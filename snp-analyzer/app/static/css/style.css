@@ -36,6 +36,21 @@ header h1 {
     font-weight: 600;
 }
 
+.powered-by {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-decoration: none;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2px 10px;
+}
+
+.powered-by:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+}
+
 #session-info { display: flex; gap: 8px; }
 
 .badge {
