@@ -1,0 +1,5 @@
+SESSION_EXPIRY_MINUTES = 60
+MAX_UPLOAD_SIZE_MB = 50
+SUPPORTED_EXTENSIONS = {".xls", ".xlsx", ".eds", ".pcrd", ".zip"}
+WELL_ROWS = "ABCDEFGH"
+WELL_COLS = 12

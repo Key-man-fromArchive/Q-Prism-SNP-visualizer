@@ -1,0 +1,9 @@
+services:
+  snp-analyzer:
+    build: .
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./app:/app/app
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1

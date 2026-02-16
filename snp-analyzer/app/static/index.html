@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASG-PCR SNP Discrimination Analyzer</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+    <header>
+        <h1>ASG-PCR SNP Discrimination Analyzer</h1>
+        <div id="session-info" class="hidden">
+            <span id="instrument-badge" class="badge"></span>
+            <span id="wells-badge" class="badge"></span>
+            <span id="cycles-badge" class="badge"></span>
+        </div>
+    </header>
+
+    <main>
+        <!-- Upload Zone -->
+        <div id="upload-zone">
+            <div id="drop-area">
+                <div class="upload-icon">&#128196;</div>
+                <p>Drag & drop your raw fluorescence file here</p>
+                <p class="sub">QuantStudio (.eds, .xls) | CFX Opus (.xlsx, .zip, or drag XML files/folder)</p>
+                <div class="browse-buttons">
+                    <button id="browse-btn">Browse Files</button>
+                    <button id="browse-folder-btn">Browse Folder</button>
+                </div>
+                <input type="file" id="file-input" accept=".eds,.xls,.xlsx,.pcrd,.zip,.xml" multiple hidden>
+                <input type="file" id="folder-input" webkitdirectory hidden>
+            </div>
+            <div id="upload-progress" class="hidden">
+                <div class="progress-bar"><div class="progress-fill"></div></div>
+                <p id="upload-status">Uploading...</p>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div id="analysis-panel" class="hidden">
+            <nav class="tabs">
+                <button class="tab active" data-tab="analysis">Analysis</button>
+                <button class="tab" data-tab="protocol">Protocol</button>
+                <button class="tab" data-tab="settings">Settings</button>
+            </nav>
+
+            <!-- Analysis Tab -->
+            <div id="tab-analysis" class="tab-content active">
+                <!-- Cycle Slider -->
+                <div id="cycle-control">
+                    <label>Cycle: <span id="cycle-value">1</span> / <span id="cycle-max">1</span></label>
+                    <div class="slider-row">
+                        <button id="play-btn" title="Play/Pause">&#9654;</button>
+                        <input type="range" id="cycle-slider" min="1" max="1" value="1">
+                    </div>
+                </div>
+
+                <div class="analysis-grid">
+                    <!-- Scatter Plot -->
+                    <div class="panel scatter-panel">
+                        <h3>Allele Discrimination</h3>
+                        <div id="scatter-plot"></div>
+                    </div>
+
+                    <!-- Plate View -->
+                    <div class="panel plate-panel">
+                        <h3>Plate View (96-well)</h3>
+                        <div id="plate-grid"></div>
+                    </div>
+
+                    <!-- Detail Panel -->
+                    <div class="panel detail-panel">
+                        <h3>Well Details</h3>
+                        <div id="detail-content">
+                            <p class="placeholder">Click a well to see details</p>
+                        </div>
+                        <div id="amplification-plot" class="hidden"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="tab-settings" class="tab-content">
+                <div class="panel">
+                    <h3>Scatter Plot Axis</h3>
+                    <div class="settings-form">
+                        <div class="settings-group">
+                            <label>
+                                <input type="checkbox" id="fix-axis-checkbox">
+                                Fix axis range
+                            </label>
+                            <div class="settings-inputs">
+                                <div class="settings-field">
+                                    <span>X axis max</span>
+                                    <input type="number" id="x-axis-max" min="0.1" step="0.5" value="12">
+                                </div>
+                                <div class="settings-field">
+                                    <span>Y axis max</span>
+                                    <input type="number" id="y-axis-max" min="0.1" step="0.5" value="12">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Protocol Tab -->
+            <div id="tab-protocol" class="tab-content">
+                <div class="protocol-grid">
+                    <div class="panel">
+                        <h3>PCR Protocol Steps</h3>
+                        <table id="protocol-table">
+                            <thead>
+                                <tr>
+                                    <th>Step</th>
+                                    <th>Label</th>
+                                    <th>Temp (&deg;C)</th>
+                                    <th>Duration (s)</th>
+                                    <th>Cycles</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                        <div class="protocol-actions">
+                            <button id="add-step-btn">+ Add Step</button>
+                            <button id="save-protocol-btn">Save</button>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <h3>Temperature Profile</h3>
+                        <div id="protocol-plot"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script type="module" src="/js/app.js"></script>
+</body>
+</html>
