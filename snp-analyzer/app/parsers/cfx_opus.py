@@ -15,7 +15,7 @@ import os
 
 import openpyxl
 
-from app.models import UnifiedData, WellCycleData
+from app.models import UnifiedData, WellCycleData, DataWindow
 from app.parsers.xlsx_fixer import fix_cfx_xlsx, needs_fixing
 
 
@@ -73,13 +73,16 @@ def _parse_workbook(wb: openpyxl.Workbook) -> UnifiedData:
         wells_set.add(well)
         cycles_set.add(cycle)
 
+    sorted_cycles = sorted(cycles_set)
+    window_name = "Amplification" if len(sorted_cycles) > 1 else "End Point"
     return UnifiedData(
         instrument="CFX Opus",
         allele2_dye=allele2_dye,
         wells=sorted(wells_set, key=_well_sort_key),
-        cycles=sorted(cycles_set),
+        cycles=sorted_cycles,
         data=data,
         has_rox=has_rox,
+        data_windows=[DataWindow(name=window_name, start_cycle=sorted_cycles[0], end_cycle=sorted_cycles[-1])] if sorted_cycles else None,
     )
 
 
@@ -163,6 +166,7 @@ def parse_cfx_endpoint(file_path: str) -> UnifiedData:
             cycles=[1],
             data=data,
             has_rox=has_rox,
+            data_windows=[DataWindow(name="End Point", start_cycle=1, end_cycle=1)],
         )
     finally:
         wb.close()
@@ -270,6 +274,7 @@ def parse_cfx_allelic(file_path: str) -> UnifiedData:
             data=data,
             has_rox=False,
             sample_names=sample_names if sample_names else None,
+            data_windows=[DataWindow(name="End Point", start_cycle=1, end_cycle=1)],
         )
     finally:
         wb.close()

@@ -164,6 +164,34 @@ header h1 {
 
 #cycle-control label { font-size: 14px; font-weight: 500; }
 
+#window-selector {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.window-btn {
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-muted);
+    transition: all 0.15s;
+}
+
+.window-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.window-btn.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+}
+
 .slider-row {
     display: flex;
     align-items: center;

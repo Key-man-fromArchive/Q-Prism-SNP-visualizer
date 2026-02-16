@@ -213,12 +213,9 @@ function initAnalysis() {
     // Init components
     initScatter();
     initPlate();
-    initCycleSlider(sessionInfo.num_cycles, onCycleChange);
+    initCycleSlider(sessionInfo.num_cycles, sessionInfo.data_windows, onCycleChange);
     initProtocol(sessionId);
     initSettings(() => onCycleChange(getCurrentCycle()));
-
-    // Load initial data at last cycle
-    onCycleChange(sessionInfo.num_cycles);
 
     // Tab switching
     document.querySelectorAll(".tab").forEach((tab) => {

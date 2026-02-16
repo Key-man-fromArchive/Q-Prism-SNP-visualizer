@@ -18,7 +18,7 @@ import re
 import zipfile
 import xml.etree.ElementTree as ET
 
-from app.models import UnifiedData, WellCycleData, ProtocolStep
+from app.models import UnifiedData, WellCycleData, ProtocolStep, DataWindow
 
 WELL_ROWS = "ABCDEFGH"
 
@@ -135,7 +135,8 @@ def parse_eds(file_path: str) -> UnifiedData:
             "This .eds file may not be from an SNP discrimination experiment."
         )
 
-    # Build WellCycleData for amplification cycles only
+    # Build WellCycleData for all data points (pre-read + amplification + post-read)
+    all_indices = pre_read_indices + amp_indices + post_read_indices
     data: list[WellCycleData] = []
     wells_set: set[str] = set()
     cycles_set: set[int] = set()
@@ -152,8 +153,8 @@ def parse_eds(file_path: str) -> UnifiedData:
         allele2_array = cycle_arrays[allele2_dye_idx]
         rox_array = cycle_arrays[rox_dye_idx] if rox_dye_idx is not None else None
 
-        # Extract amplification cycles only (1-indexed for user display)
-        for cycle_num, raw_idx in enumerate(amp_indices, start=1):
+        # Emit sequential cycles 1..N for all data points
+        for cycle_num, raw_idx in enumerate(all_indices, start=1):
             if raw_idx >= len(fam_array):
                 continue
             fam_val = fam_array[raw_idx]
@@ -170,6 +171,19 @@ def parse_eds(file_path: str) -> UnifiedData:
             wells_set.add(well_id)
             cycles_set.add(cycle_num)
 
+    # Build data windows from stage flag counts
+    windows: list[DataWindow] = []
+    offset = 1
+    if pre_read_indices:
+        windows.append(DataWindow(name="Pre-read", start_cycle=offset, end_cycle=offset + len(pre_read_indices) - 1))
+        offset += len(pre_read_indices)
+    if amp_indices:
+        windows.append(DataWindow(name="Amplification", start_cycle=offset, end_cycle=offset + len(amp_indices) - 1))
+        offset += len(amp_indices)
+    if post_read_indices:
+        windows.append(DataWindow(name="Post-read", start_cycle=offset, end_cycle=offset + len(post_read_indices) - 1))
+        offset += len(post_read_indices)
+
     # Convert sample names from well index to well ID
     sample_names_by_id = {}
     for well_idx, name in sample_names.items():
@@ -185,6 +199,7 @@ def parse_eds(file_path: str) -> UnifiedData:
         has_rox=has_rox,
         sample_names=sample_names_by_id or None,
         protocol_steps=protocol_steps or None,
+        data_windows=windows if windows else None,
     )
 
 

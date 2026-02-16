@@ -11,7 +11,7 @@ File structure:
 
 import xlrd
 
-from app.models import UnifiedData, WellCycleData
+from app.models import UnifiedData, WellCycleData, DataWindow
 
 WELL_ROWS = "ABCDEFGH"
 
@@ -103,13 +103,15 @@ def parse_quantstudio(file_path: str) -> UnifiedData:
         wells_set.add(well_id)
         cycles_set.add(cycle)
 
+    sorted_cycles = sorted(cycles_set)
     return UnifiedData(
         instrument="QuantStudio 3",
         allele2_dye=allele2_dye,
         wells=sorted(wells_set, key=_well_sort_key),
-        cycles=sorted(cycles_set),
+        cycles=sorted_cycles,
         data=data,
         has_rox=has_rox,
+        data_windows=[DataWindow(name="Amplification", start_cycle=sorted_cycles[0], end_cycle=sorted_cycles[-1])] if sorted_cycles else None,
     )
 
 
@@ -214,13 +216,15 @@ def parse_quantstudio_amplification(file_path: str) -> UnifiedData:
         wells_set.add(well_id)
         cycles_set.add(cycle)
 
+    sorted_cycles = sorted(cycles_set)
     return UnifiedData(
         instrument="QuantStudio 3",
         allele2_dye=allele2_dye,
         wells=sorted(wells_set, key=_well_sort_key),
-        cycles=sorted(cycles_set),
+        cycles=sorted_cycles,
         data=data_list,
         has_rox=False,  # Rn is already normalized
+        data_windows=[DataWindow(name="Amplification", start_cycle=sorted_cycles[0], end_cycle=sorted_cycles[-1])] if sorted_cycles else None,
     )
 
 

@@ -20,7 +20,7 @@ import tempfile
 import zipfile
 import xml.etree.ElementTree as ET
 
-from app.models import UnifiedData, WellCycleData
+from app.models import UnifiedData, WellCycleData, DataWindow
 
 
 # --- Filename patterns (Bio-Rad consistent suffixes) ---
@@ -226,6 +226,7 @@ def _assemble_tier1(xml_files: dict[str, str]) -> UnifiedData:
         data=data,
         has_rox=bool(rox_data),
         sample_names=sample_names if has_meaningful_names else None,
+        data_windows=[DataWindow(name="Amplification", start_cycle=cycles[0], end_cycle=cycles[-1])] if cycles else None,
     )
 
 
@@ -279,6 +280,7 @@ def _assemble_tier2(xml_files: dict[str, str]) -> UnifiedData:
         data=data,
         has_rox=False,
         sample_names=sample_names if has_meaningful_names else None,
+        data_windows=[DataWindow(name="End Point", start_cycle=1, end_cycle=1)],
     )
 
 
@@ -311,6 +313,7 @@ def _assemble_tier3(xml_files: dict[str, str]) -> UnifiedData:
         data=data,
         has_rox=False,
         sample_names=sample_names if has_meaningful_names else None,
+        data_windows=[DataWindow(name="End Point", start_cycle=1, end_cycle=1)],
     )
 
 

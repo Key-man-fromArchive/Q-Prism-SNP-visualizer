@@ -44,4 +44,5 @@ async def upload_file(file: UploadFile = File(...)):
         num_wells=len(unified.wells),
         num_cycles=len(unified.cycles),
         has_rox=unified.has_rox,
+        data_windows=[{"name": w.name, "start_cycle": w.start_cycle, "end_cycle": w.end_cycle} for w in unified.data_windows] if unified.data_windows else None,
     )

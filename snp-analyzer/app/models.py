@@ -20,6 +20,12 @@ class NormalizedPoint(BaseModel):
     raw_rox: float | None = None
 
 
+class DataWindow(BaseModel):
+    name: str         # "Pre-read", "Amplification", "Post-read", "End Point"
+    start_cycle: int  # inclusive absolute cycle
+    end_cycle: int    # inclusive absolute cycle
+
+
 class UnifiedData(BaseModel):
     instrument: str                  # "QuantStudio 3" or "CFX Opus"
     allele2_dye: str                 # "VIC" or "HEX"
@@ -29,6 +35,7 @@ class UnifiedData(BaseModel):
     has_rox: bool = True
     sample_names: dict[str, str] | None = None  # well -> sample name
     protocol_steps: list[ProtocolStep] | None = None  # from .eds tcprotocol.xml
+    data_windows: list[DataWindow] | None = None
 
 
 class UploadResponse(BaseModel):
@@ -38,6 +45,7 @@ class UploadResponse(BaseModel):
     num_wells: int
     num_cycles: int
     has_rox: bool
+    data_windows: list[DataWindow] | None = None
 
 
 class ScatterPoint(BaseModel):
