@@ -10,6 +10,12 @@ A web-based analysis tool for Allele-Specific Genotyping PCR (ASG-PCR) SNP discr
 
 > **Disclaimer**: Q-Prism® is a project name. It is not affiliated with or endorsed by Applied Biosystems, Thermo Fisher Scientific, or Bio-Rad Laboratories.
 
+## Screenshots
+
+| Upload | Analysis |
+|:---:|:---:|
+| ![Upload](docs/screenshot-upload.png) | ![Analysis](docs/screenshot-analysis.png) |
+
 ## Overview
 
 The SNP Visualizer parses raw data files from common qPCR instruments and renders interactive scatter plots, plate views, and amplification curves. It eliminates the need for proprietary desktop software for routine allele discrimination analysis, offering a lightweight, containerized alternative with ROX normalization and cycle-by-cycle playback.
