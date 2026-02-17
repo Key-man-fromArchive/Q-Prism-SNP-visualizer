@@ -16,9 +16,9 @@ def cluster_threshold(
             assignments[p["well"]] = WellType.NTC.value
             continue
         ratio = p["norm_fam"] / total
-        if ratio < config.allele1_ratio_max:
+        if ratio > config.allele2_ratio_min:
             assignments[p["well"]] = WellType.ALLELE1_HOMO.value
-        elif ratio > config.allele2_ratio_min:
+        elif ratio < config.allele1_ratio_max:
             assignments[p["well"]] = WellType.ALLELE2_HOMO.value
         else:
             assignments[p["well"]] = WellType.HETEROZYGOUS.value
@@ -69,9 +69,9 @@ def _label_clusters(centers) -> dict[int, str]:
         if i in labels:
             continue
         if ratio > 0.6:
-            labels[i] = WellType.ALLELE2_HOMO.value
-        elif ratio < 0.4:
             labels[i] = WellType.ALLELE1_HOMO.value
+        elif ratio < 0.4:
+            labels[i] = WellType.ALLELE2_HOMO.value
         else:
             labels[i] = WellType.HETEROZYGOUS.value
 

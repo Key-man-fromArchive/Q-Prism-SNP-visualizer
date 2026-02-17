@@ -149,8 +149,8 @@ def parse_quantstudio_amplification(file_path: str) -> UnifiedData:
         if isinstance(t, str) and t.strip():
             targets.add(t.strip())
 
-    # Identify which target is FAM (Allele 2) and which is VIC/HEX (Allele 1)
-    # Convention: "Allele 1" = VIC, "Allele 2" = FAM
+    # Identify which target is FAM (Allele 1) and which is VIC/HEX (Allele 2)
+    # QS files may label targets as "Allele 1" (=VIC/HEX) and "Allele 2" (=FAM)
     fam_target = None
     allele2_target = None
     allele2_dye = "VIC"

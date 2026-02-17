@@ -234,7 +234,7 @@ function initAnalysis() {
     // Init core components
     initScatter(sessionId);
     initPlate(sessionId);
-    initCycleSlider(sessionInfo.num_cycles, sessionInfo.data_windows, onCycleChange);
+    initCycleSlider(sessionInfo.num_cycles, sessionInfo.data_windows, onCycleChange, sessionInfo.suggested_cycle);
     initProtocol(sessionId);
     initSettings(() => onCycleChange(getCurrentCycle()), sessionId, sessionInfo);
 
@@ -485,8 +485,8 @@ function updateDetailPanel(well) {
     let genotype = "Undetermined";
     if (total > 0) {
         const r = point.norm_fam / total;
-        if (r > 0.6) genotype = "Allele 2 (FAM)";
-        else if (r < 0.4) genotype = `Allele 1 (${dye})`;
+        if (r > 0.6) genotype = "Allele 1 (FAM)";
+        else if (r < 0.4) genotype = `Allele 2 (${dye})`;
         else genotype = "Heterozygous";
     }
 

@@ -47,6 +47,7 @@ class UploadResponse(BaseModel):
     num_cycles: int
     has_rox: bool
     data_windows: list[DataWindow] | None = None
+    suggested_cycle: int | None = None
 
 
 class ScatterPoint(BaseModel):

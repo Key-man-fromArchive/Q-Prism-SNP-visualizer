@@ -3,10 +3,12 @@ let animTimer = null;
 let onCycleChange = null;
 let dataWindows = null;
 let activeWindowIdx = 0;
+let suggestedCycle = null;
 
-export function initCycleSlider(maxCycle, windows, callback) {
+export function initCycleSlider(maxCycle, windows, callback, suggestedCycleVal) {
     onCycleChange = callback;
     dataWindows = windows;
+    suggestedCycle = suggestedCycleVal || null;
 
     const slider = document.getElementById("cycle-slider");
     const valueEl = document.getElementById("cycle-value");
@@ -96,8 +98,16 @@ function selectWindow(idx) {
         control.classList.remove("hidden");
         slider.min = 1;
         slider.max = windowCycles;
-        slider.value = windowCycles;
-        valueEl.textContent = windowCycles;
+        // Use suggested cycle if available and within this window
+        let initialVal = windowCycles;
+        if (suggestedCycle != null && win) {
+            const rel = suggestedCycle - win.start_cycle + 1;
+            if (rel >= 1 && rel <= windowCycles) {
+                initialVal = rel;
+            }
+        }
+        slider.value = initialVal;
+        valueEl.textContent = initialVal;
         maxEl.textContent = windowCycles;
     }
 

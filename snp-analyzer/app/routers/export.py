@@ -49,9 +49,9 @@ def _determine_genotype(
 
     ratio = norm_fam / total
     if ratio > 0.6:
-        return "Allele 2 Homo"
-    elif ratio < 0.4:
         return "Allele 1 Homo"
+    elif ratio < 0.4:
+        return "Allele 2 Homo"
     else:
         return "Heterozygous"
 

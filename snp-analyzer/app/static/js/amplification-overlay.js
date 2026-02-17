@@ -3,8 +3,8 @@
  */
 
 const GENOTYPE_COLORS = {
-    "Allele 1 Homo": "#dc2626",
-    "Allele 2 Homo": "#2563eb",
+    "Allele 1 Homo": "#2563eb",
+    "Allele 2 Homo": "#dc2626",
     "Heterozygous": "#16a34a",
     "NTC": "#9ca3af",
     "Undetermined": "#f59e0b",

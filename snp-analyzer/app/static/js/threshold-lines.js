@@ -4,9 +4,9 @@
  * Interactive threshold visualization for scatter plot clustering.
  * Displays threshold lines and regions based on clustering parameters:
  * - NTC region (gray shaded area near origin)
- * - Allele1 ratio line (red dashed diagonal)
- * - Allele2 ratio line (blue dashed diagonal)
- * - Region labels (A1 Homo, Het, A2 Homo, NTC)
+ * - Allele 2 boundary line (red dashed diagonal)
+ * - Allele 1 boundary line (blue dashed diagonal)
+ * - Region labels (Allele 1, Het, Allele 2, NTC)
  */
 
 let isVisible = false;
@@ -120,8 +120,8 @@ function updateLines() {
             },
             layer: 'below'
         },
-        // Allele 1 ratio line (red dashed)
-        // Above this line = higher Allele2, below = higher FAM (Allele1)
+        // Allele 2 boundary (red dashed)
+        // Above this line = Allele 2 region (HEX dominant)
         {
             type: 'line',
             x0: xMin,
@@ -135,8 +135,8 @@ function updateLines() {
             },
             layer: 'below'
         },
-        // Allele 2 ratio line (blue dashed)
-        // Below this line = higher FAM, above = higher Allele2
+        // Allele 1 boundary (blue dashed)
+        // Below this line = Allele 1 region (FAM dominant)
         {
             type: 'line',
             x0: xMin,
@@ -154,13 +154,13 @@ function updateLines() {
 
     // Region labels as annotations (using paper coordinates for consistent positioning)
     const annotations = [
-        // Allele 1 Homo region (bottom left, below red line)
+        // Allele 2 Homo region (top left, high HEX/low FAM)
         {
             x: 0.15,
             y: 0.85,
             xref: 'paper',
             yref: 'paper',
-            text: 'Allele 1',
+            text: 'Allele 2',
             font: {
                 color: '#dc2626',
                 size: 12,
@@ -192,13 +192,13 @@ function updateLines() {
             borderwidth: 1,
             opacity: 0.9
         },
-        // Allele 2 Homo region (top right, above blue line)
+        // Allele 1 Homo region (bottom right, high FAM/low HEX)
         {
             x: 0.85,
             y: 0.15,
             xref: 'paper',
             yref: 'paper',
-            text: 'Allele 2',
+            text: 'Allele 1',
             font: {
                 color: '#2563eb',
                 size: 12,
