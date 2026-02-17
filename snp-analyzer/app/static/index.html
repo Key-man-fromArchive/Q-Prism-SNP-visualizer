@@ -85,23 +85,102 @@
 
             <!-- Settings Tab -->
             <div id="tab-settings" class="tab-content">
-                <div class="panel">
-                    <h3>Scatter Plot Axis</h3>
-                    <div class="settings-form">
-                        <div class="settings-group">
-                            <label>
-                                <input type="checkbox" id="fix-axis-checkbox">
-                                Fix axis range
-                            </label>
-                            <div class="settings-inputs">
-                                <div class="settings-field">
-                                    <span>X axis max</span>
-                                    <input type="number" id="x-axis-max" min="0.1" step="0.5" value="12">
+                <div class="settings-grid">
+                    <div class="panel">
+                        <h3>Normalization</h3>
+                        <div class="settings-form">
+                            <div class="settings-group" id="rox-normalize-group">
+                                <label>
+                                    <input type="checkbox" id="rox-normalize-checkbox">
+                                    ROX normalization (FAM/ROX, Allele2/ROX)
+                                </label>
+                                <p class="settings-hint">Recommended for ABI/QuantStudio. Not recommended for Bio-Rad CFX (ROX crosstalk).</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Scatter Plot Axis</h3>
+                        <div class="settings-form">
+                            <div class="settings-group">
+                                <label>
+                                    <input type="checkbox" id="fix-axis-checkbox">
+                                    Fix axis range
+                                </label>
+                                <div class="settings-inputs">
+                                    <div class="settings-field">
+                                        <span>X axis max</span>
+                                        <input type="number" id="x-axis-max" min="0.1" step="0.5" value="12">
+                                    </div>
+                                    <div class="settings-field">
+                                        <span>Y axis max</span>
+                                        <input type="number" id="y-axis-max" min="0.1" step="0.5" value="12">
+                                    </div>
                                 </div>
-                                <div class="settings-field">
-                                    <span>Y axis max</span>
-                                    <input type="number" id="y-axis-max" min="0.1" step="0.5" value="12">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Auto Clustering</h3>
+                        <div class="settings-form">
+                            <div class="settings-group">
+                                <div class="radio-group">
+                                    <label class="radio-label">
+                                        <input type="radio" name="cluster-algo" value="threshold" checked>
+                                        Threshold
+                                    </label>
+                                    <label class="radio-label">
+                                        <input type="radio" name="cluster-algo" value="kmeans">
+                                        K-means
+                                    </label>
                                 </div>
+                            </div>
+
+                            <div id="threshold-config" class="settings-group">
+                                <div class="settings-inputs">
+                                    <div class="settings-field">
+                                        <span>NTC threshold</span>
+                                        <input type="number" id="ntc-threshold" min="0" step="0.05" value="0.1">
+                                    </div>
+                                    <div class="settings-field">
+                                        <span>Allele1 ratio max</span>
+                                        <input type="number" id="allele1-ratio-max" min="0" max="1" step="0.05" value="0.4">
+                                    </div>
+                                    <div class="settings-field">
+                                        <span>Allele2 ratio min</span>
+                                        <input type="number" id="allele2-ratio-min" min="0" max="1" step="0.05" value="0.6">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="kmeans-config" class="settings-group hidden">
+                                <div class="settings-inputs">
+                                    <div class="settings-field">
+                                        <span>Number of clusters</span>
+                                        <input type="number" id="n-clusters" min="2" max="6" step="1" value="4">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button id="run-clustering-btn" class="settings-action-btn">Run Auto Clustering</button>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Display Layers</h3>
+                        <div class="settings-form">
+                            <div class="settings-group">
+                                <label>
+                                    <input type="checkbox" id="show-auto-cluster" checked>
+                                    Show auto-clustering layer
+                                </label>
+                            </div>
+                            <div class="settings-group">
+                                <label>
+                                    <input type="checkbox" id="show-manual-types" checked>
+                                    Show manual well types layer
+                                </label>
                             </div>
                         </div>
                     </div>

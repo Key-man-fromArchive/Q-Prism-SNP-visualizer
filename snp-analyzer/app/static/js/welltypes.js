@@ -1,0 +1,20 @@
+export const WELL_TYPES = {
+    NTC:              { label: "NTC",              color: "#9ca3af", symbol: "x" },
+    Unknown:          { label: "Unknown",          color: "#a3a3a3", symbol: "diamond" },
+    "Positive Control": { label: "Positive Control", color: "#f59e0b", symbol: "star" },
+    "Allele 1 Homo":  { label: "Allele 1 Homo",   color: "#dc2626", symbol: "circle" },
+    "Allele 2 Homo":  { label: "Allele 2 Homo",   color: "#2563eb", symbol: "circle" },
+    Heterozygous:     { label: "Heterozygous",     color: "#8b5cf6", symbol: "square" },
+};
+
+export const UNASSIGNED = { label: "Unassigned", color: "#6b7280", symbol: "circle" };
+
+export function getWellTypeInfo(type) {
+    return WELL_TYPES[type] || UNASSIGNED;
+}
+
+export function effectiveType(autoCluster, manualType, showAuto, showManual) {
+    if (showManual && manualType) return manualType;
+    if (showAuto && autoCluster) return autoCluster;
+    return null;
+}

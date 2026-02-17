@@ -1,4 +1,5 @@
 from __future__ import annotations
+from enum import Enum
 from pydantic import BaseModel
 
 
@@ -56,6 +57,8 @@ class ScatterPoint(BaseModel):
     raw_allele2: float
     raw_rox: float | None = None
     sample_name: str | None = None
+    auto_cluster: str | None = None
+    manual_type: str | None = None
 
 
 class PlateWell(BaseModel):
@@ -66,6 +69,8 @@ class PlateWell(BaseModel):
     norm_allele2: float
     ratio: float | None = None
     sample_name: str | None = None
+    auto_cluster: str | None = None
+    manual_type: str | None = None
 
 
 class AmplificationCurve(BaseModel):
@@ -81,3 +86,41 @@ class ProtocolStep(BaseModel):
     duration_sec: int
     cycles: int = 1
     label: str = ""
+
+
+class WellType(str, Enum):
+    NTC = "NTC"
+    UNKNOWN = "Unknown"
+    POSITIVE_CONTROL = "Positive Control"
+    ALLELE1_HOMO = "Allele 1 Homo"
+    ALLELE2_HOMO = "Allele 2 Homo"
+    HETEROZYGOUS = "Heterozygous"
+
+
+class ClusteringAlgorithm(str, Enum):
+    THRESHOLD = "threshold"
+    KMEANS = "kmeans"
+
+
+class ThresholdConfig(BaseModel):
+    ntc_threshold: float = 0.1
+    allele1_ratio_max: float = 0.4
+    allele2_ratio_min: float = 0.6
+
+
+class ClusteringRequest(BaseModel):
+    algorithm: ClusteringAlgorithm = ClusteringAlgorithm.THRESHOLD
+    cycle: int = 0
+    threshold_config: ThresholdConfig | None = None
+    n_clusters: int = 4
+
+
+class ClusteringResult(BaseModel):
+    algorithm: str
+    cycle: int
+    assignments: dict[str, str]
+
+
+class ManualWellTypeUpdate(BaseModel):
+    wells: list[str]
+    well_type: WellType

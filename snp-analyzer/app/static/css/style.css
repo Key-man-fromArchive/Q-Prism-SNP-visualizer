@@ -414,6 +414,12 @@ header h1 {
     height: 16px;
 }
 
+.settings-hint {
+    font-size: 12px;
+    color: #6b7280;
+    margin: 4px 0 0 24px;
+}
+
 .settings-inputs {
     display: flex;
     gap: 16px;
@@ -443,6 +449,125 @@ header h1 {
 .settings-field input[type="number"]:disabled {
     opacity: 0.5;
     background: var(--bg);
+}
+
+/* Drag Selection */
+.drag-selection-rect {
+    position: fixed;
+    border: 2px dashed var(--primary);
+    background: rgba(37, 99, 235, 0.1);
+    pointer-events: none;
+    z-index: 1000;
+}
+
+.plate-well.multi-selected {
+    box-shadow: 0 0 0 2px var(--primary) !important;
+    transform: scale(1.1);
+}
+
+/* Cluster Dot */
+.cluster-dot {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+/* Well Type Popup */
+.welltype-popup {
+    position: fixed;
+    z-index: 1001;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    padding: 8px 0;
+    min-width: 200px;
+}
+
+.welltype-popup-header {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+}
+
+.welltype-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 16px;
+    border: none;
+    border-left: 4px solid transparent;
+    background: none;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+    transition: background 0.15s;
+}
+
+.welltype-btn:hover {
+    background: var(--bg);
+}
+
+.welltype-cancel {
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+}
+
+/* Settings Action Button */
+.settings-action-btn {
+    padding: 8px 20px;
+    border-radius: var(--radius);
+    border: none;
+    background: var(--primary);
+    color: #fff;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 12px;
+    transition: background 0.2s;
+}
+
+.settings-action-btn:hover {
+    background: var(--primary-hover);
+}
+
+.settings-action-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Radio Group */
+.radio-group {
+    display: flex;
+    gap: 16px;
+}
+
+.radio-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.radio-label input[type="radio"] {
+    accent-color: var(--primary);
+}
+
+/* Settings Grid */
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
 }
 
 /* Responsive */

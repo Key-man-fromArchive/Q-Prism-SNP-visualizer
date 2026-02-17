@@ -2,7 +2,8 @@ import { initScatter, updateScatter, highlightScatterPoint, getPointData, getAll
 import { initPlate, updatePlate, highlightPlateWell } from "./plateview.js";
 import { initCycleSlider, getCurrentCycle } from "./cycleslider.js";
 import { initProtocol } from "./protocol.js";
-import { initSettings } from "./settings.js";
+import { initSettings, getUseRox } from "./settings.js";
+import { loadClustering, loadManualWellTypes } from "./clustering.js";
 
 let sessionId = null;
 let sessionInfo = null;
@@ -212,10 +213,14 @@ function initAnalysis() {
 
     // Init components
     initScatter();
-    initPlate();
+    initPlate(sessionId);
     initCycleSlider(sessionInfo.num_cycles, sessionInfo.data_windows, onCycleChange);
     initProtocol(sessionId);
-    initSettings(() => onCycleChange(getCurrentCycle()));
+    initSettings(() => onCycleChange(getCurrentCycle()), sessionId, sessionInfo);
+
+    // Load existing clustering/welltype state
+    loadClustering(sessionId);
+    loadManualWellTypes(sessionId);
 
     // Tab switching
     document.querySelectorAll(".tab").forEach((tab) => {
@@ -230,11 +235,27 @@ function initAnalysis() {
 
 async function onCycleChange(cycle) {
     if (!sessionId) return;
+    const useRox = getUseRox();
     await Promise.all([
-        updateScatter(sessionId, cycle),
-        updatePlate(sessionId, cycle),
+        updateScatter(sessionId, cycle, useRox),
+        updatePlate(sessionId, cycle, useRox),
     ]);
 }
+
+// Listen for clustering/welltype changes -> refresh scatter + plate
+document.addEventListener("clustering-changed", () => {
+    if (sessionId) {
+        const cycle = getCurrentCycle();
+        onCycleChange(cycle);
+    }
+});
+
+document.addEventListener("welltypes-changed", () => {
+    if (sessionId) {
+        const cycle = getCurrentCycle();
+        onCycleChange(cycle);
+    }
+});
 
 // Bidirectional well selection
 document.addEventListener("well-selected", async (e) => {
@@ -276,6 +297,8 @@ function updateDetailPanel(well) {
             <tr><td>Well</td><td><b>${well}</b></td></tr>
             ${point.sample_name ? `<tr><td>Sample</td><td>${point.sample_name}</td></tr>` : ""}
             <tr><td>Genotype</td><td>${genotype}</td></tr>
+            ${point.auto_cluster ? `<tr><td>Auto Cluster</td><td>${point.auto_cluster}</td></tr>` : ""}
+            ${point.manual_type ? `<tr><td>Manual Type</td><td>${point.manual_type}</td></tr>` : ""}
             <tr><td>FAM (norm)</td><td>${point.norm_fam.toFixed(4)}</td></tr>
             <tr><td>${dye} (norm)</td><td>${point.norm_allele2.toFixed(4)}</td></tr>
             <tr><td>FAM ratio</td><td>${ratio}%</td></tr>
@@ -297,7 +320,8 @@ async function loadAmplificationCurve(well) {
     plotDiv.classList.remove("hidden");
     const dye = getAllele2Dye();
 
-    const res = await fetch(`/api/data/${sessionId}/amplification?wells=${well}`);
+    const useRox = getUseRox();
+    const res = await fetch(`/api/data/${sessionId}/amplification?wells=${well}&use_rox=${useRox}`);
     const json = await res.json();
 
     if (!json.curves.length) {

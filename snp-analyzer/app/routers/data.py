@@ -9,6 +9,7 @@ from app.models import (
 )
 from app.processing.normalize import normalize_for_cycle, normalize
 from app.routers.upload import sessions
+from app.routers.clustering import cluster_store, welltype_store
 
 router = APIRouter()
 
@@ -32,7 +33,7 @@ def _get_session(sid: str) -> UnifiedData:
 
 
 @router.get("/api/data/{sid}/scatter")
-async def scatter_data(sid: str, cycle: int = Query(default=0)):
+async def scatter_data(sid: str, cycle: int = Query(default=0), use_rox: bool = Query(default=True)):
     unified = _get_session(sid)
 
     if cycle <= 0:
@@ -41,7 +42,12 @@ async def scatter_data(sid: str, cycle: int = Query(default=0)):
     if cycle not in unified.cycles:
         raise HTTPException(400, f"Cycle {cycle} not available. Range: {unified.cycles[0]}-{unified.cycles[-1]}")
 
-    points = normalize_for_cycle(unified.data, cycle, unified.has_rox)
+    points = normalize_for_cycle(unified.data, cycle, unified.has_rox, use_rox)
+
+    cluster_assignments = {}
+    if sid in cluster_store:
+        cluster_assignments = cluster_store[sid].assignments
+    manual_assignments = welltype_store.get(sid, {})
 
     return {
         "cycle": cycle,
@@ -55,6 +61,8 @@ async def scatter_data(sid: str, cycle: int = Query(default=0)):
                 raw_allele2=p.raw_allele2,
                 raw_rox=p.raw_rox,
                 sample_name=(unified.sample_names or {}).get(p.well),
+                auto_cluster=cluster_assignments.get(p.well),
+                manual_type=manual_assignments.get(p.well),
             )
             for p in points
         ],
@@ -62,13 +70,18 @@ async def scatter_data(sid: str, cycle: int = Query(default=0)):
 
 
 @router.get("/api/data/{sid}/plate")
-async def plate_data(sid: str, cycle: int = Query(default=0)):
+async def plate_data(sid: str, cycle: int = Query(default=0), use_rox: bool = Query(default=True)):
     unified = _get_session(sid)
 
     if cycle <= 0:
         cycle = max(unified.cycles)
 
-    points = normalize_for_cycle(unified.data, cycle, unified.has_rox)
+    points = normalize_for_cycle(unified.data, cycle, unified.has_rox, use_rox)
+
+    cluster_assignments_plate = {}
+    if sid in cluster_store:
+        cluster_assignments_plate = cluster_store[sid].assignments
+    manual_assignments_plate = welltype_store.get(sid, {})
 
     wells = []
     for p in points:
@@ -85,6 +98,8 @@ async def plate_data(sid: str, cycle: int = Query(default=0)):
                 norm_allele2=p.norm_allele2,
                 ratio=round(ratio, 4),
                 sample_name=(unified.sample_names or {}).get(p.well),
+                auto_cluster=cluster_assignments_plate.get(p.well),
+                manual_type=manual_assignments_plate.get(p.well),
             )
         )
 
@@ -93,7 +108,7 @@ async def plate_data(sid: str, cycle: int = Query(default=0)):
 
 @router.get("/api/data/{sid}/amplification")
 async def amplification_data(
-    sid: str, wells: str = Query(default="")
+    sid: str, wells: str = Query(default=""), use_rox: bool = Query(default=True)
 ):
     unified = _get_session(sid)
     well_list = [w.strip() for w in wells.split(",") if w.strip()]
@@ -101,7 +116,7 @@ async def amplification_data(
     if not well_list:
         raise HTTPException(400, "Provide at least one well, e.g., ?wells=A5,A6")
 
-    all_normalized = normalize(unified.data, unified.has_rox)
+    all_normalized = normalize(unified.data, unified.has_rox, use_rox)
 
     curves = []
     for well in well_list:

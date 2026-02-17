@@ -1,10 +1,10 @@
 from app.models import WellCycleData, NormalizedPoint
 
 
-def normalize(data: list[WellCycleData], has_rox: bool) -> list[NormalizedPoint]:
+def normalize(data: list[WellCycleData], has_rox: bool, use_rox: bool = True) -> list[NormalizedPoint]:
     results = []
     for d in data:
-        if has_rox and d.rox and d.rox > 0:
+        if has_rox and use_rox and d.rox and d.rox > 0:
             norm_fam = d.fam / d.rox
             norm_allele2 = d.allele2 / d.rox
         else:
@@ -23,7 +23,7 @@ def normalize(data: list[WellCycleData], has_rox: bool) -> list[NormalizedPoint]
 
 
 def normalize_for_cycle(
-    data: list[WellCycleData], cycle: int, has_rox: bool
+    data: list[WellCycleData], cycle: int, has_rox: bool, use_rox: bool = True
 ) -> list[NormalizedPoint]:
     cycle_data = [d for d in data if d.cycle == cycle]
-    return normalize(cycle_data, has_rox)
+    return normalize(cycle_data, has_rox, use_rox)
