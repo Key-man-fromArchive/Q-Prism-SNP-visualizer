@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ASG-PCR SNP Discrimination Analyzer</title>
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/dark-theme.css">
+    <link rel="stylesheet" href="/css/print.css">
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
@@ -16,7 +18,15 @@
             <span id="instrument-badge" class="badge"></span>
             <span id="wells-badge" class="badge"></span>
             <span id="cycles-badge" class="badge"></span>
+            <div id="qc-badges" style="display:flex;gap:8px;"></div>
         </div>
+        <div class="export-buttons hidden" id="export-buttons">
+            <button id="export-csv-btn" class="badge" title="Export CSV (Ctrl+E)">CSV</button>
+            <button id="export-png-btn" class="badge" title="Export scatter PNG">PNG</button>
+            <button id="export-print-btn" class="badge" title="Print report">Print</button>
+            <button id="new-upload-btn" class="badge" title="Upload another file">+ New</button>
+        </div>
+        <button id="dark-mode-toggle" title="Toggle dark mode"></button>
     </header>
 
     <main>
@@ -45,6 +55,7 @@
                 <button class="tab active" data-tab="analysis">Analysis</button>
                 <button class="tab" data-tab="protocol">Protocol</button>
                 <button class="tab" data-tab="settings">Settings</button>
+                <button class="tab" data-tab="compare">Compare Runs</button>
             </nav>
 
             <!-- Analysis Tab -->
@@ -80,6 +91,12 @@
                         </div>
                         <div id="amplification-plot" class="hidden"></div>
                     </div>
+
+                    <!-- Results Table -->
+                    <div class="panel results-panel">
+                        <h3>Genotype Results</h3>
+                        <div id="results-plate"></div>
+                    </div>
                 </div>
             </div>
 
@@ -109,12 +126,20 @@
                                 </label>
                                 <div class="settings-inputs">
                                     <div class="settings-field">
+                                        <span>X axis min</span>
+                                        <input type="number" id="x-axis-min" step="0.5" value="0">
+                                    </div>
+                                    <div class="settings-field">
                                         <span>X axis max</span>
-                                        <input type="number" id="x-axis-max" min="0.1" step="0.5" value="12">
+                                        <input type="number" id="x-axis-max" step="0.5" value="12">
+                                    </div>
+                                    <div class="settings-field">
+                                        <span>Y axis min</span>
+                                        <input type="number" id="y-axis-min" step="0.5" value="0">
                                     </div>
                                     <div class="settings-field">
                                         <span>Y axis max</span>
-                                        <input type="number" id="y-axis-max" min="0.1" step="0.5" value="12">
+                                        <input type="number" id="y-axis-max" step="0.5" value="12">
                                     </div>
                                 </div>
                             </div>
@@ -164,6 +189,7 @@
                             </div>
 
                             <button id="run-clustering-btn" class="settings-action-btn">Run Auto Clustering</button>
+                            <button id="toggle-threshold-lines-btn" class="settings-action-btn" style="background:var(--surface);color:var(--primary);border:1px solid var(--primary);margin-left:8px;">Show Threshold Lines</button>
                         </div>
                     </div>
 
@@ -186,6 +212,9 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Compare Tab -->
+            <div id="tab-compare" class="tab-content"></div>
 
             <!-- Protocol Tab -->
             <div id="tab-protocol" class="tab-content">

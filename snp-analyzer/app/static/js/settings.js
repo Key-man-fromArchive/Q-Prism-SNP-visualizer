@@ -4,7 +4,9 @@ const STORAGE_KEY = "snp-analyzer-settings";
 
 const DEFAULTS = {
     fixAxis: false,
+    xMin: 0,
     xMax: 12,
+    yMin: 0,
     yMax: 12,
     useRox: null,  // null = auto (ON for QuantStudio, OFF for Bio-Rad)
 };
@@ -39,24 +41,34 @@ export function initSettings(callback, sessionId, sessionInfo) {
     const settings = load();
 
     const fixCheckbox = document.getElementById("fix-axis-checkbox");
+    const xMinInput = document.getElementById("x-axis-min");
     const xMaxInput = document.getElementById("x-axis-max");
+    const yMinInput = document.getElementById("y-axis-min");
     const yMaxInput = document.getElementById("y-axis-max");
 
     fixCheckbox.checked = settings.fixAxis;
+    xMinInput.value = settings.xMin;
     xMaxInput.value = settings.xMax;
+    yMinInput.value = settings.yMin;
     yMaxInput.value = settings.yMax;
 
     // Toggle disabled state of inputs
-    xMaxInput.disabled = !settings.fixAxis;
-    yMaxInput.disabled = !settings.fixAxis;
+    const toggleDisabled = (on) => {
+        xMinInput.disabled = !on;
+        xMaxInput.disabled = !on;
+        yMinInput.disabled = !on;
+        yMaxInput.disabled = !on;
+    };
+    toggleDisabled(settings.fixAxis);
 
     fixCheckbox.addEventListener("change", () => {
-        xMaxInput.disabled = !fixCheckbox.checked;
-        yMaxInput.disabled = !fixCheckbox.checked;
+        toggleDisabled(fixCheckbox.checked);
         persist();
     });
 
+    xMinInput.addEventListener("input", persist);
     xMaxInput.addEventListener("input", persist);
+    yMinInput.addEventListener("input", persist);
     yMaxInput.addEventListener("input", persist);
 
     // ROX normalization toggle
@@ -93,12 +105,19 @@ function initRoxToggle(settings, sessionInfo) {
     });
 }
 
+function numOrDefault(val, def) {
+    const n = parseFloat(val);
+    return Number.isNaN(n) ? def : n;
+}
+
 function persist() {
     const roxCheckbox = document.getElementById("rox-normalize-checkbox");
     const settings = {
         fixAxis: document.getElementById("fix-axis-checkbox").checked,
-        xMax: parseFloat(document.getElementById("x-axis-max").value) || DEFAULTS.xMax,
-        yMax: parseFloat(document.getElementById("y-axis-max").value) || DEFAULTS.yMax,
+        xMin: numOrDefault(document.getElementById("x-axis-min").value, DEFAULTS.xMin),
+        xMax: numOrDefault(document.getElementById("x-axis-max").value, DEFAULTS.xMax),
+        yMin: numOrDefault(document.getElementById("y-axis-min").value, DEFAULTS.yMin),
+        yMax: numOrDefault(document.getElementById("y-axis-max").value, DEFAULTS.yMax),
         useRox: roxCheckbox ? roxCheckbox.checked : true,
     };
     save(settings);

@@ -1,0 +1,169 @@
+/* Dark Mode Theme Overrides */
+/* Activated by body.dark class */
+
+body.dark {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2d3040;
+    --text: #e4e4e7;
+    --text-muted: #9ca3af;
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+    --accent: #10b981;
+    --danger: #ef4444;
+    --fam-color: #60a5fa;
+    --allele2-color: #f87171;
+}
+
+/* Smooth transition for theme switch */
+body {
+    transition: background-color 0.3s, color 0.3s;
+}
+
+/* Header adjustments */
+body.dark header {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Panel depth */
+body.dark .panel {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* Tab hover/active states */
+body.dark .tab:hover {
+    background: rgba(59, 130, 246, 0.1);
+}
+
+body.dark .tab.active {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+/* Drop area dragover */
+body.dark #drop-area.dragover {
+    border-color: var(--primary);
+    background: rgba(59, 130, 246, 0.1);
+}
+
+/* Plate well empty state */
+body.dark .plate-well.empty {
+    background: #0a0c10;
+    border-color: #2d3040;
+    opacity: 0.6;
+}
+
+body.dark .plate-well:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+/* Result cell empty state */
+body.dark .result-cell.empty-cell {
+    background: #0a0c10;
+    border-color: #2d3040;
+    opacity: 0.7;
+}
+
+body.dark .result-cell:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Form elements */
+body.dark input,
+body.dark select {
+    background: #0f1117;
+    color: var(--text);
+    border-color: var(--border);
+}
+
+body.dark input:focus,
+body.dark select:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-color: var(--primary);
+}
+
+body.dark input:disabled {
+    background: #0a0c10;
+    opacity: 0.5;
+}
+
+/* Buttons */
+body.dark button:not(#browse-btn):not(#save-protocol-btn):not(.settings-action-btn) {
+    background: var(--surface);
+    color: var(--text);
+}
+
+body.dark button:not(#browse-btn):not(#save-protocol-btn):not(.settings-action-btn):hover {
+    background: #252935;
+}
+
+body.dark #browse-folder-btn:hover {
+    background: rgba(59, 130, 246, 0.15);
+}
+
+body.dark .window-btn:hover {
+    background: rgba(59, 130, 246, 0.1);
+}
+
+/* Well type popup */
+body.dark .welltype-popup {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+body.dark .welltype-btn:hover {
+    background: #0f1117;
+}
+
+/* Badge */
+body.dark .badge {
+    background: #0f1117;
+}
+
+/* Powered by link */
+body.dark .powered-by:hover {
+    background: rgba(59, 130, 246, 0.1);
+}
+
+/* Detail table */
+body.dark .detail-table td {
+    border-bottom-color: #2d3040;
+}
+
+/* Protocol table */
+body.dark #protocol-table th,
+body.dark #protocol-table td {
+    border-bottom-color: #2d3040;
+}
+
+/* Drag selection */
+body.dark .drag-selection-rect {
+    border-color: var(--primary);
+    background: rgba(59, 130, 246, 0.15);
+}
+
+/* Dark mode toggle button */
+#dark-mode-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background 0.2s, border-color 0.2s;
+    margin-left: 8px;
+}
+
+#dark-mode-toggle:hover {
+    background: var(--bg);
+    border-color: var(--primary);
+}
+
+body.dark #dark-mode-toggle {
+    color: #fbbf24;
+}
+
+/* Plotly dark mode adjustments are handled in JavaScript */

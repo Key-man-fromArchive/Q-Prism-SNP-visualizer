@@ -95,6 +95,7 @@ class WellType(str, Enum):
     ALLELE1_HOMO = "Allele 1 Homo"
     ALLELE2_HOMO = "Allele 2 Homo"
     HETEROZYGOUS = "Heterozygous"
+    UNDETERMINED = "Undetermined"
 
 
 class ClusteringAlgorithm(str, Enum):

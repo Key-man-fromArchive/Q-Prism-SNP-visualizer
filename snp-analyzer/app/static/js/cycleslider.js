@@ -152,7 +152,19 @@ function stopAnimation() {
 }
 
 export function getCurrentCycle() {
-    // Returns absolute cycle number for amplification curve vertical line
     const slider = document.getElementById("cycle-slider");
     return relativeToAbsolute(parseInt(slider.value));
+}
+
+export function togglePlay() {
+    const playBtn = document.getElementById("play-btn");
+    if (playBtn) playBtn.click();
+}
+
+export function setCycle(delta) {
+    const slider = document.getElementById("cycle-slider");
+    if (!slider) return;
+    const newVal = Math.max(parseInt(slider.min), Math.min(parseInt(slider.max), parseInt(slider.value) + delta));
+    slider.value = newVal;
+    slider.dispatchEvent(new Event("input"));
 }

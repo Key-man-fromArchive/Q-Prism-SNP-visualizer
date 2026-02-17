@@ -1,5 +1,6 @@
-import { WELL_TYPES, getWellTypeInfo } from "./welltypes.js";
-import { setManualWellTypes, isAutoClusterVisible, isManualTypesVisible } from "./clustering.js";
+import { getWellTypeInfo, effectiveType } from "./welltypes.js";
+import { isAutoClusterVisible, isManualTypesVisible } from "./clustering.js";
+import { showWellTypePopup, removePopup } from "./welltype-popup.js";
 
 let plateWells = {};
 let selectedWell = null;
@@ -121,7 +122,7 @@ function onDragEnd(e) {
         multiSelected = selected;
 
         if (selected.length > 0) {
-            showWellTypePopup(e.clientX, e.clientY, selected);
+            showWellTypePopup(e.clientX, e.clientY, selected, sessionId, clearMultiSelection);
         }
     }
 
@@ -160,64 +161,6 @@ function getWellsInRect(left, top, width, height) {
     return wells;
 }
 
-function showWellTypePopup(x, y, wells) {
-    removePopup();
-
-    const popup = document.createElement("div");
-    popup.className = "welltype-popup";
-    popup.innerHTML = `<div class="welltype-popup-header">Assign type to ${wells.length} well${wells.length > 1 ? "s" : ""}</div>`;
-
-    for (const [type, info] of Object.entries(WELL_TYPES)) {
-        const btn = document.createElement("button");
-        btn.className = "welltype-btn";
-        btn.style.borderLeftColor = info.color;
-        btn.textContent = info.label;
-        btn.addEventListener("click", async () => {
-            if (sessionId) {
-                await setManualWellTypes(sessionId, wells, type);
-            }
-            removePopup();
-            clearMultiSelection();
-        });
-        popup.appendChild(btn);
-    }
-
-    // Cancel button
-    const cancelBtn = document.createElement("button");
-    cancelBtn.className = "welltype-btn welltype-cancel";
-    cancelBtn.textContent = "Cancel";
-    cancelBtn.addEventListener("click", () => {
-        removePopup();
-        clearMultiSelection();
-    });
-    popup.appendChild(cancelBtn);
-
-    // Position popup
-    popup.style.left = Math.min(x, window.innerWidth - 220) + "px";
-    popup.style.top = Math.min(y, window.innerHeight - 300) + "px";
-
-    document.body.appendChild(popup);
-
-    // Close on outside click
-    setTimeout(() => {
-        document.addEventListener("mousedown", onPopupOutsideClick);
-    }, 50);
-}
-
-function onPopupOutsideClick(e) {
-    const popup = document.querySelector(".welltype-popup");
-    if (popup && !popup.contains(e.target)) {
-        removePopup();
-        clearMultiSelection();
-    }
-}
-
-function removePopup() {
-    const popup = document.querySelector(".welltype-popup");
-    if (popup) popup.remove();
-    document.removeEventListener("mousedown", onPopupOutsideClick);
-}
-
 function clearMultiSelection() {
     multiSelected = [];
     document.querySelectorAll(".plate-well.multi-selected").forEach(el => {
@@ -251,26 +194,18 @@ export async function updatePlate(sid, cycle, useRox = true) {
 
         el.classList.remove("empty");
 
-        // Base color by FAM ratio
-        const ratio = w.ratio ?? 0.5;
-        const r = Math.round(220 * (1 - ratio) + 37 * ratio);
-        const g = Math.round(38 * (1 - ratio) + 99 * ratio);
-        const b = Math.round(38 * (1 - ratio) + 235 * ratio);
-        el.style.background = `rgb(${r}, ${g}, ${b})`;
-
-        // Manual type indicator: thick colored border ring
-        if (showManual && w.manual_type) {
-            const info = getWellTypeInfo(w.manual_type);
-            el.style.boxShadow = `0 0 0 3px ${info.color}`;
-        }
-
-        // Auto cluster indicator: small colored center dot
-        if (showAuto && w.auto_cluster) {
-            const info = getWellTypeInfo(w.auto_cluster);
-            const dot = document.createElement("span");
-            dot.className = "cluster-dot";
-            dot.style.background = info.color;
-            el.appendChild(dot);
+        // Use well-type color when assigned, otherwise FAM ratio gradient
+        const type = effectiveType(w.auto_cluster, w.manual_type, showAuto, showManual);
+        if (type) {
+            const info = getWellTypeInfo(type);
+            el.style.background = info.color;
+        } else {
+            // Fallback: ratio gradient (blue → red)
+            const ratio = w.ratio ?? 0.5;
+            const r = Math.round(220 * (1 - ratio) + 37 * ratio);
+            const g = Math.round(38 * (1 - ratio) + 99 * ratio);
+            const b = Math.round(38 * (1 - ratio) + 235 * ratio);
+            el.style.background = `rgb(${r}, ${g}, ${b})`;
         }
     }
 

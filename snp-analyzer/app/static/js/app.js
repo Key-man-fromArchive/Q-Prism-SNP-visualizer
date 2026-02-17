@@ -1,12 +1,23 @@
-import { initScatter, updateScatter, highlightScatterPoint, getPointData, getAllele2Dye } from "./scatter.js";
+import { initScatter, updateScatter, highlightScatterPoint, getPointData, getAllele2Dye, getAllPoints } from "./scatter.js";
+import { updateResultsTable } from "./results-table.js";
 import { initPlate, updatePlate, highlightPlateWell } from "./plateview.js";
-import { initCycleSlider, getCurrentCycle } from "./cycleslider.js";
+import { initCycleSlider, getCurrentCycle, togglePlay, setCycle } from "./cycleslider.js";
 import { initProtocol } from "./protocol.js";
 import { initSettings, getUseRox } from "./settings.js";
-import { loadClustering, loadManualWellTypes } from "./clustering.js";
+import { loadClustering, loadManualWellTypes, setManualWellTypes } from "./clustering.js";
+import { initDarkMode, toggleDarkMode } from "./dark-mode.js";
+import { initKeyboard } from "./keyboard.js";
+import { initExportUI, downloadCSV } from "./export-ui.js";
+import { initThresholdLines, toggleThresholdLines, refreshThresholdLines, isThresholdVisible } from "./threshold-lines.js";
+import { initSampleEditor, enablePlateEditing } from "./sample-editor.js";
+import { initQC, updateQC } from "./qc-indicators.js";
+import { initCompare, refreshSessionList } from "./compare.js";
 
 let sessionId = null;
 let sessionInfo = null;
+
+// Init dark mode on page load
+initDarkMode();
 
 // Upload handling
 const dropArea = document.getElementById("drop-area");
@@ -204,19 +215,62 @@ function initAnalysis() {
     document.getElementById("upload-zone").classList.add("hidden");
     document.getElementById("analysis-panel").classList.remove("hidden");
 
-    // Show session badges
+    // Show session badges + export buttons
     const infoEl = document.getElementById("session-info");
     infoEl.classList.remove("hidden");
     document.getElementById("instrument-badge").textContent = sessionInfo.instrument;
     document.getElementById("wells-badge").textContent = `${sessionInfo.num_wells} wells`;
     document.getElementById("cycles-badge").textContent = `${sessionInfo.num_cycles} cycles`;
+    const exportBtns = document.getElementById("export-buttons");
+    if (exportBtns) exportBtns.classList.remove("hidden");
 
-    // Init components
-    initScatter();
+    // Init core components
+    initScatter(sessionId);
     initPlate(sessionId);
     initCycleSlider(sessionInfo.num_cycles, sessionInfo.data_windows, onCycleChange);
     initProtocol(sessionId);
     initSettings(() => onCycleChange(getCurrentCycle()), sessionId, sessionInfo);
+
+    // Init new modules
+    initExportUI(sessionId);
+    initThresholdLines();
+    initSampleEditor(sessionId);
+    initQC(sessionId);
+    initCompare();
+
+    // Enable double-click sample editing on plate wells
+    setTimeout(() => enablePlateEditing(), 100);
+
+    // Keyboard shortcuts
+    initKeyboard({
+        togglePlay: () => togglePlay(),
+        prevCycle: () => setCycle(-1),
+        nextCycle: () => setCycle(1),
+        exportCSV: () => downloadCSV(),
+        toggleDarkMode: () => toggleDarkMode(),
+        assignWellType: (type) => {
+            // Get currently selected well from scatter or plate
+            const selected = document.querySelector(".plate-well.selected");
+            if (selected) {
+                const well = selected.dataset.well;
+                setManualWellTypes(sessionId, [well], type);
+            }
+        },
+    });
+
+    // Threshold lines toggle button
+    const threshBtn = document.getElementById("toggle-threshold-lines-btn");
+    if (threshBtn) {
+        threshBtn.addEventListener("click", () => {
+            const settings = {
+                ntcThreshold: parseFloat(document.getElementById("ntc-threshold")?.value) || 0.1,
+                allele1RatioMax: parseFloat(document.getElementById("allele1-ratio-max")?.value) || 0.4,
+                allele2RatioMin: parseFloat(document.getElementById("allele2-ratio-min")?.value) || 0.6,
+            };
+            toggleThresholdLines(settings);
+            threshBtn.textContent = isThresholdVisible() ? "Hide Threshold Lines" : "Show Threshold Lines";
+        });
+    }
 
     // Load existing clustering/welltype state
     loadClustering(sessionId);
@@ -229,8 +283,25 @@ function initAnalysis() {
             document.querySelectorAll(".tab-content").forEach((tc) => tc.classList.remove("active"));
             tab.classList.add("active");
             document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
+            // Refresh session list when Compare tab is activated
+            if (tab.dataset.tab === "compare") {
+                refreshSessionList();
+            }
         });
     });
+
+    // New Upload button — show upload zone again without losing current session
+    const newUploadBtn = document.getElementById("new-upload-btn");
+    if (newUploadBtn) {
+        newUploadBtn.addEventListener("click", () => {
+            document.getElementById("upload-zone").classList.remove("hidden");
+            document.getElementById("analysis-panel").classList.add("hidden");
+            // Reset file input and progress
+            document.getElementById("file-input").value = "";
+            const progress = document.getElementById("upload-progress");
+            if (progress) progress.classList.add("hidden");
+        });
+    }
 }
 
 async function onCycleChange(cycle) {
@@ -240,6 +311,9 @@ async function onCycleChange(cycle) {
         updateScatter(sessionId, cycle, useRox),
         updatePlate(sessionId, cycle, useRox),
     ]);
+    updateResultsTable(getAllPoints());
+    refreshThresholdLines();
+    updateQC(cycle, useRox);
 }
 
 // Listen for clustering/welltype changes -> refresh scatter + plate

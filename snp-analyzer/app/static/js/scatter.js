@@ -1,16 +1,18 @@
 import { getAxisSettings } from "./settings.js";
 import { WELL_TYPES, UNASSIGNED, getWellTypeInfo, effectiveType } from "./welltypes.js";
 import { isAutoClusterVisible, isManualTypesVisible } from "./clustering.js";
+import { showWellTypePopup, removePopup } from "./welltype-popup.js";
 
 let currentPoints = [];
 let selectedWell = null;
 let allele2Dye = "HEX";
+let sessionIdLocal = null;
 
 function applyAxisRange(layout) {
     const s = getAxisSettings();
     if (s.fixAxis) {
-        layout.xaxis.range = [0, s.xMax];
-        layout.yaxis.range = [0, s.yMax];
+        layout.xaxis.range = [s.xMin ?? 0, s.xMax];
+        layout.yaxis.range = [s.yMin ?? 0, s.yMax];
     } else {
         layout.xaxis.autorange = true;
         layout.yaxis.autorange = true;
@@ -18,7 +20,8 @@ function applyAxisRange(layout) {
     return layout;
 }
 
-export function initScatter() {
+export function initScatter(sid) {
+    sessionIdLocal = sid;
     const layout = applyAxisRange({
         xaxis: { title: "Normalized FAM", zeroline: true },
         yaxis: { title: "Normalized HEX/VIC", zeroline: true },
@@ -30,10 +33,12 @@ export function initScatter() {
     Plotly.newPlot("scatter-plot", [], layout, {
         responsive: true,
         displayModeBar: true,
-        modeBarButtonsToRemove: ["toImage", "sendDataToCloud"],
+        modeBarButtonsToRemove: ["toImage", "sendDataToCloud", "zoom2d", "pan2d"],
     });
 
-    document.getElementById("scatter-plot").on("plotly_click", (data) => {
+    const plotDiv = document.getElementById("scatter-plot");
+
+    plotDiv.on("plotly_click", (data) => {
         if (data.points.length > 0) {
             const well = data.points[0].customdata;
             if (well) {
@@ -42,6 +47,41 @@ export function initScatter() {
                 document.dispatchEvent(new CustomEvent("well-selected", { detail: { well, source: "scatter" } }));
             }
         }
+    });
+
+    plotDiv.on("plotly_selected", (data) => {
+        if (!data || !data.points || data.points.length === 0) return;
+
+        const wells = data.points.map(p => p.customdata).filter(Boolean);
+        if (wells.length === 0) return;
+
+        // Compute popup position from selection bounding box
+        let px, py;
+        try {
+            const xaxis = plotDiv._fullLayout.xaxis;
+            const yaxis = plotDiv._fullLayout.yaxis;
+            const plotArea = plotDiv._fullLayout._plots.xy.plotgroup.node().getBoundingClientRect();
+
+            // Get pixel coords of max-x, min-y corner (top-right of selection)
+            const xs = data.points.map(p => p.x);
+            const ys = data.points.map(p => p.y);
+            const maxX = Math.max(...xs);
+            const minY = Math.min(...ys);
+
+            px = plotArea.left + xaxis.l2p(maxX) + xaxis._offset;
+            py = plotArea.top + yaxis.l2p(minY) + yaxis._offset;
+        } catch (_) {
+            // Fallback: use mouse position approximation from last point
+            const rect = plotDiv.getBoundingClientRect();
+            px = rect.left + rect.width / 2;
+            py = rect.top + rect.height / 2;
+        }
+
+        showWellTypePopup(px + 10, py, wells, sessionIdLocal, null);
+    });
+
+    plotDiv.on("plotly_deselect", () => {
+        removePopup();
     });
 }
 
@@ -80,7 +120,7 @@ export async function updateScatter(sessionId, cycle, useRox = true) {
             name: info.label,
             customdata: pts.map(p => p.well),
             marker: {
-                size: 8,
+                size: 12,
                 color: info.color,
                 symbol: info.symbol,
                 opacity: 0.8,
@@ -104,6 +144,8 @@ export async function updateScatter(sessionId, cycle, useRox = true) {
     const layout = applyAxisRange({
         xaxis: { title: "Normalized FAM" },
         yaxis: { title: `Normalized ${allele2Dye}` },
+        hovermode: "closest",
+        dragmode: "select",
         legend: { orientation: "h", y: -0.15 },
     });
 
@@ -124,7 +166,7 @@ export function highlightScatterPoint(well) {
     for (let t = 0; t < data.length; t++) {
         const trace = data[t];
         const customdata = trace.customdata || [];
-        const sizes = customdata.map(w => w === well ? 14 : 8);
+        const sizes = customdata.map(w => w === well ? 18 : 12);
         const lineWidths = customdata.map(w => w === well ? 3 : 1);
         const lineColors = customdata.map(w => w === well ? "#000" : "#fff");
 
@@ -138,6 +180,10 @@ export function highlightScatterPoint(well) {
 
 export function getPointData(well) {
     return currentPoints.find((p) => p.well === well) || null;
+}
+
+export function getAllPoints() {
+    return currentPoints;
 }
 
 export function getAllele2Dye() {
