@@ -87,16 +87,41 @@ def parse_eds(file_path: str) -> UnifiedData:
 
         # Find tcprotocol.xml (optional, for protocol steps)
         protocol_steps = []
+        stage_type_map: dict[int, str] = {}  # stage_index (1-based) -> stage_type
         tc_path = _find_file(names, "tcprotocol.xml")
         if tc_path:
             tc_xml = zf.read(tc_path)
             protocol_steps = _parse_protocol(tc_xml)
+            stage_type_map = _parse_stage_type_map(tc_xml)
 
-    # Determine cycle indices for amplification (stage flag == 5)
-    # stage_flags = [1, 5, 5, ..., 5, 6]
-    amp_indices = [i for i, flag in enumerate(stage_flags) if flag == 5]
-    pre_read_indices = [i for i, flag in enumerate(stage_flags) if flag == 1]
-    post_read_indices = [i for i, flag in enumerate(stage_flags) if flag == 6]
+    # Determine cycle indices using stage type mapping from protocol
+    # TCStageFlags values are 1-based stage indices, not fixed enums.
+    # Look up actual stage type (PRE_READ, CYCLING, POST_READ) from protocol.
+    amp_indices = []
+    pre_read_indices = []
+    post_read_indices = []
+
+    if stage_type_map:
+        # Find which stage indices have data collection in CYCLING stages
+        cycling_with_collection = set()
+        for idx, stype in stage_type_map.items():
+            if stype == "CYCLING":
+                cycling_with_collection.add(idx)
+        pre_read_stages = {idx for idx, s in stage_type_map.items() if s == "PRE_READ"}
+        post_read_stages = {idx for idx, s in stage_type_map.items() if s == "POST_READ"}
+
+        for i, flag in enumerate(stage_flags):
+            if flag in cycling_with_collection:
+                amp_indices.append(i)
+            elif flag in pre_read_stages:
+                pre_read_indices.append(i)
+            elif flag in post_read_stages:
+                post_read_indices.append(i)
+    else:
+        # Fallback: assume flag 5=CYCLING, 1=PRE_READ, 6=POST_READ
+        amp_indices = [i for i, flag in enumerate(stage_flags) if flag == 5]
+        pre_read_indices = [i for i, flag in enumerate(stage_flags) if flag == 1]
+        post_read_indices = [i for i, flag in enumerate(stage_flags) if flag == 6]
 
     # Detect allele2 dye from the first assigned well's dye list
     allele2_dye = "VIC"
@@ -318,6 +343,33 @@ def _parse_protocol(xml_data: bytes) -> list[ProtocolStep]:
             ))
 
     return steps
+
+
+def _parse_stage_type_map(xml_data: bytes) -> dict[int, str]:
+    """Parse tcprotocol.xml to build stage_index -> stage_type mapping.
+
+    TCStageFlags values in multicomponentdata.xml are 1-based stage indices.
+    This maps each stage index to its type (PRE_READ, CYCLING, POST_READ, etc).
+    Only CYCLING stages with data collection are relevant for amplification.
+    """
+    root = ET.fromstring(xml_data)
+    stage_map: dict[int, str] = {}
+
+    for i, stage in enumerate(root.findall("TCStage"), 1):
+        stage_flag = stage.findtext("StageFlag", "")
+        # Only mark CYCLING stages that have data collection
+        if stage_flag == "CYCLING":
+            has_collection = any(
+                s.findtext("CollectionFlag", "0") == "1"
+                for s in stage.findall("TCStep")
+            )
+            if has_collection:
+                stage_map[i] = "CYCLING"
+            # Skip non-collecting CYCLING stages (e.g., touchdown)
+        elif stage_flag in ("PRE_READ", "POST_READ", "PRE_CYCLING"):
+            stage_map[i] = stage_flag
+
+    return stage_map
 
 
 def _well_sort_key(well: str) -> tuple[int, int]:

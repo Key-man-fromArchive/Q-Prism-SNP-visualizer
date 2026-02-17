@@ -41,6 +41,10 @@ async def upload_file(file: UploadFile = File(...)):
     from app.db import save_session
     save_session(session_id, unified, filename=file.filename or "")
 
+    # Compute suggested display cycle via NTC detection
+    from app.processing.ntc_detection import compute_suggested_cycle
+    suggested = compute_suggested_cycle(unified)
+
     return UploadResponse(
         session_id=session_id,
         instrument=unified.instrument,
@@ -49,4 +53,5 @@ async def upload_file(file: UploadFile = File(...)):
         num_cycles=len(unified.cycles),
         has_rox=unified.has_rox,
         data_windows=[{"name": w.name, "start_cycle": w.start_cycle, "end_cycle": w.end_cycle} for w in unified.data_windows] if unified.data_windows else None,
+        suggested_cycle=suggested,
     )
