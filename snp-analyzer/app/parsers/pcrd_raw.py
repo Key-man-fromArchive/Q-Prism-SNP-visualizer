@@ -188,7 +188,11 @@ def _parse_dye_layers(plate_setup: ET.Element) -> tuple[
 
 
 def _parse_protocol(root: ET.Element) -> list[ProtocolStep]:
-    """Parse protocol2BaseList for PCR protocol display."""
+    """Parse protocol2BaseList for PCR protocol display.
+
+    Resolves GotoStep elements into cycle counts and assigns phase labels
+    for visual grouping: Pre-read / Amplification 1,2,3 / Post-read.
+    """
     proto = root.find(".//protocol2BaseList")
     if proto is None:
         return []
@@ -218,20 +222,82 @@ def _parse_protocol(root: ET.Element) -> list[ProtocolStep]:
                 "count": count,
             })
 
-    # Second pass: resolve GOTOs to get cycle counts for temperature steps
-    cycle_counts: dict[int, int] = {}  # step_index -> total cycles
+    # Second pass: resolve GOTOs — build cycle counts and GOTO group info
+    cycle_counts: dict[int, int] = {}  # raw_index -> total cycles
+    # Each GOTO defines a cycling group: (target_idx, last_temp_idx, total_cycles)
+    goto_groups: list[dict] = []
     for i, step in enumerate(raw_steps):
         if step["type"] == "goto":
             target = step["target"]
             count = step["count"]
-            # GOTO repeats steps from target to (i-1) for count+1 total iterations
-            # But the first iteration already happened, so GOTO adds `count` more
+            total = count + 1
             for j in range(target, i):
                 if raw_steps[j]["type"] == "temp":
                     cycle_counts[j] = cycle_counts.get(j, 1) + count
+            goto_groups.append({
+                "target": target,
+                "goto_idx": i,
+                "total_cycles": total,
+            })
 
-    # Third pass: build ProtocolStep list
+    # Build set of raw indices covered by any GOTO group
+    goto_covered: set[int] = set()
+    for g in goto_groups:
+        for j in range(g["target"], g["goto_idx"]):
+            if raw_steps[j]["type"] == "temp":
+                goto_covered.add(j)
+
+    # Third pass: assign phase and build ProtocolStep list
+    # Determine phase for each raw temp step index
+    raw_phase: dict[int, str] = {}
+    amp_num = 0
+    for g in goto_groups:
+        amp_num += 1
+        # Check if this group has touchdown or data collection
+        has_td = any(raw_steps[j].get("inc_temp", 0) != 0
+                     for j in range(g["target"], g["goto_idx"])
+                     if raw_steps[j]["type"] == "temp")
+        has_dc = any(raw_steps[j].get("has_read", False)
+                     for j in range(g["target"], g["goto_idx"])
+                     if raw_steps[j]["type"] == "temp")
+        suffix = ""
+        if has_td:
+            suffix = " (Touchdown)"
+        elif has_dc:
+            suffix = " (Read)"
+        phase_name = f"Amplification {amp_num}{suffix}"
+        for j in range(g["target"], g["goto_idx"]):
+            if raw_steps[j]["type"] == "temp":
+                raw_phase[j] = phase_name
+
+    # Assign phases to non-GOTO temp steps
+    first_goto_target = goto_groups[0]["target"] if goto_groups else len(raw_steps)
+    last_goto_idx = goto_groups[-1]["goto_idx"] if goto_groups else -1
+    for i, step in enumerate(raw_steps):
+        if step["type"] != "temp" or i in goto_covered:
+            continue
+        if i < first_goto_target:
+            if step["temp"] <= 32 and step["has_read"]:
+                raw_phase[i] = "Pre-read"
+            else:
+                raw_phase[i] = "Initial Denaturation"
+        elif i > last_goto_idx:
+            if step["temp"] <= 32 and step["has_read"]:
+                raw_phase[i] = "Post-read"
+            else:
+                raw_phase[i] = "Hold"
+
+    # Fourth pass: build ProtocolStep list with phases and GOTO labels
     steps: list[ProtocolStep] = []
+    step_num = 0
+    # Map raw_index -> output step number (for GOTO label references)
+    raw_to_step: dict[int, int] = {}
+    for i, step in enumerate(raw_steps):
+        if step["type"] != "temp":
+            continue
+        step_num += 1
+        raw_to_step[i] = step_num
+
     step_num = 0
     for i, step in enumerate(raw_steps):
         if step["type"] != "temp":
@@ -240,10 +306,11 @@ def _parse_protocol(root: ET.Element) -> list[ProtocolStep]:
         total_cycles = cycle_counts.get(i, 1)
         temp = step["temp"]
         hold = step["hold"]
+        phase = raw_phase.get(i, "")
 
         # Generate label
         if temp <= 32 and step["has_read"]:
-            label = "Pre-Read" if i < len(raw_steps) // 2 else "Post-Read"
+            label = "Pre-Read" if i < first_goto_target else "Post-Read"
         elif temp >= 90:
             label = "Initial Denaturation" if total_cycles == 1 else "Denaturation"
         elif step["has_read"]:
@@ -255,12 +322,31 @@ def _parse_protocol(root: ET.Element) -> list[ProtocolStep]:
         else:
             label = "Hold"
 
+        # Check if this is the last temp step before a GOTO
+        goto_label = ""
+        for g in goto_groups:
+            # Last temp step in GOTO range is at goto_idx - 1 (or earlier if goto_idx-1 is a goto)
+            last_temp_in_group = max(
+                j for j in range(g["target"], g["goto_idx"])
+                if raw_steps[j]["type"] == "temp"
+            )
+            if i == last_temp_in_group:
+                first_step = raw_to_step.get(g["target"], "?")
+                last_step = raw_to_step.get(last_temp_in_group, "?")
+                if first_step == last_step:
+                    goto_label = f"\u21a9 Repeat Step {first_step} \u00d7 {g['total_cycles']} cycles"
+                else:
+                    goto_label = f"\u21a9 Repeat Steps {first_step}-{last_step} \u00d7 {g['total_cycles']} cycles"
+                break
+
         steps.append(ProtocolStep(
             step=step_num,
             temperature=temp,
             duration_sec=hold,
             cycles=total_cycles,
             label=label,
+            phase=phase,
+            goto_label=goto_label,
         ))
 
     return steps

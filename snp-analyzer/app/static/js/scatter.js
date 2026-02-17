@@ -23,8 +23,8 @@ function applyAxisRange(layout) {
 export function initScatter(sid) {
     sessionIdLocal = sid;
     const layout = applyAxisRange({
-        xaxis: { title: "Normalized FAM", zeroline: true },
-        yaxis: { title: "Normalized HEX/VIC", zeroline: true },
+        xaxis: { title: "FAM", zeroline: true },
+        yaxis: { title: "HEX/VIC", zeroline: true },
         hovermode: "closest",
         margin: { t: 10, r: 10, b: 50, l: 60 },
         dragmode: "select",
@@ -126,24 +126,26 @@ export async function updateScatter(sessionId, cycle, useRox = true) {
                 opacity: 0.8,
                 line: { width: 1, color: "#fff" },
             },
-            text: pts.map(p =>
-                `<b>${p.well}</b>${p.sample_name ? " (" + p.sample_name + ")" : ""}<br>` +
-                `FAM: ${p.norm_fam.toFixed(4)}<br>` +
-                `${allele2Dye}: ${p.norm_allele2.toFixed(4)}<br>` +
-                `Raw FAM: ${p.raw_fam.toFixed(1)}<br>` +
-                `Raw ${allele2Dye}: ${p.raw_allele2.toFixed(1)}` +
-                (p.raw_rox != null ? `<br>Raw ROX: ${p.raw_rox.toFixed(1)}` : "") +
-                (p.auto_cluster ? `<br>Auto: ${p.auto_cluster}` : "") +
-                (p.manual_type ? `<br>Manual: ${p.manual_type}` : "")
-            ),
+            text: pts.map(p => {
+                const normLabel = useRox ? "/ROX" : "";
+                return `<b>${p.well}</b>${p.sample_name ? " (" + p.sample_name + ")" : ""}<br>` +
+                    `FAM${normLabel}: ${p.norm_fam.toFixed(useRox ? 4 : 1)}<br>` +
+                    `${allele2Dye}${normLabel}: ${p.norm_allele2.toFixed(useRox ? 4 : 1)}` +
+                    (useRox ? `<br>Raw FAM: ${p.raw_fam.toFixed(1)}<br>Raw ${allele2Dye}: ${p.raw_allele2.toFixed(1)}` : "") +
+                    (p.raw_rox != null ? `<br>ROX: ${p.raw_rox.toFixed(1)}` : "") +
+                    (p.auto_cluster ? `<br>Auto: ${p.auto_cluster}` : "") +
+                    (p.manual_type ? `<br>Manual: ${p.manual_type}` : "");
+            }),
             hoverinfo: "text",
             hovertemplate: "%{text}<extra></extra>",
         });
     }
 
+    const xLabel = useRox ? "FAM / ROX" : "FAM (raw RFU)";
+    const yLabel = useRox ? `${allele2Dye} / ROX` : `${allele2Dye} (raw RFU)`;
     const layout = applyAxisRange({
-        xaxis: { title: "Normalized FAM" },
-        yaxis: { title: `Normalized ${allele2Dye}` },
+        xaxis: { title: xLabel },
+        yaxis: { title: yLabel },
         hovermode: "closest",
         dragmode: "select",
         legend: { orientation: "h", y: -0.15 },

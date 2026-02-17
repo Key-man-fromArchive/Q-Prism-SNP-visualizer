@@ -22,6 +22,7 @@ import { initBatch, loadProjects } from "./batch.js";
 
 let sessionId = null;
 let sessionInfo = null;
+let selectedWellId = null;
 
 // Init dark mode on page load
 initDarkMode();
@@ -430,6 +431,8 @@ async function onCycleChange(cycle) {
     refreshThresholdLines();
     updateQC(cycle, useRox);
     loadCtData(useRox);
+    // Refresh detail panel if a well is selected (ROX toggle changes values)
+    if (selectedWellId) updateDetailPanel(selectedWellId);
 }
 
 // Listen for clustering/welltype changes -> refresh scatter + plate
@@ -458,6 +461,7 @@ document.addEventListener("welltypes-changed", async () => {
 // Bidirectional well selection
 document.addEventListener("well-selected", async (e) => {
     const { well, source } = e.detail;
+    selectedWellId = well;
 
     if (source !== "scatter") highlightScatterPoint(well);
     if (source !== "plate") highlightPlateWell(well);
@@ -497,8 +501,8 @@ function updateDetailPanel(well) {
             <tr><td>Genotype</td><td>${genotype}</td></tr>
             ${point.auto_cluster ? `<tr><td>Auto Cluster</td><td>${point.auto_cluster}</td></tr>` : ""}
             ${point.manual_type ? `<tr><td>Manual Type</td><td>${point.manual_type}</td></tr>` : ""}
-            <tr><td>FAM (norm)</td><td>${point.norm_fam.toFixed(4)}</td></tr>
-            <tr><td>${dye} (norm)</td><td>${point.norm_allele2.toFixed(4)}</td></tr>
+            <tr><td>FAM${getUseRox() ? "/ROX" : ""}</td><td>${point.norm_fam.toFixed(getUseRox() ? 4 : 1)}</td></tr>
+            <tr><td>${dye}${getUseRox() ? "/ROX" : ""}</td><td>${point.norm_allele2.toFixed(getUseRox() ? 4 : 1)}</td></tr>
             <tr><td>FAM ratio</td><td>${ratio}%</td></tr>
             <tr><td>FAM (raw)</td><td>${point.raw_fam.toFixed(1)}</td></tr>
             <tr><td>${dye} (raw)</td><td>${point.raw_allele2.toFixed(1)}</td></tr>

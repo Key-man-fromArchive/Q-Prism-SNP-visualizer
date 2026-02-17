@@ -135,6 +135,11 @@ body.dark #protocol-table td {
     border-bottom-color: #2d3040;
 }
 
+/* Phase bar dark mode — darken segment backgrounds */
+body.dark .phase-bar-segment {
+    filter: brightness(0.4) saturate(1.2);
+}
+
 /* Drag selection */
 body.dark .drag-selection-rect {
     border-color: var(--primary);

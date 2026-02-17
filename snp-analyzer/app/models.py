@@ -87,6 +87,8 @@ class ProtocolStep(BaseModel):
     duration_sec: int
     cycles: int = 1
     label: str = ""
+    phase: str = ""        # e.g., "Pre-read", "Amplification 1 (Touchdown)", "Post-read"
+    goto_label: str = ""   # e.g., "↩ Repeat Steps 3-4 × 10 cycles"
 
 
 class WellType(str, Enum):

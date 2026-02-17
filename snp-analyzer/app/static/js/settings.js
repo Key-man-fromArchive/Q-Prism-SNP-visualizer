@@ -91,14 +91,14 @@ function initRoxToggle(settings, sessionInfo) {
     }
     roxGroup.classList.remove("hidden");
 
-    // Default: ON for QuantStudio, OFF for Bio-Rad/CFX
-    let useRox = settings.useRox;
-    if (useRox === null || useRox === undefined) {
-        const instrument = (sessionInfo.instrument || "").toLowerCase();
-        useRox = instrument.includes("quantstudio");
-    }
-
+    // Always derive default from instrument on each new upload
+    // (stale localStorage from a prior session must not override)
+    const instrument = (sessionInfo.instrument || "").toLowerCase();
+    const useRox = instrument.includes("quantstudio");
     roxCheckbox.checked = useRox;
+
+    // Save instrument-appropriate default so getUseRox() reads correctly
+    persist();
 
     roxCheckbox.addEventListener("change", () => {
         persist();

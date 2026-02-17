@@ -75,8 +75,10 @@ test.describe('Detail Panel Content', () => {
     await wellA1.click();
 
     const detail = page.locator('#detail-content');
-    await expect(detail).toContainText('FAM (norm)');
-    await expect(detail).toContainText('HEX (norm)');
+    // Label depends on ROX state: "FAM/ROX" when ROX ON, "FAM" when OFF
+    // CFX defaults to ROX OFF, so label is just "FAM"
+    await expect(detail).toContainText(/FAM(\/ROX)?/);
+    await expect(detail).toContainText(/HEX(\/ROX)?/);
     await expect(detail).toContainText('Genotype');
     await expect(detail).toContainText('FAM ratio');
   });

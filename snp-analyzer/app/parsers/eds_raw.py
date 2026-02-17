@@ -294,21 +294,60 @@ def _parse_plate_setup(xml_data: bytes) -> dict[int, str]:
 
 
 def _parse_protocol(xml_data: bytes) -> list[ProtocolStep]:
-    """Parse tcprotocol.xml for PCR protocol steps."""
+    """Parse tcprotocol.xml for PCR protocol steps with phase grouping.
+
+    Assigns phase labels for visual grouping:
+    Pre-read / Initial Denaturation / Amplification 1,2,3 / Post-read.
+    """
     root = ET.fromstring(xml_data)
     steps: list[ProtocolStep] = []
     step_num = 0
 
-    for stage in root.findall("TCStage"):
+    # First pass: count CYCLING stages and determine phase names
+    cycling_stages: list[tuple[int, ET.Element]] = []
+    all_stages = root.findall("TCStage")
+    for idx, stage in enumerate(all_stages):
+        if stage.findtext("StageFlag", "") == "CYCLING":
+            cycling_stages.append((idx, stage))
+
+    # Build phase names for cycling stages
+    cycling_phase_names: dict[int, str] = {}
+    for amp_num, (stage_idx, stage) in enumerate(cycling_stages, 1):
+        auto_delta = stage.findtext("AutoDeltaEnabled", "false") == "true"
+        has_collection = any(
+            s.findtext("CollectionFlag", "0") == "1"
+            for s in stage.findall("TCStep")
+        )
+        suffix = ""
+        if auto_delta:
+            suffix = " (Touchdown)"
+        elif has_collection:
+            suffix = " (Read)"
+        cycling_phase_names[stage_idx] = f"Amplification {amp_num}{suffix}"
+
+    # Second pass: build steps with phases and GOTO labels
+    for stage_idx, stage in enumerate(all_stages):
         stage_flag = stage.findtext("StageFlag", "")
         repetitions = int(stage.findtext("NumOfRepetitions", "1"))
         label_base = STAGE_LABELS.get(stage_flag, stage_flag)
         auto_delta = stage.findtext("AutoDeltaEnabled", "false") == "true"
 
+        # Determine phase for this stage
+        if stage_flag == "PRE_READ":
+            phase = "Pre-read"
+        elif stage_flag == "POST_READ":
+            phase = "Post-read"
+        elif stage_flag == "PRE_CYCLING":
+            phase = "Initial Denaturation"
+        elif stage_idx in cycling_phase_names:
+            phase = cycling_phase_names[stage_idx]
+        else:
+            phase = stage_flag
+
         tc_steps = stage.findall("TCStep")
+        first_step_in_stage = step_num + 1
         for i, tc_step in enumerate(tc_steps):
             step_num += 1
-            # Take first Temperature element (they're all the same per zone)
             temp_elem = tc_step.find("Temperature")
             temp = float(temp_elem.text) if temp_elem is not None else 0.0
             hold_time = int(tc_step.findtext("HoldTime", "0"))
@@ -334,12 +373,23 @@ def _parse_protocol(xml_data: bytes) -> list[ProtocolStep]:
                 if auto_delta and ext_temp != 0:
                     label += f" (TD {ext_temp:+.1f}/cyc)"
 
+            # GOTO label on last step of cycling stages with repetitions > 1
+            goto_label = ""
+            if stage_flag == "CYCLING" and repetitions > 1 and i == len(tc_steps) - 1:
+                last_step = step_num
+                if first_step_in_stage == last_step:
+                    goto_label = f"\u21a9 Repeat Step {first_step_in_stage} \u00d7 {repetitions} cycles"
+                else:
+                    goto_label = f"\u21a9 Repeat Steps {first_step_in_stage}-{last_step} \u00d7 {repetitions} cycles"
+
             steps.append(ProtocolStep(
                 step=step_num,
                 temperature=temp,
                 duration_sec=hold_time,
                 cycles=repetitions,
                 label=label,
+                phase=phase,
+                goto_label=goto_label,
             ))
 
     return steps
