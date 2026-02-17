@@ -144,7 +144,7 @@ export function QualityTab() {
                 <td className="py-3 text-text">{bucket.count}</td>
                 <td className="py-3">
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-surface rounded-full h-4 overflow-hidden">
+                    <div className="flex-1 bg-bg rounded-full h-4 overflow-hidden border border-border">
                       <div
                         className={`h-full ${bucket.color} transition-all duration-300`}
                         style={{ width: `${bucket.percentage}%` }}

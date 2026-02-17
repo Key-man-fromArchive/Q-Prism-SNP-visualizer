@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
+import { setWellTypes } from "@/lib/api";
 import { Header } from "@/components/layout/Header";
 import { UploadZone } from "@/components/upload/UploadZone";
 import { TabNavigation, type TabId } from "@/components/layout/TabNavigation";
@@ -28,6 +29,25 @@ export default function App() {
   const { downloadCSV } = useExports();
   const { undo, redo } = useUndoRedo();
 
+  // Track whether ROX was auto-set for THIS session (prevents overriding manual toggles)
+  const roxAutoSetForSession = useRef<string | null>(null);
+
+  // Auto-set ROX based on instrument ONLY on session change
+  useEffect(() => {
+    if (!sessionInfo || !sessionId) return;
+    if (roxAutoSetForSession.current === sessionId) return;
+
+    roxAutoSetForSession.current = sessionId;
+    const instrument = (sessionInfo.instrument || "").toLowerCase();
+    const isQuantStudio = instrument.includes("quantstudio");
+
+    if (isQuantStudio && sessionInfo.has_rox) {
+      setUseRox(true);
+    } else if (!isQuantStudio) {
+      setUseRox(false);
+    }
+  }, [sessionId, sessionInfo, setUseRox]);
+
   // Keyboard shortcut callbacks
   const shortcuts = useMemo(
     () => ({
@@ -47,43 +67,44 @@ export default function App() {
       toggleDarkMode,
       undo,
       redo,
+      assignWellType: async (type: string) => {
+        const sid = useSessionStore.getState().sessionId;
+        const wells = useSelectionStore.getState().selectedWells;
+        if (!sid || wells.length === 0) return;
+        try {
+          await setWellTypes(sid, { wells, well_type: type as any });
+          useSelectionStore.getState().clearSelection();
+          window.dispatchEvent(new CustomEvent("welltypes-changed"));
+        } catch (err) {
+          console.error("Failed to assign well type:", err);
+        }
+      },
     }),
     [downloadCSV, toggleDarkMode, undo, redo]
   );
 
   const { showHelp, setShowHelp } = useKeyboardShortcuts(shortcuts);
 
-  // Auto-set ROX based on instrument when session loads
-  if (sessionInfo && sessionId) {
-    const instrument = (sessionInfo.instrument || "").toLowerCase();
-    const currentRox = useSettingsStore.getState().useRox;
-    const isQuantStudio = instrument.includes("quantstudio");
-    if (isQuantStudio && sessionInfo.has_rox && !currentRox) {
-      setUseRox(true);
-    } else if (!isQuantStudio && currentRox) {
-      setUseRox(false);
-    }
-  }
-
   return (
     <div className="min-h-screen bg-bg">
       <Header />
       <main>
-        {!sessionId ? (
-          <UploadZone />
-        ) : (
-          <div id="analysis-panel">
-            <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+        {!sessionId && <UploadZone />}
+        <div id="analysis-panel" className={!sessionId ? "hidden" : ""}>
+          {sessionId && (
+            <>
+              <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
 
-            {activeTab === "analysis" && <AnalysisTab />}
-            {activeTab === "protocol" && <ProtocolTab />}
-            {activeTab === "settings" && <SettingsTab />}
-            {activeTab === "quality" && <QualityTab />}
-            {activeTab === "statistics" && <StatisticsTab />}
-            {activeTab === "compare" && <CompareTab />}
-            {activeTab === "batch" && <BatchTab />}
-          </div>
-        )}
+              {activeTab === "analysis" && <AnalysisTab />}
+              {activeTab === "protocol" && <ProtocolTab />}
+              {activeTab === "settings" && <SettingsTab />}
+              {activeTab === "quality" && <QualityTab />}
+              {activeTab === "statistics" && <StatisticsTab />}
+              {activeTab === "compare" && <CompareTab />}
+              {activeTab === "batch" && <BatchTab />}
+            </>
+          )}
+        </div>
       </main>
 
       {showHelp && <KeyboardHelpOverlay onClose={() => setShowHelp(false)} />}

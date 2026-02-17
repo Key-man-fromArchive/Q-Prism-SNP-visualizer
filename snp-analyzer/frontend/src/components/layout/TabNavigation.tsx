@@ -27,13 +27,14 @@ export function TabNavigation({ activeTab, onTabChange }: TabNavigationProps) {
       {tabs.map((tab) => (
         <button
           key={tab.id}
+          id={`tab-${tab.dataTab}`}
           data-tab={tab.dataTab}
           onClick={() => onTabChange(tab.id)}
           className={`
-            px-5 py-2.5 border-none bg-transparent cursor-pointer text-sm transition-colors border-b-2
+            tab px-5 py-2.5 border-none bg-transparent cursor-pointer text-sm transition-colors border-b-2
             ${
               activeTab === tab.id
-                ? 'text-primary border-b-primary font-medium'
+                ? 'active text-primary border-b-primary font-medium'
                 : 'text-text-muted border-b-transparent hover:text-text'
             }
           `}

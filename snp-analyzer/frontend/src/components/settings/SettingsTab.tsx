@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSessionStore } from "@/stores/session-store";
+import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import {
   getPresets,
@@ -31,9 +32,13 @@ export function SettingsTab() {
     nClusters, setNClusters,
     showAutoCluster, setShowAutoCluster,
     showManualTypes, setShowManualTypes,
+    resetToDefaults,
   } = useSettingsStore();
 
+  const currentCycle = useSelectionStore((s) => s.currentCycle);
   const setClusterAssignments = useDataStore((s) => s.setClusterAssignments);
+  const [showThresholdLines, setShowThresholdLines] = useState(false);
+  const [clusterError, setClusterError] = useState<string | null>(null);
 
   // Load presets on mount
   const loadPresetList = useCallback(async () => {
@@ -114,10 +119,11 @@ export function SettingsTab() {
     if (!sessionId) return;
 
     setClusterLoading(true);
+    setClusterError(null);
     try {
       const result = await apiRunClustering(sessionId, {
         algorithm: clusterAlgorithm,
-        cycle: 0,
+        cycle: currentCycle || 0,
         threshold_config:
           clusterAlgorithm === "threshold"
             ? {
@@ -130,11 +136,13 @@ export function SettingsTab() {
       });
       setClusterAssignments(result.assignments);
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Clustering failed";
+      setClusterError(msg);
       console.error("Clustering failed:", err);
     } finally {
       setClusterLoading(false);
     }
-  }, [sessionId, clusterAlgorithm, ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters, setClusterAssignments]);
+  }, [sessionId, clusterAlgorithm, currentCycle, ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters, setClusterAssignments]);
 
   return (
     <div
@@ -206,7 +214,7 @@ export function SettingsTab() {
       </div>
 
       {/* Panel 2: Normalization */}
-      {sessionInfo?.has_rox !== false && (
+      {sessionInfo?.has_rox === true && (
         <div id="rox-normalize-group" className="panel">
           <h3 className="text-sm font-semibold mb-3 text-text">Normalization</h3>
           <div className="mb-4">
@@ -338,7 +346,7 @@ export function SettingsTab() {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-text-muted font-medium">Allele 2 max ratio</span>
+              <span className="text-xs text-text-muted font-medium">Allele 1 max ratio</span>
               <input
                 id="allele1-ratio-max"
                 type="number"
@@ -351,7 +359,7 @@ export function SettingsTab() {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-text-muted font-medium">Allele 1 min ratio</span>
+              <span className="text-xs text-text-muted font-medium">Allele 2 min ratio</span>
               <input
                 id="allele2-ratio-min"
                 type="number"
@@ -384,6 +392,12 @@ export function SettingsTab() {
           </div>
         )}
 
+        {clusterError && (
+          <div className="mb-3 px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded text-xs">
+            {clusterError}
+          </div>
+        )}
+
         <div className="flex gap-2">
           <button
             id="run-clustering-btn"
@@ -395,9 +409,21 @@ export function SettingsTab() {
           </button>
           <button
             id="toggle-threshold-lines-btn"
-            className="px-4 py-1.5 bg-surface text-primary border border-primary rounded text-[13px] cursor-pointer"
+            className={`px-4 py-1.5 rounded text-[13px] cursor-pointer border ${
+              showThresholdLines
+                ? "bg-primary text-white border-primary"
+                : "bg-surface text-primary border-primary"
+            }`}
+            onClick={() => {
+              setShowThresholdLines((v) => !v);
+              window.dispatchEvent(
+                new CustomEvent("threshold-lines-toggle", {
+                  detail: { visible: !showThresholdLines },
+                })
+              );
+            }}
           >
-            Show Threshold Lines
+            {showThresholdLines ? "Hide Threshold Lines" : "Show Threshold Lines"}
           </button>
         </div>
       </div>
@@ -427,6 +453,20 @@ export function SettingsTab() {
             Show manual well types layer
           </label>
         </div>
+      </div>
+
+      {/* Panel 6: Reset */}
+      <div className="panel flex items-center gap-3">
+        <button
+          id="reset-defaults-btn"
+          className="px-4 py-1.5 bg-surface text-danger border border-danger rounded text-[13px] cursor-pointer hover:bg-red-50"
+          onClick={resetToDefaults}
+        >
+          Reset to Defaults
+        </button>
+        <span className="text-xs text-text-muted">
+          Resets all settings (normalization, axis, clustering) to default values
+        </span>
       </div>
     </div>
   );

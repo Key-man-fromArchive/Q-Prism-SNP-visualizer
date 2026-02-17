@@ -5,6 +5,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { getAmplification } from "@/lib/api";
+import { plotlyColors } from "@/lib/plotly-theme";
 import type { AmplificationCurve } from "@/types/api";
 
 export function WellDetailPanel() {
@@ -74,11 +75,15 @@ export function WellDetailPanel() {
             ]
           : [];
 
+        const c = plotlyColors();
         const layout: any = {
-          xaxis: { title: "Cycle" },
-          yaxis: { title: "Norm. RFU" },
+          xaxis: { title: "Cycle", gridcolor: c.gridColor },
+          yaxis: { title: "Norm. RFU", gridcolor: c.gridColor },
+          paper_bgcolor: c.paper_bgcolor,
+          plot_bgcolor: c.plot_bgcolor,
+          font: { color: c.fontColor },
           margin: { t: 5, r: 5, b: 40, l: 50 },
-          legend: { x: 0, y: 1, bgcolor: "rgba(255,255,255,0.7)" },
+          legend: { x: 0, y: 1, bgcolor: c.legendBg },
           shapes,
         };
 

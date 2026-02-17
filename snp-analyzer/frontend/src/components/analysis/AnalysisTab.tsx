@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { setWellTypes } from "@/lib/api";
@@ -13,16 +13,44 @@ import { WellTypePopup } from "./WellTypePopup";
 export function AnalysisTab() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
+  const selectedWells = useSelectionStore((s) => s.selectedWells);
 
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
   const [popupWells, setPopupWells] = useState<string[]>([]);
+
+  // Show popup when multiple wells are selected (right-click or multi-select)
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      const wells = useSelectionStore.getState().selectedWells;
+      if (wells.length > 0) {
+        e.preventDefault();
+        setPopupPos({ x: e.clientX, y: e.clientY });
+        setPopupWells(wells);
+      }
+    };
+
+    document.addEventListener("contextmenu", handleContextMenu);
+    return () => document.removeEventListener("contextmenu", handleContextMenu);
+  }, []);
+
+  // Auto-show popup on multi-select (more than 1 well selected via drag)
+  useEffect(() => {
+    if (selectedWells.length > 1) {
+      // Position popup near center of viewport
+      setPopupPos({
+        x: window.innerWidth / 2 - 90,
+        y: window.innerHeight / 2 - 150,
+      });
+      setPopupWells(selectedWells);
+    }
+  }, [selectedWells]);
 
   const handleAssignType = useCallback(
     async (wellType: string) => {
       if (!sessionId || popupWells.length === 0) return;
       try {
         await setWellTypes(sessionId, { wells: popupWells, well_type: wellType as any });
-        // Trigger re-fetch by clearing popup (scatter/plate will re-fetch on data change)
+        window.dispatchEvent(new CustomEvent("welltypes-changed"));
       } catch (err) {
         console.error("Failed to assign well type:", err);
       }

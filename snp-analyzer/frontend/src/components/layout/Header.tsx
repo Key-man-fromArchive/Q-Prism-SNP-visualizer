@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useSessionStore } from "@/stores/session-store";
 import { useDarkMode } from "@/hooks/use-dark-mode";
 import { useExports } from "@/hooks/use-exports";
@@ -16,6 +17,19 @@ export function Header() {
     reset();
   };
 
+  // Wrap export functions to show user-visible errors
+  const safeExport = useCallback(
+    (fn: () => Promise<void>, label: string) => async () => {
+      try {
+        await fn();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        alert(`${label} failed: ${msg}`);
+      }
+    },
+    []
+  );
+
   return (
     <header className="bg-surface border-b border-border px-6 py-3 flex items-center gap-4">
       <h1 className="text-lg font-semibold text-text">
@@ -30,8 +44,9 @@ export function Header() {
         Powered by Invirustech
       </a>
 
-      {sessionInfo && (
-        <div id="session-info" className="flex gap-2 items-center">
+      <div id="session-info" className={`flex gap-2 items-center ${!sessionInfo ? "hidden" : ""}`}>
+        {sessionInfo && (
+          <>
           <span id="instrument-badge" className="badge">
             {sessionInfo.instrument}
           </span>
@@ -42,8 +57,9 @@ export function Header() {
             {sessionInfo.num_cycles} cycles
           </span>
           <QcBadges />
-        </div>
-      )}
+          </>
+        )}
+      </div>
 
       {sessionId && (
         <div id="export-buttons" className="flex gap-1 ml-2">
@@ -70,7 +86,7 @@ export function Header() {
             id="export-csv-btn"
             className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
             title="Export CSV (Ctrl+E)"
-            onClick={downloadCSV}
+            onClick={safeExport(downloadCSV, "CSV export")}
           >
             CSV
           </button>
@@ -78,7 +94,7 @@ export function Header() {
             id="export-png-btn"
             className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
             title="Export scatter PNG"
-            onClick={exportPNG}
+            onClick={safeExport(exportPNG, "PNG export")}
           >
             PNG
           </button>
@@ -94,7 +110,7 @@ export function Header() {
             id="export-pdf-btn"
             className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
             title="Export PDF report"
-            onClick={exportPDF}
+            onClick={safeExport(exportPDF, "PDF export")}
           >
             PDF
           </button>

@@ -66,15 +66,23 @@ body.dark #drop-area.border-primary {
   background: rgba(59, 130, 246, 0.1);
 }
 
-body.dark input,
-body.dark select {
+body.dark input[type="text"],
+body.dark input[type="number"],
+body.dark input[type="search"],
+body.dark input[type="email"],
+body.dark input[type="password"],
+body.dark select,
+body.dark textarea {
   background: #0f1117;
   color: var(--color-text);
   border-color: var(--color-border);
 }
 
-body.dark input:focus,
-body.dark select:focus {
+body.dark input[type="text"]:focus,
+body.dark input[type="number"]:focus,
+body.dark input[type="search"]:focus,
+body.dark select:focus,
+body.dark textarea:focus {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
   border-color: var(--color-primary);

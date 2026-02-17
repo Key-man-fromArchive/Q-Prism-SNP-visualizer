@@ -16,6 +16,8 @@ export function useDarkMode() {
       document.body.classList.remove("dark");
     }
     localStorage.setItem(STORAGE_KEY, String(isDark));
+    // Notify Plotly charts to update their colors
+    window.dispatchEvent(new CustomEvent("dark-mode-changed", { detail: { isDark } }));
   }, [isDark]);
 
   // Listen for system theme changes when no user preference

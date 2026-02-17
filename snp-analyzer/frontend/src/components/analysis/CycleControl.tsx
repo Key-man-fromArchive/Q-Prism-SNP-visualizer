@@ -93,18 +93,16 @@ export function CycleControl() {
   }, [isPlaying, windowCycles, activeWindow, setCycle]);
 
   // Hide if single cycle and no multiple windows
-  if (
+  const shouldHide =
     sessionInfo &&
     sessionInfo.num_cycles <= 1 &&
-    (!windows || windows.length <= 1)
-  ) {
-    return null;
-  }
+    (!windows || windows.length <= 1);
 
   return (
     <div
       id="cycle-control"
-      style={{
+      className={shouldHide ? 'hidden' : ''}
+      style={shouldHide ? undefined : {
         padding: '8px 24px',
         display: 'flex',
         flexWrap: 'wrap',
@@ -120,7 +118,7 @@ export function CycleControl() {
               key={w.name}
               className={`window-btn px-3 py-1 text-xs rounded border ${
                 idx === activeWindowIdx
-                  ? 'bg-primary text-white border-primary'
+                  ? 'active bg-primary text-white border-primary'
                   : 'bg-surface text-text-muted border-border hover:border-primary'
               }`}
               onClick={() => {

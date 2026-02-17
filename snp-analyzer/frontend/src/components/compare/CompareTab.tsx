@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, Fragment } from 'react';
 import Plotly from 'plotly.js-dist-min';
 import { useSettingsStore } from '@/stores/settings-store';
 import { getSessions, getCompareScatter, getCompareStats } from '@/lib/api';
+import { plotlyColors } from '@/lib/plotly-theme';
 import type {
   SessionListItem,
   CompareScatterResponse,
@@ -104,20 +105,21 @@ export function CompareTab() {
       },
     };
 
+    const c = plotlyColors();
     const layout: any = {
       xaxis: {
         title: 'FAM (Allele 1)',
-        gridcolor: '#374151',
-        zerolinecolor: '#4b5563',
+        gridcolor: c.gridColor,
+        zerolinecolor: c.lineColor,
       },
       yaxis: {
         title: `${run1.allele2_dye} (Allele 2)`,
-        gridcolor: '#374151',
-        zerolinecolor: '#4b5563',
+        gridcolor: c.gridColor,
+        zerolinecolor: c.lineColor,
       },
-      plot_bgcolor: '#1f2937',
-      paper_bgcolor: '#111827',
-      font: { color: '#e5e7eb' },
+      plot_bgcolor: c.plot_bgcolor,
+      paper_bgcolor: c.paper_bgcolor,
+      font: { color: c.fontColor },
       showlegend: true,
       legend: {
         x: 1,

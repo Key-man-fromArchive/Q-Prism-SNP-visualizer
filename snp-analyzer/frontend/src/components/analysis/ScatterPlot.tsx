@@ -6,6 +6,7 @@ import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { getScatter } from "@/lib/api";
 import { WELL_TYPE_INFO, UNASSIGNED_TYPE } from "@/lib/constants";
+import { plotlyColors } from "@/lib/plotly-theme";
 import type { ScatterPoint } from "@/types/api";
 
 function effectiveType(
@@ -60,6 +61,7 @@ export function ScatterPlot() {
       typeGroups.get(type)!.push(point);
     }
 
+    const colors = plotlyColors();
     const decimals = useRox ? 4 : 1;
     const traces: any[] = [];
 
@@ -100,7 +102,7 @@ export function ScatterPlot() {
           color: info.color,
           symbol: info.symbol,
           opacity: 0.8,
-          line: { width: 1, color: "#fff" },
+          line: { width: 1, color: colors.markerLineColor },
         },
       });
     }
@@ -111,12 +113,19 @@ export function ScatterPlot() {
     const layout: any = {
       xaxis: {
         title: xLabel,
+        gridcolor: colors.gridColor,
+        zerolinecolor: colors.lineColor,
         ...(fixAxis ? { range: [xMin, xMax] } : { autorange: true }),
       },
       yaxis: {
         title: yLabel,
+        gridcolor: colors.gridColor,
+        zerolinecolor: colors.lineColor,
         ...(fixAxis ? { range: [yMin, yMax] } : { autorange: true }),
       },
+      paper_bgcolor: colors.paper_bgcolor,
+      plot_bgcolor: colors.plot_bgcolor,
+      font: { color: colors.fontColor },
       hovermode: "closest",
       dragmode: "select",
       margin: { t: 10, r: 10, b: 50, l: 60 },
@@ -183,12 +192,13 @@ export function ScatterPlot() {
     const data = el.data;
     if (!data || data.length === 0) return;
 
+    const colors = plotlyColors();
     for (let t = 0; t < data.length; t++) {
       const customdata = data[t].customdata || [];
       const sizes = customdata.map((w: string) => (w === selectedWell ? 18 : 12));
       const lineWidths = customdata.map((w: string) => (w === selectedWell ? 3 : 1));
       const lineColors = customdata.map((w: string) =>
-        w === selectedWell ? "#000" : "#fff"
+        w === selectedWell ? colors.selectedLineColor : colors.markerLineColor
       );
 
       Plotly.restyle(plotRef.current!, {
@@ -198,6 +208,25 @@ export function ScatterPlot() {
       }, [t]);
     }
   }, [selectedWell, scatterPoints]);
+
+  // Listen for dark mode changes to update Plotly layout
+  useEffect(() => {
+    const handler = () => {
+      if (!plotRef.current || !initialized.current) return;
+      const c = plotlyColors();
+      Plotly.relayout(plotRef.current, {
+        paper_bgcolor: c.paper_bgcolor,
+        plot_bgcolor: c.plot_bgcolor,
+        "font.color": c.fontColor,
+        "xaxis.gridcolor": c.gridColor,
+        "xaxis.zerolinecolor": c.lineColor,
+        "yaxis.gridcolor": c.gridColor,
+        "yaxis.zerolinecolor": c.lineColor,
+      });
+    };
+    window.addEventListener("dark-mode-changed", handler);
+    return () => window.removeEventListener("dark-mode-changed", handler);
+  }, []);
 
   // Cleanup
   useEffect(() => {

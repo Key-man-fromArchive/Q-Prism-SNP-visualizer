@@ -5,6 +5,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import Plotly from 'plotly.js-dist-min';
 import { getProtocol, updateProtocol } from '@/lib/api';
 import { useSessionStore } from '@/stores/session-store';
+import { plotlyColors } from '@/lib/plotly-theme';
 import type { ProtocolStep } from '@/types/api';
 
 // Phase color system
@@ -287,24 +288,26 @@ export function ProtocolTab() {
       text: readingMarkers.map((m) => m.label),
     };
 
+    const c = plotlyColors();
     const layout: any = {
       xaxis: {
         title: 'Time (minutes)',
         showgrid: true,
-        gridcolor: '#e5e7eb',
+        gridcolor: c.gridColor,
       },
       yaxis: {
         title: 'Temperature (°C)',
         showgrid: true,
-        gridcolor: '#e5e7eb',
+        gridcolor: c.gridColor,
       },
       margin: { t: 30, r: 20, b: 60, l: 60 },
       hovermode: 'closest',
       shapes,
       annotations,
       showlegend: false,
-      plot_bgcolor: 'white',
-      paper_bgcolor: 'white',
+      plot_bgcolor: c.plot_bgcolor,
+      paper_bgcolor: c.paper_bgcolor,
+      font: { color: c.fontColor },
     };
 
     const config: any = {
@@ -343,7 +346,7 @@ export function ProtocolTab() {
       style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', padding: '16px 24px' }}
     >
       {/* Left: Table */}
-      <div className="panel" style={{ background: 'white', borderRadius: '8px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <div className="panel" style={{ borderRadius: '8px', padding: '20px' }}>
         <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: '600' }}>PCR Protocol Steps</h3>
 
         {error && (
@@ -365,34 +368,21 @@ export function ProtocolTab() {
               </tr>
             </thead>
             <tbody>
-              {groupedSteps.map((group, groupIdx) => {
-                const color = getPhaseColor(group.phase);
-                const phaseCycles = group.steps[0]?.cycles || 1;
+              {steps.map((step, stepIndex) => {
+                const color = getPhaseColor(step.phase || '');
+                const isFirstInPhase = stepIndex === 0 || steps[stepIndex - 1]?.phase !== step.phase;
 
                 return (
-                  <Fragment key={groupIdx}>
-                    {/* Phase Header */}
-                    <tr style={{ background: '#f9fafb' }}>
-                      <td colSpan={6} style={{ padding: '8px', fontWeight: '600', fontSize: '12px', color: color.label }}>
-                        <span style={{
-                          display: 'inline-block',
-                          width: '8px',
-                          height: '8px',
-                          borderRadius: '50%',
-                          background: color.border,
-                          marginRight: '8px',
-                        }} />
-                        {group.phase} {phaseCycles > 1 ? `(×${phaseCycles})` : ''}
+                  <Fragment key={step.step}>
+                    <tr style={{ borderBottom: '1px solid #f3f4f6', borderLeft: `3px solid ${color.border}` }}>
+                      <td style={{ padding: '8px' }}>
+                        {isFirstInPhase && step.phase && (
+                          <div style={{ fontSize: '10px', fontWeight: '600', color: color.label, marginBottom: '2px' }}>
+                            {step.phase} {step.cycles > 1 ? `(×${step.cycles})` : ''}
+                          </div>
+                        )}
+                        {step.step}
                       </td>
-                    </tr>
-
-                    {/* Step Rows */}
-                    {group.steps.map((step) => {
-                      const stepIndex = steps.findIndex((s) => s.step === step.step);
-                      return (
-                        <Fragment key={step.step}>
-                          <tr style={{ borderBottom: '1px solid #f3f4f6', borderLeft: `3px solid ${color.border}` }}>
-                            <td style={{ padding: '8px' }}>{step.step}</td>
                             <td style={{ padding: '8px' }}>
                               <input
                                 type="text"
@@ -454,6 +444,7 @@ export function ProtocolTab() {
                             </td>
                             <td style={{ padding: '8px', textAlign: 'center' }}>
                               <button
+                                className="del-btn"
                                 onClick={() => handleDeleteStep(stepIndex)}
                                 style={{
                                   padding: '4px 8px',
@@ -479,9 +470,6 @@ export function ProtocolTab() {
                               </td>
                             </tr>
                           )}
-                        </Fragment>
-                      );
-                    })}
                   </Fragment>
                 );
               })}
@@ -530,7 +518,7 @@ export function ProtocolTab() {
       </div>
 
       {/* Right: Plot */}
-      <div className="panel" style={{ background: 'white', borderRadius: '8px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <div className="panel" style={{ borderRadius: '8px', padding: '20px' }}>
         <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: '600' }}>Temperature Profile</h3>
         {phaseBarData.length > 0 && (
           <div id="protocol-phase-bar" style={{ display: 'flex', marginBottom: '12px', borderRadius: '6px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>

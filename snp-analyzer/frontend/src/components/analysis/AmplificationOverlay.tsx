@@ -4,6 +4,7 @@ import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useDataStore } from "@/stores/data-store";
 import { getAllAmplification } from "@/lib/api";
+import { plotlyColors } from "@/lib/plotly-theme";
 
 const GENOTYPE_COLORS: Record<string, string> = {
   "Allele 1 Homo": "#2563eb",
@@ -72,12 +73,16 @@ export function AmplificationOverlay() {
 
         const channelLabel = channel === "fam" ? "FAM" : (allele2Dye || "Allele2");
 
+        const c = plotlyColors();
         const layout: any = {
-          title: { text: `Amplification Overlay — ${channelLabel}`, font: { size: 14 } },
-          xaxis: { title: "Cycle" },
-          yaxis: { title: `Norm. ${channelLabel} RFU` },
+          title: { text: `Amplification Overlay — ${channelLabel}`, font: { size: 14, color: c.fontColor } },
+          xaxis: { title: "Cycle", gridcolor: c.gridColor },
+          yaxis: { title: `Norm. ${channelLabel} RFU`, gridcolor: c.gridColor },
+          paper_bgcolor: c.paper_bgcolor,
+          plot_bgcolor: c.plot_bgcolor,
+          font: { color: c.fontColor },
           margin: { t: 40, r: 10, b: 40, l: 60 },
-          legend: { x: 0.01, y: 0.99, bgcolor: "rgba(255,255,255,0.8)", font: { size: 11 } },
+          legend: { x: 0.01, y: 0.99, bgcolor: c.legendBg, font: { size: 11 } },
           hovermode: "closest",
         };
 
