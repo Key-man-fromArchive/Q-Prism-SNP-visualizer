@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -40,5 +41,17 @@ app.include_router(presets.router)
 app.include_router(quality.router)
 app.include_router(batch.router)
 
-static_dir = Path(__file__).parent / "static"
-app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+# Serve React build (default) or legacy static (USE_LEGACY=1)
+use_legacy = os.environ.get("USE_LEGACY", "").strip().lower() in ("1", "true", "yes")
+
+if use_legacy:
+    static_dir = Path(__file__).parent / "static"
+    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+else:
+    static_react_dir = Path(__file__).parent / "static-react"
+    if static_react_dir.exists():
+        app.mount("/", StaticFiles(directory=str(static_react_dir), html=True), name="static")
+    else:
+        # Fallback to legacy if React build not found
+        static_dir = Path(__file__).parent / "static"
+        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")

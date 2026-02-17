@@ -3,7 +3,9 @@ import json
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path("/app/data/snp_analyzer.db")
+import os as _os
+
+DB_PATH = Path(_os.environ.get("DB_PATH", str(Path(__file__).parent / "data" / "snp_analyzer.db")))
 
 _conn: sqlite3.Connection | None = None
 
