@@ -18,8 +18,9 @@ XML hierarchy:
     runData/plateReadDataVector/plateRead:
       PlateRead/Hdr/PlateReadDataHeader: Step, Cycle, ChCount, NumRows, NumCols
       PlateRead/Data/PAr: semicolon-delimited RFU stats
-        Layout: (NumRows * NumCols) positions × ChCount channels × 4 stats
-        Index: position * (ChCount * 4) + channel * 4 + stat_offset
+        Layout: CHANNEL-MAJOR — ChCount channels × N_positions × 4 stats
+        Index: channel * (N_positions * 4) + position * 4 + stat_offset
+        N_positions = NumRows * NumCols (typically 108 = 9×12)
         stat_offset: 0=mean, 1=stdev, 2=min, 3=max
         Rows 0-7 = wells A-H, row 8 = reference (skip)
 """
@@ -71,6 +72,9 @@ def parse_pcrd(file_path: str) -> UnifiedData:
 
     # Classify reads into data windows and assign sequential cycle numbers
     data_windows, cycle_data = _classify_reads_into_windows(plate_reads)
+
+    # Apply baseline subtraction: subtract first amplification cycle from all
+    _subtract_baseline(cycle_data, data_windows)
 
     # Build UnifiedData
     wells_set: set[str] = set()
@@ -306,12 +310,13 @@ def _parse_plate_reads(
         vals_text = data_elem.text.split(";")
         vals = [float(v) for v in vals_text if v.strip()]
 
-        stats_per_pos = ch_count * 4
-        expected = 108 * stats_per_pos  # 9 rows × 12 cols
+        n_positions = 108  # 9 rows × 12 cols (including reference row)
+        stats_per_ch = n_positions * 4  # positions × 4 stats per channel
+        expected = ch_count * stats_per_ch
         if len(vals) < expected:
             raise ValueError(
                 f"PAr data has {len(vals)} values, expected {expected} "
-                f"(108 positions × {ch_count} channels × 4 stats)."
+                f"({ch_count} channels × {n_positions} positions × 4 stats)."
             )
 
         wells: dict[str, dict] = {}
@@ -322,11 +327,11 @@ def _parse_plate_reads(
                     continue
 
                 pos = row * num_cols + col
-                base = pos * stats_per_pos
 
-                fam_val = vals[base + fam_ch * 4]
-                allele2_val = vals[base + allele2_ch * 4] if allele2_ch >= 0 else 0.0
-                rox_val = vals[base + rox_ch * 4] if rox_ch >= 0 else None
+                # Channel-major: vals[channel * stats_per_ch + pos * 4 + 0]
+                fam_val = vals[fam_ch * stats_per_ch + pos * 4]
+                allele2_val = vals[allele2_ch * stats_per_ch + pos * 4] if allele2_ch >= 0 else 0.0
+                rox_val = vals[rox_ch * stats_per_ch + pos * 4] if rox_ch >= 0 else None
 
                 well_id = _well_index_to_id(plate_idx)
                 wells[well_id] = {
@@ -403,6 +408,47 @@ def _classify_reads_into_windows(
         windows.append(DataWindow(name=name, start_cycle=start, end_cycle=end))
 
     return windows, cycle_data
+
+
+def _subtract_baseline(
+    cycle_data: list[dict],
+    data_windows: list[DataWindow],
+) -> None:
+    """Subtract first amplification cycle as flat baseline from all cycles.
+
+    Raw .pcrd PAr data includes hardware background (~3000-5000 RFU per channel).
+    Subtracting the first amplification cycle removes this background and produces
+    values comparable to CFX Maestro's baseline-subtracted export (within 1-8%).
+    """
+    # Find the first amplification cycle index
+    amp_start_idx = 0
+    for w in data_windows:
+        if w.name == "Amplification":
+            amp_start_idx = w.start_cycle - 1  # convert to 0-indexed
+            break
+
+    if amp_start_idx >= len(cycle_data):
+        return
+
+    # Copy baseline values (avoid aliasing — baseline dict IS a cycle_data entry)
+    baseline: dict[str, dict] = {}
+    for well_id, rfu in cycle_data[amp_start_idx]["wells"].items():
+        baseline[well_id] = {
+            "fam": rfu["fam"],
+            "allele2": rfu["allele2"],
+            "rox": rfu.get("rox"),
+        }
+
+    # Subtract baseline from reporter dyes only (FAM + allele2).
+    # ROX is a passive reference dye — its raw value is used for
+    # plate-loading normalization and should NOT be baseline-subtracted.
+    for entry in cycle_data:
+        for well_id, rfu in entry["wells"].items():
+            bl = baseline.get(well_id)
+            if bl is None:
+                continue
+            rfu["fam"] -= bl["fam"]
+            rfu["allele2"] -= bl["allele2"]
 
 
 def _well_index_to_id(idx: int) -> str:
