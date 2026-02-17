@@ -1,7 +1,7 @@
 // @TASK Frontend - Plate View Component
 // @SPEC Renders 96-well plate grid with drag selection and genotype coloring
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useSelectionStore } from '@/stores/selection-store';
@@ -33,6 +33,15 @@ export function PlateView() {
   const [dragRect, setDragRect] = useState<DragRect | null>(null);
   const dragThreshold = 5;
 
+  // Re-fetch trigger (incremented when well types change)
+  const [refetchTrigger, setRefetchTrigger] = useState(0);
+
+  useEffect(() => {
+    const handler = () => setRefetchTrigger((n) => n + 1);
+    window.addEventListener("welltypes-changed", handler);
+    return () => window.removeEventListener("welltypes-changed", handler);
+  }, []);
+
   // Fetch plate data when dependencies change
   useEffect(() => {
     if (!sessionId || currentCycle === undefined) return;
@@ -47,7 +56,7 @@ export function PlateView() {
     };
 
     fetchPlateData();
-  }, [sessionId, currentCycle, useRox, setPlateData]);
+  }, [sessionId, currentCycle, useRox, setPlateData, refetchTrigger]);
 
   // Build wellMap for quick lookup
   const wellMap = useMemo(() => {

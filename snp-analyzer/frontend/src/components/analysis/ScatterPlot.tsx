@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import Plotly from "plotly.js-dist-min";
 import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -32,6 +32,16 @@ export function ScatterPlot() {
   const { scatterPoints, allele2Dye, clusterAssignments, wellTypeAssignments } = useDataStore();
   const setScatterData = useDataStore((s) => s.setScatterData);
 
+  // Re-fetch trigger (incremented when well types change)
+  const [refetchTrigger, setRefetchTrigger] = useState(0);
+
+  // Listen for well type changes to re-fetch scatter data
+  useEffect(() => {
+    const handler = () => setRefetchTrigger((n) => n + 1);
+    window.addEventListener("welltypes-changed", handler);
+    return () => window.removeEventListener("welltypes-changed", handler);
+  }, []);
+
   // Fetch scatter data
   const fetchData = useCallback(async () => {
     if (!sessionId || !currentCycle) return;
@@ -45,7 +55,7 @@ export function ScatterPlot() {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, refetchTrigger]);
 
   // Build and render traces
   useEffect(() => {

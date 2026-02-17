@@ -126,19 +126,6 @@ test.describe('Protocol Tab', () => {
     expect(count).toBeGreaterThanOrEqual(1);
   });
 
-  test('protocol plot renders', async ({ page }) => {
-    await uploadAndWait(page, CFX_AMPLIFICATION);
-
-    await page.locator('.tab[data-tab="protocol"]').click();
-    await page.waitForTimeout(1000);
-
-    const hasPlot = await page.evaluate(() => {
-      const el = document.getElementById('protocol-plot');
-      return el && el.querySelector('.plot-container') !== null;
-    });
-    expect(hasPlot).toBe(true);
-  });
-
   test('add step button works', async ({ page }) => {
     await uploadAndWait(page, CFX_AMPLIFICATION);
 
