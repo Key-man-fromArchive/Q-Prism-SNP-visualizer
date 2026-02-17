@@ -806,6 +806,159 @@ header h1 {
 .legend-marker.circle { border-radius: 50%; }
 .legend-marker.diamond { transform: rotate(45deg); width: 12px; height: 12px; }
 
+/* Ct/Cq Display */
+.ct-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    background: var(--bg);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+}
+
+.ct-badge.determined {
+    background: #dbeafe;
+    color: #1e40af;
+    border-color: #93c5fd;
+}
+
+.ct-badge.undetermined {
+    background: var(--bg);
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Amplification Overlay */
+#overlay-plot { width: 100%; height: 400px; }
+
+/* Statistics */
+.stats-sections {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.stats-section h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+}
+
+.hwe-result {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-top: 8px;
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.hwe-pass {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.hwe-fail {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.hwe-verdict {
+    margin-left: auto;
+    font-weight: 600;
+}
+
+/* Undo/Redo */
+.undo-redo-buttons { display: flex; gap: 4px; margin-left: 4px; }
+.undo-redo-buttons button { cursor: pointer; transition: all 0.15s; }
+.undo-redo-buttons button:hover:not(:disabled) { color: var(--primary); border-color: var(--primary); }
+.undo-redo-buttons button:disabled { opacity: 0.4; cursor: default; }
+
+/* Quality Scoring */
+.quality-summary {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 16px;
+}
+
+.quality-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.quality-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.quality-value {
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.quality-high { color: #059669; }
+.quality-medium { color: #d97706; }
+.quality-warning { color: #ea580c; }
+.quality-low { color: #dc2626; }
+
+.quality-distribution, .quality-alerts {
+    margin-top: 16px;
+}
+
+.quality-distribution h4, .quality-alerts h4 {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+}
+
+.quality-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--bg);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.quality-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s;
+}
+
+.quality-bar-fill.quality-high { background: #059669; }
+.quality-bar-fill.quality-medium { background: #d97706; }
+.quality-bar-fill.quality-warning { background: #ea580c; }
+.quality-bar-fill.quality-low { background: #dc2626; }
+
+/* Batch / Projects */
+.batch-container { padding: 8px 0; }
+.batch-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.batch-create-form { display: flex; gap: 8px; align-items: center; }
+.batch-create-form input { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; flex: 1; max-width: 300px; }
+.project-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.project-table th, .project-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+.project-table th { font-weight: 600; color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
+.project-table tr:hover { background: var(--bg); }
+.project-detail { margin-top: 16px; }
+.project-sessions-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.session-add-form { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.session-add-form select { padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; }
+.concordance-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-weight: 600; font-size: 12px; }
+.concordance-badge.high { background: #d1fae5; color: #065f46; }
+.concordance-badge.medium { background: #fef3c7; color: #92400e; }
+.concordance-badge.low { background: #fee2e2; color: #991b1b; }
+
 /* Responsive */
 @media (max-width: 900px) {
     .analysis-grid {

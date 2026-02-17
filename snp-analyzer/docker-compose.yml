@@ -5,5 +5,9 @@ services:
       - "8002:8000"
     volumes:
       - ./app:/app/app
+      - snp-data:/app/data
     environment:
       - PYTHONDONTWRITEBYTECODE=1
+
+volumes:
+  snp-data:

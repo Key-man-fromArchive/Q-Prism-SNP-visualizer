@@ -51,6 +51,11 @@ async def update_samples(sid: str, body: SampleNamesUpdate):
     if sid not in sample_name_store:
         sample_name_store[sid] = {}
     sample_name_store[sid].update(body.samples)
+
+    from app.db import save_sample_override
+    for well, name in body.samples.items():
+        save_sample_override(sid, well, name)
+
     merged = _merged_samples(sid)
     return {"samples": merged}
 
@@ -60,6 +65,10 @@ async def delete_samples(sid: str):
     """Clear all user overrides, returning to parsed names only."""
     _get_session(sid)  # validate session exists
     sample_name_store.pop(sid, None)
+
+    from app.db import delete_sample_overrides
+    delete_sample_overrides(sid)
+
     unified = sessions[sid]
     parsed = dict(unified.sample_names) if unified.sample_names else {}
     return {"samples": parsed}

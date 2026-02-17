@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
+from pydantic import BaseModel as _BaseModel
+
 from app.models import (
     ClusteringAlgorithm,
     ClusteringRequest,
@@ -10,6 +12,10 @@ from app.models import (
 from app.processing.clustering import cluster_kmeans, cluster_threshold
 from app.processing.normalize import normalize_for_cycle
 from app.routers.upload import sessions
+
+
+class BulkWellTypeReplace(_BaseModel):
+    assignments: dict[str, str]
 
 router = APIRouter()
 
@@ -48,6 +54,10 @@ async def run_clustering(sid: str, req: ClusteringRequest):
         algorithm=req.algorithm.value, cycle=cycle, assignments=assignments
     )
     cluster_store[sid] = result
+
+    from app.db import save_clustering
+    save_clustering(sid, result)
+
     return result
 
 
@@ -66,6 +76,11 @@ async def set_well_types(sid: str, update: ManualWellTypeUpdate):
         welltype_store[sid] = {}
     for well in update.wells:
         welltype_store[sid][well] = update.well_type.value
+
+    from app.db import save_welltype
+    for well in update.wells:
+        save_welltype(sid, well, update.well_type.value)
+
     return {"status": "ok", "assignments": welltype_store[sid]}
 
 
@@ -79,4 +94,22 @@ async def get_well_types(sid: str):
 async def clear_well_types(sid: str):
     _get_session(sid)
     welltype_store.pop(sid, None)
+
+    from app.db import delete_welltypes
+    delete_welltypes(sid)
+
     return {"status": "ok"}
+
+
+@router.put("/api/data/{sid}/welltypes/bulk")
+async def bulk_replace_well_types(sid: str, body: BulkWellTypeReplace):
+    """Replace all manual welltypes with the given snapshot (for undo/redo)."""
+    _get_session(sid)
+    welltype_store[sid] = dict(body.assignments)
+
+    from app.db import delete_welltypes, save_welltype
+    delete_welltypes(sid)
+    for well, wtype in body.assignments.items():
+        save_welltype(sid, well, wtype)
+
+    return {"status": "ok", "assignments": welltype_store[sid]}

@@ -24,7 +24,12 @@
             <button id="export-csv-btn" class="badge" title="Export CSV (Ctrl+E)">CSV</button>
             <button id="export-png-btn" class="badge" title="Export scatter PNG">PNG</button>
             <button id="export-print-btn" class="badge" title="Print report">Print</button>
+            <button id="export-pdf-btn" class="badge" title="Export PDF report">PDF</button>
             <button id="new-upload-btn" class="badge" title="Upload another file">+ New</button>
+        </div>
+        <div class="undo-redo-buttons hidden" id="undo-redo-buttons">
+            <button id="undo-btn" class="badge" title="Undo (Ctrl+Z)" disabled>Undo</button>
+            <button id="redo-btn" class="badge" title="Redo (Ctrl+Y)" disabled>Redo</button>
         </div>
         <button id="dark-mode-toggle" title="Toggle dark mode"></button>
     </header>
@@ -55,7 +60,10 @@
                 <button class="tab active" data-tab="analysis">Analysis</button>
                 <button class="tab" data-tab="protocol">Protocol</button>
                 <button class="tab" data-tab="settings">Settings</button>
+                <button class="tab" data-tab="quality">Quality</button>
+                <button class="tab" data-tab="statistics">Statistics</button>
                 <button class="tab" data-tab="compare">Compare Runs</button>
+                <button class="tab" data-tab="batch">Batch</button>
             </nav>
 
             <!-- Analysis Tab -->
@@ -90,6 +98,10 @@
                             <p class="placeholder">Click a well to see details</p>
                         </div>
                         <div id="amplification-plot" class="hidden"></div>
+                        <div id="ct-info" class="hidden">
+                            <h4 style="font-size:13px;color:var(--text-muted);margin:12px 0 4px;">Ct/Cq Values</h4>
+                            <div id="ct-summary"></div>
+                        </div>
                     </div>
 
                     <!-- Results Table -->
@@ -98,11 +110,47 @@
                         <div id="results-plate"></div>
                     </div>
                 </div>
+
+                <!-- Amplification Overlay -->
+                <div class="panel" style="margin-top:16px;">
+                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+                        <h3 style="margin-bottom:0;">Amplification Overlay</h3>
+                        <button id="toggle-overlay-btn" class="badge" style="cursor:pointer;">Show Overlay</button>
+                        <select id="overlay-channel-select" style="padding:2px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;">
+                            <option value="fam">FAM</option>
+                            <option value="allele2">Allele2</option>
+                        </select>
+                    </div>
+                    <div id="overlay-container" class="hidden">
+                        <div id="overlay-plot" style="width:100%;height:400px;"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Settings Tab -->
             <div id="tab-settings" class="tab-content">
                 <div class="settings-grid">
+                    <div class="panel">
+                        <h3>Assay Presets</h3>
+                        <div class="settings-form">
+                            <div class="settings-group">
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <select id="preset-select" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+                                        <option value="">-- Select Preset --</option>
+                                    </select>
+                                    <button id="apply-preset-btn" class="settings-action-btn" style="margin-top:0;padding:6px 12px;font-size:13px;">Apply</button>
+                                    <button id="delete-preset-btn" class="badge" style="cursor:pointer;color:var(--danger);" title="Delete selected preset">Del</button>
+                                </div>
+                            </div>
+                            <div class="settings-group">
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <input type="text" id="preset-name-input" placeholder="New preset name" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;">
+                                    <button id="save-preset-btn" class="settings-action-btn" style="margin-top:0;padding:6px 12px;font-size:13px;background:var(--accent);">Save</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="panel">
                         <h3>Normalization</h3>
                         <div class="settings-form">
@@ -213,8 +261,37 @@
                 </div>
             </div>
 
+            <!-- Quality Tab -->
+            <div id="tab-quality" class="tab-content">
+                <div class="panel">
+                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+                        <h3 style="margin-bottom:0;">Signal Quality Scores</h3>
+                        <button id="refresh-quality-btn" class="badge" style="cursor:pointer;">Refresh</button>
+                    </div>
+                    <div id="quality-content">
+                        <p class="placeholder">Upload data to see quality scores.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics Tab -->
+            <div id="tab-statistics" class="tab-content">
+                <div class="panel">
+                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+                        <h3 style="margin-bottom:0;">Population Statistics</h3>
+                        <button id="refresh-stats-btn" class="badge" style="cursor:pointer;">Refresh</button>
+                    </div>
+                    <div id="statistics-content">
+                        <p class="placeholder">Upload data and run clustering to see statistics.</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Compare Tab -->
             <div id="tab-compare" class="tab-content"></div>
+
+            <!-- Batch Tab -->
+            <div id="tab-batch" class="tab-content"></div>
 
             <!-- Protocol Tab -->
             <div id="tab-protocol" class="tab-content">

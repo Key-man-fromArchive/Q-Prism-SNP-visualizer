@@ -37,6 +37,10 @@ async def upload_file(file: UploadFile = File(...)):
     session_id = uuid.uuid4().hex[:12]
     sessions[session_id] = unified
 
+    # Write-through to SQLite
+    from app.db import save_session
+    save_session(session_id, unified, filename=file.filename or "")
+
     return UploadResponse(
         session_id=session_id,
         instrument=unified.instrument,

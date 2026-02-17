@@ -125,3 +125,22 @@ class ClusteringResult(BaseModel):
 class ManualWellTypeUpdate(BaseModel):
     wells: list[str]
     well_type: WellType
+
+
+class CtResult(BaseModel):
+    well: str
+    fam_ct: float | None = None
+    fam_threshold: float = 0
+    fam_baseline_mean: float = 0
+    allele2_ct: float | None = None
+    allele2_threshold: float = 0
+    allele2_baseline_mean: float = 0
+
+
+class QualityResult(BaseModel):
+    well: str
+    score: int
+    magnitude_score: float = 0
+    noise_score: float = 0
+    rise_score: float = 0
+    flags: list[str] = []

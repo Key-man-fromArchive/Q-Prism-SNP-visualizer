@@ -12,6 +12,13 @@ import { initThresholdLines, toggleThresholdLines, refreshThresholdLines, isThre
 import { initSampleEditor, enablePlateEditing } from "./sample-editor.js";
 import { initQC, updateQC } from "./qc-indicators.js";
 import { initCompare, refreshSessionList } from "./compare.js";
+import { initCtDisplay, loadCtData, renderCtInDetail } from "./ct-display.js";
+import { initOverlay, toggleOverlay, renderOverlay, isOverlayVisible } from "./amplification-overlay.js";
+import { initStatistics, loadStatistics } from "./statistics.js";
+import { loadPresets, applyPreset, saveCurrentAsPreset, deletePreset } from "./presets.js";
+import { initUndoRedo, pushSnapshot, undo, redo, handleUndoRedoKey } from "./undo-redo.js";
+import { initQuality, loadQuality, renderQualityInDetail } from "./quality.js";
+import { initBatch, loadProjects } from "./batch.js";
 
 let sessionId = null;
 let sessionInfo = null;
@@ -236,7 +243,80 @@ function initAnalysis() {
     initThresholdLines();
     initSampleEditor(sessionId);
     initQC(sessionId);
+    initCtDisplay(sessionId);
+    loadCtData(getUseRox());
     initCompare();
+    initBatch();
+    initStatistics(sessionId);
+
+    const refreshStatsBtn = document.getElementById("refresh-stats-btn");
+    if (refreshStatsBtn) {
+        refreshStatsBtn.addEventListener("click", () => loadStatistics());
+    }
+
+    // Presets
+    loadPresets();
+
+    const applyPresetBtn = document.getElementById("apply-preset-btn");
+    if (applyPresetBtn) {
+        applyPresetBtn.addEventListener("click", () => {
+            const select = document.getElementById("preset-select");
+            if (select?.value) applyPreset(select.value);
+        });
+    }
+
+    const savePresetBtn = document.getElementById("save-preset-btn");
+    if (savePresetBtn) {
+        savePresetBtn.addEventListener("click", async () => {
+            const nameInput = document.getElementById("preset-name-input");
+            const name = nameInput?.value?.trim();
+            if (!name) { alert("Enter a preset name"); return; }
+            const ok = await saveCurrentAsPreset(name);
+            if (ok) nameInput.value = "";
+        });
+    }
+
+    const deletePresetBtn = document.getElementById("delete-preset-btn");
+    if (deletePresetBtn) {
+        deletePresetBtn.addEventListener("click", async () => {
+            const select = document.getElementById("preset-select");
+            if (select?.value) {
+                await deletePreset(select.value);
+            }
+        });
+    }
+
+    // Undo/Redo
+    initUndoRedo(sessionId);
+    document.getElementById("undo-redo-buttons")?.classList.remove("hidden");
+    document.getElementById("undo-btn")?.addEventListener("click", () => undo());
+    document.getElementById("redo-btn")?.addEventListener("click", () => redo());
+    document.addEventListener("keydown", handleUndoRedoKey);
+
+    // Quality scoring
+    initQuality(sessionId);
+    document.getElementById("refresh-quality-btn")?.addEventListener("click", () => loadQuality(getUseRox()));
+
+    // Amplification Overlay
+    initOverlay(sessionId);
+
+    const overlayBtn = document.getElementById("toggle-overlay-btn");
+    const overlayChannelSel = document.getElementById("overlay-channel-select");
+    if (overlayBtn) {
+        overlayBtn.addEventListener("click", async () => {
+            const useRox = getUseRox();
+            const channel = overlayChannelSel?.value || "fam";
+            await toggleOverlay(useRox, channel);
+            overlayBtn.textContent = isOverlayVisible() ? "Hide Overlay" : "Show Overlay";
+        });
+    }
+    if (overlayChannelSel) {
+        overlayChannelSel.addEventListener("change", async () => {
+            if (isOverlayVisible()) {
+                await renderOverlay(getUseRox(), overlayChannelSel.value);
+            }
+        });
+    }
 
     // Enable double-click sample editing on plate wells
     setTimeout(() => enablePlateEditing(), 100);
@@ -272,6 +352,32 @@ function initAnalysis() {
         });
     }
 
+    // PDF export button
+    const pdfBtn = document.getElementById("export-pdf-btn");
+    if (pdfBtn) {
+        pdfBtn.addEventListener("click", async () => {
+            pdfBtn.disabled = true;
+            pdfBtn.textContent = "...";
+            try {
+                const useRox = getUseRox();
+                const res = await fetch(`/api/data/${sessionId}/export/pdf?use_rox=${useRox}`);
+                if (!res.ok) throw new Error("PDF generation failed");
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `snp_report_${sessionId}.pdf`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                alert("PDF export failed: " + err.message);
+            } finally {
+                pdfBtn.disabled = false;
+                pdfBtn.textContent = "PDF";
+            }
+        });
+    }
+
     // Load existing clustering/welltype state
     loadClustering(sessionId);
     loadManualWellTypes(sessionId);
@@ -286,6 +392,15 @@ function initAnalysis() {
             // Refresh session list when Compare tab is activated
             if (tab.dataset.tab === "compare") {
                 refreshSessionList();
+            }
+            if (tab.dataset.tab === "quality") {
+                loadQuality(getUseRox());
+            }
+            if (tab.dataset.tab === "statistics") {
+                loadStatistics();
+            }
+            if (tab.dataset.tab === "batch") {
+                loadProjects();
             }
         });
     });
@@ -314,6 +429,7 @@ async function onCycleChange(cycle) {
     updateResultsTable(getAllPoints());
     refreshThresholdLines();
     updateQC(cycle, useRox);
+    loadCtData(useRox);
 }
 
 // Listen for clustering/welltype changes -> refresh scatter + plate
@@ -324,10 +440,18 @@ document.addEventListener("clustering-changed", () => {
     }
 });
 
-document.addEventListener("welltypes-changed", () => {
+document.addEventListener("welltypes-changed", async () => {
     if (sessionId) {
         const cycle = getCurrentCycle();
         onCycleChange(cycle);
+        // Push undo snapshot
+        try {
+            const res = await fetch(`/api/data/${sessionId}/welltypes`);
+            if (res.ok) {
+                const data = await res.json();
+                pushSnapshot(data.assignments || {});
+            }
+        } catch { /* ignore */ }
     }
 });
 
@@ -379,6 +503,8 @@ function updateDetailPanel(well) {
             <tr><td>FAM (raw)</td><td>${point.raw_fam.toFixed(1)}</td></tr>
             <tr><td>${dye} (raw)</td><td>${point.raw_allele2.toFixed(1)}</td></tr>
             ${point.raw_rox != null ? `<tr><td>ROX (raw)</td><td>${point.raw_rox.toFixed(1)}</td></tr>` : ""}
+            ${renderCtInDetail(well, dye)}
+            ${renderQualityInDetail(well)}
         </table>
     `;
 }
