@@ -51,11 +51,7 @@ def detect_and_parse(file_path: str, original_filename: str = "") -> UnifiedData
     elif ext == ".eds":
         return _handle_eds(file_path)
     elif ext == ".pcrd":
-        raise ValueError(
-            "Bio-Rad .pcrd files are password-encrypted and cannot be read directly.\n\n"
-            "Please export from CFX Maestro instead:\n"
-            "  File > Export > 'Quantification Amplification Results' (.xlsx)"
-        )
+        return _handle_pcrd(file_path)
     elif ext == ".xls":
         return _handle_quantstudio(file_path, filename)
     elif ext == ".xlsx":
@@ -63,8 +59,9 @@ def detect_and_parse(file_path: str, original_filename: str = "") -> UnifiedData
     else:
         raise ValueError(
             f"Unsupported file extension: {ext}.\n"
-            "Upload .eds (QuantStudio raw), .xls (QuantStudio export), "
-            ".xlsx (CFX Opus export), or .zip (CFX XML export) files."
+            "Upload .eds (QuantStudio raw), .pcrd (CFX Opus raw), "
+            ".xls (QuantStudio export), .xlsx (CFX Opus export), "
+            "or .zip (CFX XML export) files."
         )
 
 
@@ -78,6 +75,18 @@ def _handle_eds(file_path: str) -> UnifiedData:
             "Try re-exporting from QuantStudio."
         )
     return parse_eds(file_path)
+
+
+def _handle_pcrd(file_path: str) -> UnifiedData:
+    """Handle Bio-Rad .pcrd raw instrument files."""
+    from app.parsers.pcrd_raw import parse_pcrd
+
+    if not zipfile.is_zipfile(file_path):
+        raise ValueError(
+            "This .pcrd file appears to be corrupted (not a valid ZIP archive).\n"
+            "Try re-exporting from CFX Maestro."
+        )
+    return parse_pcrd(file_path)
 
 
 def _handle_zip(file_path: str, filename: str) -> UnifiedData:
