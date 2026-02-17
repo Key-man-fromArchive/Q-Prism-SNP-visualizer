@@ -120,15 +120,17 @@ export function ScatterPlot() {
     const xLabel = useRox ? "FAM / ROX" : "FAM (raw RFU)";
     const yLabel = useRox ? `${allele2Dye} / ROX` : `${allele2Dye} (raw RFU)`;
 
+    const axisTitleFont = { size: 14, color: colors.fontColor };
+
     const layout: any = {
       xaxis: {
-        title: xLabel,
+        title: { text: xLabel, font: axisTitleFont, standoff: 10 },
         gridcolor: colors.gridColor,
         zerolinecolor: colors.lineColor,
         ...(fixAxis ? { range: [xMin, xMax] } : { autorange: true }),
       },
       yaxis: {
-        title: yLabel,
+        title: { text: yLabel, font: axisTitleFont, standoff: 10 },
         gridcolor: colors.gridColor,
         zerolinecolor: colors.lineColor,
         ...(fixAxis ? { range: [yMin, yMax] } : { autorange: true }),
@@ -138,8 +140,8 @@ export function ScatterPlot() {
       font: { color: colors.fontColor },
       hovermode: "closest",
       dragmode: "select",
-      margin: { t: 10, r: 10, b: 50, l: 60 },
-      legend: { orientation: "h", y: -0.15 },
+      margin: { t: 10, r: 10, b: 60, l: 70 },
+      legend: { orientation: "h", y: -0.2 },
     };
 
     const config = {
