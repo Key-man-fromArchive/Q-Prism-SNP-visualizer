@@ -25,13 +25,14 @@ XML hierarchy:
         Rows 0-7 = wells A-H, row 8 = reference (skip)
 """
 
+import os
 import zipfile
 import xml.etree.ElementTree as ET
 
 from app.models import UnifiedData, WellCycleData, ProtocolStep, DataWindow
 
 WELL_ROWS = "ABCDEFGH"
-_PCRD_PASSWORD = b"***REDACTED***"
+_PCRD_PASSWORD = os.environ.get("PCRD_PASSWORD", "").encode("utf-8") or None
 
 # Well sample types that indicate an assigned well
 _ASSIGNED_TYPES = {"wcSample", "wcNTC", "wcPostiveControl", "wcPositiveControl"}
@@ -116,6 +117,12 @@ def parse_pcrd(file_path: str) -> UnifiedData:
 
 def _extract_xml(file_path: str) -> ET.Element:
     """Open encrypted ZIP, extract single XML entry, parse to Element."""
+    if not _PCRD_PASSWORD:
+        raise ValueError(
+            "PCRD_PASSWORD environment variable is not set.\n"
+            "The .pcrd format requires a decryption key to parse.\n"
+            "Set the PCRD_PASSWORD environment variable and restart the server."
+        )
     with zipfile.ZipFile(file_path, "r") as zf:
         names = zf.namelist()
         if not names:

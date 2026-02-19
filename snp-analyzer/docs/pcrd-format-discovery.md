@@ -9,11 +9,11 @@
 | Property | Value |
 |----------|-------|
 | Container | ZIP archive with ZipCrypto encryption |
-| Password | `***REDACTED***` |
+| Password | Set via `PCRD_PASSWORD` environment variable |
 | Contents | Single XML file (UTF-8 with BOM) |
 | Root element | `<experimentalData2>` |
 
-The password was extracted from `BioRad.Common.dll` in the CFX Maestro installation.
+The decryption key must be provided via the `PCRD_PASSWORD` environment variable.
 Standard Python `zipfile` module handles ZipCrypto decryption natively.
 
 ## 2. XML Structure Overview

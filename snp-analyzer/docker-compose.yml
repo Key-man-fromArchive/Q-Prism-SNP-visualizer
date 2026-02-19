@@ -6,6 +6,8 @@ services:
     volumes:
       - ./app:/app/app
       - snp-data:/app/data
+    env_file:
+      - .env
     environment:
       - PYTHONDONTWRITEBYTECODE=1
 
