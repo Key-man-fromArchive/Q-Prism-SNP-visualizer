@@ -108,11 +108,11 @@ export function ScatterPlot() {
         hoverinfo: "text",
         hovertemplate: "%{text}<extra></extra>",
         marker: {
-          size: 12,
+          size: typeKey === "NTC" ? 10 : 12,
           color: info.color,
           symbol: info.symbol,
-          opacity: 0.8,
-          line: { width: 1, color: colors.markerLineColor },
+          opacity: typeKey === "NTC" ? 1.0 : 0.8,
+          line: { width: 1, color: typeKey === "NTC" ? "#000000" : colors.markerLineColor },
         },
       });
     }

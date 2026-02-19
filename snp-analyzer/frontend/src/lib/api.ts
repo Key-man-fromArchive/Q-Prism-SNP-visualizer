@@ -261,6 +261,24 @@ export async function getSessions(): Promise<SessionListItem[]> {
   return apiFetch<SessionListItem[]>('/api/sessions');
 }
 
+export async function getSessionInfo(sid: string): Promise<UploadResponse> {
+  return apiFetch<UploadResponse>(`/api/sessions/${sid}`);
+}
+
+export async function deleteSession(sid: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/api/sessions/${sid}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function bulkDeleteSessions(sessionIds: string[]): Promise<{ status: string; deleted: number }> {
+  return apiFetch<{ status: string; deleted: number }>('/api/sessions/bulk-delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_ids: sessionIds }),
+  });
+}
+
 // ============================================================================
 // Compare
 // ============================================================================
@@ -415,6 +433,34 @@ export async function removeProjectSession(
     `/api/projects/${projectId}/sessions/${sid}`,
     {
       method: 'DELETE',
+    }
+  );
+}
+
+export async function bulkAddProjectSessions(
+  projectId: string,
+  sessionIds: string[]
+): Promise<{ status: string; added: number; session_ids: string[] }> {
+  return apiFetch<{ status: string; added: number; session_ids: string[] }>(
+    `/api/projects/${projectId}/sessions/bulk-add`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_ids: sessionIds }),
+    }
+  );
+}
+
+export async function bulkRemoveProjectSessions(
+  projectId: string,
+  sessionIds: string[]
+): Promise<{ status: string; removed: number; session_ids: string[] }> {
+  return apiFetch<{ status: string; removed: number; session_ids: string[] }>(
+    `/api/projects/${projectId}/sessions/bulk-remove`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_ids: sessionIds }),
     }
   );
 }

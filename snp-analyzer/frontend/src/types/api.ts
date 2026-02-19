@@ -74,6 +74,7 @@ export type SessionListItem = {
   num_wells: number;
   num_cycles: number;
   uploaded_at: string;
+  raw_filename?: string;
 };
 
 // ============================================================================

@@ -85,24 +85,27 @@ export default function App() {
 
   const { showHelp, setShowHelp } = useKeyboardShortcuts(shortcuts);
 
+  // Project tab is accessible without a session
+  const showProjectOnly = !sessionId && activeTab === "project";
+
   return (
     <div className="min-h-screen bg-bg">
       <Header />
       <main>
-        {!sessionId && <UploadZone />}
-        <div id="analysis-panel" className={!sessionId ? "hidden" : ""}>
-          {sessionId && (
-            <>
-              <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+        {!sessionId && !showProjectOnly && <UploadZone onGoToProject={() => setActiveTab("project")} />}
 
-              {activeTab === "analysis" && <AnalysisTab />}
-              {activeTab === "protocol" && <ProtocolTab />}
-              {activeTab === "settings" && <SettingsTab />}
-              {activeTab === "quality" && <QualityTab />}
-              {activeTab === "statistics" && <StatisticsTab />}
-              {activeTab === "compare" && <CompareTab />}
-              {activeTab === "batch" && <BatchTab />}
-            </>
+        {/* Session-dependent tabs */}
+        <div id="analysis-panel" className={!sessionId && !showProjectOnly ? "hidden" : ""}>
+          <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} hasSession={!!sessionId} />
+
+          {sessionId && activeTab === "analysis" && <AnalysisTab />}
+          {sessionId && activeTab === "protocol" && <ProtocolTab />}
+          {sessionId && activeTab === "settings" && <SettingsTab />}
+          {sessionId && activeTab === "quality" && <QualityTab />}
+          {sessionId && activeTab === "statistics" && <StatisticsTab />}
+          {sessionId && activeTab === "compare" && <CompareTab />}
+          {activeTab === "project" && (
+            <BatchTab onLoadSession={() => setActiveTab("analysis")} />
           )}
         </div>
       </main>

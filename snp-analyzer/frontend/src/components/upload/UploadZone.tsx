@@ -3,7 +3,13 @@ import { useSessionStore } from "@/stores/session-store";
 import { uploadFile as apiUpload } from "@/lib/api";
 import JSZip from "jszip";
 
-export function UploadZone() {
+const RAW_EXTENSIONS = [".eds", ".xls", ".xlsx", ".pcrd", ".zip"];
+
+type UploadZoneProps = {
+  onGoToProject?: () => void;
+};
+
+export function UploadZone({ onGoToProject }: UploadZoneProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [dragover, setDragover] = useState(false);
@@ -18,7 +24,8 @@ export function UploadZone() {
     setUploadError,
   } = useSessionStore();
 
-  const handleUpload = useCallback(
+  /** Upload a single file and go to Analysis tab */
+  const handleSingleUpload = useCallback(
     async (file: File) => {
       setUploadState("uploading");
       setUploadProgress(30);
@@ -34,7 +41,6 @@ export function UploadZone() {
         );
         setUploadState("success");
 
-        // Brief delay before transitioning to analysis view (matching legacy)
         setTimeout(() => {
           setSession(info.session_id, info);
         }, 500);
@@ -48,55 +54,104 @@ export function UploadZone() {
     [setSession, setUploadState, setUploadProgress, setUploadError],
   );
 
+  /** Upload multiple files as separate sessions, then go to Project tab */
+  const handleBatchUpload = useCallback(
+    async (files: File[]) => {
+      setUploadState("uploading");
+      setUploadProgress(0);
+      setUploadError(null);
+
+      let success = 0;
+      let failed = 0;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const pct = Math.round(((i) / files.length) * 100);
+        setUploadProgress(pct);
+        setStatusMessage(`Uploading ${i + 1}/${files.length}: ${file.name}`);
+
+        try {
+          await apiUpload(file);
+          success++;
+        } catch {
+          failed++;
+        }
+      }
+
+      setUploadProgress(100);
+      if (failed === 0) {
+        setStatusMessage(`All ${success} files uploaded successfully`);
+        setUploadState("success");
+      } else {
+        setStatusMessage(`${success} uploaded, ${failed} failed`);
+        setUploadState(failed === files.length ? "error" : "success");
+        if (failed > 0) setUploadError(`${failed} file(s) failed to upload`);
+      }
+
+      // Navigate to Project tab to see all sessions
+      setTimeout(() => {
+        setUploadState("idle");
+        setUploadProgress(0);
+        onGoToProject?.();
+      }, 800);
+    },
+    [setUploadState, setUploadProgress, setUploadError, onGoToProject],
+  );
+
+  /** Handle multiple files: XML → zip as one, raw files → batch upload */
   const handleMultipleFiles = useCallback(
     async (files: File[]) => {
-      const xmlFiles = files.filter((f) =>
-        f.name.toLowerCase().endsWith(".xml"),
+      const lowerName = (f: File) => f.name.toLowerCase();
+      const xmlFiles = files.filter((f) => lowerName(f).endsWith(".xml"));
+      const rawFiles = files.filter((f) =>
+        RAW_EXTENSIONS.some((ext) => lowerName(f).endsWith(ext)),
       );
 
-      // If no XML files but exactly 1 other file, use single upload
-      if (xmlFiles.length === 0) {
-        const nonXml = files.filter(
-          (f) => !f.name.toLowerCase().endsWith(".xml"),
+      // Build the list of uploads: each raw file is one upload,
+      // all XML files are zipped into one upload
+      const uploadItems: File[] = [...rawFiles];
+
+      if (xmlFiles.length > 0) {
+        setUploadState("packaging");
+        setUploadProgress(10);
+        setStatusMessage(
+          `Packaging ${xmlFiles.length} XML file${xmlFiles.length > 1 ? "s" : ""}...`,
         );
-        if (nonXml.length === 1) {
-          await handleUpload(nonXml[0]);
+
+        try {
+          const zip = new JSZip();
+          for (const file of xmlFiles) {
+            const data = await file.arrayBuffer();
+            zip.file(file.name, data);
+          }
+          const blob = await zip.generateAsync({ type: "blob" });
+          const zipFile = new File([blob], "cfx_xml_export.zip", {
+            type: "application/zip",
+          });
+          uploadItems.push(zipFile);
+        } catch (err) {
+          setUploadState("error");
+          const msg = err instanceof Error ? err.message : "Packaging failed";
+          setUploadError(msg);
+          setStatusMessage(`Error: ${msg}`);
           return;
         }
+      }
+
+      if (uploadItems.length === 0) {
         setUploadState("error");
-        setUploadError("No .xml files found");
-        setStatusMessage("Error: No .xml files found");
+        setUploadError("No supported files found");
+        setStatusMessage("Error: No supported files found (.eds, .xls, .xlsx, .pcrd, .zip, .xml)");
         return;
       }
 
-      setUploadState("packaging");
-      setUploadProgress(10);
-      setStatusMessage(
-        `Packaging ${xmlFiles.length} XML file${xmlFiles.length > 1 ? "s" : ""}...`,
-      );
-
-      try {
-        const zip = new JSZip();
-        for (const file of xmlFiles) {
-          const data = await file.arrayBuffer();
-          zip.file(file.name, data);
-        }
-        const blob = await zip.generateAsync({ type: "blob" });
-        const zipFile = new File([blob], "cfx_xml_export.zip", {
-          type: "application/zip",
-        });
-
-        setUploadProgress(40);
-        setStatusMessage("Uploading...");
-        await handleUpload(zipFile);
-      } catch (err) {
-        setUploadState("error");
-        const msg = err instanceof Error ? err.message : "Packaging failed";
-        setUploadError(msg);
-        setStatusMessage(`Error: ${msg}`);
+      // Single file → go to Analysis; multiple files → batch to Project tab
+      if (uploadItems.length === 1) {
+        await handleSingleUpload(uploadItems[0]);
+      } else {
+        await handleBatchUpload(uploadItems);
       }
     },
-    [handleUpload, setUploadState, setUploadProgress, setUploadError],
+    [handleSingleUpload, handleBatchUpload, setUploadState, setUploadProgress, setUploadError],
   );
 
   const onDrop = useCallback(
@@ -124,29 +179,31 @@ export function UploadZone() {
         if (file.name.toLowerCase().endsWith(".xml")) {
           await handleMultipleFiles([file]);
         } else {
-          await handleUpload(file);
+          await handleSingleUpload(file);
         }
       }
     },
-    [handleUpload, handleMultipleFiles],
+    [handleSingleUpload, handleMultipleFiles],
   );
 
   const onFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!e.target.files?.length) return;
       const files = Array.from(e.target.files);
-      const xmlFiles = files.filter((f) =>
-        f.name.toLowerCase().endsWith(".xml"),
-      );
 
-      if (xmlFiles.length > 0 || files.length > 1) {
+      if (files.length > 1) {
         await handleMultipleFiles(files);
       } else if (files.length === 1) {
-        await handleUpload(files[0]);
+        const file = files[0];
+        if (file.name.toLowerCase().endsWith(".xml")) {
+          await handleMultipleFiles([file]);
+        } else {
+          await handleSingleUpload(file);
+        }
       }
       e.target.value = "";
     },
-    [handleUpload, handleMultipleFiles],
+    [handleSingleUpload, handleMultipleFiles],
   );
 
   const onFolderChange = useCallback(
@@ -179,8 +236,11 @@ export function UploadZone() {
           Drag & drop your raw fluorescence file here
         </p>
         <p className="text-text-muted text-[13px]">
-          QuantStudio (.eds, .xls) | CFX Opus (.xlsx, .zip, or drag XML
+          QuantStudio (.eds, .xls) | CFX Opus (.xlsx, .zip, .pcrd, or drag XML
           files/folder)
+        </p>
+        <p className="text-text-muted text-[11px] mt-1">
+          Multiple files or folders → batch upload to session list
         </p>
         <div className="flex gap-2 justify-center mt-3">
           <button
@@ -240,6 +300,17 @@ export function UploadZone() {
           >
             {statusMessage}
           </p>
+        </div>
+      )}
+
+      {onGoToProject && (
+        <div className="mt-6 text-center">
+          <button
+            onClick={onGoToProject}
+            className="text-sm text-text-muted hover:text-primary transition-colors"
+          >
+            Or manage existing sessions &amp; projects &rarr;
+          </button>
         </div>
       )}
     </div>

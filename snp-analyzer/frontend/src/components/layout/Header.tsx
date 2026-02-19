@@ -4,6 +4,7 @@ import { useDarkMode } from "@/hooks/use-dark-mode";
 import { useExports } from "@/hooks/use-exports";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
 import { QcBadges } from "@/components/shared/QcBadges";
+import { AddToProjectButton } from "@/components/analysis/AddToProjectButton";
 
 export function Header() {
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
@@ -122,6 +123,8 @@ export function Header() {
           >
             + New
           </button>
+          <span className="w-px bg-border mx-1" />
+          <AddToProjectButton />
         </div>
       )}
 

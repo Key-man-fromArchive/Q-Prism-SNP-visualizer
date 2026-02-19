@@ -1,6 +1,6 @@
 /** Well type definitions mirroring welltypes.js */
 export const WELL_TYPE_INFO = {
-  NTC: { label: "NTC", color: "#6b7280", symbol: "x" },
+  NTC: { label: "NTC", color: "#000000", symbol: "circle" },
   Unknown: { label: "Unknown", color: "#9ca3af", symbol: "circle" },
   "Positive Control": { label: "Positive Control", color: "#f59e0b", symbol: "diamond" },
   "Allele 1 Homo": { label: "Allele 1 Homo", color: "#2563eb", symbol: "circle" },

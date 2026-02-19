@@ -114,9 +114,22 @@ async def get_project(project_id: str):
     projects = _load_projects()
     project = _find_project(projects, project_id)
 
+    # Load raw_filename from DB for all project sessions
+    from app.db import get_db
+    conn = get_db()
+    sids_list = project.get("session_ids", [])
+    db_info: dict[str, str] = {}
+    if sids_list:
+        placeholders = ",".join("?" * len(sids_list))
+        rows = conn.execute(
+            f"SELECT session_id, raw_filename FROM sessions WHERE session_id IN ({placeholders})",
+            sids_list,
+        ).fetchall()
+        db_info = {r["session_id"]: r["raw_filename"] or "" for r in rows}
+
     # Build per-session summaries (only for sessions that still exist)
     session_summaries = []
-    for sid in project.get("session_ids", []):
+    for sid in sids_list:
         if sid in sessions:
             unified = sessions[sid]
             session_summaries.append({
@@ -124,6 +137,7 @@ async def get_project(project_id: str):
                 "instrument": unified.instrument,
                 "num_wells": len(unified.wells),
                 "num_cycles": len(unified.cycles),
+                "raw_filename": db_info.get(sid, ""),
             })
         else:
             session_summaries.append({
@@ -131,6 +145,7 @@ async def get_project(project_id: str):
                 "instrument": "unknown",
                 "num_wells": 0,
                 "num_cycles": 0,
+                "raw_filename": db_info.get(sid, ""),
                 "missing": True,
             })
 
@@ -166,6 +181,44 @@ async def delete_project(project_id: str):
 # ---------------------------------------------------------------------------
 # Session membership endpoints
 # ---------------------------------------------------------------------------
+
+class BulkSessionsRequest(BaseModel):
+    session_ids: list[str]
+
+
+@router.post("/api/projects/{project_id}/sessions/bulk-add")
+async def bulk_add_sessions_to_project(project_id: str, body: BulkSessionsRequest):
+    """Add multiple sessions to a project at once."""
+    projects = _load_projects()
+    project = _find_project(projects, project_id)
+    sids = project.get("session_ids", [])
+    existing = set(sids)
+    added = []
+    for sid in body.session_ids:
+        if sid not in sessions:
+            continue  # skip missing sessions silently
+        if sid not in existing:
+            sids.append(sid)
+            existing.add(sid)
+            added.append(sid)
+    project["session_ids"] = sids
+    _save_projects(projects)
+    return {"status": "ok", "added": len(added), "session_ids": sids}
+
+
+@router.post("/api/projects/{project_id}/sessions/bulk-remove")
+async def bulk_remove_sessions_from_project(project_id: str, body: BulkSessionsRequest):
+    """Remove multiple sessions from a project at once."""
+    projects = _load_projects()
+    project = _find_project(projects, project_id)
+    remove_set = set(body.session_ids)
+    old_sids = project.get("session_ids", [])
+    new_sids = [s for s in old_sids if s not in remove_set]
+    removed = len(old_sids) - len(new_sids)
+    project["session_ids"] = new_sids
+    _save_projects(projects)
+    return {"status": "ok", "removed": removed, "session_ids": new_sids}
+
 
 @router.post("/api/projects/{project_id}/sessions/{sid}")
 async def add_session_to_project(project_id: str, sid: str):
@@ -212,7 +265,20 @@ async def project_summary(project_id: str):
     # For concordance: well_id -> list of genotypes across plates
     well_genotypes: dict[str, list[str]] = {}
 
-    for sid in project.get("session_ids", []):
+    # Load raw_filename from DB for all project sessions
+    from app.db import get_db
+    conn = get_db()
+    sids_list = project.get("session_ids", [])
+    db_info: dict[str, str] = {}
+    if sids_list:
+        placeholders = ",".join("?" * len(sids_list))
+        rows = conn.execute(
+            f"SELECT session_id, raw_filename FROM sessions WHERE session_id IN ({placeholders})",
+            sids_list,
+        ).fetchall()
+        db_info = {r["session_id"]: r["raw_filename"] or "" for r in rows}
+
+    for sid in sids_list:
         if sid not in sessions:
             plate_summaries.append({
                 "session_id": sid,
@@ -222,6 +288,7 @@ async def project_summary(project_id: str):
                 "ntc_count": 0,
                 "unknown_count": 0,
                 "mean_quality": 0.0,
+                "raw_filename": db_info.get(sid, ""),
                 "missing": True,
             })
             continue
@@ -262,6 +329,7 @@ async def project_summary(project_id: str):
             "ntc_count": ntc_count,
             "unknown_count": unknown_count,
             "mean_quality": mean_quality,
+            "raw_filename": db_info.get(sid, ""),
         })
 
         # Collect genotypes per well for concordance
