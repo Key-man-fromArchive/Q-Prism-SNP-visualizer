@@ -4,6 +4,7 @@ import uuid
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
+from app.auth import CurrentUser
 from app.config import SUPPORTED_EXTENSIONS
 from app.models import UploadResponse
 from app.parsers.detector import detect_and_parse
@@ -15,7 +16,7 @@ sessions: dict = {}
 
 
 @router.post("/api/upload", response_model=UploadResponse)
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(current_user: CurrentUser, file: UploadFile = File(...)):
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in SUPPORTED_EXTENSIONS:
         raise HTTPException(400, f"Unsupported file type: {ext}")
@@ -39,7 +40,7 @@ async def upload_file(file: UploadFile = File(...)):
 
     # Write-through to SQLite
     from app.db import save_session
-    save_session(session_id, unified, filename=file.filename or "")
+    save_session(session_id, unified, filename=file.filename or "", user_id=current_user.user_id)
 
     # Compute suggested display cycle via NTC detection
     from app.processing.ntc_detection import compute_suggested_cycle

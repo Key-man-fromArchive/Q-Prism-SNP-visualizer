@@ -5,12 +5,14 @@ from app.routers.upload import sessions
 from app.routers.clustering import cluster_store, welltype_store
 from app.processing.genotype import get_effective_types, count_genotypes
 from app.processing.statistics import allele_frequencies, hwe_test
+from app.auth import CurrentUser, check_session_access
 
 router = APIRouter()
 
 
 @router.get("/api/data/{sid}/statistics")
-async def get_statistics(sid: str):
+async def get_statistics(sid: str, current_user: CurrentUser):
+    check_session_access(sid, current_user)
     if sid not in sessions:
         raise HTTPException(404, "Session not found")
     unified = sessions[sid]

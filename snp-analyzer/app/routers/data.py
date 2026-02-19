@@ -10,6 +10,7 @@ from app.models import (
 from app.processing.normalize import normalize_for_cycle, normalize
 from app.routers.upload import sessions
 from app.routers.clustering import cluster_store, welltype_store
+from app.auth import CurrentUser, check_session_access
 
 router = APIRouter()
 
@@ -33,7 +34,8 @@ def _get_session(sid: str) -> UnifiedData:
 
 
 @router.get("/api/data/{sid}/scatter")
-async def scatter_data(sid: str, cycle: int = Query(default=0), use_rox: bool = Query(default=True)):
+async def scatter_data(sid: str, current_user: CurrentUser, cycle: int = Query(default=0), use_rox: bool = Query(default=True)):
+    check_session_access(sid, current_user)
     unified = _get_session(sid)
 
     if cycle <= 0:
@@ -70,7 +72,8 @@ async def scatter_data(sid: str, cycle: int = Query(default=0), use_rox: bool = 
 
 
 @router.get("/api/data/{sid}/plate")
-async def plate_data(sid: str, cycle: int = Query(default=0), use_rox: bool = Query(default=True)):
+async def plate_data(sid: str, current_user: CurrentUser, cycle: int = Query(default=0), use_rox: bool = Query(default=True)):
+    check_session_access(sid, current_user)
     unified = _get_session(sid)
 
     if cycle <= 0:
@@ -108,8 +111,9 @@ async def plate_data(sid: str, cycle: int = Query(default=0), use_rox: bool = Qu
 
 @router.get("/api/data/{sid}/amplification")
 async def amplification_data(
-    sid: str, wells: str = Query(default=""), use_rox: bool = Query(default=True)
+    sid: str, current_user: CurrentUser, wells: str = Query(default=""), use_rox: bool = Query(default=True)
 ):
+    check_session_access(sid, current_user)
     unified = _get_session(sid)
     well_list = [w.strip() for w in wells.split(",") if w.strip()]
 
@@ -138,8 +142,9 @@ async def amplification_data(
 
 
 @router.get("/api/data/{sid}/amplification/all")
-async def amplification_all(sid: str, use_rox: bool = Query(default=True)):
+async def amplification_all(sid: str, current_user: CurrentUser, use_rox: bool = Query(default=True)):
     """Return amplification curves for ALL wells with effective genotype type."""
+    check_session_access(sid, current_user)
     unified = _get_session(sid)
     all_normalized = normalize(unified.data, unified.has_rox, use_rox)
 
@@ -169,7 +174,8 @@ async def amplification_all(sid: str, use_rox: bool = Query(default=True)):
 
 
 @router.get("/api/data/{sid}/ct")
-async def ct_data(sid: str, use_rox: bool = Query(default=True)):
+async def ct_data(sid: str, current_user: CurrentUser, use_rox: bool = Query(default=True)):
+    check_session_access(sid, current_user)
     unified = _get_session(sid)
     if len(unified.cycles) < 3:
         return {"results": {}, "allele2_dye": unified.allele2_dye}
@@ -180,7 +186,8 @@ async def ct_data(sid: str, use_rox: bool = Query(default=True)):
 
 
 @router.get("/api/data/{sid}/export/pdf")
-async def export_pdf(sid: str, use_rox: bool = Query(default=True)):
+async def export_pdf(sid: str, current_user: CurrentUser, use_rox: bool = Query(default=True)):
+    check_session_access(sid, current_user)
     from fastapi.responses import Response
     from app.processing.normalize import normalize_for_cycle
     from app.processing.ct_calculation import calculate_all_ct
@@ -254,7 +261,8 @@ async def export_pdf(sid: str, use_rox: bool = Query(default=True)):
 
 
 @router.get("/api/data/{sid}/protocol")
-async def get_protocol(sid: str):
+async def get_protocol(sid: str, current_user: CurrentUser):
+    check_session_access(sid, current_user)
     unified = _get_session(sid)
     # Use protocol from .eds file if available, then user-saved, then default
     if sid in protocol_store:
@@ -267,7 +275,8 @@ async def get_protocol(sid: str):
 
 
 @router.post("/api/data/{sid}/protocol")
-async def save_protocol(sid: str, steps: list[ProtocolStep]):
+async def save_protocol(sid: str, current_user: CurrentUser, steps: list[ProtocolStep]):
+    check_session_access(sid, current_user)
     _get_session(sid)
     protocol_store[sid] = steps
 

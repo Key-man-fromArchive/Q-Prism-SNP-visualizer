@@ -23,6 +23,8 @@ import type {
   ProjectResponse,
   ProjectSummaryResponse,
 } from '@/types/api';
+import type { LoginRequest, LoginResponse, UserListItem } from '@/types/auth';
+import { useAuthStore } from '@/stores/auth-store';
 
 /**
  * Build query string from params object, skipping undefined values
@@ -36,12 +38,20 @@ function buildQuery(params: Record<string, string | number | boolean | undefined
 }
 
 /**
- * Generic fetch wrapper with error handling
+ * Generic fetch wrapper with error handling and auth cookie support
  */
 async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await fetch(url, {
+    ...init,
+    credentials: 'same-origin',
+  });
 
   if (!res.ok) {
+    // Auto-clear auth on 401
+    if (res.status === 401) {
+      useAuthStore.getState().clearAuth();
+    }
+
     let errorMessage = `HTTP ${res.status}: ${res.statusText}`;
     try {
       const errorData = await res.json();
@@ -125,7 +135,7 @@ export async function exportPdf(
   useRox?: boolean
 ): Promise<Blob> {
   const query = buildQuery({ use_rox: useRox });
-  const res = await fetch(`/api/data/${sid}/export/pdf${query}`);
+  const res = await fetch(`/api/data/${sid}/export/pdf${query}`, { credentials: 'same-origin' });
 
   if (!res.ok) {
     throw new Error(`Failed to export PDF: ${res.statusText}`);
@@ -210,7 +220,7 @@ export async function exportCsv(
   useRox?: boolean
 ): Promise<Blob> {
   const query = buildQuery({ cycle, use_rox: useRox });
-  const res = await fetch(`/api/data/${sid}/export/csv${query}`);
+  const res = await fetch(`/api/data/${sid}/export/csv${query}`, { credentials: 'same-origin' });
 
   if (!res.ok) {
     throw new Error(`Failed to export CSV: ${res.statusText}`);
@@ -467,4 +477,68 @@ export async function bulkRemoveProjectSessions(
 
 export async function getProjectSummary(id: string): Promise<ProjectSummaryResponse> {
   return apiFetch<ProjectSummaryResponse>(`/api/projects/${id}/summary`);
+}
+
+// ============================================================================
+// Auth
+// ============================================================================
+
+export async function login(req: LoginRequest): Promise<LoginResponse> {
+  return apiFetch<LoginResponse>('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export async function logout(): Promise<void> {
+  await apiFetch<{ status: string }>('/api/auth/logout', { method: 'POST' });
+}
+
+export async function getMe(): Promise<LoginResponse> {
+  return apiFetch<LoginResponse>('/api/auth/me');
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await apiFetch<{ status: string }>('/api/auth/change-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
+// ============================================================================
+// User Management (admin)
+// ============================================================================
+
+export async function getUsers(): Promise<{ users: UserListItem[] }> {
+  return apiFetch<{ users: UserListItem[] }>('/api/users');
+}
+
+export async function createUser(data: {
+  username: string;
+  password: string;
+  display_name?: string;
+  role?: string;
+}): Promise<UserListItem> {
+  return apiFetch<UserListItem>('/api/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateUser(
+  id: string,
+  data: { display_name?: string; role?: string; is_active?: boolean; password?: string }
+): Promise<UserListItem> {
+  return apiFetch<UserListItem>(`/api/users/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteUser(id: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/api/users/${id}`, { method: 'DELETE' });
 }

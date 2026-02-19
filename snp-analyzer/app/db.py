@@ -21,14 +21,38 @@ def get_db() -> sqlite3.Connection:
     return _conn
 
 
+def _get_schema_version(conn: sqlite3.Connection) -> int:
+    """Get current schema version, 0 if table doesn't exist."""
+    try:
+        row = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
+        return row[0] or 0
+    except sqlite3.OperationalError:
+        return 0
+
+
+def _run_migrations(conn: sqlite3.Connection):
+    """Run incremental migrations based on schema_version."""
+    current = _get_schema_version(conn)
+
+    if current < 1:
+        # Migration 1: Add user_id column to sessions if missing
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(sessions)").fetchall()]
+        if "user_id" not in cols:
+            conn.execute("ALTER TABLE sessions ADD COLUMN user_id TEXT REFERENCES users(id)")
+        conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (1)")
+
+    conn.commit()
+
+
 def init_db():
     conn = get_db()
     schema_path = Path(__file__).parent / "db_schema.sql"
     conn.executescript(schema_path.read_text())
+    _run_migrations(conn)
     conn.commit()
 
 
-def save_session(session_id: str, unified, filename: str = ""):
+def save_session(session_id: str, unified, filename: str = "", user_id: str | None = None):
     """Write session metadata + all well cycle data to DB."""
     conn = get_db()
     metadata = {}
@@ -41,10 +65,10 @@ def save_session(session_id: str, unified, filename: str = ""):
 
     conn.execute(
         """INSERT OR REPLACE INTO sessions
-           (session_id, instrument, num_wells, num_cycles, allele2_dye, has_rox, raw_filename, metadata_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+           (session_id, instrument, num_wells, num_cycles, allele2_dye, has_rox, raw_filename, metadata_json, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (session_id, unified.instrument, len(unified.wells), len(unified.cycles),
-         unified.allele2_dye, int(unified.has_rox), filename, json.dumps(metadata)),
+         unified.allele2_dye, int(unified.has_rox), filename, json.dumps(metadata), user_id),
     )
 
     # Batch insert well cycle data
@@ -111,6 +135,13 @@ def save_protocol_override(session_id: str, steps_json: str):
         (session_id, steps_json),
     )
     conn.commit()
+
+
+def get_session_owner(session_id: str) -> str | None:
+    """Get the user_id that owns a session."""
+    conn = get_db()
+    row = conn.execute("SELECT user_id FROM sessions WHERE session_id = ?", (session_id,)).fetchone()
+    return row["user_id"] if row else None
 
 
 def load_all_sessions():

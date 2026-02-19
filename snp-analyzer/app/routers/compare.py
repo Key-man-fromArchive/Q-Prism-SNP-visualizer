@@ -14,6 +14,7 @@ from app.models import ScatterPoint, UnifiedData
 from app.processing.normalize import normalize_for_cycle
 from app.routers.clustering import cluster_store, welltype_store
 from app.routers.upload import sessions
+from app.auth import CurrentUser, check_session_access
 
 router = APIRouter()
 
@@ -98,6 +99,7 @@ def _pearson_r(xs: list[float], ys: list[float]) -> float | None:
 
 @router.get("/api/compare/scatter")
 async def compare_scatter(
+    current_user: CurrentUser,
     sid1: str = Query(..., description="Session ID for run 1"),
     sid2: str = Query(..., description="Session ID for run 2"),
     cycle1: int = Query(default=0, description="Cycle for run 1 (0 = max)"),
@@ -105,6 +107,8 @@ async def compare_scatter(
     use_rox: bool = Query(default=True, description="Apply ROX normalization"),
 ):
     """Return normalized scatter data for two sessions for side-by-side comparison."""
+    check_session_access(sid1, current_user)
+    check_session_access(sid2, current_user)
     unified1 = _get_session(sid1)
     unified2 = _get_session(sid2)
 
@@ -136,6 +140,7 @@ async def compare_scatter(
 
 @router.get("/api/compare/stats")
 async def compare_stats(
+    current_user: CurrentUser,
     sid1: str = Query(..., description="Session ID for run 1"),
     sid2: str = Query(..., description="Session ID for run 2"),
     cycle1: int = Query(default=0, description="Cycle for run 1 (0 = max)"),
@@ -143,6 +148,8 @@ async def compare_stats(
     use_rox: bool = Query(default=True, description="Apply ROX normalization"),
 ):
     """Return summary statistics and cross-run Pearson correlation."""
+    check_session_access(sid1, current_user)
+    check_session_access(sid2, current_user)
     unified1 = _get_session(sid1)
     unified2 = _get_session(sid2)
 

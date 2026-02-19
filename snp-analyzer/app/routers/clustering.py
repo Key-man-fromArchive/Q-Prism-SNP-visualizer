@@ -12,6 +12,7 @@ from app.models import (
 from app.processing.clustering import cluster_kmeans, cluster_threshold
 from app.processing.normalize import normalize_for_cycle
 from app.routers.upload import sessions
+from app.auth import CurrentUser, check_session_access
 
 
 class BulkWellTypeReplace(_BaseModel):
@@ -31,7 +32,8 @@ def _get_session(sid: str):
 
 
 @router.post("/api/data/{sid}/cluster")
-async def run_clustering(sid: str, req: ClusteringRequest):
+async def run_clustering(sid: str, req: ClusteringRequest, current_user: CurrentUser):
+    check_session_access(sid, current_user)
     unified = _get_session(sid)
 
     cycle = req.cycle if req.cycle > 0 else max(unified.cycles)
@@ -62,7 +64,8 @@ async def run_clustering(sid: str, req: ClusteringRequest):
 
 
 @router.get("/api/data/{sid}/cluster")
-async def get_clustering(sid: str):
+async def get_clustering(sid: str, current_user: CurrentUser):
+    check_session_access(sid, current_user)
     _get_session(sid)
     if sid not in cluster_store:
         return {"algorithm": None, "cycle": 0, "assignments": {}}
@@ -70,7 +73,8 @@ async def get_clustering(sid: str):
 
 
 @router.post("/api/data/{sid}/welltypes")
-async def set_well_types(sid: str, update: ManualWellTypeUpdate):
+async def set_well_types(sid: str, update: ManualWellTypeUpdate, current_user: CurrentUser):
+    check_session_access(sid, current_user)
     _get_session(sid)
     if sid not in welltype_store:
         welltype_store[sid] = {}
@@ -85,13 +89,15 @@ async def set_well_types(sid: str, update: ManualWellTypeUpdate):
 
 
 @router.get("/api/data/{sid}/welltypes")
-async def get_well_types(sid: str):
+async def get_well_types(sid: str, current_user: CurrentUser):
+    check_session_access(sid, current_user)
     _get_session(sid)
     return {"assignments": welltype_store.get(sid, {})}
 
 
 @router.delete("/api/data/{sid}/welltypes")
-async def clear_well_types(sid: str):
+async def clear_well_types(sid: str, current_user: CurrentUser):
+    check_session_access(sid, current_user)
     _get_session(sid)
     welltype_store.pop(sid, None)
 
@@ -102,8 +108,9 @@ async def clear_well_types(sid: str):
 
 
 @router.put("/api/data/{sid}/welltypes/bulk")
-async def bulk_replace_well_types(sid: str, body: BulkWellTypeReplace):
+async def bulk_replace_well_types(sid: str, body: BulkWellTypeReplace, current_user: CurrentUser):
     """Replace all manual welltypes with the given snapshot (for undo/redo)."""
+    check_session_access(sid, current_user)
     _get_session(sid)
     welltype_store[sid] = dict(body.assignments)
 

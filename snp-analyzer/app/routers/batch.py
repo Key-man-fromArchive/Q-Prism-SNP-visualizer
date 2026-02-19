@@ -1,26 +1,25 @@
 """Batch / Project workflow router.
 
 A "project" groups multiple sessions (runs/plates) together for batch analysis.
-Projects are stored in /app/data/projects.json (JSON file, same pattern as presets).
+Projects are stored in the DB (projects + project_sessions tables).
+All endpoints require authentication; regular users see only their own projects.
 """
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.auth import CurrentUser, check_project_access
+from app.db import get_db
 from app.processing.genotype import count_genotypes, get_effective_types
 from app.processing.quality import score_all_wells
 from app.routers.clustering import cluster_store, welltype_store
 from app.routers.upload import sessions
 
 router = APIRouter()
-
-PROJECTS_FILE = Path(__file__).resolve().parent.parent / "data" / "projects.json"
 
 
 # ---------------------------------------------------------------------------
@@ -30,6 +29,7 @@ PROJECTS_FILE = Path(__file__).resolve().parent.parent / "data" / "projects.json
 class Project(BaseModel):
     id: str
     name: str
+    user_id: str
     created_at: str
     session_ids: list[str] = []
 
@@ -44,32 +44,56 @@ class ProjectUpdate(BaseModel):
     session_ids: list[str] | None = None
 
 
+class BulkSessionsRequest(BaseModel):
+    session_ids: list[str]
+
+
 # ---------------------------------------------------------------------------
-# JSON persistence helpers (same pattern as presets.py)
+# DB helper functions
 # ---------------------------------------------------------------------------
 
-def _load_projects() -> list[dict]:
-    """Load all projects from the JSON file."""
-    if PROJECTS_FILE.exists():
-        try:
-            return json.loads(PROJECTS_FILE.read_text())
-        except (json.JSONDecodeError, IOError):
-            return []
-    return []
+def _get_project_or_404(project_id: str) -> dict:
+    """Load a project row from DB or raise 404."""
+    conn = get_db()
+    row = conn.execute("SELECT id, name, user_id, created_at FROM projects WHERE id = ?", (project_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Project not found")
+    return dict(row)
 
 
-def _save_projects(projects: list[dict]) -> None:
-    """Write projects list to JSON file."""
-    PROJECTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    PROJECTS_FILE.write_text(json.dumps(projects, indent=2))
+def _get_session_ids(project_id: str) -> list[str]:
+    """Get ordered session_ids for a project."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT session_id FROM project_sessions WHERE project_id = ? ORDER BY position",
+        (project_id,),
+    ).fetchall()
+    return [r["session_id"] for r in rows]
 
 
-def _find_project(projects: list[dict], project_id: str) -> dict:
-    """Find a project by id or raise 404."""
-    for p in projects:
-        if p["id"] == project_id:
-            return p
-    raise HTTPException(404, "Project not found")
+def _set_session_ids(project_id: str, session_ids: list[str]) -> None:
+    """Replace all project_sessions for a project with the given ordered list."""
+    conn = get_db()
+    conn.execute("DELETE FROM project_sessions WHERE project_id = ?", (project_id,))
+    for pos, sid in enumerate(session_ids):
+        conn.execute(
+            "INSERT INTO project_sessions (project_id, session_id, position) VALUES (?, ?, ?)",
+            (project_id, sid, pos),
+        )
+    conn.commit()
+
+
+def _get_raw_filenames(sids_list: list[str]) -> dict[str, str]:
+    """Batch-load raw_filename from the sessions DB table."""
+    if not sids_list:
+        return {}
+    conn = get_db()
+    placeholders = ",".join("?" * len(sids_list))
+    rows = conn.execute(
+        f"SELECT session_id, raw_filename FROM sessions WHERE session_id IN ({placeholders})",
+        sids_list,
+    ).fetchall()
+    return {r["session_id"]: r["raw_filename"] or "" for r in rows}
 
 
 # ---------------------------------------------------------------------------
@@ -77,57 +101,69 @@ def _find_project(projects: list[dict], project_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 @router.get("/api/projects")
-async def list_projects():
-    """List all projects (id, name, created_at, session count)."""
-    projects = _load_projects()
-    return {
-        "projects": [
-            {
-                "id": p["id"],
-                "name": p["name"],
-                "created_at": p["created_at"],
-                "session_count": len(p.get("session_ids", [])),
-            }
-            for p in projects
-        ]
-    }
+async def list_projects(current_user: CurrentUser):
+    """List all projects (id, name, created_at, session count).
+    Regular users see only their own; admin sees all.
+    """
+    conn = get_db()
+    if current_user.role == "admin":
+        rows = conn.execute("SELECT id, name, user_id, created_at FROM projects ORDER BY created_at DESC").fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id, name, user_id, created_at FROM projects WHERE user_id = ? ORDER BY created_at DESC",
+            (current_user.user_id,),
+        ).fetchall()
+
+    projects = []
+    for r in rows:
+        count = conn.execute(
+            "SELECT COUNT(*) as cnt FROM project_sessions WHERE project_id = ?", (r["id"],)
+        ).fetchone()["cnt"]
+        projects.append({
+            "id": r["id"],
+            "name": r["name"],
+            "created_at": r["created_at"],
+            "session_count": count,
+        })
+
+    return {"projects": projects}
 
 
 @router.post("/api/projects")
-async def create_project(body: ProjectCreate):
+async def create_project(body: ProjectCreate, current_user: CurrentUser):
     """Create a new project with auto-generated id and timestamp."""
-    projects = _load_projects()
-    new_project = {
-        "id": uuid.uuid4().hex[:12],
+    conn = get_db()
+    project_id = uuid.uuid4().hex[:12]
+    created_at = datetime.now(timezone.utc).isoformat()
+
+    conn.execute(
+        "INSERT INTO projects (id, name, user_id, created_at) VALUES (?, ?, ?, ?)",
+        (project_id, body.name, current_user.user_id, created_at),
+    )
+    conn.commit()
+
+    # Add initial sessions if provided
+    if body.session_ids:
+        _set_session_ids(project_id, body.session_ids)
+
+    return {
+        "id": project_id,
         "name": body.name,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "user_id": current_user.user_id,
+        "created_at": created_at,
         "session_ids": body.session_ids,
     }
-    projects.append(new_project)
-    _save_projects(projects)
-    return new_project
 
 
 @router.get("/api/projects/{project_id}")
-async def get_project(project_id: str):
+async def get_project(project_id: str, current_user: CurrentUser):
     """Get project detail with per-session summary info."""
-    projects = _load_projects()
-    project = _find_project(projects, project_id)
+    check_project_access(project_id, current_user)
+    project = _get_project_or_404(project_id)
+    sids_list = _get_session_ids(project_id)
+    db_info = _get_raw_filenames(sids_list)
 
-    # Load raw_filename from DB for all project sessions
-    from app.db import get_db
-    conn = get_db()
-    sids_list = project.get("session_ids", [])
-    db_info: dict[str, str] = {}
-    if sids_list:
-        placeholders = ",".join("?" * len(sids_list))
-        rows = conn.execute(
-            f"SELECT session_id, raw_filename FROM sessions WHERE session_id IN ({placeholders})",
-            sids_list,
-        ).fetchall()
-        db_info = {r["session_id"]: r["raw_filename"] or "" for r in rows}
-
-    # Build per-session summaries (only for sessions that still exist)
+    # Build per-session summaries (only for sessions that still exist in memory)
     session_summaries = []
     for sid in sids_list:
         if sid in sessions:
@@ -150,31 +186,49 @@ async def get_project(project_id: str):
             })
 
     return {
-        **project,
+        "id": project["id"],
+        "name": project["name"],
+        "user_id": project["user_id"],
+        "created_at": project["created_at"],
+        "session_ids": sids_list,
         "sessions": session_summaries,
     }
 
 
 @router.put("/api/projects/{project_id}")
-async def update_project(project_id: str, body: ProjectUpdate):
+async def update_project(project_id: str, body: ProjectUpdate, current_user: CurrentUser):
     """Update project name and/or session_ids."""
-    projects = _load_projects()
-    project = _find_project(projects, project_id)
+    check_project_access(project_id, current_user)
+    project = _get_project_or_404(project_id)
+
+    conn = get_db()
     if body.name is not None:
+        conn.execute("UPDATE projects SET name = ? WHERE id = ?", (body.name, project_id))
+        conn.commit()
         project["name"] = body.name
+
     if body.session_ids is not None:
-        project["session_ids"] = body.session_ids
-    _save_projects(projects)
-    return project
+        _set_session_ids(project_id, body.session_ids)
+
+    sids = body.session_ids if body.session_ids is not None else _get_session_ids(project_id)
+    return {
+        "id": project["id"],
+        "name": project["name"],
+        "user_id": project["user_id"],
+        "created_at": project["created_at"],
+        "session_ids": sids,
+    }
 
 
 @router.delete("/api/projects/{project_id}")
-async def delete_project(project_id: str):
-    """Delete a project."""
-    projects = _load_projects()
-    _find_project(projects, project_id)  # raises 404 if not found
-    projects = [p for p in projects if p["id"] != project_id]
-    _save_projects(projects)
+async def delete_project(project_id: str, current_user: CurrentUser):
+    """Delete a project (CASCADE removes project_sessions rows)."""
+    check_project_access(project_id, current_user)
+    _get_project_or_404(project_id)  # raises 404 if not found
+
+    conn = get_db()
+    conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+    conn.commit()
     return {"status": "ok"}
 
 
@@ -182,16 +236,13 @@ async def delete_project(project_id: str):
 # Session membership endpoints
 # ---------------------------------------------------------------------------
 
-class BulkSessionsRequest(BaseModel):
-    session_ids: list[str]
-
-
 @router.post("/api/projects/{project_id}/sessions/bulk-add")
-async def bulk_add_sessions_to_project(project_id: str, body: BulkSessionsRequest):
+async def bulk_add_sessions_to_project(project_id: str, body: BulkSessionsRequest, current_user: CurrentUser):
     """Add multiple sessions to a project at once."""
-    projects = _load_projects()
-    project = _find_project(projects, project_id)
-    sids = project.get("session_ids", [])
+    check_project_access(project_id, current_user)
+    _get_project_or_404(project_id)
+
+    sids = _get_session_ids(project_id)
     existing = set(sids)
     added = []
     for sid in body.session_ids:
@@ -201,53 +252,56 @@ async def bulk_add_sessions_to_project(project_id: str, body: BulkSessionsReques
             sids.append(sid)
             existing.add(sid)
             added.append(sid)
-    project["session_ids"] = sids
-    _save_projects(projects)
+
+    _set_session_ids(project_id, sids)
     return {"status": "ok", "added": len(added), "session_ids": sids}
 
 
 @router.post("/api/projects/{project_id}/sessions/bulk-remove")
-async def bulk_remove_sessions_from_project(project_id: str, body: BulkSessionsRequest):
+async def bulk_remove_sessions_from_project(project_id: str, body: BulkSessionsRequest, current_user: CurrentUser):
     """Remove multiple sessions from a project at once."""
-    projects = _load_projects()
-    project = _find_project(projects, project_id)
+    check_project_access(project_id, current_user)
+    _get_project_or_404(project_id)
+
     remove_set = set(body.session_ids)
-    old_sids = project.get("session_ids", [])
+    old_sids = _get_session_ids(project_id)
     new_sids = [s for s in old_sids if s not in remove_set]
     removed = len(old_sids) - len(new_sids)
-    project["session_ids"] = new_sids
-    _save_projects(projects)
+
+    _set_session_ids(project_id, new_sids)
     return {"status": "ok", "removed": removed, "session_ids": new_sids}
 
 
 @router.post("/api/projects/{project_id}/sessions/{sid}")
-async def add_session_to_project(project_id: str, sid: str):
+async def add_session_to_project(project_id: str, sid: str, current_user: CurrentUser):
     """Add a session to a project."""
     if sid not in sessions:
         raise HTTPException(404, "Session not found")
 
-    projects = _load_projects()
-    project = _find_project(projects, project_id)
-    sids = project.get("session_ids", [])
+    check_project_access(project_id, current_user)
+    _get_project_or_404(project_id)
+
+    sids = _get_session_ids(project_id)
     if sid in sids:
         raise HTTPException(400, "Session already in project")
     sids.append(sid)
-    project["session_ids"] = sids
-    _save_projects(projects)
+
+    _set_session_ids(project_id, sids)
     return {"status": "ok", "session_ids": sids}
 
 
 @router.delete("/api/projects/{project_id}/sessions/{sid}")
-async def remove_session_from_project(project_id: str, sid: str):
+async def remove_session_from_project(project_id: str, sid: str, current_user: CurrentUser):
     """Remove a session from a project."""
-    projects = _load_projects()
-    project = _find_project(projects, project_id)
-    sids = project.get("session_ids", [])
+    check_project_access(project_id, current_user)
+    _get_project_or_404(project_id)
+
+    sids = _get_session_ids(project_id)
     if sid not in sids:
         raise HTTPException(404, "Session not in project")
     sids.remove(sid)
-    project["session_ids"] = sids
-    _save_projects(projects)
+
+    _set_session_ids(project_id, sids)
     return {"status": "ok", "session_ids": sids}
 
 
@@ -256,27 +310,16 @@ async def remove_session_from_project(project_id: str, sid: str):
 # ---------------------------------------------------------------------------
 
 @router.get("/api/projects/{project_id}/summary")
-async def project_summary(project_id: str):
+async def project_summary(project_id: str, current_user: CurrentUser):
     """Batch summary: per-plate genotype counts, quality scores, cross-plate concordance."""
-    projects = _load_projects()
-    project = _find_project(projects, project_id)
+    check_project_access(project_id, current_user)
+    project = _get_project_or_404(project_id)
+    sids_list = _get_session_ids(project_id)
+    db_info = _get_raw_filenames(sids_list)
 
     plate_summaries: list[dict] = []
     # For concordance: well_id -> list of genotypes across plates
     well_genotypes: dict[str, list[str]] = {}
-
-    # Load raw_filename from DB for all project sessions
-    from app.db import get_db
-    conn = get_db()
-    sids_list = project.get("session_ids", [])
-    db_info: dict[str, str] = {}
-    if sids_list:
-        placeholders = ",".join("?" * len(sids_list))
-        rows = conn.execute(
-            f"SELECT session_id, raw_filename FROM sessions WHERE session_id IN ({placeholders})",
-            sids_list,
-        ).fetchall()
-        db_info = {r["session_id"]: r["raw_filename"] or "" for r in rows}
 
     for sid in sids_list:
         if sid not in sessions:

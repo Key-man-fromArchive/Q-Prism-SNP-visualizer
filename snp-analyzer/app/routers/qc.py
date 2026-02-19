@@ -9,6 +9,7 @@ from app.models import UnifiedData
 from app.processing.normalize import normalize_for_cycle
 from app.routers.upload import sessions
 from app.routers.clustering import cluster_store, welltype_store
+from app.auth import CurrentUser, check_session_access
 
 router = APIRouter()
 
@@ -133,10 +134,12 @@ def _compute_cluster_separation(sid: str, points: list) -> float | None:
 @router.get("/api/data/{sid}/qc", response_model=QcResult)
 async def qc_metrics(
     sid: str,
+    current_user: CurrentUser,
     cycle: int = Query(default=0),
     use_rox: bool = Query(default=True),
 ):
     """Compute quality-control metrics for the current dataset."""
+    check_session_access(sid, current_user)
     unified = _get_session(sid)
 
     if cycle <= 0:

@@ -6,6 +6,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.auth import CurrentUser
+
 router = APIRouter()
 
 PRESETS_FILE = Path(__file__).resolve().parent.parent / "data" / "presets.json"
@@ -86,12 +88,12 @@ class PresetUpdate(BaseModel):
 
 
 @router.get("/api/presets")
-async def list_presets():
+async def list_presets(current_user: CurrentUser):
     return {"presets": _load_presets()}
 
 
 @router.post("/api/presets")
-async def create_preset(body: PresetCreate):
+async def create_preset(body: PresetCreate, current_user: CurrentUser):
     import uuid
     presets = _load_presets()
     new_preset = {
@@ -106,7 +108,7 @@ async def create_preset(body: PresetCreate):
 
 
 @router.put("/api/presets/{preset_id}")
-async def update_preset(preset_id: str, body: PresetUpdate):
+async def update_preset(preset_id: str, body: PresetUpdate, current_user: CurrentUser):
     presets = _load_presets()
     for p in presets:
         if p["id"] == preset_id:
@@ -122,7 +124,7 @@ async def update_preset(preset_id: str, body: PresetUpdate):
 
 
 @router.delete("/api/presets/{preset_id}")
-async def delete_preset(preset_id: str):
+async def delete_preset(preset_id: str, current_user: CurrentUser):
     presets = _load_presets()
     for p in presets:
         if p["id"] == preset_id:

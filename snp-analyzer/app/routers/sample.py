@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.auth import CurrentUser, check_session_access
 from app.routers.upload import sessions
 
 router = APIRouter()
@@ -32,20 +33,22 @@ def _merged_samples(sid: str) -> dict[str, str]:
 
 
 @router.get("/api/data/{sid}/samples")
-async def get_samples(sid: str):
+async def get_samples(sid: str, current_user: CurrentUser):
     """Return merged sample names (parsed + user overrides) for all wells."""
+    check_session_access(sid, current_user)
     merged = _merged_samples(sid)
     return {"samples": merged}
 
 
 @router.put("/api/data/{sid}/samples")
-async def update_samples(sid: str, body: SampleNamesUpdate):
+async def update_samples(sid: str, body: SampleNamesUpdate, current_user: CurrentUser):
     """Merge user-provided sample names into the override store.
 
     Only the wells specified in the request body are updated; existing
     overrides for other wells are preserved.
     """
     _get_session(sid)  # validate session exists
+    check_session_access(sid, current_user)
     if sid not in sample_name_store:
         sample_name_store[sid] = {}
     sample_name_store[sid].update(body.samples)
@@ -59,9 +62,10 @@ async def update_samples(sid: str, body: SampleNamesUpdate):
 
 
 @router.delete("/api/data/{sid}/samples")
-async def delete_samples(sid: str):
+async def delete_samples(sid: str, current_user: CurrentUser):
     """Clear all user overrides, returning to parsed names only."""
     _get_session(sid)  # validate session exists
+    check_session_access(sid, current_user)
     sample_name_store.pop(sid, None)
 
     from app.db import delete_sample_overrides
@@ -73,19 +77,27 @@ async def delete_samples(sid: str):
 
 
 @router.get("/api/sessions")
-async def list_sessions():
+async def list_sessions(current_user: CurrentUser):
     """Return a list of all active sessions with summary info."""
     # Load raw_filename and created_at from DB for all sessions
     from app.db import get_db
     conn = get_db()
-    db_rows = conn.execute(
-        "SELECT session_id, raw_filename, created_at FROM sessions"
-    ).fetchall()
+    if current_user.role == "admin":
+        db_rows = conn.execute(
+            "SELECT session_id, raw_filename, created_at FROM sessions"
+        ).fetchall()
+    else:
+        db_rows = conn.execute(
+            "SELECT session_id, raw_filename, created_at FROM sessions WHERE user_id = ?",
+            (current_user.user_id,),
+        ).fetchall()
     db_info = {r["session_id"]: dict(r) for r in db_rows}
 
     result = []
     for sid, unified in sessions.items():
-        info = db_info.get(sid, {})
+        if sid not in db_info:
+            continue
+        info = db_info[sid]
         result.append(
             {
                 "session_id": sid,
@@ -108,7 +120,6 @@ def _delete_sessions_impl(sids_to_delete: list[str]):
     from app.routers.clustering import cluster_store, welltype_store
     from app.routers.data import protocol_store
     from app.db import get_db
-    from app.routers.batch import _load_projects, _save_projects
 
     # Remove from in-memory stores
     for sid in sids_to_delete:
@@ -118,44 +129,51 @@ def _delete_sessions_impl(sids_to_delete: list[str]):
         sample_name_store.pop(sid, None)
         protocol_store.pop(sid, None)
 
-    # Remove from DB in a single transaction (CASCADE deletes child tables)
+    # Remove from project_sessions
     conn = get_db()
     placeholders = ",".join("?" * len(sids_to_delete))
+    conn.execute(
+        f"DELETE FROM project_sessions WHERE session_id IN ({placeholders})",
+        sids_to_delete,
+    )
+
+    # Remove from DB (CASCADE deletes remaining child tables)
     conn.execute(
         f"DELETE FROM sessions WHERE session_id IN ({placeholders})",
         sids_to_delete,
     )
     conn.commit()
 
-    # Remove from all projects
-    delete_set = set(sids_to_delete)
-    projects = _load_projects()
-    changed = False
-    for p in projects:
-        old_sids = p.get("session_ids", [])
-        new_sids = [s for s in old_sids if s not in delete_set]
-        if len(new_sids) != len(old_sids):
-            p["session_ids"] = new_sids
-            changed = True
-    if changed:
-        _save_projects(projects)
-
 
 # NOTE: bulk-delete MUST be registered before {sid} to avoid path conflict
 @router.post("/api/sessions/bulk-delete")
-async def bulk_delete_sessions(body: BulkDeleteRequest):
+async def bulk_delete_sessions(body: BulkDeleteRequest, current_user: CurrentUser):
     """Delete multiple sessions in one transaction."""
     if not body.session_ids:
         return {"status": "ok", "deleted": 0}
-    _delete_sessions_impl(body.session_ids)
-    return {"status": "ok", "deleted": len(body.session_ids)}
+
+    # Filter to only sessions the user owns (admin can delete all)
+    if current_user.role == "admin":
+        sids_to_delete = body.session_ids
+    else:
+        from app.db import get_session_owner
+        sids_to_delete = [
+            sid for sid in body.session_ids
+            if get_session_owner(sid) in (current_user.user_id, None)
+        ]
+    if not sids_to_delete:
+        return {"status": "ok", "deleted": 0}
+
+    _delete_sessions_impl(sids_to_delete)
+    return {"status": "ok", "deleted": len(sids_to_delete)}
 
 
 @router.get("/api/sessions/{sid}")
-async def get_session_info(sid: str):
+async def get_session_info(sid: str, current_user: CurrentUser):
     """Return UploadResponse-compatible info for a session (for re-loading)."""
     if sid not in sessions:
         raise HTTPException(404, "Session not found")
+    check_session_access(sid, current_user)
     unified = sessions[sid]
 
     from app.processing.ntc_detection import compute_suggested_cycle
@@ -177,7 +195,8 @@ async def get_session_info(sid: str):
 
 
 @router.delete("/api/sessions/{sid}")
-async def delete_session(sid: str):
+async def delete_session(sid: str, current_user: CurrentUser):
     """Completely delete a single session."""
+    check_session_access(sid, current_user)
     _delete_sessions_impl([sid])
     return {"status": "ok"}

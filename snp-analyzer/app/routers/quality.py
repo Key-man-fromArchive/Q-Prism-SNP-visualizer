@@ -2,12 +2,14 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from app.routers.upload import sessions
+from app.auth import CurrentUser, check_session_access
 
 router = APIRouter()
 
 
 @router.get("/api/data/{sid}/quality")
-async def get_quality(sid: str, use_rox: bool = Query(default=True)):
+async def get_quality(sid: str, current_user: CurrentUser, use_rox: bool = Query(default=True)):
+    check_session_access(sid, current_user)
     if sid not in sessions:
         raise HTTPException(404, "Session not found")
     unified = sessions[sid]

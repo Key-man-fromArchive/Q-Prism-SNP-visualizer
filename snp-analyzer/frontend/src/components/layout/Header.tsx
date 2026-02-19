@@ -1,10 +1,12 @@
 import { useCallback } from "react";
 import { useSessionStore } from "@/stores/session-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { useDarkMode } from "@/hooks/use-dark-mode";
 import { useExports } from "@/hooks/use-exports";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
 import { QcBadges } from "@/components/shared/QcBadges";
 import { AddToProjectButton } from "@/components/analysis/AddToProjectButton";
+import { logout } from "@/lib/api";
 
 export function Header() {
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
@@ -14,8 +16,20 @@ export function Header() {
   const { downloadCSV, exportPNG, exportPDF, printReport } = useExports();
   const { undo, redo, canUndo, canRedo } = useUndoRedo();
 
+  const user = useAuthStore((s) => s.user);
+  const clearAuth = useAuthStore((s) => s.clearAuth);
+
   const handleNewUpload = () => {
     reset();
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      // Clear auth even if server call fails
+    }
+    clearAuth();
   };
 
   // Wrap export functions to show user-visible errors
@@ -125,6 +139,27 @@ export function Header() {
           </button>
           <span className="w-px bg-border mx-1" />
           <AddToProjectButton />
+        </div>
+      )}
+
+      {/* User info + Logout */}
+      {user && (
+        <div className="flex items-center gap-2 ml-2">
+          <span className="text-xs text-text">{user.display_name || user.username}</span>
+          <span className={`text-xs px-1.5 py-0.5 rounded-full border ${
+            user.role === 'admin'
+              ? 'border-primary text-primary'
+              : 'border-border text-text-muted'
+          }`}>
+            {user.role}
+          </span>
+          <button
+            onClick={handleLogout}
+            className="text-xs text-text-muted hover:text-red-500 cursor-pointer transition-colors"
+            title="Sign out"
+          >
+            Logout
+          </button>
         </div>
       )}
 
