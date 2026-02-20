@@ -55,4 +55,5 @@ async def upload_file(current_user: CurrentUser, file: UploadFile = File(...)):
         has_rox=unified.has_rox,
         data_windows=[{"name": w.name, "start_cycle": w.start_cycle, "end_cycle": w.end_cycle} for w in unified.data_windows] if unified.data_windows else None,
         suggested_cycle=suggested,
+        well_groups=unified.well_groups,
     )

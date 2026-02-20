@@ -117,7 +117,7 @@ class BulkDeleteRequest(BaseModel):
 
 def _delete_sessions_impl(sids_to_delete: list[str]):
     """Delete multiple sessions from memory, DB, and projects in one go."""
-    from app.routers.clustering import cluster_store, welltype_store
+    from app.routers.clustering import cluster_store, welltype_store, group_store
     from app.routers.data import protocol_store
     from app.db import get_db
 
@@ -128,6 +128,7 @@ def _delete_sessions_impl(sids_to_delete: list[str]):
         welltype_store.pop(sid, None)
         sample_name_store.pop(sid, None)
         protocol_store.pop(sid, None)
+        group_store.pop(sid, None)
 
     # Remove from project_sessions
     conn = get_db()
@@ -191,6 +192,7 @@ async def get_session_info(sid: str, current_user: CurrentUser):
             for w in unified.data_windows
         ] if unified.data_windows else None,
         "suggested_cycle": suggested,
+        "well_groups": unified.well_groups,
     }
 
 

@@ -15,6 +15,7 @@ interface SettingsState {
   nClusters: number;
   showAutoCluster: boolean;
   showManualTypes: boolean;
+  showEmptyWells: boolean;
   // Actions
   setUseRox: (v: boolean) => void;
   setFixAxis: (v: boolean) => void;
@@ -29,6 +30,7 @@ interface SettingsState {
   setNClusters: (n: number) => void;
   setShowAutoCluster: (v: boolean) => void;
   setShowManualTypes: (v: boolean) => void;
+  setShowEmptyWells: (v: boolean) => void;
   resetToDefaults: () => void;
 }
 
@@ -46,6 +48,7 @@ const defaults = {
   nClusters: 4,
   showAutoCluster: true,
   showManualTypes: true,
+  showEmptyWells: false,
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -66,6 +69,7 @@ export const useSettingsStore = create<SettingsState>()(
       setNClusters: (n) => set({ nClusters: n }),
       setShowAutoCluster: (v) => set({ showAutoCluster: v }),
       setShowManualTypes: (v) => set({ showManualTypes: v }),
+      setShowEmptyWells: (v) => set({ showEmptyWells: v }),
       resetToDefaults: () => set(defaults),
     }),
     {

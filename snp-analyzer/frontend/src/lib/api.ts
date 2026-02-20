@@ -10,6 +10,7 @@ import type {
   ClusteringResult,
   ManualWellTypeUpdate,
   WellTypesResponse,
+  WellGroupsResponse,
   QcResponse,
   SamplesResponse,
   SessionListItem,
@@ -207,6 +208,41 @@ export async function bulkSetWellTypes(
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ assignments }),
+  });
+}
+
+// ============================================================================
+// Well Groups
+// ============================================================================
+
+export async function getWellGroups(sid: string): Promise<WellGroupsResponse> {
+  return apiFetch<WellGroupsResponse>(`/api/data/${sid}/groups`);
+}
+
+export async function createWellGroup(
+  sid: string,
+  name: string,
+  wells: string[]
+): Promise<{ status: string; name: string; wells: string[] }> {
+  return apiFetch(`/api/data/${sid}/groups`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, wells }),
+  });
+}
+
+export async function deleteWellGroup(
+  sid: string,
+  name: string
+): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/api/data/${sid}/groups/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function deleteAllWellGroups(sid: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/api/data/${sid}/groups`, {
+    method: 'DELETE',
   });
 }
 

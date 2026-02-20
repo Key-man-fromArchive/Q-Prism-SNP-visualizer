@@ -7,6 +7,7 @@ import { useDataStore } from "@/stores/data-store";
 import { getScatter } from "@/lib/api";
 import { WELL_TYPE_INFO, UNASSIGNED_TYPE } from "@/lib/constants";
 import { plotlyColors } from "@/lib/plotly-theme";
+import { useWellFilter } from "@/hooks/use-well-filter";
 import type { ScatterPoint } from "@/types/api";
 
 function effectiveType(
@@ -31,6 +32,7 @@ export function ScatterPlot() {
   const { selectWell, selectWells, clearSelection, selectedWell } = useSelectionStore();
   const { scatterPoints, allele2Dye, clusterAssignments, wellTypeAssignments } = useDataStore();
   const setScatterData = useDataStore((s) => s.setScatterData);
+  const { isWellVisible } = useWellFilter();
 
   // Re-fetch trigger (incremented when well types change)
   const [refetchTrigger, setRefetchTrigger] = useState(0);
@@ -61,9 +63,12 @@ export function ScatterPlot() {
   useEffect(() => {
     if (!plotRef.current || scatterPoints.length === 0) return;
 
+    // Filter to only visible wells before grouping
+    const visiblePoints = scatterPoints.filter((p) => isWellVisible(p.well));
+
     // Group points by effective type
     const typeGroups = new Map<string, ScatterPoint[]>();
-    for (const point of scatterPoints) {
+    for (const point of visiblePoints) {
       const type =
         effectiveType(point.auto_cluster, point.manual_type, showAutoCluster, showManualTypes) ||
         "Unassigned";
@@ -192,6 +197,7 @@ export function ScatterPlot() {
     showManualTypes,
     clusterAssignments,
     wellTypeAssignments,
+    isWellVisible,
     selectWell,
     selectWells,
     clearSelection,

@@ -2,7 +2,8 @@ import { Fragment, useMemo } from "react";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
-import { PLATE_ROWS, PLATE_COLS, WELL_TYPE_INFO, UNASSIGNED_TYPE } from "@/lib/constants";
+import { WELL_TYPE_INFO, UNASSIGNED_TYPE } from "@/lib/constants";
+import { useWellFilter } from "@/hooks/use-well-filter";
 import type { ScatterPoint } from "@/types/api";
 
 const LABEL_MAP: Record<string, string> = {
@@ -13,6 +14,7 @@ const LABEL_MAP: Record<string, string> = {
   "Positive Control": "PC",
   Unknown: "Unk",
   Undetermined: "Und",
+  Empty: "E",
   Unassigned: "",
 };
 
@@ -40,6 +42,8 @@ export function ResultsTable() {
   const { selectWell } = useSelectionStore();
   const { showAutoCluster, showManualTypes } = useSettingsStore();
 
+  const { visibleRows, visibleCols } = useWellFilter();
+
   const wellMap = useMemo(() => {
     const map = new Map<string, ScatterPoint>();
     for (const p of scatterPoints) map.set(p.well, p);
@@ -54,7 +58,7 @@ export function ResultsTable() {
         id="results-plate"
         style={{
           display: "grid",
-          gridTemplateColumns: "auto repeat(12, 1fr)",
+          gridTemplateColumns: `auto repeat(${visibleCols.length}, 1fr)`,
           gap: "2px",
           fontSize: "0.7rem",
         }}
@@ -63,7 +67,7 @@ export function ResultsTable() {
         <div className="plate-label" />
 
         {/* Column headers */}
-        {PLATE_COLS.map((col) => (
+        {visibleCols.map((col) => (
           <div
             key={`col-${col}`}
             className="text-center text-xs text-text-muted font-medium"
@@ -74,7 +78,7 @@ export function ResultsTable() {
         ))}
 
         {/* Rows */}
-        {PLATE_ROWS.map((row) => (
+        {visibleRows.map((row) => (
           <Fragment key={row}>
             <div
               className="text-center text-xs text-text-muted font-medium"
@@ -83,7 +87,7 @@ export function ResultsTable() {
               {row}
             </div>
 
-            {PLATE_COLS.map((col) => {
+            {visibleCols.map((col) => {
               const well = `${row}${col}`;
               const point = wellMap.get(well);
 

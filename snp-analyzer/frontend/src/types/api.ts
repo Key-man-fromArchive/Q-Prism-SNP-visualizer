@@ -66,6 +66,7 @@ export type UploadResponse = {
   has_rox: boolean;
   data_windows: DataWindow[] | null;
   suggested_cycle: number | null;
+  well_groups: Record<string, string[]> | null;
 };
 
 export type SessionListItem = {
@@ -124,6 +125,7 @@ export const WellType = {
   ALLELE2_HOMO: 'Allele 2 Homo',
   HETEROZYGOUS: 'Heterozygous',
   UNDETERMINED: 'Undetermined',
+  EMPTY: 'Empty',
 } as const;
 
 export type WellType = typeof WellType[keyof typeof WellType];
@@ -225,6 +227,10 @@ export type QcResponse = {
 
 export type WellTypesResponse = {
   assignments: Record<string, string>;
+};
+
+export type WellGroupsResponse = {
+  groups: Record<string, { wells: string[]; source: 'parsed' | 'manual' }>;
 };
 
 export type SamplesResponse = {

@@ -18,11 +18,18 @@ from app.auth import CurrentUser, check_session_access
 class BulkWellTypeReplace(_BaseModel):
     assignments: dict[str, str]
 
+
+class WellGroupCreate(_BaseModel):
+    name: str
+    wells: list[str]
+
+
 router = APIRouter()
 
 # In-memory stores
 cluster_store: dict[str, ClusteringResult] = {}
 welltype_store: dict[str, dict[str, str]] = {}
+group_store: dict[str, dict[str, list[str]]] = {}  # sid -> {group_name: [wells]}
 
 
 def _get_session(sid: str):
@@ -120,3 +127,72 @@ async def bulk_replace_well_types(sid: str, body: BulkWellTypeReplace, current_u
         save_welltype(sid, well, wtype)
 
     return {"status": "ok", "assignments": welltype_store[sid]}
+
+
+# ============================================================================
+# Well Groups (parsed + manual)
+# ============================================================================
+
+
+@router.get("/api/data/{sid}/groups")
+async def get_well_groups(sid: str, current_user: CurrentUser):
+    """Return merged well groups: parsed (from file) + manual (user-created)."""
+    check_session_access(sid, current_user)
+    unified = _get_session(sid)
+
+    groups: dict[str, dict] = {}
+
+    # Parsed groups (read-only)
+    if unified.well_groups:
+        for name, wells in unified.well_groups.items():
+            groups[name] = {"wells": wells, "source": "parsed"}
+
+    # Manual groups (editable)
+    manual = group_store.get(sid, {})
+    for name, wells in manual.items():
+        groups[name] = {"wells": wells, "source": "manual"}
+
+    return {"groups": groups}
+
+
+@router.post("/api/data/{sid}/groups")
+async def create_well_group(sid: str, body: WellGroupCreate, current_user: CurrentUser):
+    """Create or update a manual well group."""
+    check_session_access(sid, current_user)
+    _get_session(sid)
+
+    if sid not in group_store:
+        group_store[sid] = {}
+    group_store[sid][body.name] = body.wells
+
+    from app.db import save_well_groups
+    save_well_groups(sid, group_store[sid])
+
+    return {"status": "ok", "name": body.name, "wells": body.wells}
+
+
+@router.delete("/api/data/{sid}/groups/{name}")
+async def delete_well_group(sid: str, name: str, current_user: CurrentUser):
+    """Delete a single manual well group."""
+    check_session_access(sid, current_user)
+    _get_session(sid)
+
+    if sid in group_store and name in group_store[sid]:
+        del group_store[sid][name]
+        from app.db import save_well_groups
+        save_well_groups(sid, group_store[sid])
+
+    return {"status": "ok"}
+
+
+@router.delete("/api/data/{sid}/groups")
+async def delete_all_well_groups(sid: str, current_user: CurrentUser):
+    """Delete all manual well groups."""
+    check_session_access(sid, current_user)
+    _get_session(sid)
+
+    group_store.pop(sid, None)
+    from app.db import delete_well_groups
+    delete_well_groups(sid)
+
+    return {"status": "ok"}

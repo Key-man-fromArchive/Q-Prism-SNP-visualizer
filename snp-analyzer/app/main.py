@@ -104,6 +104,13 @@ async def lifespan(app: FastAPI):
             sample.sample_name_store[entry["session_id"]] = entry["sample_overrides"]
         if entry["protocol_override"]:
             data.protocol_store[entry["session_id"]] = entry["protocol_override"]
+
+    # Restore manual well groups from DB
+    from app.db import load_well_groups
+    for sid in list(upload.sessions.keys()):
+        manual_groups = load_well_groups(sid)
+        if manual_groups:
+            clustering.group_store[sid] = manual_groups
     yield
 
 

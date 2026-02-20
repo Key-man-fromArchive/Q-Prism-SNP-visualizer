@@ -66,16 +66,30 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
         Assign type to {wells.length} well{wells.length > 1 ? 's' : ''}
       </div>
 
-      {Object.entries(WELL_TYPE_INFO).map(([type, info]) => (
+      {Object.entries(WELL_TYPE_INFO)
+        .filter(([type]) => type !== 'Empty')
+        .map(([type, info]) => (
+          <button
+            key={type}
+            className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-bg cursor-pointer border-none bg-transparent flex items-center gap-2"
+            style={{ borderLeft: `3px solid ${info.color}` }}
+            onClick={() => onAssign(type)}
+          >
+            {info.label}
+          </button>
+        ))}
+
+      <div className="border-t border-border my-1" />
+
+      {WELL_TYPE_INFO['Empty'] && (
         <button
-          key={type}
           className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-bg cursor-pointer border-none bg-transparent flex items-center gap-2"
-          style={{ borderLeft: `3px solid ${info.color}` }}
-          onClick={() => onAssign(type)}
+          style={{ borderLeft: `3px solid ${WELL_TYPE_INFO['Empty'].color}` }}
+          onClick={() => onAssign('Empty')}
         >
-          {info.label}
+          {WELL_TYPE_INFO['Empty'].label}
         </button>
-      ))}
+      )}
 
       <button
         className="w-full text-left px-2 py-1.5 text-sm rounded text-text-muted hover:bg-bg cursor-pointer border-none bg-transparent mt-1"

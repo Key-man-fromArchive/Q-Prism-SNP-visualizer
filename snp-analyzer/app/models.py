@@ -37,6 +37,7 @@ class UnifiedData(BaseModel):
     sample_names: dict[str, str] | None = None  # well -> sample name
     protocol_steps: list[ProtocolStep] | None = None  # from .eds tcprotocol.xml
     data_windows: list[DataWindow] | None = None
+    well_groups: dict[str, list[str]] | None = None
 
 
 class UploadResponse(BaseModel):
@@ -48,6 +49,7 @@ class UploadResponse(BaseModel):
     has_rox: bool
     data_windows: list[DataWindow] | None = None
     suggested_cycle: int | None = None
+    well_groups: dict[str, list[str]] | None = None
 
 
 class ScatterPoint(BaseModel):
@@ -99,6 +101,7 @@ class WellType(str, Enum):
     ALLELE2_HOMO = "Allele 2 Homo"
     HETEROZYGOUS = "Heterozygous"
     UNDETERMINED = "Undetermined"
+    EMPTY = "Empty"
 
 
 class ClusteringAlgorithm(str, Enum):

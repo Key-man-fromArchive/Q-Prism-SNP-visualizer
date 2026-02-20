@@ -62,6 +62,8 @@ def save_session(session_id: str, unified, filename: str = "", user_id: str | No
         metadata["protocol_steps"] = [s.model_dump() for s in unified.protocol_steps]
     if unified.data_windows:
         metadata["data_windows"] = [w.model_dump() for w in unified.data_windows]
+    if unified.well_groups:
+        metadata["well_groups"] = unified.well_groups
 
     conn.execute(
         """INSERT OR REPLACE INTO sessions
@@ -144,6 +146,35 @@ def get_session_owner(session_id: str) -> str | None:
     return row["user_id"] if row else None
 
 
+def save_well_groups(session_id: str, groups: dict[str, list[str]]):
+    """Write manual well groups to DB."""
+    conn = get_db()
+    conn.execute("DELETE FROM well_groups WHERE session_id = ?", (session_id,))
+    for name, wells in groups.items():
+        conn.execute(
+            "INSERT INTO well_groups (session_id, group_name, wells_json) VALUES (?, ?, ?)",
+            (session_id, name, json.dumps(wells)),
+        )
+    conn.commit()
+
+
+def load_well_groups(session_id: str) -> dict[str, list[str]]:
+    """Load manual well groups from DB."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT group_name, wells_json FROM well_groups WHERE session_id = ?",
+        (session_id,),
+    ).fetchall()
+    return {r["group_name"]: json.loads(r["wells_json"]) for r in rows}
+
+
+def delete_well_groups(session_id: str):
+    """Delete all manual well groups for a session."""
+    conn = get_db()
+    conn.execute("DELETE FROM well_groups WHERE session_id = ?", (session_id,))
+    conn.commit()
+
+
 def load_all_sessions():
     """Load all sessions from DB for startup restore. Returns list of dicts."""
     from app.models import UnifiedData, WellCycleData, ProtocolStep, DataWindow, ClusteringResult
@@ -173,6 +204,8 @@ def load_all_sessions():
         if "data_windows" in metadata:
             data_windows = [DataWindow(**w) for w in metadata["data_windows"]]
 
+        well_groups = metadata.get("well_groups")
+
         unified = UnifiedData(
             instrument=row["instrument"],
             allele2_dye=row["allele2_dye"],
@@ -183,6 +216,7 @@ def load_all_sessions():
             sample_names=sample_names,
             protocol_steps=protocol_steps,
             data_windows=data_windows,
+            well_groups=well_groups,
         )
 
         # Load clustering results

@@ -7,7 +7,8 @@ import { useSettingsStore } from '@/stores/settings-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useDataStore } from '@/stores/data-store';
 import { getPlate } from '@/lib/api';
-import { PLATE_ROWS, PLATE_COLS, WELL_TYPE_INFO } from '@/lib/constants';
+import { WELL_TYPE_INFO } from '@/lib/constants';
+import { useWellFilter } from '@/hooks/use-well-filter';
 
 interface DragRect {
   left: number;
@@ -57,6 +58,8 @@ export function PlateView() {
 
     fetchPlateData();
   }, [sessionId, currentCycle, useRox, setPlateData, refetchTrigger]);
+
+  const { visibleRows, visibleCols } = useWellFilter();
 
   // Build wellMap for quick lookup
   const wellMap = useMemo(() => {
@@ -188,7 +191,7 @@ export function PlateView() {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      <h3 className="text-sm font-semibold mb-3 text-text">Plate View (96-well)</h3>
+      <h3 className="text-sm font-semibold mb-3 text-text">Plate View ({visibleRows.length}×{visibleCols.length})</h3>
 
       <div
         id="plate-grid"
@@ -196,8 +199,8 @@ export function PlateView() {
         ref={gridRef}
         style={{
           display: 'grid',
-          gridTemplateColumns: 'auto repeat(12, 1fr)',
-          gridTemplateRows: 'auto repeat(8, 1fr)',
+          gridTemplateColumns: `auto repeat(${visibleCols.length}, 1fr)`,
+          gridTemplateRows: `auto repeat(${visibleRows.length}, 1fr)`,
           gap: '2px',
           maxWidth: '500px',
           margin: '0 auto'
@@ -207,7 +210,7 @@ export function PlateView() {
         <div className="plate-label" />
 
         {/* Column headers */}
-        {PLATE_COLS.map(col => (
+        {visibleCols.map(col => (
           <div
             key={`col-${col}`}
             className="plate-label text-center text-xs text-text-muted font-medium py-1"
@@ -217,7 +220,7 @@ export function PlateView() {
         ))}
 
         {/* Rows with wells */}
-        {PLATE_ROWS.map(row => (
+        {visibleRows.map(row => (
           <Fragment key={row}>
             {/* Row header */}
             <div className="plate-label text-center text-xs text-text-muted font-medium px-2">
@@ -225,7 +228,7 @@ export function PlateView() {
             </div>
 
             {/* Wells in this row */}
-            {PLATE_COLS.map(col => {
+            {visibleCols.map(col => {
               const wellId = `${row}${col}`;
               const wellData = wellMap.get(wellId);
               const isSelected = selectedWell === wellId;

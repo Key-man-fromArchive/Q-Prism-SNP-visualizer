@@ -32,7 +32,18 @@ import xml.etree.ElementTree as ET
 from app.models import UnifiedData, WellCycleData, ProtocolStep, DataWindow
 
 WELL_ROWS = "ABCDEFGH"
-_PCRD_PASSWORD = os.environ.get("PCRD_PASSWORD", "").encode("utf-8") or None
+def _load_pcrd_password() -> bytes | None:
+    """Load PCRD decryption key from secret file or env var."""
+    for path in ("/app/secrets/pcrd-pw.txt", "pcrd-pw.txt"):
+        if os.path.exists(path):
+            with open(path) as f:
+                pw = f.read().strip()
+                if pw:
+                    return pw.encode("utf-8")
+    env = os.environ.get("PCRD_PASSWORD", "")
+    return env.encode("utf-8") if env else None
+
+_PCRD_PASSWORD = _load_pcrd_password()
 
 # Well sample types that indicate an assigned well
 _ASSIGNED_TYPES = {"wcSample", "wcNTC", "wcPostiveControl", "wcPositiveControl"}
@@ -62,6 +73,9 @@ def parse_pcrd(file_path: str) -> UnifiedData:
 
     if not assigned_wells:
         raise ValueError("No assigned wells found in .pcrd file (all wells are empty).")
+
+    # Parse well groups
+    well_groups = _parse_well_groups(plate_setup, assigned_wells)
 
     # Parse protocol for display
     protocol_steps = _parse_protocol(root)
@@ -112,6 +126,7 @@ def parse_pcrd(file_path: str) -> UnifiedData:
         sample_names=sample_names_by_id or None,
         protocol_steps=protocol_steps or None,
         data_windows=data_windows if data_windows else None,
+        well_groups=well_groups,
     )
 
 
@@ -542,6 +557,47 @@ def _subtract_baseline(
                 continue
             rfu["fam"] -= bl["fam"]
             rfu["allele2"] -= bl["allele2"]
+
+
+def _parse_well_groups(
+    plate_setup: ET.Element,
+    assigned_wells: set[int],
+) -> dict[str, list[str]] | None:
+    """Parse wellGroup elements from plateSetup2.
+
+    Returns {group_name: [well_ids]} or None if only "All Wells" / single group.
+    """
+    groups: dict[str, list[str]] = {}
+
+    for wg in plate_setup.findall(".//wellGroup"):
+        name = wg.get("wellGroupName", "")
+        if not name:
+            continue
+        members_text = wg.get("wellGroupMembers", "")
+        if not members_text:
+            continue
+
+        # wellGroupMembers is comma-separated plate indices
+        well_ids = []
+        for idx_str in members_text.split(","):
+            idx_str = idx_str.strip()
+            if not idx_str:
+                continue
+            try:
+                plate_idx = int(idx_str)
+            except ValueError:
+                continue
+            if plate_idx in assigned_wells and 0 <= plate_idx < 96:
+                well_ids.append(_well_index_to_id(plate_idx))
+
+        if well_ids:
+            groups[name] = sorted(well_ids, key=_well_sort_key)
+
+    # Filter out if only "All Wells" or single group
+    non_all = {k: v for k, v in groups.items() if k.lower() != "all wells"}
+    if len(non_all) <= 1:
+        return None
+    return non_all if non_all else None
 
 
 def _well_index_to_id(idx: int) -> str:

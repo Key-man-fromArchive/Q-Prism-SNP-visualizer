@@ -3,6 +3,7 @@ import { create } from 'zustand';
 interface SelectionState {
   selectedWell: string | null;
   selectedWells: string[]; // multi-select
+  selectedGroup: string | null; // well group filter (null = all)
   currentCycle: number;
   currentDataWindow: string | null; // "Pre-read", "Amplification", "Post-read"
   isPlaying: boolean;
@@ -10,6 +11,7 @@ interface SelectionState {
   selectWell: (well: string | null, source?: 'scatter' | 'plate' | 'table') => void;
   selectWells: (wells: string[]) => void;
   clearSelection: () => void;
+  setGroup: (group: string | null) => void;
   setCycle: (cycle: number) => void;
   setDataWindow: (name: string | null) => void;
   setPlaying: (v: boolean) => void;
@@ -18,6 +20,7 @@ interface SelectionState {
 export const useSelectionStore = create<SelectionState>((set) => ({
   selectedWell: null,
   selectedWells: [],
+  selectedGroup: null,
   currentCycle: 0,
   currentDataWindow: null,
   isPlaying: false,
@@ -37,6 +40,7 @@ export const useSelectionStore = create<SelectionState>((set) => ({
       selectedWell: null,
       selectedWells: [],
     }),
+  setGroup: (group) => set({ selectedGroup: group }),
   setCycle: (cycle) => set({ currentCycle: cycle }),
   setDataWindow: (name) => set({ currentDataWindow: name }),
   setPlaying: (v) => set({ isPlaying: v }),

@@ -72,6 +72,15 @@ CREATE TABLE IF NOT EXISTS protocol_overrides (
     FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 );
 
+-- Manual well groups (user-created groups)
+CREATE TABLE IF NOT EXISTS well_groups (
+    session_id TEXT NOT NULL,
+    group_name TEXT NOT NULL,
+    wells_json TEXT NOT NULL,
+    PRIMARY KEY (session_id, group_name),
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+
 -- Projects table (replaces projects.json)
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,

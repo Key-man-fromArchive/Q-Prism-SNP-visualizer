@@ -78,12 +78,14 @@ def parse_eds(file_path: str) -> UnifiedData:
         mc_xml = zf.read(mc_path)
         dye_map, signal_map, stage_flags = _parse_multicomponent(mc_xml)
 
-        # Find plate_setup.xml (optional, for sample names)
+        # Find plate_setup.xml (optional, for sample names and marker groups)
         sample_names = {}
+        marker_groups_raw: dict[str, list[int]] | None = None
         ps_path = _find_file(names, "plate_setup.xml")
         if ps_path:
             ps_xml = zf.read(ps_path)
             sample_names = _parse_plate_setup(ps_xml)
+            marker_groups_raw = _parse_marker_groups(ps_xml)
 
         # Find tcprotocol.xml (optional, for protocol steps)
         protocol_steps = []
@@ -215,6 +217,17 @@ def parse_eds(file_path: str) -> UnifiedData:
         if 0 <= well_idx < 96:
             sample_names_by_id[well_index_to_id(well_idx)] = name
 
+    # Convert marker groups from well indices to well IDs, filter to assigned wells
+    well_groups: dict[str, list[str]] | None = None
+    if marker_groups_raw:
+        well_groups = {}
+        for marker_name, indices in marker_groups_raw.items():
+            ids = [well_index_to_id(idx) for idx in indices if 0 <= idx < 96 and well_index_to_id(idx) in wells_set]
+            if ids:
+                well_groups[marker_name] = sorted(ids, key=_well_sort_key)
+        if len(well_groups) <= 1:
+            well_groups = None
+
     return UnifiedData(
         instrument="QuantStudio 3 (raw)",
         allele2_dye=allele2_dye,
@@ -225,6 +238,7 @@ def parse_eds(file_path: str) -> UnifiedData:
         sample_names=sample_names_by_id or None,
         protocol_steps=protocol_steps or None,
         data_windows=windows if windows else None,
+        well_groups=well_groups,
     )
 
 
@@ -291,6 +305,39 @@ def _parse_plate_setup(xml_data: bytes) -> dict[int, str]:
                 sample_names[well_idx] = name
 
     return sample_names
+
+
+def _parse_marker_groups(xml_data: bytes) -> dict[str, list[int]] | None:
+    """Parse plate_setup.xml for marker-task groups.
+
+    Returns {marker_name: [well_indices]} or None if only one marker.
+    """
+    root = ET.fromstring(xml_data)
+    groups: dict[str, list[int]] = {}
+
+    for fm in root.findall(".//FeatureMap"):
+        feature = fm.find("Feature")
+        if feature is None:
+            continue
+        fid = feature.findtext("Id", "")
+        if fid != "marker-task":
+            continue
+        for fv in fm.findall("FeatureValue"):
+            idx_text = fv.findtext("Index")
+            if idx_text is None:
+                continue
+            well_idx = int(idx_text)
+            marker_name = fv.findtext(".//MarkerTask/Marker/Name", "")
+            if not marker_name:
+                continue
+            if marker_name not in groups:
+                groups[marker_name] = []
+            groups[marker_name].append(well_idx)
+
+    # Return None if single marker or no markers (no group UI needed)
+    if len(groups) <= 1:
+        return None
+    return groups
 
 
 def _parse_protocol(xml_data: bytes) -> list[ProtocolStep]:
