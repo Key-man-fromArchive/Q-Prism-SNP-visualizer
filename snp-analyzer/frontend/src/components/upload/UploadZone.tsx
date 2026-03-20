@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { useSessionStore } from "@/stores/session-store";
 import { uploadFile as apiUpload } from "@/lib/api";
 import JSZip from "jszip";
+import { useI18n } from "@/hooks/use-i18n";
 
 const RAW_EXTENSIONS = [".eds", ".xls", ".xlsx", ".pcrd", ".zip"];
 
@@ -10,6 +11,7 @@ type UploadZoneProps = {
 };
 
 export function UploadZone({ onGoToProject }: UploadZoneProps) {
+  const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [dragover, setDragover] = useState(false);
@@ -30,15 +32,13 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       setUploadState("uploading");
       setUploadProgress(30);
       setUploadError(null);
-      setStatusMessage("Uploading...");
+      setStatusMessage(t.uploading);
 
       try {
         setUploadProgress(70);
         const info = await apiUpload(file);
         setUploadProgress(100);
-        setStatusMessage(
-          `Parsed: ${info.instrument} | ${info.num_wells} wells | ${info.num_cycles} cycles`,
-        );
+        setStatusMessage(t.parsed(info.instrument, info.num_wells, info.num_cycles));
         setUploadState("success");
 
         setTimeout(() => {
@@ -46,12 +46,12 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         }, 500);
       } catch (err) {
         setUploadState("error");
-        const msg = err instanceof Error ? err.message : "Upload failed";
+        const msg = err instanceof Error ? err.message : t.uploadFailed;
         setUploadError(msg);
         setStatusMessage(`Error: ${msg}`);
       }
     },
-    [setSession, setUploadState, setUploadProgress, setUploadError],
+    [t, setSession, setUploadState, setUploadProgress, setUploadError],
   );
 
   /** Upload multiple files as separate sessions, then go to Project tab */
@@ -67,7 +67,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         const file = files[i];
         const pct = Math.round(((i) / files.length) * 100);
         setUploadProgress(pct);
-        setStatusMessage(`Uploading ${i + 1}/${files.length}: ${file.name}`);
+        setStatusMessage(t.uploadingN(i + 1, files.length, file.name));
 
         try {
           await apiUpload(file);
@@ -79,12 +79,12 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
 
       setUploadProgress(100);
       if (failed === 0) {
-        setStatusMessage(`All ${success} files uploaded successfully`);
+        setStatusMessage(t.allUploaded(success));
         setUploadState("success");
       } else {
-        setStatusMessage(`${success} uploaded, ${failed} failed`);
+        setStatusMessage(t.uploadResult(success, failed));
         setUploadState(failed === files.length ? "error" : "success");
-        if (failed > 0) setUploadError(`${failed} file(s) failed to upload`);
+        if (failed > 0) setUploadError(t.nFileFailed(failed));
       }
 
       // Navigate to Project tab to see all sessions
@@ -94,7 +94,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         onGoToProject?.();
       }, 800);
     },
-    [setUploadState, setUploadProgress, setUploadError, onGoToProject],
+    [t, setUploadState, setUploadProgress, setUploadError, onGoToProject],
   );
 
   /** Handle multiple files: XML → zip as one, raw files → batch upload */
@@ -113,9 +113,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       if (xmlFiles.length > 0) {
         setUploadState("packaging");
         setUploadProgress(10);
-        setStatusMessage(
-          `Packaging ${xmlFiles.length} XML file${xmlFiles.length > 1 ? "s" : ""}...`,
-        );
+        setStatusMessage(t.packagingXML(xmlFiles.length));
 
         try {
           const zip = new JSZip();
@@ -130,7 +128,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           uploadItems.push(zipFile);
         } catch (err) {
           setUploadState("error");
-          const msg = err instanceof Error ? err.message : "Packaging failed";
+          const msg = err instanceof Error ? err.message : t.packagingFailed;
           setUploadError(msg);
           setStatusMessage(`Error: ${msg}`);
           return;
@@ -139,8 +137,8 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
 
       if (uploadItems.length === 0) {
         setUploadState("error");
-        setUploadError("No supported files found");
-        setStatusMessage("Error: No supported files found (.eds, .xls, .xlsx, .pcrd, .zip, .xml)");
+        setUploadError(t.noSupportedFiles);
+        setStatusMessage(`Error: ${t.noSupportedFilesDetail}`);
         return;
       }
 
@@ -151,7 +149,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         await handleBatchUpload(uploadItems);
       }
     },
-    [handleSingleUpload, handleBatchUpload, setUploadState, setUploadProgress, setUploadError],
+    [t, handleSingleUpload, handleBatchUpload, setUploadState, setUploadProgress, setUploadError],
   );
 
   const onDrop = useCallback(
@@ -216,8 +214,10 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
     [handleMultipleFiles],
   );
 
+  const [showGuide, setShowGuide] = useState(true);
+
   return (
-    <div id="upload-zone" className="max-w-[500px] mx-auto mt-20">
+    <div id="upload-zone" className="max-w-[700px] mx-auto mt-4">
       <div
         id="drop-area"
         onDragOver={(e) => {
@@ -227,22 +227,21 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         onDragLeave={() => setDragover(false)}
         onDrop={onDrop}
         onClick={() => fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-lg p-12 text-center bg-surface transition-colors cursor-pointer ${
+        className={`border-2 border-dashed rounded-lg p-6 text-center bg-surface transition-colors cursor-pointer ${
           dragover ? "border-primary bg-blue-50" : "border-border"
         }`}
       >
-        <div className="text-5xl mb-3">&#128196;</div>
-        <p className="text-text-muted mb-2">
-          Drag & drop your raw fluorescence file here
+        <div className="text-4xl mb-2">&#128196;</div>
+        <p className="text-text-muted mb-1">
+          {t.dragDrop}
         </p>
         <p className="text-text-muted text-[13px]">
-          QuantStudio (.eds, .xls) | CFX Opus (.xlsx, .zip, .pcrd, or drag XML
-          files/folder)
+          {t.fileFormats}
         </p>
         <p className="text-text-muted text-[11px] mt-1">
-          Multiple files or folders → batch upload to session list
+          {t.batchHint}
         </p>
-        <div className="flex gap-2 justify-center mt-3">
+        <div className="flex gap-2 justify-center mt-2">
           <button
             id="browse-btn"
             onClick={(e) => {
@@ -251,7 +250,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
             }}
             className="px-6 py-2 bg-primary text-white rounded-lg text-sm cursor-pointer border-none hover:bg-primary-hover transition-colors"
           >
-            Browse Files
+            {t.browseFiles}
           </button>
           <button
             id="browse-folder-btn"
@@ -261,7 +260,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
             }}
             className="px-6 py-2 bg-surface text-primary border border-primary rounded-lg text-sm cursor-pointer hover:bg-blue-50 transition-colors"
           >
-            Browse Folder
+            {t.browseFolder}
           </button>
         </div>
         <input
@@ -309,10 +308,80 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
             onClick={onGoToProject}
             className="text-sm text-text-muted hover:text-primary transition-colors"
           >
-            Or manage existing sessions &amp; projects &rarr;
+            {t.goToProjects}
           </button>
         </div>
       )}
+
+      {/* Quick Start Guide */}
+      <div className="mt-5 border border-border rounded-lg bg-surface overflow-hidden">
+        <button
+          onClick={() => setShowGuide((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-[var(--bg)] transition-colors"
+        >
+          <span className="font-semibold flex items-center gap-2">
+            <span className="text-base">&#128218;</span>
+            {t.guideTitle}
+          </span>
+          <span className="text-xs text-text-muted">{showGuide ? "▲" : "▼"}</span>
+        </button>
+
+        {showGuide && (
+          <div className="px-4 pb-4 space-y-4 border-t border-border pt-4">
+            {/* 4-step workflow */}
+            <div className="grid grid-cols-4 gap-2">
+              {([
+                { icon: "1", title: t.guideStep1Title, desc: t.guideStep1Desc },
+                { icon: "2", title: t.guideStep2Title, desc: t.guideStep2Desc },
+                { icon: "3", title: t.guideStep3Title, desc: t.guideStep3Desc },
+                { icon: "4", title: t.guideStep4Title, desc: t.guideStep4Desc },
+              ] as const).map((step, i) => (
+                <div
+                  key={step.icon}
+                  className="relative text-center p-3 rounded-lg bg-[var(--bg)]"
+                >
+                  {i < 3 && (
+                    <span className="absolute right-[-10px] top-1/2 -translate-y-1/2 text-text-muted text-xs z-10">
+                      &#8594;
+                    </span>
+                  )}
+                  <div className="w-6 h-6 mx-auto mb-1.5 rounded-full bg-primary text-white flex items-center justify-center text-[11px] font-bold">
+                    {step.icon}
+                  </div>
+                  <p className="text-[13px] font-medium mb-0.5">{step.title}</p>
+                  <p className="text-[10px] text-text-muted leading-snug">{step.desc}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Supported Formats + Tips side by side */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <h4 className="text-[12px] font-semibold mb-1.5">{t.guideSupportedFormats}</h4>
+                <div className="space-y-1.5 text-[11px]">
+                  <div className="p-2 rounded bg-[var(--bg)]">
+                    <span className="font-medium">{t.guideQS}</span>
+                    <span className="text-text-muted block">{t.guideQSFormats}</span>
+                  </div>
+                  <div className="p-2 rounded bg-[var(--bg)]">
+                    <span className="font-medium">{t.guideCFX}</span>
+                    <span className="text-text-muted block">{t.guideCFXFormats}</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <h4 className="text-[12px] font-semibold mb-1.5">{t.guideTips}</h4>
+                <ul className="text-[11px] text-text-muted space-y-1 list-disc list-inside">
+                  <li>{t.guideTip1}</li>
+                  <li>{t.guideTip2}</li>
+                  <li>{t.guideTip3}</li>
+                  <li>{t.guideTip4}</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

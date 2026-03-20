@@ -1,6 +1,7 @@
 import { useRef, useEffect } from "react";
 import Plotly from "plotly.js-dist-min";
 import { useSessionStore } from "@/stores/session-store";
+import { useI18n } from "@/hooks/use-i18n";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
@@ -9,6 +10,7 @@ import { plotlyColors } from "@/lib/plotly-theme";
 import type { AmplificationCurve } from "@/types/api";
 
 export function WellDetailPanel() {
+  const { t } = useI18n();
   const plotRef = useRef<HTMLDivElement>(null);
   const plotInitRef = useRef(false);
 
@@ -114,10 +116,10 @@ export function WellDetailPanel() {
   if (!selectedWell) {
     return (
       <div className="panel detail-panel">
-        <h3 className="text-sm font-semibold mb-2 text-text">Well Details</h3>
+        <h3 className="text-sm font-semibold mb-2 text-text">{t.wellDetails}</h3>
         <div id="detail-content">
           <p className="placeholder text-sm text-text-muted">
-            Click a well to see details
+            {t.clickWellToSee}
           </p>
         </div>
       </div>
@@ -127,10 +129,10 @@ export function WellDetailPanel() {
   if (!pointData) {
     return (
       <div className="panel detail-panel">
-        <h3 className="text-sm font-semibold mb-2 text-text">Well Details</h3>
+        <h3 className="text-sm font-semibold mb-2 text-text">{t.wellDetails}</h3>
         <div id="detail-content">
           <p className="text-sm text-text-muted">
-            No data for well {selectedWell}
+            {t.noDataForWell(selectedWell)}
           </p>
         </div>
       </div>
@@ -152,12 +154,12 @@ export function WellDetailPanel() {
   const total = normFam + normAllele2;
   const ratio = total > 0 ? (normFam / total * 100).toFixed(1) : "N/A";
 
-  let genotype = "Undetermined";
+  let genotype = t.genotypeUndetermined;
   if (total > 0) {
     const r = normFam / total;
-    if (r > 0.6) genotype = "Allele 1 (FAM)";
-    else if (r < 0.4) genotype = `Allele 2 (${allele2Dye})`;
-    else genotype = "Heterozygous";
+    if (r > 0.6) genotype = t.genotypeAllele1;
+    else if (r < 0.4) genotype = t.genotypeAllele2(allele2Dye ?? "Allele2");
+    else genotype = t.genotypeHeterozygous;
   }
 
   const decimals = useRox ? 4 : 1;
@@ -166,34 +168,34 @@ export function WellDetailPanel() {
 
   return (
     <div className="panel detail-panel">
-      <h3 className="text-sm font-semibold mb-2 text-text">Well Details</h3>
+      <h3 className="text-sm font-semibold mb-2 text-text">{t.wellDetails}</h3>
 
       <div id="detail-content">
         <table className="detail-table w-full text-sm">
           <tbody>
             <tr>
-              <td className="text-text-muted pr-3 py-0.5">Well</td>
+              <td className="text-text-muted pr-3 py-0.5">{t.well}</td>
               <td className="font-medium">{well}</td>
             </tr>
             {sampleName && (
               <tr>
-                <td className="text-text-muted pr-3 py-0.5">Sample</td>
+                <td className="text-text-muted pr-3 py-0.5">{t.sample}</td>
                 <td>{sampleName}</td>
               </tr>
             )}
             <tr>
-              <td className="text-text-muted pr-3 py-0.5">Genotype</td>
+              <td className="text-text-muted pr-3 py-0.5">{t.genotype}</td>
               <td className="font-medium">{genotype}</td>
             </tr>
             {autoCluster && (
               <tr>
-                <td className="text-text-muted pr-3 py-0.5">Auto Cluster</td>
+                <td className="text-text-muted pr-3 py-0.5">{t.autoCluster}</td>
                 <td>{autoCluster}</td>
               </tr>
             )}
             {manualType && (
               <tr>
-                <td className="text-text-muted pr-3 py-0.5">Manual Type</td>
+                <td className="text-text-muted pr-3 py-0.5">{t.manualType}</td>
                 <td>{manualType}</td>
               </tr>
             )}
@@ -208,20 +210,20 @@ export function WellDetailPanel() {
               <td>{normAllele2.toFixed(decimals)}</td>
             </tr>
             <tr>
-              <td className="text-text-muted pr-3 py-0.5">FAM ratio</td>
+              <td className="text-text-muted pr-3 py-0.5">{t.famRatio}</td>
               <td>{ratio}%</td>
             </tr>
             <tr>
-              <td className="text-text-muted pr-3 py-0.5">FAM (raw)</td>
+              <td className="text-text-muted pr-3 py-0.5">FAM ({t.raw})</td>
               <td>{rawFam.toFixed(1)}</td>
             </tr>
             <tr>
-              <td className="text-text-muted pr-3 py-0.5">{dye} (raw)</td>
+              <td className="text-text-muted pr-3 py-0.5">{dye} ({t.raw})</td>
               <td>{rawAllele2.toFixed(1)}</td>
             </tr>
             {rawRox != null && (
               <tr>
-                <td className="text-text-muted pr-3 py-0.5">ROX (raw)</td>
+                <td className="text-text-muted pr-3 py-0.5">ROX ({t.raw})</td>
                 <td>{rawRox.toFixed(1)}</td>
               </tr>
             )}

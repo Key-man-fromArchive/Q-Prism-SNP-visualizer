@@ -1,3 +1,5 @@
+import { useI18n } from '@/hooks/use-i18n';
+
 export type TabId = 'analysis' | 'protocol' | 'settings' | 'quality' | 'statistics' | 'compare' | 'project' | 'users';
 
 export type TabNavigationProps = {
@@ -31,6 +33,17 @@ const tabs: Tab[] = [
 ];
 
 export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdmin = false }: TabNavigationProps) {
+  const { t } = useI18n();
+  const tabLabels: Record<TabId, string> = {
+    analysis: t.tabAnalysis,
+    protocol: t.tabProtocol,
+    settings: t.tabSettings,
+    quality: t.tabQuality,
+    statistics: t.tabStatistics,
+    compare: t.tabCompare,
+    project: t.tabProject,
+    users: t.tabUsers,
+  };
   return (
     <nav className="flex gap-0 border-b border-border px-6 bg-surface">
       {tabs
@@ -54,7 +67,7 @@ export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdm
                 }
               `}
             >
-              {tab.label}
+              {tabLabels[tab.id]}
             </button>
           );
         })}

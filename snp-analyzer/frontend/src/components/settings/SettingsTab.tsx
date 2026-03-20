@@ -3,6 +3,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
+import { useI18n } from "@/hooks/use-i18n";
 import {
   getPresets,
   createPreset,
@@ -12,6 +13,7 @@ import {
 import type { PresetResponse } from "@/types/api";
 
 export function SettingsTab() {
+  const { t } = useI18n();
   const [presets, setPresets] = useState<PresetResponse[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState("");
   const [newPresetName, setNewPresetName] = useState("");
@@ -156,7 +158,7 @@ export function SettingsTab() {
     >
       {/* Panel 1: Assay Presets */}
       <div className="panel">
-        <h3 className="text-sm font-semibold mb-3 text-text">Assay Presets</h3>
+        <h3 className="text-sm font-semibold mb-3 text-text">{t.assayPresets}</h3>
 
         <div className="mb-4">
           <div className="flex gap-2 items-center">
@@ -166,10 +168,10 @@ export function SettingsTab() {
               value={selectedPresetId}
               onChange={(e) => setSelectedPresetId(e.target.value)}
             >
-              <option value="">-- Select Preset --</option>
+              <option value="">{t.selectPreset}</option>
               {presets.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name}{p.builtin ? " (built-in)" : ""}
+                  {p.name}{p.builtin ? ` ${t.builtIn}` : ""}
                 </option>
               ))}
             </select>
@@ -179,7 +181,7 @@ export function SettingsTab() {
               onClick={handleApplyPreset}
               disabled={!selectedPresetId}
             >
-              Apply
+              {t.apply}
             </button>
             <button
               id="delete-preset-btn"
@@ -188,7 +190,7 @@ export function SettingsTab() {
               onClick={handleDeletePreset}
               disabled={!selectedPresetId}
             >
-              Del
+              {t.del}
             </button>
           </div>
         </div>
@@ -198,7 +200,7 @@ export function SettingsTab() {
             id="preset-name-input"
             type="text"
             className="flex-1 px-2 py-1.5 border border-border rounded text-[13px] bg-surface text-text"
-            placeholder="New preset name"
+            placeholder={t.newPresetName}
             value={newPresetName}
             onChange={(e) => setNewPresetName(e.target.value)}
           />
@@ -208,7 +210,7 @@ export function SettingsTab() {
             onClick={handleSavePreset}
             disabled={!newPresetName.trim()}
           >
-            Save
+            {t.save}
           </button>
         </div>
       </div>
@@ -216,7 +218,7 @@ export function SettingsTab() {
       {/* Panel 2: Normalization */}
       {sessionInfo?.has_rox === true && (
         <div id="rox-normalize-group" className="panel">
-          <h3 className="text-sm font-semibold mb-3 text-text">Normalization</h3>
+          <h3 className="text-sm font-semibold mb-3 text-text">{t.normalization}</h3>
           <div className="mb-4">
             <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
               <input
@@ -226,10 +228,10 @@ export function SettingsTab() {
                 checked={useRox}
                 onChange={(e) => setUseRox(e.target.checked)}
               />
-              ROX normalization (FAM/ROX, Allele2/ROX)
+              {t.roxNormalization}
             </label>
             <p className="text-xs text-text-muted mt-1 ml-6">
-              Recommended for ABI/QuantStudio. Not recommended for Bio-Rad CFX (ROX crosstalk).
+              {t.roxDescription}
             </p>
           </div>
         </div>
@@ -237,7 +239,7 @@ export function SettingsTab() {
 
       {/* Panel 3: Scatter Plot Axis */}
       <div className="panel">
-        <h3 className="text-sm font-semibold mb-3 text-text">Scatter Plot Axis</h3>
+        <h3 className="text-sm font-semibold mb-3 text-text">{t.scatterPlotAxis}</h3>
         <div className="mb-4">
           <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
             <input
@@ -247,12 +249,12 @@ export function SettingsTab() {
               checked={fixAxis}
               onChange={(e) => setFixAxis(e.target.checked)}
             />
-            Fix axis range
+            {t.fixAxisRange}
           </label>
         </div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-3">
           <div className="flex flex-col gap-1">
-            <span className="text-xs text-text-muted font-medium">X axis min</span>
+            <span className="text-xs text-text-muted font-medium">{t.xAxisMin}</span>
             <input
               id="x-axis-min"
               type="number"
@@ -264,7 +266,7 @@ export function SettingsTab() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-xs text-text-muted font-medium">X axis max</span>
+            <span className="text-xs text-text-muted font-medium">{t.xAxisMax}</span>
             <input
               id="x-axis-max"
               type="number"
@@ -276,7 +278,7 @@ export function SettingsTab() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-xs text-text-muted font-medium">Y axis min</span>
+            <span className="text-xs text-text-muted font-medium">{t.yAxisMin}</span>
             <input
               id="y-axis-min"
               type="number"
@@ -288,7 +290,7 @@ export function SettingsTab() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-xs text-text-muted font-medium">Y axis max</span>
+            <span className="text-xs text-text-muted font-medium">{t.yAxisMax}</span>
             <input
               id="y-axis-max"
               type="number"
@@ -304,7 +306,7 @@ export function SettingsTab() {
 
       {/* Panel 4: Auto Clustering */}
       <div className="panel">
-        <h3 className="text-sm font-semibold mb-3 text-text">Auto Clustering</h3>
+        <h3 className="text-sm font-semibold mb-3 text-text">{t.autoClustering}</h3>
 
         <div className="mb-4">
           <div className="flex gap-4">
@@ -316,7 +318,7 @@ export function SettingsTab() {
                 checked={clusterAlgorithm === "threshold"}
                 onChange={() => setClusterAlgorithm("threshold")}
               />
-              Threshold
+              {t.threshold}
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
@@ -326,7 +328,7 @@ export function SettingsTab() {
                 checked={clusterAlgorithm === "kmeans"}
                 onChange={() => setClusterAlgorithm("kmeans")}
               />
-              K-means
+              {t.kmeans}
             </label>
           </div>
         </div>
@@ -334,7 +336,7 @@ export function SettingsTab() {
         {clusterAlgorithm === "threshold" && (
           <div id="threshold-config" className="grid grid-cols-2 gap-x-4 gap-y-2 mb-4">
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-text-muted font-medium">NTC threshold</span>
+              <span className="text-xs text-text-muted font-medium">{t.ntcThreshold}</span>
               <input
                 id="ntc-threshold"
                 type="number"
@@ -346,7 +348,7 @@ export function SettingsTab() {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-text-muted font-medium">Allele 1 max ratio</span>
+              <span className="text-xs text-text-muted font-medium">{t.allele1MaxRatio}</span>
               <input
                 id="allele1-ratio-max"
                 type="number"
@@ -359,7 +361,7 @@ export function SettingsTab() {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-text-muted font-medium">Allele 2 min ratio</span>
+              <span className="text-xs text-text-muted font-medium">{t.allele2MinRatio}</span>
               <input
                 id="allele2-ratio-min"
                 type="number"
@@ -377,7 +379,7 @@ export function SettingsTab() {
         {clusterAlgorithm === "kmeans" && (
           <div id="kmeans-config" className="mb-4">
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-text-muted font-medium">Number of clusters</span>
+              <span className="text-xs text-text-muted font-medium">{t.numberOfClusters}</span>
               <input
                 id="n-clusters"
                 type="number"
@@ -405,7 +407,7 @@ export function SettingsTab() {
             onClick={handleRunClustering}
             disabled={!sessionId || clusterLoading}
           >
-            {clusterLoading ? "Running..." : "Run Auto Clustering"}
+            {clusterLoading ? t.running : t.runAutoClustering}
           </button>
           <button
             id="toggle-threshold-lines-btn"
@@ -423,14 +425,14 @@ export function SettingsTab() {
               );
             }}
           >
-            {showThresholdLines ? "Hide Threshold Lines" : "Show Threshold Lines"}
+            {showThresholdLines ? t.hideThresholdLines : t.showThresholdLines}
           </button>
         </div>
       </div>
 
       {/* Panel 5: Display Layers */}
       <div className="panel">
-        <h3 className="text-sm font-semibold mb-3 text-text">Display Layers</h3>
+        <h3 className="text-sm font-semibold mb-3 text-text">{t.displayLayers}</h3>
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
             <input
@@ -440,7 +442,7 @@ export function SettingsTab() {
               checked={showAutoCluster}
               onChange={(e) => setShowAutoCluster(e.target.checked)}
             />
-            Show auto-clustering layer
+            {t.showAutoClusterLayer}
           </label>
           <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
             <input
@@ -450,7 +452,7 @@ export function SettingsTab() {
               checked={showManualTypes}
               onChange={(e) => setShowManualTypes(e.target.checked)}
             />
-            Show manual well types layer
+            {t.showManualTypesLayer}
           </label>
         </div>
       </div>
@@ -462,10 +464,10 @@ export function SettingsTab() {
           className="px-4 py-1.5 bg-surface text-danger border border-danger rounded text-[13px] cursor-pointer hover:bg-red-50"
           onClick={resetToDefaults}
         >
-          Reset to Defaults
+          {t.resetToDefaults}
         </button>
         <span className="text-xs text-text-muted">
-          Resets all settings (normalization, axis, clustering) to default values
+          {t.resetDescription}
         </span>
       </div>
     </div>

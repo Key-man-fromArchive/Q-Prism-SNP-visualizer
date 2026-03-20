@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
+import { useI18n } from "@/hooks/use-i18n";
 import {
   getWellGroups,
   createWellGroup,
@@ -15,6 +16,7 @@ type GroupManagerProps = {
 };
 
 export function GroupManager({ sessionId, onClose }: GroupManagerProps) {
+  const { t } = useI18n();
   const [groups, setGroups] = useState<Record<string, GroupInfo>>({});
   const [newName, setNewName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -78,7 +80,7 @@ export function GroupManager({ sessionId, onClose }: GroupManagerProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-semibold text-text">Well Groups</h3>
+          <h3 className="text-sm font-semibold text-text">{t.wellGroups}</h3>
           <button
             className="text-text-muted hover:text-text cursor-pointer bg-transparent border-none text-lg"
             onClick={onClose}
@@ -90,7 +92,7 @@ export function GroupManager({ sessionId, onClose }: GroupManagerProps) {
         <div className="p-4 space-y-3">
           {/* Existing groups */}
           {Object.keys(groups).length === 0 && (
-            <p className="text-xs text-text-muted">No groups defined yet.</p>
+            <p className="text-xs text-text-muted">{t.noGroupsYet}</p>
           )}
           {Object.entries(groups).map(([name, info]) => (
             <div
@@ -100,7 +102,7 @@ export function GroupManager({ sessionId, onClose }: GroupManagerProps) {
               <div>
                 <span className="text-sm text-text font-medium">{name}</span>
                 <span className="text-xs text-text-muted ml-2">
-                  ({info.wells.length} wells)
+                  {t.nWells(info.wells.length)}
                 </span>
                 <span
                   className="text-[10px] ml-1"
@@ -118,7 +120,7 @@ export function GroupManager({ sessionId, onClose }: GroupManagerProps) {
                   onClick={() => handleDelete(name)}
                   disabled={loading}
                 >
-                  Delete
+                  {t.delete}
                 </button>
               )}
             </div>
@@ -127,13 +129,13 @@ export function GroupManager({ sessionId, onClose }: GroupManagerProps) {
           {/* Create new group */}
           <div className="border-t border-border pt-3">
             <p className="text-xs text-text-muted mb-2">
-              Select wells on the plate (drag), then name the group:
+              {t.selectWellsPrompt}
             </p>
             <div className="flex gap-2">
               <input
                 type="text"
                 className="flex-1 px-2 py-1 border border-border rounded text-sm bg-surface text-text"
-                placeholder="Group name"
+                placeholder={t.groupName}
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleCreate()}
@@ -145,18 +147,20 @@ export function GroupManager({ sessionId, onClose }: GroupManagerProps) {
                   loading || !newName.trim() || selectedWells.length === 0
                 }
               >
-                Create
+                {t.create}
               </button>
             </div>
             {selectedWells.length > 0 && (
               <p className="text-[10px] text-text-muted mt-1">
-                {selectedWells.length} well(s) selected: {selectedWells.slice(0, 8).join(", ")}
-                {selectedWells.length > 8 ? "..." : ""}
+                {t.nWellsSelected(
+                  selectedWells.length,
+                  selectedWells.slice(0, 8).join(", ") + (selectedWells.length > 8 ? "..." : "")
+                )}
               </p>
             )}
             {selectedWells.length === 0 && (
               <p className="text-[10px] text-text-muted mt-1">
-                No wells selected. Drag-select wells on the plate first.
+                {t.noWellsSelected}
               </p>
             )}
           </div>

@@ -33,6 +33,8 @@ snp-analyzer/app/static-react/
 # Environment secrets
 .env
 snp-analyzer/.env
+snp-analyzer/pcrd-pw.txt
+snp-analyzer/app.env
 
 # Docker volumes / runtime
 *.egg-info/

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { getQuality } from '@/lib/api';
+import { useI18n } from '@/hooks/use-i18n';
 import type { QualityResponse, QualityResult } from '@/types/api';
 
 type ScoreBucket = {
@@ -12,6 +13,7 @@ type ScoreBucket = {
 };
 
 export function QualityTab() {
+  const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
   const useRox = useSettingsStore((s) => s.useRox);
 
@@ -84,7 +86,7 @@ export function QualityTab() {
   if (loading) {
     return (
       <div className="p-6">
-        <div className="text-text-muted">Loading quality data...</div>
+        <div className="text-text-muted">{t.loadingQuality}</div>
       </div>
     );
   }
@@ -100,7 +102,7 @@ export function QualityTab() {
   if (!data) {
     return (
       <div className="p-6">
-        <div className="text-text-muted">No quality data available</div>
+        <div className="text-text-muted">{t.noQualityData}</div>
       </div>
     );
   }
@@ -110,13 +112,13 @@ export function QualityTab() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div className="panel">
-          <div className="text-sm text-text-muted mb-1">Mean Quality Score</div>
+          <div className="text-sm text-text-muted mb-1">{t.meanQualityScore}</div>
           <div className={`text-3xl font-bold ${getScoreColor(data.summary.mean_score)}`}>
             {data.summary.mean_score.toFixed(1)}
           </div>
         </div>
         <div className="panel">
-          <div className="text-sm text-text-muted mb-1">Low Quality Wells</div>
+          <div className="text-sm text-text-muted mb-1">{t.lowQualityWells}</div>
           <div className="text-3xl font-bold text-text">
             {data.summary.low_quality_count}
             <span className="text-base text-text-muted ml-2">
@@ -128,13 +130,13 @@ export function QualityTab() {
 
       {/* Score Distribution */}
       <div className="panel mb-6">
-        <h3 className="text-lg font-semibold text-text mb-4">Score Distribution</h3>
+        <h3 className="text-lg font-semibold text-text mb-4">{t.scoreDistribution}</h3>
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left py-2 text-text">Range</th>
-              <th className="text-left py-2 text-text">Count</th>
-              <th className="text-left py-2 text-text">Distribution</th>
+              <th className="text-left py-2 text-text">{t.range}</th>
+              <th className="text-left py-2 text-text">{t.count}</th>
+              <th className="text-left py-2 text-text">{t.distribution}</th>
             </tr>
           </thead>
           <tbody>
@@ -165,15 +167,15 @@ export function QualityTab() {
       {lowQualityWells.length > 0 && (
         <div className="panel">
           <h3 className="text-lg font-semibold text-text mb-4">
-            Low Quality Wells (Score &lt; 50)
+            {t.lowQualityWellsTitle}
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left py-2 text-text">Well</th>
-                  <th className="text-left py-2 text-text">Score</th>
-                  <th className="text-left py-2 text-text">Flags</th>
+                  <th className="text-left py-2 text-text">{t.well}</th>
+                  <th className="text-left py-2 text-text">{t.score}</th>
+                  <th className="text-left py-2 text-text">{t.flags}</th>
                 </tr>
               </thead>
               <tbody>

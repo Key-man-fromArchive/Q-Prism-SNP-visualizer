@@ -3,6 +3,7 @@
 
 import { useRef, useEffect } from 'react';
 import { WELL_TYPE_INFO } from '@/lib/constants';
+import { useI18n } from '@/hooks/use-i18n';
 
 type WellTypePopupProps = {
   wells: string[];
@@ -12,7 +13,19 @@ type WellTypePopupProps = {
 };
 
 export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePopupProps) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
+
+  const wellTypeLabels: Record<string, string> = {
+    NTC: t.wellTypeNTC,
+    Unknown: t.wellTypeUnknown,
+    'Positive Control': t.wellTypePositiveControl,
+    'Allele 1 Homo': t.wellTypeAllele1Homo,
+    'Allele 2 Homo': t.wellTypeAllele2Homo,
+    Heterozygous: t.wellTypeHeterozygous,
+    Undetermined: t.wellTypeUndetermined,
+    Empty: t.wellTypeEmpty,
+  };
 
   // Close on outside click
   useEffect(() => {
@@ -63,7 +76,7 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
       }}
     >
       <div className="text-xs text-text-muted font-medium mb-2 px-1">
-        Assign type to {wells.length} well{wells.length > 1 ? 's' : ''}
+        {t.assignType(wells.length)}
       </div>
 
       {Object.entries(WELL_TYPE_INFO)
@@ -75,7 +88,7 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
             style={{ borderLeft: `3px solid ${info.color}` }}
             onClick={() => onAssign(type)}
           >
-            {info.label}
+            {wellTypeLabels[type] || info.label}
           </button>
         ))}
 
@@ -87,7 +100,7 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
           style={{ borderLeft: `3px solid ${WELL_TYPE_INFO['Empty'].color}` }}
           onClick={() => onAssign('Empty')}
         >
-          {WELL_TYPE_INFO['Empty'].label}
+          {wellTypeLabels['Empty'] || WELL_TYPE_INFO['Empty'].label}
         </button>
       )}
 
@@ -95,7 +108,7 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
         className="w-full text-left px-2 py-1.5 text-sm rounded text-text-muted hover:bg-bg cursor-pointer border-none bg-transparent mt-1"
         onClick={onClose}
       >
-        Cancel
+        {t.cancel}
       </button>
     </div>
   );

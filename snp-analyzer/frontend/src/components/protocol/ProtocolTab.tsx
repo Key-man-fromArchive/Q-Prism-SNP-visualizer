@@ -4,6 +4,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { getProtocol, updateProtocol } from '@/lib/api';
 import { useSessionStore } from '@/stores/session-store';
+import { useI18n } from '@/hooks/use-i18n';
 import type { ProtocolStep } from '@/types/api';
 
 // Phase color system
@@ -33,6 +34,7 @@ function isReadingStep(label: string): boolean {
 }
 
 export function ProtocolTab() {
+  const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
   const [steps, setSteps] = useState<ProtocolStep[]>([]);
   const [loading, setLoading] = useState(false);
@@ -99,7 +101,7 @@ export function ProtocolTab() {
     <div style={{ padding: '16px 24px', maxWidth: '800px' }}>
       <div className="panel" style={{ borderRadius: '8px', padding: '20px' }}>
         <h3 className="text-lg font-semibold text-text" style={{ margin: '0 0 16px 0' }}>
-          PCR Protocol Steps
+          {t.pcrProtocolSteps}
         </h3>
 
         {error && (
@@ -112,12 +114,12 @@ export function ProtocolTab() {
           <table id="protocol-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
               <tr className="border-b-2 border-border bg-bg">
-                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>Step</th>
-                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>Label</th>
-                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>Temp (&deg;C)</th>
-                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>Duration (s)</th>
-                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>Cycles</th>
-                <th className="text-center text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>Actions</th>
+                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>{t.step}</th>
+                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>{t.label}</th>
+                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>{t.tempC}</th>
+                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>{t.durationS}</th>
+                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>{t.cycles}</th>
+                <th className="text-center text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>{t.actions}</th>
               </tr>
             </thead>
             <tbody>
@@ -190,7 +192,7 @@ export function ProtocolTab() {
                             fontWeight: '500',
                           }}
                         >
-                          Delete
+                          {t.delete}
                         </button>
                       </td>
                     </tr>
@@ -227,7 +229,7 @@ export function ProtocolTab() {
               opacity: loading ? 0.6 : 1,
             }}
           >
-            Add Step
+            {t.addStep}
           </button>
           <button
             id="save-protocol-btn"
@@ -245,7 +247,7 @@ export function ProtocolTab() {
               opacity: loading ? 0.6 : 1,
             }}
           >
-            {loading ? 'Saving...' : 'Save Protocol'}
+            {loading ? t.saving : t.saveProtocol}
           </button>
         </div>
       </div>

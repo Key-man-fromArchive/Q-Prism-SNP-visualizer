@@ -8,6 +8,7 @@ from app.auth import AdminUser, create_user_in_db, hash_password, get_user_by_id
 from app.db import get_db
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+admin_router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 class UserCreate(BaseModel):
@@ -43,6 +44,81 @@ async def list_users(admin: AdminUser):
             for r in rows
         ]
     }
+
+
+@admin_router.get("/dashboard")
+async def admin_dashboard(admin: AdminUser):
+    conn = get_db()
+
+    # Get all users
+    users = conn.execute(
+        "SELECT id, username, display_name, role, is_active, created_at FROM users ORDER BY created_at"
+    ).fetchall()
+
+    result = []
+    for u in users:
+        uid = u["id"]
+
+        # Count sessions owned by this user
+        sessions = conn.execute(
+            """SELECT session_id, instrument, num_wells, num_cycles, raw_filename, created_at
+               FROM sessions WHERE user_id = ? ORDER BY created_at DESC""",
+            (uid,),
+        ).fetchall()
+
+        # Count projects owned by this user
+        projects = conn.execute(
+            """SELECT p.id, p.name, p.created_at, COUNT(ps.session_id) as session_count
+               FROM projects p LEFT JOIN project_sessions ps ON p.id = ps.project_id
+               WHERE p.user_id = ?
+               GROUP BY p.id ORDER BY p.created_at DESC""",
+            (uid,),
+        ).fetchall()
+
+        # Total disk usage estimate: count well_cycle_data rows for this user's sessions
+        session_ids = [s["session_id"] for s in sessions]
+        total_data_points = 0
+        if session_ids:
+            placeholders = ",".join("?" * len(session_ids))
+            row = conn.execute(
+                f"SELECT COUNT(*) as cnt FROM well_cycle_data WHERE session_id IN ({placeholders})",
+                session_ids,
+            ).fetchone()
+            total_data_points = row["cnt"] if row else 0
+
+        result.append({
+            "id": uid,
+            "username": u["username"],
+            "display_name": u["display_name"],
+            "role": u["role"],
+            "is_active": bool(u["is_active"]),
+            "created_at": u["created_at"],
+            "session_count": len(sessions),
+            "project_count": len(projects),
+            "total_data_points": total_data_points,
+            "sessions": [
+                {
+                    "session_id": s["session_id"],
+                    "instrument": s["instrument"],
+                    "num_wells": s["num_wells"],
+                    "num_cycles": s["num_cycles"],
+                    "raw_filename": s["raw_filename"] or "",
+                    "created_at": s["created_at"],
+                }
+                for s in sessions
+            ],
+            "projects": [
+                {
+                    "id": p["id"],
+                    "name": p["name"],
+                    "session_count": p["session_count"],
+                    "created_at": p["created_at"],
+                }
+                for p in projects
+            ],
+        })
+
+    return {"users": result}
 
 
 @router.post("")

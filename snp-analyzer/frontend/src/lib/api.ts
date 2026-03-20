@@ -24,7 +24,7 @@ import type {
   ProjectResponse,
   ProjectSummaryResponse,
 } from '@/types/api';
-import type { LoginRequest, LoginResponse, UserListItem } from '@/types/auth';
+import type { LoginRequest, LoginResponse, UserListItem, AdminDashboardResponse } from '@/types/auth';
 import { useAuthStore } from '@/stores/auth-store';
 
 /**
@@ -577,4 +577,8 @@ export async function updateUser(
 
 export async function deleteUser(id: string): Promise<{ status: string }> {
   return apiFetch<{ status: string }>(`/api/users/${id}`, { method: 'DELETE' });
+}
+
+export async function getAdminDashboard(): Promise<AdminDashboardResponse> {
+  return apiFetch<AdminDashboardResponse>('/api/users/dashboard');
 }

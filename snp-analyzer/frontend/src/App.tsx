@@ -20,6 +20,7 @@ import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useExports } from "@/hooks/use-exports";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
 import { useDarkMode } from "@/hooks/use-dark-mode";
+import { useI18n } from "@/hooks/use-i18n";
 import { KeyboardHelpOverlay } from "@/components/shared/KeyboardHelpOverlay";
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
   const { toggle: toggleDarkMode } = useDarkMode();
   const { downloadCSV } = useExports();
   const { undo, redo } = useUndoRedo();
+  const { t } = useI18n();
 
   // Auth state
   const user = useAuthStore((s) => s.user);
@@ -106,7 +108,7 @@ export default function App() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
-        <p className="text-text-muted">Loading...</p>
+        <p className="text-text-muted">{t.loading}</p>
       </div>
     );
   }

@@ -4,8 +4,10 @@ import { useSettingsStore } from '@/stores/settings-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { getQc } from '@/lib/api';
 import type { QcResponse } from '@/types/api';
+import { useI18n } from '@/hooks/use-i18n';
 
 export function QcBadges() {
+  const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
   const useRox = useSettingsStore((s) => s.useRox);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
@@ -62,7 +64,7 @@ export function QcBadges() {
 
   const callRatePercent = Math.round(qcData.call_rate * 100);
   const callRateColor = getCallRateColor(qcData.call_rate * 100);
-  const callRateTooltip = `${qcData.n_called} / ${qcData.n_total} wells called`;
+  const callRateTooltip = t.wellsCalled(qcData.n_called, qcData.n_total);
 
   return (
     <>
@@ -72,7 +74,7 @@ export function QcBadges() {
         style={{ borderColor: callRateColor, color: callRateColor, fontWeight: 600 }}
         title={callRateTooltip}
       >
-        Call {callRatePercent}%
+        {t.callRate(callRatePercent)}
       </span>
 
       {/* NTC Check Badge - only show if ntc_check exists */}
@@ -86,7 +88,7 @@ export function QcBadges() {
           }}
           title={qcData.ntc_check.details}
         >
-          {qcData.ntc_check.status === 'ok' ? 'NTC OK' : 'NTC WARN'}
+          {qcData.ntc_check.status === 'ok' ? t.ntcOK : t.ntcWarn}
         </span>
       )}
 
@@ -99,9 +101,9 @@ export function QcBadges() {
             color: getClusterSepColor(qcData.cluster_separation),
             fontWeight: 600,
           }}
-          title={`Cluster separation: ${qcData.cluster_separation.toFixed(2)}`}
+          title={t.clusterSeparation(qcData.cluster_separation.toFixed(2))}
         >
-          Sep {qcData.cluster_separation.toFixed(2)}
+          {t.sep(qcData.cluster_separation.toFixed(2))}
         </span>
       )}
     </>

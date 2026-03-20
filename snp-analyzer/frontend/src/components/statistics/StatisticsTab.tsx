@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useSessionStore } from '@/stores/session-store';
 import { getStatistics } from '@/lib/api';
+import { useI18n } from '@/hooks/use-i18n';
 import type { StatisticsResponse } from '@/types/api';
 
 export function StatisticsTab() {
+  const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
   const [stats, setStats] = useState<StatisticsResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -34,7 +36,7 @@ export function StatisticsTab() {
   if (!sessionId) {
     return (
       <div className="p-6">
-        <p className="text-text-muted">No session active. Upload a file to begin.</p>
+        <p className="text-text-muted">{t.noSessionActive}</p>
       </div>
     );
   }
@@ -42,7 +44,7 @@ export function StatisticsTab() {
   if (loading) {
     return (
       <div className="p-6">
-        <p className="text-text-muted">Loading statistics...</p>
+        <p className="text-text-muted">{t.loadingStatistics}</p>
       </div>
     );
   }
@@ -58,7 +60,7 @@ export function StatisticsTab() {
   if (!stats) {
     return (
       <div className="p-6">
-        <p className="text-text-muted">No statistics available.</p>
+        <p className="text-text-muted">{t.noStatisticsAvailable}</p>
       </div>
     );
   }
@@ -88,12 +90,12 @@ export function StatisticsTab() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Section 1: Genotype Distribution */}
         <div className="panel">
-          <h2 className="text-lg font-semibold text-text mb-3">Genotype Distribution</h2>
+          <h2 className="text-lg font-semibold text-text mb-3">{t.genotypeDistribution}</h2>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-text-muted font-medium text-left py-2 px-3">Genotype</th>
-                <th className="text-text-muted font-medium text-left py-2 px-3">Count</th>
+                <th className="text-text-muted font-medium text-left py-2 px-3">{t.genotype}</th>
+                <th className="text-text-muted font-medium text-left py-2 px-3">{t.count}</th>
                 <th className="text-text-muted font-medium text-left py-2 px-3">%</th>
               </tr>
             </thead>
@@ -110,13 +112,13 @@ export function StatisticsTab() {
             </tbody>
           </table>
           <p className="text-text-muted text-xs mt-2">
-            Total wells: {stats.total_wells}
+            {t.totalWells(stats.total_wells)}
           </p>
         </div>
 
         {/* Section 2: Allele Frequencies */}
         <div className="panel">
-          <h2 className="text-lg font-semibold text-text mb-3">Allele Frequencies</h2>
+          <h2 className="text-lg font-semibold text-text mb-3">{t.alleleFrequencies}</h2>
           {hasAlleleFreq ? (
             <>
               <table className="w-full text-sm">
@@ -128,19 +130,19 @@ export function StatisticsTab() {
                 </thead>
                 <tbody>
                   <tr className="border-b border-border">
-                    <td className="py-2 px-3 text-text">Allele A (p)</td>
+                    <td className="py-2 px-3 text-text">{t.alleleA}</td>
                     <td className="py-2 px-3 text-text font-bold">
                       {stats.allele_frequency.p.toFixed(4)}
                     </td>
                   </tr>
                   <tr className="border-b border-border">
-                    <td className="py-2 px-3 text-text">Allele B (q)</td>
+                    <td className="py-2 px-3 text-text">{t.alleleB}</td>
                     <td className="py-2 px-3 text-text font-bold">
                       {stats.allele_frequency.q.toFixed(4)}
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-2 px-3 text-text">Total genotyped</td>
+                    <td className="py-2 px-3 text-text">{t.totalGenotyped}</td>
                     <td className="py-2 px-3 text-text">
                       {stats.allele_frequency.total_genotyped}
                     </td>
@@ -153,22 +155,22 @@ export function StatisticsTab() {
             </>
           ) : (
             <p className="text-text-muted text-sm">
-              Run clustering first to calculate allele frequencies.
+              {t.runClusteringFirst}
             </p>
           )}
         </div>
 
         {/* Section 3: Hardy-Weinberg Equilibrium */}
         <div className="panel">
-          <h2 className="text-lg font-semibold text-text mb-3">Hardy-Weinberg Equilibrium</h2>
+          <h2 className="text-lg font-semibold text-text mb-3">{t.hweTitle}</h2>
           {hasHWE ? (
             <>
               <table className="w-full text-sm mb-3">
                 <thead>
                   <tr className="border-b border-border">
                     <th className="text-text-muted font-medium text-left py-2 px-3">Genotype</th>
-                    <th className="text-text-muted font-medium text-left py-2 px-3">Observed</th>
-                    <th className="text-text-muted font-medium text-left py-2 px-3">Expected</th>
+                    <th className="text-text-muted font-medium text-left py-2 px-3">{t.observed}</th>
+                    <th className="text-text-muted font-medium text-left py-2 px-3">{t.expected}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -204,16 +206,16 @@ export function StatisticsTab() {
                   }`}
                 >
                   {stats.hwe.in_hwe
-                    ? 'In HWE (p > 0.05)'
-                    : 'Deviates from HWE (p ≤ 0.05)'}
+                    ? t.inHWE
+                    : t.deviatesFromHWE}
                 </div>
               </div>
             </>
           ) : (
             <p className="text-text-muted text-sm">
               {hasAlleleFreq
-                ? 'HWE test not available.'
-                : 'Run clustering first to calculate allele frequencies.'}
+                ? t.hweNotAvailable
+                : t.runClusteringFirst}
             </p>
           )}
         </div>

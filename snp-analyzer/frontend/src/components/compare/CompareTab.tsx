@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState, Fragment } from 'react';
 import Plotly from 'plotly.js-dist-min';
 import { useSettingsStore } from '@/stores/settings-store';
+import { useI18n } from '@/hooks/use-i18n';
 import { getSessions, getCompareScatter, getCompareStats } from '@/lib/api';
 import { plotlyColors } from '@/lib/plotly-theme';
 import type {
@@ -13,6 +14,7 @@ import type {
 } from '@/types/api';
 
 export function CompareTab() {
+  const { t } = useI18n();
   const plotRef = useRef<HTMLDivElement>(null);
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [runA, setRunA] = useState<string>('');
@@ -158,18 +160,18 @@ export function CompareTab() {
     <div className="space-y-4">
       {/* Control Panel */}
       <div className="panel">
-        <h2 className="text-lg font-semibold text-text mb-3">Compare Runs</h2>
+        <h2 className="text-lg font-semibold text-text mb-3">{t.compareRuns}</h2>
 
         {!hasEnoughSessions ? (
           <div className="text-amber-500 text-sm">
-            ⚠️ Upload at least 2 files to compare runs
+            ⚠️ {t.uploadAtLeast2}
           </div>
         ) : (
           <Fragment>
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2">
                 <label htmlFor="run-a" className="text-sm text-text-muted">
-                  Run A:
+                  {t.runA}
                 </label>
                 <select
                   id="run-a"
@@ -177,7 +179,7 @@ export function CompareTab() {
                   onChange={(e) => setRunA(e.target.value)}
                   className="px-3 py-1.5 border border-border rounded bg-surface text-text text-sm"
                 >
-                  <option value="">Select run...</option>
+                  <option value="">{t.selectRun}</option>
                   {sessions.map((s) => (
                     <option key={s.session_id} value={s.session_id}>
                       {s.instrument} ({s.num_wells} wells, {s.num_cycles} cycles)
@@ -188,7 +190,7 @@ export function CompareTab() {
 
               <div className="flex items-center gap-2">
                 <label htmlFor="run-b" className="text-sm text-text-muted">
-                  Run B:
+                  {t.runB}
                 </label>
                 <select
                   id="run-b"
@@ -196,7 +198,7 @@ export function CompareTab() {
                   onChange={(e) => setRunB(e.target.value)}
                   className="px-3 py-1.5 border border-border rounded bg-surface text-text text-sm"
                 >
-                  <option value="">Select run...</option>
+                  <option value="">{t.selectRun}</option>
                   {sessions.map((s) => (
                     <option key={s.session_id} value={s.session_id}>
                       {s.instrument} ({s.num_wells} wells, {s.num_cycles} cycles)
@@ -210,7 +212,7 @@ export function CompareTab() {
                 disabled={!canCompare || isLoading}
                 className="px-4 py-1.5 bg-primary text-white rounded text-sm font-medium disabled:opacity-50"
               >
-                {isLoading ? 'Comparing...' : 'Compare'}
+                {isLoading ? t.comparing : t.compare}
               </button>
             </div>
 
@@ -227,14 +229,14 @@ export function CompareTab() {
           {/* Scatter Plot */}
           <div className="lg:col-span-2 panel">
             <h3 className="text-base font-semibold text-text mb-3">
-              Overlay Scatter Plot
+              {t.overlayScatterPlot}
             </h3>
             <div ref={plotRef} style={{ height: '400px' }} />
           </div>
 
           {/* Statistics */}
           <div className="panel">
-            <h3 className="text-base font-semibold text-text mb-3">Statistics</h3>
+            <h3 className="text-base font-semibold text-text mb-3">{t.statistics}</h3>
 
             {/* Run A Stats */}
             <div className="mb-4">
@@ -244,7 +246,7 @@ export function CompareTab() {
               <table className="w-full text-sm">
                 <tbody className="text-text-muted">
                   <tr>
-                    <td className="py-1">Wells:</td>
+                    <td className="py-1">{t.wells}:</td>
                     <td className="text-right text-text">{statsData.run1.num_wells}</td>
                   </tr>
                   <tr>
@@ -283,7 +285,7 @@ export function CompareTab() {
               <table className="w-full text-sm">
                 <tbody className="text-text-muted">
                   <tr>
-                    <td className="py-1">Wells:</td>
+                    <td className="py-1">{t.wells}:</td>
                     <td className="text-right text-text">{statsData.run2.num_wells}</td>
                   </tr>
                   <tr>
@@ -316,7 +318,7 @@ export function CompareTab() {
 
             {/* Correlation */}
             <div className="border-t border-border pt-3">
-              <h4 className="text-sm font-medium text-text mb-2">Correlation</h4>
+              <h4 className="text-sm font-medium text-text mb-2">{t.correlation}</h4>
               <table className="w-full text-sm">
                 <tbody className="text-text-muted">
                   <tr>
@@ -340,7 +342,7 @@ export function CompareTab() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1">Matched Wells:</td>
+                    <td className="py-1">{t.matchedWells}</td>
                     <td className="text-right text-text">
                       {statsData.correlation.n_matched_wells}
                     </td>

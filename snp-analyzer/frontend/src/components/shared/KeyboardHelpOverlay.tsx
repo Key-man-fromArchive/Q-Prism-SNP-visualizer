@@ -1,47 +1,51 @@
+import { useI18n } from '@/hooks/use-i18n';
+
 interface Props {
   onClose: () => void;
 }
 
-const SECTIONS = [
-  {
-    title: "Navigation",
-    shortcuts: [
-      { key: "Space", desc: "Toggle cycle animation" },
-      { key: "\u2190", desc: "Previous cycle" },
-      { key: "\u2192", desc: "Next cycle" },
-    ],
-  },
-  {
-    title: "Actions",
-    shortcuts: [
-      { key: "Ctrl+E", desc: "Export results to CSV" },
-      { key: "D", desc: "Toggle dark mode" },
-      { key: "Ctrl+Z", desc: "Undo" },
-      { key: "Ctrl+Shift+Z", desc: "Redo" },
-    ],
-  },
-  {
-    title: "Well Type Assignment",
-    shortcuts: [
-      { key: "1", desc: "NTC" },
-      { key: "2", desc: "Unknown" },
-      { key: "3", desc: "Positive Control" },
-      { key: "4", desc: "Allele 1 Homo" },
-      { key: "5", desc: "Allele 2 Homo" },
-      { key: "6", desc: "Heterozygous" },
-      { key: "7", desc: "Undetermined" },
-    ],
-  },
-  {
-    title: "Help",
-    shortcuts: [
-      { key: "?", desc: "Toggle this help" },
-      { key: "Esc", desc: "Close this help" },
-    ],
-  },
-];
-
 export function KeyboardHelpOverlay({ onClose }: Props) {
+  const { t } = useI18n();
+
+  const SECTIONS = [
+    {
+      title: t.navigation,
+      shortcuts: [
+        { key: "Space", desc: t.toggleCycleAnimation },
+        { key: "\u2190", desc: t.previousCycle },
+        { key: "\u2192", desc: t.nextCycle },
+      ],
+    },
+    {
+      title: t.keyActions,
+      shortcuts: [
+        { key: "Ctrl+E", desc: t.exportResultsCSV },
+        { key: "D", desc: t.toggleDarkMode },
+        { key: "Ctrl+Z", desc: t.undo },
+        { key: "Ctrl+Shift+Z", desc: t.redo },
+      ],
+    },
+    {
+      title: t.wellTypeAssignment,
+      shortcuts: [
+        { key: "1", desc: t.wellTypeNTC },
+        { key: "2", desc: t.wellTypeUnknown },
+        { key: "3", desc: t.wellTypePositiveControl },
+        { key: "4", desc: t.wellTypeAllele1Homo },
+        { key: "5", desc: t.wellTypeAllele2Homo },
+        { key: "6", desc: t.wellTypeHeterozygous },
+        { key: "7", desc: t.wellTypeUndetermined },
+      ],
+    },
+    {
+      title: t.help,
+      shortcuts: [
+        { key: "?", desc: t.toggleThisHelp },
+        { key: "Esc", desc: t.closeThisHelp },
+      ],
+    },
+  ];
+
   return (
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[10000]"
@@ -52,7 +56,7 @@ export function KeyboardHelpOverlay({ onClose }: Props) {
       <div className="bg-surface border border-border rounded-xl shadow-2xl max-w-[560px] w-[90%] max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface z-10">
           <h2 className="text-lg font-semibold text-text m-0">
-            Keyboard Shortcuts
+            {t.keyboardShortcuts}
           </h2>
           <button
             onClick={onClose}
@@ -87,7 +91,7 @@ export function KeyboardHelpOverlay({ onClose }: Props) {
 
         <div className="px-6 py-3 border-t border-border bg-bg rounded-b-xl">
           <p className="text-xs text-text-muted m-0">
-            Tip: Select wells in the scatter plot or plate view before using well type shortcuts
+            {t.keyboardTip}
           </p>
         </div>
       </div>

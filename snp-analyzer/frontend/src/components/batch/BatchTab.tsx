@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useI18n } from '@/hooks/use-i18n';
 import {
   getSessions,
   getProjects,
@@ -40,6 +41,7 @@ type ProjectPickerProps = {
 };
 
 function ProjectPicker({ projects, onSelect, disabled, label }: ProjectPickerProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
@@ -64,7 +66,7 @@ function ProjectPicker({ projects, onSelect, disabled, label }: ProjectPickerPro
         disabled={disabled}
         className="text-primary hover:text-primary/80 text-xs font-medium disabled:opacity-50 whitespace-nowrap"
       >
-        {label || '+ Project'}
+        {label || t.plusProject}
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 w-52 bg-surface border border-border rounded shadow-lg z-50">
@@ -73,7 +75,7 @@ function ProjectPicker({ projects, onSelect, disabled, label }: ProjectPickerPro
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search project..."
+              placeholder={t.searchProject}
               className="w-full px-2 py-1 text-xs border border-border rounded bg-bg text-text"
               autoFocus
             />
@@ -81,7 +83,7 @@ function ProjectPicker({ projects, onSelect, disabled, label }: ProjectPickerPro
           <div className="max-h-40 overflow-y-auto">
             {filtered.length === 0 ? (
               <div className="px-3 py-2 text-xs text-text-muted">
-                {projects.length === 0 ? 'No projects' : 'No match'}
+                {projects.length === 0 ? t.noProjects : t.noMatch}
               </div>
             ) : (
               filtered.map((p) => (
@@ -103,6 +105,7 @@ function ProjectPicker({ projects, onSelect, disabled, label }: ProjectPickerPro
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 export function BatchTab({ onLoadSession }: BatchTabProps) {
+  const { t } = useI18n();
   const [view, setView] = useState<View>('list');
   const [projects, setProjects] = useState<ProjectListResponse['projects']>([]);
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
@@ -147,7 +150,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   };
 
   const handleDeleteProject = async (id: string, name: string) => {
-    if (!window.confirm(`Delete project "${name}"?`)) return;
+    if (!window.confirm(t.deleteProjectConfirm(name))) return;
     try { setLoading(true); await deleteProject(id); await loadProjects(); }
     catch (err) { setError(err instanceof Error ? err.message : 'Failed to delete project'); }
     finally { setLoading(false); }
@@ -194,7 +197,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   const handleBulkRemoveFromProject = async () => {
     if (!currentProject || checkedDetailSessions.size === 0) return;
     const count = checkedDetailSessions.size;
-    if (!window.confirm(`Remove ${count} session(s) from project "${currentProject.name}"?`)) return;
+    if (!window.confirm(t.bulkRemoveConfirm(count, currentProject.name))) return;
     try {
       setLoading(true); setError(null);
       await bulkRemoveProjectSessions(currentProject.id, [...checkedDetailSessions]);
@@ -214,7 +217,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   // ── Session delete (single) ────────────────────────────────────────────────
   const handleDeleteSession = async (sid: string) => {
     const s = sessions.find((x) => x.session_id === sid);
-    if (!window.confirm(`Delete session "${fmtSession(sid, s?.raw_filename)}" permanently?\nThis removes it from all projects.`)) return;
+    if (!window.confirm(t.deleteSessionConfirm(fmtSession(sid, s?.raw_filename)))) return;
     try {
       setLoading(true); setError(null);
       if (activeSessionId === sid) resetSession();
@@ -234,7 +237,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   const handleBulkDelete = async () => {
     const count = checkedSessions.size;
     if (count === 0) return;
-    if (!window.confirm(`Delete ${count} session(s) permanently?\nThis removes them from all projects and cannot be undone.`)) return;
+    if (!window.confirm(t.bulkDeleteConfirm(count))) return;
     try {
       setLoading(true); setError(null);
       if (activeSessionId && checkedSessions.has(activeSessionId)) resetSession();
@@ -343,17 +346,17 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
         {/* ── Projects ── */}
         <div className="panel">
           <div className="mb-4">
-            <h2 className="text-xl font-semibold text-text mb-3">Projects</h2>
+            <h2 className="text-xl font-semibold text-text mb-3">{t.projects}</h2>
             <div className="flex gap-2 items-center">
               <input type="text" value={newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
-                placeholder="New project name..."
+                placeholder={t.newProjectName}
                 className="px-3 py-1.5 border border-border rounded bg-surface text-text text-sm flex-1"
                 onKeyDown={(e) => { if (e.key === 'Enter') handleCreateProject(); }}
                 disabled={loading} />
               <button onClick={handleCreateProject}
                 disabled={loading || !newProjectName.trim()}
-                className="px-3 py-1.5 bg-primary text-white rounded text-sm font-medium disabled:opacity-50">Create</button>
+                className="px-3 py-1.5 bg-primary text-white rounded text-sm font-medium disabled:opacity-50">{t.create}</button>
             </div>
           </div>
           {projects.length > 0 ? (
@@ -361,9 +364,9 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
               <thead>
                 <tr className="border-b border-border">
                   <th className="text-left py-2 px-3 text-text-muted font-medium">Name</th>
-                  <th className="text-left py-2 px-3 text-text-muted font-medium">Sessions</th>
-                  <th className="text-left py-2 px-3 text-text-muted font-medium">Created</th>
-                  <th className="text-left py-2 px-3 text-text-muted font-medium">Actions</th>
+                  <th className="text-left py-2 px-3 text-text-muted font-medium">{t.sessions}</th>
+                  <th className="text-left py-2 px-3 text-text-muted font-medium">{t.created}</th>
+                  <th className="text-left py-2 px-3 text-text-muted font-medium">{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
@@ -373,38 +376,38 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                     <td className="py-2 px-3 text-text">{proj.session_count}</td>
                     <td className="py-2 px-3 text-text-muted">{new Date(proj.created_at).toLocaleDateString()}</td>
                     <td className="py-2 px-3 flex gap-2">
-                      <button onClick={() => handleViewProject(proj.id)} className="text-primary hover:text-primary/80 text-xs font-medium">View</button>
-                      <button onClick={() => handleDeleteProject(proj.id, proj.name)} className="text-red-600 hover:text-red-800 text-xs font-medium">Delete</button>
+                      <button onClick={() => handleViewProject(proj.id)} className="text-primary hover:text-primary/80 text-xs font-medium">{t.view}</button>
+                      <button onClick={() => handleDeleteProject(proj.id, proj.name)} className="text-red-600 hover:text-red-800 text-xs font-medium">{t.delete}</button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           ) : (
-            <div className="text-text-muted text-sm text-center py-6">No projects yet.</div>
+            <div className="text-text-muted text-sm text-center py-6">{t.noProjectsYet}</div>
           )}
         </div>
 
         {/* ── Sessions ── */}
         <div className="panel">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-text">Sessions</h2>
+            <h2 className="text-xl font-semibold text-text">{t.sessions}</h2>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-text-muted">{sessions.length} session(s)</span>
+              <span className="text-xs text-text-muted">{t.nSessions(sessions.length)}</span>
               {checkedSessions.size > 0 && (
                 <>
                   <ProjectPicker
                     projects={projects}
                     disabled={loading}
                     onSelect={(pid, pname) => handleBulkAddToProject(pid, pname)}
-                    label={`Add Selected (${checkedSessions.size}) to Project`}
+                    label={t.addSelectedToProject(checkedSessions.size)}
                   />
                   <button
                     onClick={handleBulkDelete}
                     disabled={loading}
                     className="px-2.5 py-1 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 disabled:opacity-50"
                   >
-                    Delete Selected ({checkedSessions.size})
+                    {t.deleteSelected(checkedSessions.size)}
                   </button>
                 </>
               )}
@@ -421,12 +424,12 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                       onChange={toggleAll}
                       className="accent-primary" />
                   </th>
-                  <th className="text-left py-2 px-3 text-text-muted font-medium">Session</th>
-                  <th className="text-left py-2 px-3 text-text-muted font-medium">Instrument</th>
-                  <th className="text-left py-2 px-3 text-text-muted font-medium">Wells</th>
-                  <th className="text-left py-2 px-3 text-text-muted font-medium">Cycles</th>
-                  <th className="text-left py-2 px-3 text-text-muted font-medium">Uploaded</th>
-                  <th className="text-left py-2 px-3 text-text-muted font-medium">Actions</th>
+                  <th className="text-left py-2 px-3 text-text-muted font-medium">{t.session}</th>
+                  <th className="text-left py-2 px-3 text-text-muted font-medium">{t.instrument}</th>
+                  <th className="text-left py-2 px-3 text-text-muted font-medium">{t.wells}</th>
+                  <th className="text-left py-2 px-3 text-text-muted font-medium">{t.cycles}</th>
+                  <th className="text-left py-2 px-3 text-text-muted font-medium">{t.uploaded}</th>
+                  <th className="text-left py-2 px-3 text-text-muted font-medium">{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
@@ -443,7 +446,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                       <td className="py-2 px-3 text-text text-xs">
                         <span className="font-mono">{s.session_id.substring(0, 8)}</span>
                         {s.raw_filename && <span className="ml-1 text-text-muted">[{s.raw_filename}]</span>}
-                        {isActive && <span className="ml-1 text-[10px] text-primary font-medium">(active)</span>}
+                        {isActive && <span className="ml-1 text-[10px] text-primary font-medium">({t.active})</span>}
                       </td>
                       <td className="py-2 px-3 text-text">{s.instrument}</td>
                       <td className="py-2 px-3 text-text">{s.num_wells}</td>
@@ -454,14 +457,14 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                       <td className="py-2 px-3">
                         <div className="flex gap-2 items-center">
                           <button onClick={() => handleLoadSession(s.session_id)} disabled={loading}
-                            className="text-primary hover:text-primary/80 text-xs font-medium disabled:opacity-50">Load</button>
+                            className="text-primary hover:text-primary/80 text-xs font-medium disabled:opacity-50">{t.load}</button>
                           <ProjectPicker
                             projects={projects}
                             disabled={loading}
                             onSelect={(pid, pname) => handleAddToProject(s.session_id, pid, pname)}
                           />
                           <button onClick={() => handleDeleteSession(s.session_id)} disabled={loading}
-                            className="text-red-600 hover:text-red-800 text-xs font-medium disabled:opacity-50">Delete</button>
+                            className="text-red-600 hover:text-red-800 text-xs font-medium disabled:opacity-50">{t.delete}</button>
                         </div>
                       </td>
                     </tr>
@@ -470,7 +473,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
               </tbody>
             </table>
           ) : (
-            <div className="text-text-muted text-sm text-center py-6">No sessions. Upload a file first.</div>
+            <div className="text-text-muted text-sm text-center py-6">{t.noSessions}</div>
           )}
         </div>
       </div>
@@ -479,7 +482,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
 
   // ═══════════════════════════════════ Detail View ═══════════════════════════
   if (!currentProject || !summary) {
-    return <div className="p-6"><div className="panel"><div className="text-text-muted text-sm">Loading...</div></div></div>;
+    return <div className="p-6"><div className="panel"><div className="text-text-muted text-sm">{t.loading}</div></div></div>;
   }
 
   const totals = summary.plates.reduce(
@@ -500,12 +503,12 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
           <div className="flex items-center gap-4">
             <button onClick={handleBackToList}
               className="px-3 py-1.5 bg-surface border border-border rounded text-sm font-medium text-text hover:bg-bg">
-              &#8592; Back
+              &#8592; {t.back}
             </button>
             <h2 className="text-xl font-semibold text-text">{currentProject.name}</h2>
           </div>
           <button onClick={handleExportCsv}
-            className="px-3 py-1.5 bg-primary text-white rounded text-sm font-medium">Export CSV</button>
+            className="px-3 py-1.5 bg-primary text-white rounded text-sm font-medium">{t.exportCSVBtn}</button>
         </div>
 
         {/* Add Session */}
@@ -514,7 +517,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
             onChange={(e) => setSelectedSession(e.target.value)}
             className="px-3 py-1.5 border border-border rounded bg-surface text-text text-sm flex-1"
             disabled={loading || availableSessions.length === 0}>
-            <option value="">{availableSessions.length === 0 ? 'No available sessions' : 'Select session to add...'}</option>
+            <option value="">{availableSessions.length === 0 ? t.noAvailableSessions : t.selectSessionToAdd}</option>
             {availableSessions.map((s) => (
               <option key={s.session_id} value={s.session_id}>
                 {fmtSession(s.session_id, s.raw_filename)} - {s.instrument} ({s.num_wells} wells)
@@ -522,7 +525,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
             ))}
           </select>
           <button onClick={handleAddSession} disabled={loading || !selectedSession}
-            className="px-3 py-1.5 bg-primary text-white rounded text-sm font-medium disabled:opacity-50">Add</button>
+            className="px-3 py-1.5 bg-primary text-white rounded text-sm font-medium disabled:opacity-50">{t.add}</button>
         </div>
 
         {/* Bulk remove bar */}
@@ -533,7 +536,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
               disabled={loading}
               className="px-2.5 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700 disabled:opacity-50"
             >
-              Remove Selected ({checkedDetailSessions.size}) from Project
+              {t.removeSelectedFromProject(checkedDetailSessions.size)}
             </button>
           </div>
         )}
@@ -541,7 +544,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
         {summary.concordance.total_compared > 0 && (
           <div className="mb-4">
             <span className={`px-2 py-1 border rounded text-xs font-medium ${getConcordanceColor(summary.concordance.percentage)}`}>
-              Concordance: {summary.concordance.concordant_wells}/{summary.concordance.total_compared} ({summary.concordance.percentage.toFixed(1)}%)
+              {t.concordance}: {summary.concordance.concordant_wells}/{summary.concordance.total_compared} ({summary.concordance.percentage.toFixed(1)}%)
             </span>
           </div>
         )}
@@ -569,16 +572,16 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                     }}
                     className="accent-primary" />
                 </th>
-                <th className="text-left py-2 px-3 text-text-muted font-medium">Session</th>
-                <th className="text-left py-2 px-3 text-text-muted font-medium">Instrument</th>
-                <th className="text-left py-2 px-3 text-text-muted font-medium">Wells</th>
+                <th className="text-left py-2 px-3 text-text-muted font-medium">{t.session}</th>
+                <th className="text-left py-2 px-3 text-text-muted font-medium">{t.instrument}</th>
+                <th className="text-left py-2 px-3 text-text-muted font-medium">{t.wells}</th>
                 <th className="text-left py-2 px-3 text-text-muted font-medium">AA</th>
                 <th className="text-left py-2 px-3 text-text-muted font-medium">AB</th>
                 <th className="text-left py-2 px-3 text-text-muted font-medium">BB</th>
-                <th className="text-left py-2 px-3 text-text-muted font-medium">NTC</th>
-                <th className="text-left py-2 px-3 text-text-muted font-medium">Unknown</th>
-                <th className="text-left py-2 px-3 text-text-muted font-medium">Quality</th>
-                <th className="text-left py-2 px-3 text-text-muted font-medium">Actions</th>
+                <th className="text-left py-2 px-3 text-text-muted font-medium">{t.wellTypeNTC}</th>
+                <th className="text-left py-2 px-3 text-text-muted font-medium">{t.wellTypeUnknown}</th>
+                <th className="text-left py-2 px-3 text-text-muted font-medium">{t.score}</th>
+                <th className="text-left py-2 px-3 text-text-muted font-medium">{t.actions}</th>
               </tr>
             </thead>
             <tbody>
@@ -602,7 +605,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                     <td className="py-2 px-3 text-text text-xs">
                       <span className="font-mono">{plate.session_id.substring(0, 8)}</span>
                       {fn && <span className="ml-1 text-text-muted">[{fn}]</span>}
-                      {isActive && <span className="ml-1 text-[10px] text-primary font-medium">(active)</span>}
+                      {isActive && <span className="ml-1 text-[10px] text-primary font-medium">({t.active})</span>}
                     </td>
                     <td className="py-2 px-3 text-text">{plate.instrument}</td>
                     <td className="py-2 px-3 text-text">{plate.num_wells}</td>
@@ -617,11 +620,11 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                     <td className="py-2 px-3">
                       <div className="flex gap-2">
                         <button onClick={() => handleLoadSession(plate.session_id)} disabled={loading || plate.missing}
-                          className="text-primary hover:text-primary/80 text-xs font-medium disabled:opacity-50">Load</button>
+                          className="text-primary hover:text-primary/80 text-xs font-medium disabled:opacity-50">{t.load}</button>
                         <button onClick={() => handleRemoveSession(plate.session_id)} disabled={loading}
-                          className="text-text-muted hover:text-text text-xs font-medium disabled:opacity-50">Remove</button>
+                          className="text-text-muted hover:text-text text-xs font-medium disabled:opacity-50">{t.remove}</button>
                         <button onClick={() => handleDeleteSession(plate.session_id)} disabled={loading}
-                          className="text-red-600 hover:text-red-800 text-xs font-medium disabled:opacity-50">Delete</button>
+                          className="text-red-600 hover:text-red-800 text-xs font-medium disabled:opacity-50">{t.delete}</button>
                       </div>
                     </td>
                   </tr>
@@ -629,7 +632,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
               })}
               <tr className="border-t-2 border-border bg-surface">
                 <td className="py-2 px-2"></td>
-                <td className="py-2 px-3 text-text font-semibold">TOTAL</td>
+                <td className="py-2 px-3 text-text font-semibold">{t.total}</td>
                 <td className="py-2 px-3"></td>
                 <td className="py-2 px-3 text-text font-semibold">{totals.wells}</td>
                 <td className="py-2 px-3 text-text font-semibold">{totals.aa}</td>
@@ -643,7 +646,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
             </tbody>
           </table>
         ) : (
-          <div className="text-text-muted text-sm text-center py-8">No sessions in this project.</div>
+          <div className="text-text-muted text-sm text-center py-8">{t.noSessionsInProject}</div>
         )}
       </div>
     </div>

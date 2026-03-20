@@ -4,6 +4,8 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useDarkMode } from "@/hooks/use-dark-mode";
 import { useExports } from "@/hooks/use-exports";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
+import { useI18n } from "@/hooks/use-i18n";
+import { useLanguageStore } from "@/stores/language-store";
 import { QcBadges } from "@/components/shared/QcBadges";
 import { AddToProjectButton } from "@/components/analysis/AddToProjectButton";
 import { logout } from "@/lib/api";
@@ -15,6 +17,8 @@ export function Header() {
   const { isDark, toggle: toggleDarkMode } = useDarkMode();
   const { downloadCSV, exportPNG, exportPDF, printReport } = useExports();
   const { undo, redo, canUndo, canRedo } = useUndoRedo();
+  const { t } = useI18n();
+  const { language, setLanguage } = useLanguageStore();
 
   const user = useAuthStore((s) => s.user);
   const clearAuth = useAuthStore((s) => s.clearAuth);
@@ -39,7 +43,7 @@ export function Header() {
         await fn();
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
-        alert(`${label} failed: ${msg}`);
+        alert(t.exportFailed(label, msg));
       }
     },
     []
@@ -48,7 +52,7 @@ export function Header() {
   return (
     <header className="bg-surface border-b border-border px-6 py-3 flex items-center gap-4">
       <h1 className="text-lg font-semibold text-text">
-        ASG-PCR SNP Discrimination Analyzer
+        {t.appTitle}
       </h1>
       <a
         href="https://www.invirustech.com"
@@ -56,7 +60,7 @@ export function Header() {
         rel="noopener"
         className="ml-auto text-xs text-text-muted border border-border rounded-xl px-2.5 py-0.5 hover:text-primary hover:border-primary transition-colors no-underline"
       >
-        Powered by Invirustech
+        {t.poweredBy}
       </a>
 
       <div id="session-info" className={`flex gap-2 items-center ${!sessionInfo ? "hidden" : ""}`}>
@@ -66,10 +70,10 @@ export function Header() {
             {sessionInfo.instrument}
           </span>
           <span id="wells-badge" className="badge">
-            {sessionInfo.num_wells} wells
+            {sessionInfo.num_wells} {t.wells}
           </span>
           <span id="cycles-badge" className="badge">
-            {sessionInfo.num_cycles} cycles
+            {sessionInfo.num_cycles} {t.cycles}
           </span>
           <QcBadges />
           </>
@@ -81,61 +85,61 @@ export function Header() {
           <button
             id="undo-btn"
             className="badge cursor-pointer hover:text-primary hover:border-primary transition-all disabled:opacity-40 disabled:cursor-default"
-            title="Undo (Ctrl+Z)"
+            title={t.undoTooltip}
             onClick={undo}
             disabled={!canUndo}
           >
-            Undo
+            {t.undo}
           </button>
           <button
             id="redo-btn"
             className="badge cursor-pointer hover:text-primary hover:border-primary transition-all disabled:opacity-40 disabled:cursor-default"
-            title="Redo (Ctrl+Shift+Z)"
+            title={t.redoTooltip}
             onClick={redo}
             disabled={!canRedo}
           >
-            Redo
+            {t.redo}
           </button>
           <span className="w-px bg-border mx-1" />
           <button
             id="export-csv-btn"
             className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
-            title="Export CSV (Ctrl+E)"
-            onClick={safeExport(downloadCSV, "CSV export")}
+            title={t.exportCSVTooltip}
+            onClick={safeExport(downloadCSV, t.csvExportFailed)}
           >
-            CSV
+            {t.exportCSV}
           </button>
           <button
             id="export-png-btn"
             className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
-            title="Export scatter PNG"
-            onClick={safeExport(exportPNG, "PNG export")}
+            title={t.exportPNGTooltip}
+            onClick={safeExport(exportPNG, t.pngExportFailed)}
           >
-            PNG
+            {t.exportPNG}
           </button>
           <button
             id="export-print-btn"
             className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
-            title="Print report"
+            title={t.exportPrintTooltip}
             onClick={printReport}
           >
-            Print
+            {t.exportPrint}
           </button>
           <button
             id="export-pdf-btn"
             className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
-            title="Export PDF report"
-            onClick={safeExport(exportPDF, "PDF export")}
+            title={t.exportPDFTooltip}
+            onClick={safeExport(exportPDF, t.pdfExportFailed)}
           >
-            PDF
+            {t.exportPDF}
           </button>
           <button
             id="new-upload-btn"
             className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
-            title="Upload another file"
+            title={t.uploadAnother}
             onClick={handleNewUpload}
           >
-            + New
+            {t.newUpload}
           </button>
           <span className="w-px bg-border mx-1" />
           <AddToProjectButton />
@@ -156,17 +160,24 @@ export function Header() {
           <button
             onClick={handleLogout}
             className="text-xs text-text-muted hover:text-red-500 cursor-pointer transition-colors"
-            title="Sign out"
+            title={t.signOut}
           >
-            Logout
+            {t.logout}
           </button>
         </div>
       )}
 
       <button
+        onClick={() => setLanguage(language === 'en' ? 'ko' : 'en')}
+        title={language === 'en' ? '한국어로 전환' : 'Switch to English'}
+        className="bg-transparent border border-border rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-xs font-bold hover:bg-bg hover:border-primary transition-colors ml-2"
+      >
+        {language === 'en' ? '한' : 'EN'}
+      </button>
+      <button
         id="dark-mode-toggle"
         onClick={toggleDarkMode}
-        title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+        title={isDark ? t.lightMode : t.darkMode}
         className="bg-transparent border border-border rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-base hover:bg-bg hover:border-primary transition-colors ml-2"
       >
         {isDark ? "\u2600\uFE0F" : "\uD83C\uDF19"}

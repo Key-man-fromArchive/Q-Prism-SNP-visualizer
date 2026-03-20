@@ -118,6 +118,7 @@ app = FastAPI(title="ASG-PCR SNP Discrimination Analyzer", lifespan=lifespan)
 
 app.include_router(auth_router.router)
 app.include_router(users.router)
+app.include_router(users.admin_router)
 app.include_router(upload.router)
 app.include_router(data.router)
 app.include_router(clustering.router)

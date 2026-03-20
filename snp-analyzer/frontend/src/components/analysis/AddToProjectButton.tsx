@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSessionStore } from '@/stores/session-store';
 import { getProjects, addProjectSession } from '@/lib/api';
+import { useI18n } from '@/hooks/use-i18n';
 
 type ProjectItem = { id: string; name: string; session_count: number };
 
 export function AddToProjectButton() {
+  const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
@@ -29,7 +31,7 @@ export function AddToProjectButton() {
       setStatus(null);
       setOpen(true);
     } catch {
-      setStatus('Failed to load projects');
+      setStatus(t.failedToLoadProjects);
     }
   };
 
@@ -37,7 +39,7 @@ export function AddToProjectButton() {
     if (!sessionId) return;
     try {
       await addProjectSession(projectId, sessionId);
-      setStatus(`Added to "${projectName}"`);
+      setStatus(t.addedTo(projectName));
       // Refresh project list to update counts
       const data = await getProjects();
       setProjects(data.projects);
@@ -54,19 +56,19 @@ export function AddToProjectButton() {
       <button
         onClick={handleOpen}
         className="badge cursor-pointer hover:text-primary hover:border-primary transition-all text-xs"
-        title="Add this session to a project"
+        title={t.addThisToProject}
       >
-        + Project
+        {t.plusProject}
       </button>
 
       {open && (
         <div className="absolute top-full right-0 mt-1 w-56 bg-surface border border-border rounded shadow-lg z-50">
           <div className="px-3 py-2 border-b border-border text-xs text-text-muted font-medium">
-            Add to project
+            {t.addToProject}
           </div>
           {projects.length === 0 ? (
             <div className="px-3 py-3 text-xs text-text-muted">
-              No projects. Create one in the Project tab.
+              {t.noProjectsCreate}
             </div>
           ) : (
             <div className="max-h-48 overflow-y-auto">

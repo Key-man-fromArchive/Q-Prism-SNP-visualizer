@@ -6,6 +6,7 @@ services:
     volumes:
       - ./app:/app/app
       - snp-data:/app/data
+      - ./pcrd-pw.txt:/app/secrets/pcrd-pw.txt:ro
     env_file:
       - .env
     environment:

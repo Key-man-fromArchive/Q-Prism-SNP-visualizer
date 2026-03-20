@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -14,6 +15,7 @@ import { WellTypePopup } from "./WellTypePopup";
 import { GroupManager } from "./GroupManager";
 
 export function AnalysisTab() {
+  const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
   const wellGroups = useSessionStore((s) => s.wellGroups);
   const setWellGroups = useSessionStore((s) => s.setWellGroups);
@@ -130,13 +132,13 @@ export function AnalysisTab() {
         >
           {groupNames.length > 0 && (
             <>
-              <label className="text-xs text-text-muted font-medium">Group:</label>
+              <label className="text-xs text-text-muted font-medium">{t.group}</label>
               <select
                 className="px-2 py-1 border border-border rounded text-xs bg-surface text-text"
                 value={selectedGroup || ""}
                 onChange={(e) => setGroup(e.target.value || null)}
               >
-                <option value="">All Wells ({totalWells})</option>
+                <option value="">{t.allWells(totalWells)}</option>
                 {groupNames.map((name) => (
                   <option key={name} value={name}>
                     {name} ({wellGroups![name].length})
@@ -146,7 +148,7 @@ export function AnalysisTab() {
               <button
                 className="text-xs px-2 py-1 rounded border border-border bg-surface text-text hover:bg-bg cursor-pointer"
                 onClick={() => setShowGroupManager(true)}
-                title="Manage groups"
+                title={t.manageGroups}
               >
                 +
               </button>
@@ -156,9 +158,9 @@ export function AnalysisTab() {
             <button
               className="text-xs px-2 py-1 rounded border border-border bg-surface text-text hover:bg-bg cursor-pointer"
               onClick={() => setShowGroupManager(true)}
-              title="Create well groups"
+              title={t.createWellGroups}
             >
-              + Group
+              {t.plusGroup}
             </button>
           )}
           {hasEmptyWells && (
@@ -168,7 +170,7 @@ export function AnalysisTab() {
                 checked={showEmptyWells}
                 onChange={(e) => setShowEmptyWells(e.target.checked)}
               />
-              Show Empty
+              {t.showEmpty}
             </label>
           )}
         </div>

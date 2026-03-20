@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
+import { useI18n } from '@/hooks/use-i18n';
 
 export function CycleControl() {
+  const { t } = useI18n();
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const setCycle = useSelectionStore((s) => s.setCycle);
   const isPlaying = useSelectionStore((s) => s.isPlaying);
@@ -136,7 +138,7 @@ export function CycleControl() {
       {windowCycles > 1 && (
         <>
           <label id="cycle-label" className="text-sm text-text">
-            Cycle:{' '}
+            {t.cycle}{' '}
             <span id="cycle-value" className="font-medium">
               {relativeValue}
             </span>{' '}
@@ -147,7 +149,7 @@ export function CycleControl() {
               id="play-btn"
               className="w-8 h-8 flex items-center justify-center border border-border rounded bg-surface cursor-pointer text-text hover:bg-bg"
               onClick={() => setPlaying(!isPlaying)}
-              title="Play/Pause"
+              title={t.playPause}
             >
               {isPlaying ? '\u23F8' : '\u25B6'}
             </button>
