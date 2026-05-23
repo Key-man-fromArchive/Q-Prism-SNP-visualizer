@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.auth import AdminUser, create_user_in_db, hash_password, get_user_by_id
+from app.auth_security import validate_password_strength
 from app.db import get_db
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -125,8 +126,10 @@ async def admin_dashboard(admin: AdminUser):
 async def create_user(body: UserCreate, admin: AdminUser):
     if body.role not in ("admin", "user"):
         raise HTTPException(status_code=400, detail="Role must be 'admin' or 'user'")
-    if len(body.password) < 4:
-        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+    try:
+        validate_password_strength(body.password, username=body.username)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Check unique username
     conn = get_db()
@@ -172,8 +175,10 @@ async def update_user(user_id: str, body: UserUpdate, admin: AdminUser):
         updates.append("is_active = ?")
         params.append(int(body.is_active))
     if body.password is not None:
-        if len(body.password) < 4:
-            raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+        try:
+            validate_password_strength(body.password, username=user.username)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         updates.append("hashed_password = ?")
         params.append(hash_password(body.password))
 

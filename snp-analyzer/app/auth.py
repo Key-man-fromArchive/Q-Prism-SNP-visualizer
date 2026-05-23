@@ -16,6 +16,7 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 
 from app.db import get_db
+from app.auth_security import validate_password_strength
 
 # ---------------------------------------------------------------------------
 # Config
@@ -95,13 +96,14 @@ def decode_token(token: str) -> TokenData | None:
 # ---------------------------------------------------------------------------
 
 def set_auth_cookie(response: Response, token: str):
+    secure_cookie = os.environ.get("AUTH_COOKIE_SECURE", "").lower() in {"1", "true", "yes"}
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
         max_age=COOKIE_MAX_AGE,
         httponly=True,
         samesite="lax",
-        secure=False,  # Set True if using HTTPS
+        secure=secure_cookie,
         path="/",
     )
 
@@ -168,6 +170,7 @@ def create_user_in_db(
     display_name: str | None = None,
 ) -> str:
     """Create a user and return the new user id."""
+    validate_password_strength(password, username=username)
     conn = get_db()
     user_id = uuid.uuid4().hex[:12]
     hashed = hash_password(password)

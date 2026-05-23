@@ -475,7 +475,7 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
           onChange={(e) => setPassword(e.target.value)}
           className="px-2 py-1.5 bg-surface border border-border rounded text-sm text-text w-32 focus:outline-none focus:border-primary"
           required
-          minLength={4}
+          minLength={12}
         />
       </div>
       <div>

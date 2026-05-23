@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.routers import upload, data, clustering, export, qc, sample, compare, statistics, presets, quality, batch
 from app.routers import auth_router, users
+from app.auth_security import assert_auth_configuration
 
 
 def _ensure_admin():
@@ -90,6 +91,7 @@ async def lifespan(app: FastAPI):
     # Startup: init DB and restore sessions
     from app.db import init_db, load_all_sessions
 
+    assert_auth_configuration()
     init_db()
     _ensure_admin()
     _migrate_projects_json()
@@ -115,6 +117,17 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ASG-PCR SNP Discrimination Analyzer", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    if request.url.path.startswith("/api/auth/"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    return response
 
 app.include_router(auth_router.router)
 app.include_router(users.router)
