@@ -12,7 +12,8 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.auth import CurrentUser, check_project_access
+from app.auth import CurrentUser, check_project_access, check_session_access
+from app.config import is_asg_launch_mode
 from app.db import get_db
 from app.processing.genotype import count_genotypes, get_effective_types
 from app.processing.quality import score_all_wells
@@ -96,6 +97,13 @@ def _get_raw_filenames(sids_list: list[str]) -> dict[str, str]:
     return {r["session_id"]: r["raw_filename"] or "" for r in rows}
 
 
+def _validate_project_session_ids(session_ids: list[str], current_user: CurrentUser) -> None:
+    for sid in session_ids:
+        if sid not in sessions:
+            raise HTTPException(404, "Session not found")
+        check_session_access(sid, current_user)
+
+
 # ---------------------------------------------------------------------------
 # CRUD endpoints
 # ---------------------------------------------------------------------------
@@ -106,7 +114,7 @@ async def list_projects(current_user: CurrentUser):
     Regular users see only their own; admin sees all.
     """
     conn = get_db()
-    if current_user.role == "admin":
+    if current_user.role == "admin" and not is_asg_launch_mode():
         rows = conn.execute("SELECT id, name, user_id, created_at FROM projects ORDER BY created_at DESC").fetchall()
     else:
         rows = conn.execute(
@@ -136,13 +144,15 @@ async def create_project(body: ProjectCreate, current_user: CurrentUser):
     project_id = uuid.uuid4().hex[:12]
     created_at = datetime.now(timezone.utc).isoformat()
 
+    if body.session_ids:
+        _validate_project_session_ids(body.session_ids, current_user)
+
     conn.execute(
         "INSERT INTO projects (id, name, user_id, created_at) VALUES (?, ?, ?, ?)",
         (project_id, body.name, current_user.user_id, created_at),
     )
     conn.commit()
 
-    # Add initial sessions if provided
     if body.session_ids:
         _set_session_ids(project_id, body.session_ids)
 
@@ -208,6 +218,7 @@ async def update_project(project_id: str, body: ProjectUpdate, current_user: Cur
         project["name"] = body.name
 
     if body.session_ids is not None:
+        _validate_project_session_ids(body.session_ids, current_user)
         _set_session_ids(project_id, body.session_ids)
 
     sids = body.session_ids if body.session_ids is not None else _get_session_ids(project_id)
@@ -248,6 +259,7 @@ async def bulk_add_sessions_to_project(project_id: str, body: BulkSessionsReques
     for sid in body.session_ids:
         if sid not in sessions:
             continue  # skip missing sessions silently
+        check_session_access(sid, current_user)
         if sid not in existing:
             sids.append(sid)
             existing.add(sid)
@@ -277,6 +289,7 @@ async def add_session_to_project(project_id: str, sid: str, current_user: Curren
     """Add a session to a project."""
     if sid not in sessions:
         raise HTTPException(404, "Session not found")
+    check_session_access(sid, current_user)
 
     check_project_access(project_id, current_user)
     _get_project_or_404(project_id)

@@ -74,7 +74,8 @@ def get_client_ip(request: Request) -> str:
 
 
 def _prune(bucket: dict[str, list[float]], key: str, now: float) -> list[float]:
-    attempts = [ts for ts in bucket.get(key, []) if now - ts <= WINDOW_SECONDS]
+    window_seconds = _int_env("AUTH_WINDOW_SECONDS", WINDOW_SECONDS)
+    attempts = [ts for ts in bucket.get(key, []) if now - ts <= window_seconds]
     bucket[key] = attempts
     return attempts
 
@@ -105,13 +106,14 @@ def record_login_failure(username: str, ip: str):
 
     user_attempts = _prune(_user_failures, user_key, now)
     user_attempts.append(now)
-    if len(user_attempts) >= MAX_USER_FAILURES:
-        _user_locks[user_key] = now + LOCK_SECONDS
+    lock_seconds = _int_env("AUTH_LOCK_SECONDS", LOCK_SECONDS)
+    if len(user_attempts) >= _int_env("AUTH_MAX_USER_FAILURES", MAX_USER_FAILURES):
+        _user_locks[user_key] = now + lock_seconds
 
     ip_attempts = _prune(_ip_failures, ip, now)
     ip_attempts.append(now)
-    if len(ip_attempts) >= MAX_IP_FAILURES:
-        _ip_locks[ip] = now + LOCK_SECONDS
+    if len(ip_attempts) >= _int_env("AUTH_MAX_IP_FAILURES", MAX_IP_FAILURES):
+        _ip_locks[ip] = now + lock_seconds
 
 
 def record_login_success(username: str, ip: str):
@@ -121,10 +123,12 @@ def record_login_success(username: str, ip: str):
 
 
 def validate_password_strength(password: str, username: str = ""):
-    if len(password) < MIN_PASSWORD_LENGTH:
-        raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
-    if len(password) > MAX_PASSWORD_LENGTH:
-        raise ValueError(f"Password must be at most {MAX_PASSWORD_LENGTH} characters")
+    min_length = _int_env("AUTH_MIN_PASSWORD_LENGTH", MIN_PASSWORD_LENGTH)
+    max_length = _int_env("AUTH_MAX_PASSWORD_LENGTH", MAX_PASSWORD_LENGTH)
+    if len(password) < min_length:
+        raise ValueError(f"Password must be at least {min_length} characters")
+    if len(password) > max_length:
+        raise ValueError(f"Password must be at most {max_length} characters")
 
     lower = password.casefold()
     if lower in COMMON_WEAK_PASSWORDS:

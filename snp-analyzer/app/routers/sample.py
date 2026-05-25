@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.auth import CurrentUser, check_session_access
+from app.config import is_asg_launch_mode
 from app.routers.upload import sessions
 
 router = APIRouter()
@@ -82,7 +83,7 @@ async def list_sessions(current_user: CurrentUser):
     # Load raw_filename and created_at from DB for all sessions
     from app.db import get_db
     conn = get_db()
-    if current_user.role == "admin":
+    if current_user.role == "admin" and not is_asg_launch_mode():
         db_rows = conn.execute(
             "SELECT session_id, raw_filename, created_at FROM sessions"
         ).fetchall()
@@ -154,14 +155,16 @@ async def bulk_delete_sessions(body: BulkDeleteRequest, current_user: CurrentUse
         return {"status": "ok", "deleted": 0}
 
     # Filter to only sessions the user owns (admin can delete all)
-    if current_user.role == "admin":
+    if current_user.role == "admin" and not is_asg_launch_mode():
         sids_to_delete = body.session_ids
     else:
-        from app.db import get_session_owner
-        sids_to_delete = [
-            sid for sid in body.session_ids
-            if get_session_owner(sid) in (current_user.user_id, None)
-        ]
+        sids_to_delete = []
+        for sid in body.session_ids:
+            try:
+                check_session_access(sid, current_user)
+            except HTTPException:
+                continue
+            sids_to_delete.append(sid)
     if not sids_to_delete:
         return {"status": "ok", "deleted": 0}
 

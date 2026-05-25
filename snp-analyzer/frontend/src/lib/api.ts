@@ -24,7 +24,14 @@ import type {
   ProjectResponse,
   ProjectSummaryResponse,
 } from '@/types/api';
-import type { LoginRequest, LoginResponse, UserListItem, AdminDashboardResponse } from '@/types/auth';
+import type {
+  ASGLaunchResponse,
+  AuthConfigResponse,
+  LoginRequest,
+  LoginResponse,
+  UserListItem,
+  AdminDashboardResponse
+} from '@/types/auth';
 import { useAuthStore } from '@/stores/auth-store';
 
 /**
@@ -32,7 +39,7 @@ import { useAuthStore } from '@/stores/auth-store';
  */
 function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
   const entries = Object.entries(params)
-    .filter(([_, value]) => value !== undefined)
+    .filter(([, value]) => value !== undefined)
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
 
   return entries.length > 0 ? `?${entries.join('&')}` : '';
@@ -524,6 +531,18 @@ export async function login(req: LoginRequest): Promise<LoginResponse> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
+  });
+}
+
+export async function getAuthConfig(): Promise<AuthConfigResponse> {
+  return apiFetch<AuthConfigResponse>('/api/auth/config');
+}
+
+export async function asgLaunch(token: string): Promise<ASGLaunchResponse> {
+  return apiFetch<ASGLaunchResponse>('/api/auth/asg-launch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
   });
 }
 

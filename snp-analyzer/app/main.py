@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from app.routers import upload, data, clustering, export, qc, sample, compare, statistics, presets, quality, batch
 from app.routers import auth_router, users
 from app.auth_security import assert_auth_configuration
+from app.config import is_asg_launch_mode
 
 
 def _ensure_admin():
@@ -93,7 +94,8 @@ async def lifespan(app: FastAPI):
 
     assert_auth_configuration()
     init_db()
-    _ensure_admin()
+    if not is_asg_launch_mode():
+        _ensure_admin()
     _migrate_projects_json()
 
     for entry in load_all_sessions():
@@ -121,6 +123,11 @@ app = FastAPI(title="ASG-PCR SNP Discrimination Analyzer", lifespan=lifespan)
 
 @app.middleware("http")
 async def add_security_headers(request, call_next):
+    if is_asg_launch_mode() and _is_disabled_local_auth_path(request.url.path):
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse({"detail": "Local auth endpoint disabled"}, status_code=404)
+
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
@@ -128,6 +135,16 @@ async def add_security_headers(request, call_next):
     if request.url.path.startswith("/api/auth/"):
         response.headers.setdefault("Cache-Control", "no-store")
     return response
+
+
+def _is_disabled_local_auth_path(path: str) -> bool:
+    if path in {"/api/auth/login", "/api/auth/change-password"}:
+        return True
+    if path == "/api/users" or path.startswith("/api/users/"):
+        return True
+    if path == "/api/admin" or path.startswith("/api/admin/"):
+        return True
+    return False
 
 app.include_router(auth_router.router)
 app.include_router(users.router)

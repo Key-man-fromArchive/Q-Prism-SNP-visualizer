@@ -16,15 +16,25 @@ production start.
 `SNP_AUTH_MODE` currently supports:
 
 - `local`: SNP Analyze manages local users and JWT cookies.
-- `asg_launch`: reserved for ASG launch-token SSO integration.
+- `asg_launch`: accepts one-time launch tokens from ASG Designer and creates
+  local shadow users with SNP `user` privileges.
 
 All modes require a non-default `JWT_SECRET_KEY` of at least 32 characters at
 startup. Do not map ASG administrators to SNP Analyze administrators without an
 explicit authorization decision.
 
-`asg_launch` is not production-usable until P4 adds launch-token exchange and
-disables local login, password changes, local user management, and startup admin
-creation for integrated deployments.
+In `asg_launch` mode, configure:
+
+```bash
+ASG_BASE_URL=http://asg-saas-v2-web:8000
+ASG_SNP_SERVICE_SECRET=<same secret as ASG SNP_ANALYZE_SERVICE_SECRET>
+ASG_SESSION_EXPIRY_MINUTES=60
+SNP_COOKIE_PATH=/
+```
+
+Local login, password changes, local user management, admin dashboards, and
+startup admin creation are disabled in `asg_launch` mode. Existing local-mode
+JWT cookies are rejected after switching to `asg_launch`.
 
 ## Upload limits
 

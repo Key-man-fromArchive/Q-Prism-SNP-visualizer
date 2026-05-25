@@ -21,6 +21,7 @@ export function Header() {
   const { language, setLanguage } = useLanguageStore();
 
   const user = useAuthStore((s) => s.user);
+  const linkedContext = useAuthStore((s) => s.linkedContext);
   const clearAuth = useAuthStore((s) => s.clearAuth);
 
   const handleNewUpload = () => {
@@ -46,7 +47,7 @@ export function Header() {
         alert(t.exportFailed(label, msg));
       }
     },
-    []
+    [t]
   );
 
   return (
@@ -62,6 +63,19 @@ export function Header() {
       >
         {t.poweredBy}
       </a>
+
+      {linkedContext && (
+        <div className="hidden lg:flex items-center gap-1 text-xs text-text-muted border border-border rounded px-2 py-1">
+          <span>{linkedContext.target_type}</span>
+          <span className="text-text">{linkedContext.target_id}</span>
+          {typeof linkedContext.context.tag === "string" && (
+            <span className="badge">{linkedContext.context.tag}</span>
+          )}
+          {typeof linkedContext.context.marker_id === "string" && (
+            <span>{linkedContext.context.marker_id}</span>
+          )}
+        </div>
+      )}
 
       <div id="session-info" className={`flex gap-2 items-center ${!sessionInfo ? "hidden" : ""}`}>
         {sessionInfo && (

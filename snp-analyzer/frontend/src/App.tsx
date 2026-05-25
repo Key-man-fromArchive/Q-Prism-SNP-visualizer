@@ -3,7 +3,7 @@ import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useAuthStore } from "@/stores/auth-store";
-import { setWellTypes, getMe } from "@/lib/api";
+import { asgLaunch, getAuthConfig, setWellTypes, getMe } from "@/lib/api";
 import { Header } from "@/components/layout/Header";
 import { UploadZone } from "@/components/upload/UploadZone";
 import { TabNavigation, type TabId } from "@/components/layout/TabNavigation";
@@ -21,6 +21,7 @@ import { useExports } from "@/hooks/use-exports";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
 import { useDarkMode } from "@/hooks/use-dark-mode";
 import { useI18n } from "@/hooks/use-i18n";
+import type { WellType } from "@/types/api";
 import { KeyboardHelpOverlay } from "@/components/shared/KeyboardHelpOverlay";
 
 export default function App() {
@@ -39,14 +40,44 @@ export default function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
   const setUser = useAuthStore((s) => s.setUser);
+  const setAuthMode = useAuthStore((s) => s.setAuthMode);
+  const setLinkedContext = useAuthStore((s) => s.setLinkedContext);
+  const setLoading = useAuthStore((s) => s.setLoading);
   const clearAuth = useAuthStore((s) => s.clearAuth);
+  const authMode = useAuthStore((s) => s.authMode);
+  const [launchError, setLaunchError] = useState<string | null>(null);
 
-  // Check auth on mount
+  // Check auth or exchange a one-time ASG launch token on mount.
   useEffect(() => {
-    getMe()
-      .then((res) => setUser(res.user))
-      .catch(() => clearAuth());
-  }, [setUser, clearAuth]);
+    const run = async () => {
+      try {
+        const config = await getAuthConfig();
+        setAuthMode(config.auth_mode);
+        const launchToken = readLaunchTokenFromUrl();
+
+        if (config.auth_mode === "asg_launch" && launchToken) {
+          const res = await asgLaunch(launchToken);
+          setUser(res.user);
+          setLinkedContext(res.linked_context);
+          removeLaunchTokenFromUrl();
+          return;
+        }
+
+        const res = await getMe();
+        setUser(res.user);
+      } catch (err) {
+        clearAuth();
+        if (readLaunchTokenFromUrl()) {
+          setLaunchError(err instanceof Error ? err.message : "ASG launch failed");
+          removeLaunchTokenFromUrl();
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    run();
+  }, [setUser, setAuthMode, setLinkedContext, setLoading, clearAuth]);
 
   // Track whether ROX was auto-set for THIS session (prevents overriding manual toggles)
   const roxAutoSetForSession = useRef<string | null>(null);
@@ -91,7 +122,7 @@ export default function App() {
         const wells = useSelectionStore.getState().selectedWells;
         if (!sid || wells.length === 0) return;
         try {
-          await setWellTypes(sid, { wells, well_type: type as any });
+          await setWellTypes(sid, { wells, well_type: type as WellType });
           useSelectionStore.getState().clearSelection();
           window.dispatchEvent(new CustomEvent("welltypes-changed"));
         } catch (err) {
@@ -115,6 +146,18 @@ export default function App() {
 
   // Show login page if not authenticated
   if (!isAuthenticated) {
+    if (authMode === "asg_launch") {
+      return (
+        <div className="min-h-screen bg-bg flex items-center justify-center px-6">
+          <div className="max-w-md text-center">
+            <h1 className="text-lg font-semibold text-text mb-2">ASG launch required</h1>
+            <p className="text-sm text-text-muted">
+              {launchError || "Open SNP Analyze from an ASG Designer marker, design result, or order item."}
+            </p>
+          </div>
+        </div>
+      );
+    }
     return <LoginPage />;
   }
 
@@ -148,4 +191,26 @@ export default function App() {
       {showHelp && <KeyboardHelpOverlay onClose={() => setShowHelp(false)} />}
     </div>
   );
+}
+
+function readLaunchTokenFromUrl(): string | null {
+  const queryToken = new URLSearchParams(window.location.search).get("token");
+  if (queryToken) return queryToken;
+
+  const hash = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  return new URLSearchParams(hash).get("token");
+}
+
+function removeLaunchTokenFromUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("token");
+  if (url.hash) {
+    const hashParams = new URLSearchParams(url.hash.slice(1));
+    hashParams.delete("token");
+    const nextHash = hashParams.toString();
+    url.hash = nextHash ? `#${nextHash}` : "";
+  }
+  window.history.replaceState({}, document.title, url.toString());
 }

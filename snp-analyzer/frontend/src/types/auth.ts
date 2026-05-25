@@ -5,6 +5,8 @@ export type User = {
   role: 'admin' | 'user';
 };
 
+export type AuthMode = 'local' | 'asg_launch';
+
 export type LoginRequest = {
   username: string;
   password: string;
@@ -12,6 +14,22 @@ export type LoginRequest = {
 
 export type LoginResponse = {
   user: User;
+};
+
+export type AuthConfigResponse = {
+  auth_mode: AuthMode;
+};
+
+export type LinkedASGContext = {
+  target_type: string;
+  target_id: string;
+  context: Record<string, unknown>;
+  scope: string[];
+  expires_at: string | null;
+};
+
+export type ASGLaunchResponse = LoginResponse & {
+  linked_context: LinkedASGContext;
 };
 
 export type UserListItem = {
