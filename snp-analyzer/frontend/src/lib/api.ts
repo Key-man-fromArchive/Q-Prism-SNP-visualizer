@@ -46,11 +46,25 @@ function buildQuery(params: Record<string, string | number | boolean | undefined
   return entries.length > 0 ? `?${entries.join('&')}` : '';
 }
 
+function trimTrailingSlash(value: string): string {
+  return value.endsWith("/") ? value.replace(/\/+$/, "") : value;
+}
+
+const defaultApiBase = `${import.meta.env.BASE_URL || "/"}api`;
+const apiBasePath = trimTrailingSlash(import.meta.env.VITE_API_BASE_PATH || defaultApiBase);
+
+function apiUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  const suffix = normalized === "/api" ? "" : normalized.replace(/^\/api(?=\/)/, "");
+  return `${apiBasePath}${suffix}`;
+}
+
 /**
  * Generic fetch wrapper with error handling and auth cookie support
  */
 async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetch(apiUrl(url), {
     ...init,
     credentials: 'same-origin',
   });
@@ -144,7 +158,7 @@ export async function exportPdf(
   useRox?: boolean
 ): Promise<Blob> {
   const query = buildQuery({ use_rox: useRox });
-  const res = await fetch(`/api/data/${sid}/export/pdf${query}`, { credentials: 'same-origin' });
+  const res = await fetch(apiUrl(`/api/data/${sid}/export/pdf${query}`), { credentials: 'same-origin' });
 
   if (!res.ok) {
     throw new Error(`Failed to export PDF: ${res.statusText}`);
@@ -264,7 +278,7 @@ export async function exportCsv(
   useRox?: boolean
 ): Promise<Blob> {
   const query = buildQuery({ cycle, use_rox: useRox });
-  const res = await fetch(`/api/data/${sid}/export/csv${query}`, { credentials: 'same-origin' });
+  const res = await fetch(apiUrl(`/api/data/${sid}/export/csv${query}`), { credentials: 'same-origin' });
 
   if (!res.ok) {
     throw new Error(`Failed to export CSV: ${res.statusText}`);

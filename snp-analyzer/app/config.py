@@ -37,6 +37,7 @@ MAX_ZIP_COMPRESSION_RATIO = _int_env("MAX_ZIP_COMPRESSION_RATIO", 100)
 ASG_BASE_URL = os.environ.get("ASG_BASE_URL", "http://asg-saas-v2-web:8000").rstrip("/")
 ASG_SNP_SERVICE_SECRET = os.environ.get("ASG_SNP_SERVICE_SECRET", "")
 ASG_CLIENT_TIMEOUT_SECONDS = _int_env("ASG_CLIENT_TIMEOUT_SECONDS", 5)
+SNP_ROOT_PATH = os.environ.get("SNP_ROOT_PATH", "").rstrip("/")
 SNP_COOKIE_PATH = os.environ.get("SNP_COOKIE_PATH", "/") or "/"
 
 

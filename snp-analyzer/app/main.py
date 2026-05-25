@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from app.routers import upload, data, clustering, export, qc, sample, compare, statistics, presets, quality, batch, asg
 from app.routers import auth_router, users
 from app.auth_security import assert_auth_configuration
-from app.config import is_asg_launch_mode
+from app.config import SNP_ROOT_PATH, is_asg_launch_mode
 
 
 def _ensure_admin():
@@ -118,7 +118,11 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="ASG-PCR SNP Discrimination Analyzer", lifespan=lifespan)
+app = FastAPI(
+    title="ASG-PCR SNP Discrimination Analyzer",
+    lifespan=lifespan,
+    root_path=SNP_ROOT_PATH,
+)
 
 
 @app.middleware("http")
