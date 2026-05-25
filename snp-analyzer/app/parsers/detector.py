@@ -1,10 +1,16 @@
 """Auto-detect instrument format and file type, with clear error messages."""
 
 import os
+from pathlib import PurePosixPath
 import zipfile
 
 import xlrd
 
+from app.config import (
+    MAX_ZIP_COMPRESSION_RATIO,
+    MAX_ZIP_ENTRIES,
+    MAX_ZIP_UNCOMPRESSED_BYTES,
+)
 from app.models import UnifiedData
 
 # QuantStudio valid file types (by header columns)
@@ -74,6 +80,8 @@ def _handle_eds(file_path: str) -> UnifiedData:
             "This .eds file appears to be corrupted (not a valid ZIP archive).\n"
             "Try re-exporting from QuantStudio."
         )
+    with zipfile.ZipFile(file_path, "r") as zf:
+        _validate_zip_archive(zf)
     return parse_eds(file_path)
 
 
@@ -86,7 +94,32 @@ def _handle_pcrd(file_path: str) -> UnifiedData:
             "This .pcrd file appears to be corrupted (not a valid ZIP archive).\n"
             "Try re-exporting from CFX Maestro."
         )
+    with zipfile.ZipFile(file_path, "r") as zf:
+        _validate_zip_archive(zf)
     return parse_pcrd(file_path)
+
+
+def _validate_zip_archive(zf: zipfile.ZipFile):
+    infos = zf.infolist()
+    if len(infos) > MAX_ZIP_ENTRIES:
+        raise ValueError(f"ZIP archive contains too many entries ({len(infos)} > {MAX_ZIP_ENTRIES})")
+
+    total_uncompressed = 0
+    for info in infos:
+        name = info.filename.replace("\\", "/")
+        path = PurePosixPath(name)
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError(f"ZIP archive contains unsafe path: {info.filename}")
+
+        total_uncompressed += info.file_size
+        if total_uncompressed > MAX_ZIP_UNCOMPRESSED_BYTES:
+            limit_mb = MAX_ZIP_UNCOMPRESSED_BYTES // (1024 * 1024)
+            raise ValueError(f"ZIP uncompressed size exceeds {limit_mb} MB")
+
+        if info.file_size > 0 and info.compress_size == 0:
+            raise ValueError(f"ZIP entry has unsafe compression ratio: {info.filename}")
+        if info.compress_size > 0 and info.file_size / info.compress_size > MAX_ZIP_COMPRESSION_RATIO:
+            raise ValueError(f"ZIP entry has unsafe compression ratio: {info.filename}")
 
 
 def _handle_zip(file_path: str, filename: str) -> UnifiedData:
@@ -100,6 +133,7 @@ def _handle_zip(file_path: str, filename: str) -> UnifiedData:
 
     # Quick check: does this ZIP contain any CFX XML patterns?
     with zipfile.ZipFile(file_path, "r") as zf:
+        _validate_zip_archive(zf)
         names = zf.namelist()
         has_cfx_xml = any(
             n.endswith("_ADSheet.xml") or
@@ -218,6 +252,14 @@ def _handle_cfx_opus(file_path: str, filename: str) -> UnifiedData:
     """Handle CFX Opus .xlsx files with smart detection."""
     from app.parsers.cfx_opus import parse_cfx_opus, parse_cfx_endpoint, parse_cfx_allelic
     from app.parsers.xlsx_fixer import needs_fixing, fix_cfx_xlsx
+
+    if not zipfile.is_zipfile(file_path):
+        raise ValueError(
+            "This .xlsx file appears to be corrupted (not a valid ZIP archive).\n"
+            "Try re-exporting from CFX Maestro."
+        )
+    with zipfile.ZipFile(file_path, "r") as zf:
+        _validate_zip_archive(zf)
 
     # Fix broken xlsx if needed
     fixed_path = None

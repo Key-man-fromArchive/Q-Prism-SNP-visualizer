@@ -5,6 +5,8 @@ from pathlib import Path
 
 import os as _os
 
+from app.config import SESSION_RETENTION_DAYS
+
 DB_PATH = Path(_os.environ.get("DB_PATH", str(Path(__file__).parent / "data" / "snp_analyzer.db")))
 
 _conn: sqlite3.Connection | None = None
@@ -173,6 +175,19 @@ def delete_well_groups(session_id: str):
     conn = get_db()
     conn.execute("DELETE FROM well_groups WHERE session_id = ?", (session_id,))
     conn.commit()
+
+
+def cleanup_sessions_older_than(days: int = SESSION_RETENTION_DAYS) -> int:
+    """Delete persisted sessions older than the configured retention window.
+
+    This only touches SQLite. Run it while the app process is stopped so the
+    process-local session caches cannot retain deleted sessions.
+    """
+    conn = get_db()
+    modifier = f"-{max(days, 1)} days"
+    cur = conn.execute("DELETE FROM sessions WHERE created_at < datetime('now', ?)", (modifier,))
+    conn.commit()
+    return cur.rowcount
 
 
 def load_all_sessions():

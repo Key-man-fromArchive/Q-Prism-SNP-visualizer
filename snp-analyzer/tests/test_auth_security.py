@@ -1,5 +1,6 @@
 import os
 import unittest
+from unittest.mock import patch
 
 
 class AuthSecurityTest(unittest.TestCase):
@@ -61,6 +62,34 @@ class AuthSecurityTest(unittest.TestCase):
             record_login_failure(username, ip)
 
         assert_login_allowed(username, ip)
+
+    def test_invalid_auth_mode_is_rejected(self):
+        from app.config import get_auth_mode
+
+        with patch.dict(os.environ, {"SNP_AUTH_MODE": "invalid"}, clear=False):
+            with self.assertRaises(RuntimeError) as ctx:
+                get_auth_mode()
+
+        self.assertIn("SNP_AUTH_MODE", str(ctx.exception))
+
+    def test_asg_launch_mode_rejects_default_jwt_secret(self):
+        from app.auth_security import assert_auth_configuration
+
+        defaults = [
+            "dev-secret-change-in-production",
+            "change-this-to-a-random-32-plus-character-secret",
+        ]
+        for secret in defaults:
+            env = {
+                "SNP_AUTH_MODE": "asg_launch",
+                "JWT_SECRET_KEY": secret,
+            }
+            with self.subTest(secret=secret):
+                with patch.dict(os.environ, env, clear=False):
+                    with self.assertRaises(RuntimeError) as ctx:
+                        assert_auth_configuration()
+
+                self.assertIn("JWT_SECRET_KEY", str(ctx.exception))
 
 
 if __name__ == "__main__":

@@ -5,7 +5,12 @@ import uuid
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
 from app.auth import CurrentUser
-from app.config import SUPPORTED_EXTENSIONS
+from app.config import (
+    MAX_UPLOAD_SIZE_BYTES,
+    SUPPORTED_EXTENSIONS,
+    SUPPORTED_UPLOAD_CONTENT_TYPES,
+    UPLOAD_CHUNK_SIZE,
+)
 from app.models import UploadResponse
 from app.parsers.detector import detect_and_parse
 
@@ -15,24 +20,57 @@ router = APIRouter()
 sessions: dict = {}
 
 
-@router.post("/api/upload", response_model=UploadResponse)
-async def upload_file(current_user: CurrentUser, file: UploadFile = File(...)):
+def _validate_upload_metadata(file: UploadFile) -> str:
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in SUPPORTED_EXTENSIONS:
         raise HTTPException(400, f"Unsupported file type: {ext}")
 
-    # Save to temp file
-    fd, tmp_path = tempfile.mkstemp(suffix=ext)
-    try:
-        content = await file.read()
-        os.write(fd, content)
-        os.close(fd)
+    content_type = (getattr(file, "content_type", "") or "").split(";", 1)[0].strip().lower()
+    if content_type and content_type not in SUPPORTED_UPLOAD_CONTENT_TYPES.get(ext, set()):
+        raise HTTPException(400, f"Unsupported content type for {ext}: {content_type}")
 
+    return ext
+
+
+async def _write_upload_to_temp(file: UploadFile, ext: str) -> str:
+    fd, tmp_path = tempfile.mkstemp(suffix=ext)
+    total_bytes = 0
+
+    try:
+        with os.fdopen(fd, "wb") as tmp:
+            while True:
+                chunk = await file.read(UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_UPLOAD_SIZE_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File is larger than the {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MB upload limit",
+                    )
+                tmp.write(chunk)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
+
+    return tmp_path
+
+
+@router.post("/api/upload", response_model=UploadResponse)
+async def upload_file(current_user: CurrentUser, file: UploadFile = File(...)):
+    ext = _validate_upload_metadata(file)
+
+    tmp_path = ""
+    try:
+        tmp_path = await _write_upload_to_temp(file, ext)
         unified = detect_and_parse(tmp_path, original_filename=file.filename or "")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(400, f"Failed to parse file: {e}")
     finally:
-        if os.path.exists(tmp_path):
+        if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
 
     session_id = uuid.uuid4().hex[:12]

@@ -13,6 +13,8 @@ services:
       - .env
     environment:
       - PYTHONDONTWRITEBYTECODE=1
+      - DB_PATH=/app/data/snp_analyzer.db
+      - SNP_AUTH_MODE=${SNP_AUTH_MODE:-local}
 
 volumes:
   snp-data:

@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 from fastapi import Request
 
+from app.config import get_auth_mode
+
 
 def _int_env(name: str, default: int) -> int:
     try:
@@ -33,6 +35,11 @@ COMMON_WEAK_PASSWORDS = {
     "qwerty",
     "test1234",
     "welcome",
+}
+
+UNSAFE_JWT_SECRETS = {
+    "dev-secret-change-in-production",
+    "change-this-to-a-random-32-plus-character-secret",
 }
 
 
@@ -130,8 +137,10 @@ def validate_password_strength(password: str, username: str = ""):
 
 
 def assert_auth_configuration():
+    get_auth_mode()
+
     jwt_secret = os.environ.get("JWT_SECRET_KEY", "")
-    if not jwt_secret or jwt_secret == "dev-secret-change-in-production" or len(jwt_secret) < 32:
+    if not jwt_secret or jwt_secret in UNSAFE_JWT_SECRETS or len(jwt_secret) < 32:
         raise RuntimeError("JWT_SECRET_KEY must be set to a strong non-default value")
 
     admin_password = os.environ.get("ADMIN_PASSWORD")
