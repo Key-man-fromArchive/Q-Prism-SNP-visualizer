@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import upload, data, clustering, export, qc, sample, compare, statistics, presets, quality, batch
+from app.routers import upload, data, clustering, export, qc, sample, compare, statistics, presets, quality, batch, asg
 from app.routers import auth_router, users
 from app.auth_security import assert_auth_configuration
 from app.config import is_asg_launch_mode
@@ -160,6 +160,7 @@ app.include_router(statistics.router)
 app.include_router(presets.router)
 app.include_router(quality.router)
 app.include_router(batch.router)
+app.include_router(asg.router)
 
 # Serve React build (default) or legacy static (USE_LEGACY=1)
 use_legacy = os.environ.get("USE_LEGACY", "").strip().lower() in ("1", "true", "yes")

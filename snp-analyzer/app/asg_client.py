@@ -36,11 +36,25 @@ class ASGLaunchContext:
 
 
 @dataclass(frozen=True)
+class ASGLaunchSaveCredential:
+    id: str
+    save_token: str
+
+
+@dataclass(frozen=True)
 class ASGLaunchValidation:
     user: ASGLaunchUser
     target: ASGLaunchContext
     scope: list[str]
+    launch: ASGLaunchSaveCredential | None = None
     expires_at: datetime | None = None
+
+
+class ASGResultSaveError(Exception):
+    def __init__(self, message: str, *, status_code: int = 502, code: str = "asg_result_save_failed"):
+        super().__init__(message)
+        self.status_code = status_code
+        self.code = code
 
 
 def validate_launch_token(raw_token: str) -> ASGLaunchValidation:
@@ -103,10 +117,18 @@ def validate_launch_token(raw_token: str) -> ASGLaunchValidation:
             target_id=str(target_data["target_id"]),
             context=dict(target_data.get("context") or {}),
         )
+        launch = None
+        launch_data = data.get("launch")
+        if isinstance(launch_data, dict):
+            launch = ASGLaunchSaveCredential(
+                id=str(launch_data["id"]),
+                save_token=str(launch_data["save_token"]),
+            )
         expires_at = _parse_datetime(data.get("expires_at"))
         return ASGLaunchValidation(
             user=user,
             target=target,
+            launch=launch,
             scope=list(data.get("scope") or []),
             expires_at=expires_at,
         )
@@ -116,6 +138,70 @@ def validate_launch_token(raw_token: str) -> ASGLaunchValidation:
             status_code=502,
             code="asg_response_invalid",
         ) from exc
+
+
+def post_analysis_result(payload: dict[str, Any]) -> dict[str, Any]:
+    if not config.ASG_SNP_SERVICE_SECRET:
+        raise ASGResultSaveError(
+            "ASG service secret is not configured",
+            status_code=503,
+            code="asg_secret_missing",
+        )
+
+    url = urljoin(f"{config.ASG_BASE_URL}/", "api/snp-analysis/runs/")
+    request = Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "X-ASG-SNP-Service-Secret": config.ASG_SNP_SERVICE_SECRET,
+        },
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=config.ASG_CLIENT_TIMEOUT_SECONDS) as response:
+            response_body = response.read()
+    except HTTPError as exc:
+        if exc.code in {400, 401, 403, 404, 410, 413}:
+            detail = _read_error_detail(exc)
+            raise ASGResultSaveError(
+                detail or "ASG rejected the analysis result",
+                status_code=exc.code,
+                code="asg_result_rejected",
+            ) from exc
+        raise ASGResultSaveError("ASG result save failed") from exc
+    except (TimeoutError, socket.timeout, URLError) as exc:
+        raise ASGResultSaveError(
+            "ASG result save timed out",
+            status_code=504,
+            code="asg_result_save_timeout",
+        ) from exc
+
+    try:
+        data = json.loads(response_body.decode("utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("ASG response must be an object")
+        return data
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise ASGResultSaveError(
+            "Malformed ASG result save response",
+            status_code=502,
+            code="asg_result_response_invalid",
+        ) from exc
+
+
+def _read_error_detail(exc: HTTPError) -> str:
+    try:
+        raw = exc.read()
+        data = json.loads(raw.decode("utf-8"))
+    except Exception:
+        return ""
+    if isinstance(data, dict):
+        detail = data.get("detail") or data.get("error")
+        if isinstance(detail, str):
+            return detail
+    return ""
 
 
 def _parse_datetime(value: Any) -> datetime | None:

@@ -49,6 +49,7 @@ export function GroupManager({ sessionId, onClose }: GroupManagerProps) {
       await createWellGroup(sessionId, newName.trim(), selectedWells);
       setNewName("");
       await fetchGroups();
+      window.dispatchEvent(new CustomEvent("asg-result-dirty"));
     } catch (err) {
       console.error("Failed to create group:", err);
     } finally {
@@ -61,6 +62,7 @@ export function GroupManager({ sessionId, onClose }: GroupManagerProps) {
     try {
       await deleteWellGroup(sessionId, name);
       await fetchGroups();
+      window.dispatchEvent(new CustomEvent("asg-result-dirty"));
     } catch (err) {
       console.error("Failed to delete group:", err);
     } finally {

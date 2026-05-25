@@ -121,6 +121,7 @@ def _delete_sessions_impl(sids_to_delete: list[str]):
     from app.routers.clustering import cluster_store, welltype_store, group_store
     from app.routers.data import protocol_store
     from app.db import get_db
+    from app.asg_session import forget_session_asg_launch
 
     # Remove from in-memory stores
     for sid in sids_to_delete:
@@ -130,6 +131,7 @@ def _delete_sessions_impl(sids_to_delete: list[str]):
         sample_name_store.pop(sid, None)
         protocol_store.pop(sid, None)
         group_store.pop(sid, None)
+        forget_session_asg_launch(sid)
 
     # Remove from project_sessions
     conn = get_db()

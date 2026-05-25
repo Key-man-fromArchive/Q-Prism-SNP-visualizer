@@ -79,6 +79,8 @@ async def upload_file(current_user: CurrentUser, file: UploadFile = File(...)):
     # Write-through to SQLite
     from app.db import save_session
     save_session(session_id, unified, filename=file.filename or "", user_id=current_user.user_id)
+    from app.asg_session import bind_session_to_current_asg_launch
+    bind_session_to_current_asg_launch(session_id, current_user.user_id)
 
     # Compute suggested display cycle via NTC detection
     from app.processing.ntc_detection import compute_suggested_cycle

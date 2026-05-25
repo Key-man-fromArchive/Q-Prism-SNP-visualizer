@@ -14,6 +14,7 @@ export type LoginRequest = {
 
 export type LoginResponse = {
   user: User;
+  linked_context?: LinkedASGContext;
 };
 
 export type AuthConfigResponse = {

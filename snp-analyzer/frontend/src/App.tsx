@@ -65,6 +65,7 @@ export default function App() {
 
         const res = await getMe();
         setUser(res.user);
+        setLinkedContext(res.linked_context ?? null);
       } catch (err) {
         clearAuth();
         if (readLaunchTokenFromUrl()) {

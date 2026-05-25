@@ -1,6 +1,9 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertCircle, Check, Save } from "lucide-react";
 import { useSessionStore } from "@/stores/session-store";
 import { useAuthStore } from "@/stores/auth-store";
+import { useSelectionStore } from "@/stores/selection-store";
+import { useSettingsStore } from "@/stores/settings-store";
 import { useDarkMode } from "@/hooks/use-dark-mode";
 import { useExports } from "@/hooks/use-exports";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
@@ -8,12 +11,14 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useLanguageStore } from "@/stores/language-store";
 import { QcBadges } from "@/components/shared/QcBadges";
 import { AddToProjectButton } from "@/components/analysis/AddToProjectButton";
-import { logout } from "@/lib/api";
+import { logout, saveAsgResult } from "@/lib/api";
 
 export function Header() {
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const sessionId = useSessionStore((s) => s.sessionId);
   const reset = useSessionStore((s) => s.reset);
+  const currentCycle = useSelectionStore((s) => s.currentCycle);
+  const useRox = useSettingsStore((s) => s.useRox);
   const { isDark, toggle: toggleDarkMode } = useDarkMode();
   const { downloadCSV, exportPNG, exportPDF, printReport } = useExports();
   const { undo, redo, canUndo, canRedo } = useUndoRedo();
@@ -21,8 +26,20 @@ export function Header() {
   const { language, setLanguage } = useLanguageStore();
 
   const user = useAuthStore((s) => s.user);
+  const authMode = useAuthStore((s) => s.authMode);
   const linkedContext = useAuthStore((s) => s.linkedContext);
   const clearAuth = useAuthStore((s) => s.clearAuth);
+  const [asgSaveState, setAsgSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [asgAnalysisId, setAsgAnalysisId] = useState<string | null>(null);
+  const [asgSaveError, setAsgSaveError] = useState<string | null>(null);
+  const asgResultRevision = useRef(0);
+
+  useEffect(() => {
+    asgResultRevision.current += 1;
+    setAsgSaveState("idle");
+    setAsgAnalysisId(null);
+    setAsgSaveError(null);
+  }, [sessionId]);
 
   const handleNewUpload = () => {
     reset();
@@ -36,6 +53,44 @@ export function Header() {
     }
     clearAuth();
   };
+
+  const handleAsgSave = async () => {
+    if (!sessionId || !linkedContext) return;
+    const saveRevision = asgResultRevision.current;
+    setAsgSaveState("saving");
+    setAsgSaveError(null);
+    try {
+      const result = await saveAsgResult(sessionId, currentCycle, useRox);
+      if (saveRevision !== asgResultRevision.current) return;
+      setAsgAnalysisId(result.analysis_run_id);
+      setAsgSaveState("saved");
+    } catch (err) {
+      if (saveRevision !== asgResultRevision.current) return;
+      const message = err instanceof Error ? err.message : "Failed to save ASG result";
+      setAsgSaveError(message);
+      setAsgSaveState("error");
+    }
+  };
+
+  const markAsgResultDirty = useCallback(() => {
+    asgResultRevision.current += 1;
+    setAsgSaveState("idle");
+    setAsgAnalysisId(null);
+    setAsgSaveError(null);
+  }, []);
+
+  useEffect(() => {
+    markAsgResultDirty();
+  }, [currentCycle, useRox, markAsgResultDirty]);
+
+  useEffect(() => {
+    window.addEventListener("welltypes-changed", markAsgResultDirty);
+    window.addEventListener("asg-result-dirty", markAsgResultDirty);
+    return () => {
+      window.removeEventListener("welltypes-changed", markAsgResultDirty);
+      window.removeEventListener("asg-result-dirty", markAsgResultDirty);
+    };
+  }, [markAsgResultDirty]);
 
   // Wrap export functions to show user-visible errors
   const safeExport = useCallback(
@@ -157,6 +212,24 @@ export function Header() {
           </button>
           <span className="w-px bg-border mx-1" />
           <AddToProjectButton />
+          {authMode === "asg_launch" && (
+            <button
+              id="asg-save-result-btn"
+              className="badge cursor-pointer hover:text-primary hover:border-primary transition-all disabled:opacity-40 disabled:cursor-default inline-flex items-center gap-1"
+              title={asgSaveError || asgAnalysisId || (linkedContext ? "Save result to ASG Designer" : "ASG marker link required")}
+              onClick={handleAsgSave}
+              disabled={!linkedContext || asgSaveState === "saving"}
+            >
+              {asgSaveState === "saved" ? (
+                <Check size={13} aria-hidden="true" />
+              ) : asgSaveState === "error" ? (
+                <AlertCircle size={13} aria-hidden="true" />
+              ) : (
+                <Save size={13} aria-hidden="true" />
+              )}
+              <span>{asgSaveState === "saving" ? "Saving" : asgSaveState === "saved" ? "Saved" : "ASG"}</span>
+            </button>
+          )}
         </div>
       )}
 

@@ -16,6 +16,7 @@ from app.auth import (
     get_user_by_id,
 )
 from app.asg_client import ASGLaunchValidationError, validate_launch_token
+from app.asg_session import get_current_asg_launch, remember_asg_launch
 from app.auth_security import (
     AuthLimitExceeded,
     assert_login_allowed,
@@ -94,7 +95,7 @@ async def me(current_user: CurrentUser):
     user = get_user_by_id(current_user.user_id)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    return {
+    payload = {
         "user": {
             "id": user.id,
             "username": user.username,
@@ -102,6 +103,17 @@ async def me(current_user: CurrentUser):
             "role": user.role,
         }
     }
+    if is_asg_launch_mode():
+        launch = get_current_asg_launch(user.id)
+        if launch is not None:
+            payload["linked_context"] = {
+                "target_type": launch.target_type,
+                "target_id": launch.target_id,
+                "context": launch.context,
+                "scope": list(launch.scope),
+                "expires_at": launch.expires_at.isoformat() if launch.expires_at else None,
+            }
+    return payload
 
 
 @router.post("/change-password")
@@ -148,6 +160,13 @@ async def asg_launch(body: ASGLaunchRequest, response: Response):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     token = create_access_token(user.id, user.username, user.role)
     set_auth_cookie(response, token)
+    remember_asg_launch(
+        user.id,
+        validation.target,
+        validation.launch,
+        validation.scope,
+        validation.expires_at,
+    )
 
     return {
         "user": {

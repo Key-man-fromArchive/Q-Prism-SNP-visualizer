@@ -80,6 +80,21 @@ class ASGClientTest(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 504)
         self.assertEqual(ctx.exception.code, "asg_validation_timeout")
 
+    def test_post_analysis_result_sends_service_secret(self):
+        with patch.object(self.asg_client.config, "ASG_SNP_SERVICE_SECRET", "secret"):
+            with patch.object(self.asg_client.config, "ASG_BASE_URL", "http://asg.local"):
+                with patch.object(
+                    self.asg_client,
+                    "urlopen",
+                    return_value=_Response({"analysis_run_id": "run-1", "created": True}),
+                ) as mock_urlopen:
+                    result = self.asg_client.post_analysis_result({"schema_version": 1})
+
+        self.assertEqual(result["analysis_run_id"], "run-1")
+        request = mock_urlopen.call_args.args[0]
+        self.assertEqual(request.headers["X-asg-snp-service-secret"], "secret")
+        self.assertEqual(request.full_url, "http://asg.local/api/snp-analysis/runs/")
+
 
 if __name__ == "__main__":
     unittest.main()

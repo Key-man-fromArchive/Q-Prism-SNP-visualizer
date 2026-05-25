@@ -69,6 +69,14 @@ export type UploadResponse = {
   well_groups: Record<string, string[]> | null;
 };
 
+export type ASGSaveResultResponse = {
+  status: string;
+  analysis_run_id: string | null;
+  created: boolean | null;
+  target_type: string;
+  target_id: string;
+};
+
 export type SessionListItem = {
   session_id: string;
   instrument: string;

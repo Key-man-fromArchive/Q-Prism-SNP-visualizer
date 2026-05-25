@@ -23,6 +23,7 @@ import type {
   ProjectListResponse,
   ProjectResponse,
   ProjectSummaryResponse,
+  ASGSaveResultResponse,
 } from '@/types/api';
 import type {
   ASGLaunchResponse,
@@ -600,4 +601,20 @@ export async function deleteUser(id: string): Promise<{ status: string }> {
 
 export async function getAdminDashboard(): Promise<AdminDashboardResponse> {
   return apiFetch<AdminDashboardResponse>('/api/users/dashboard');
+}
+
+export async function saveAsgResult(
+  sid: string,
+  selectedCycle?: number,
+  useRox?: boolean
+): Promise<ASGSaveResultResponse> {
+  return apiFetch<ASGSaveResultResponse>('/api/asg/save-result', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sid,
+      selected_cycle: selectedCycle,
+      use_rox: useRox,
+    }),
+  });
 }

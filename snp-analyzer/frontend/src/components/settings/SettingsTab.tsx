@@ -137,6 +137,7 @@ export function SettingsTab() {
         n_clusters: nClusters,
       });
       setClusterAssignments(result.assignments);
+      window.dispatchEvent(new CustomEvent("asg-result-dirty"));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Clustering failed";
       setClusterError(msg);

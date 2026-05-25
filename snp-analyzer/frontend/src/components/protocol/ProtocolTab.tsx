@@ -62,6 +62,7 @@ export function ProtocolTab() {
     try {
       await updateProtocol(sessionId, steps);
       setError(null);
+      window.dispatchEvent(new CustomEvent("asg-result-dirty"));
     } catch (err) {
       console.error('Failed to save protocol:', err);
       setError('Failed to save protocol');
