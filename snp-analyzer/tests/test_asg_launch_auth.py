@@ -14,6 +14,8 @@ class ASGLaunchAuthTest(unittest.TestCase):
                 "SNP_AUTH_MODE": "asg_launch",
                 "JWT_SECRET_KEY": "test-secret-that-is-long-enough-for-asg-launch",
                 "ASG_SNP_SERVICE_SECRET": "secret",
+                "ASG_LAUNCH_COOKIE_NAME": "snp_launch_token",
+                "ASG_LAUNCH_COOKIE_PATH": "/snp-analyze/api/auth",
             },
             clear=False,
         )
@@ -72,6 +74,35 @@ class ASGLaunchAuthTest(unittest.TestCase):
         self.assertEqual(user.username, "asg@example.com")
         self.assertEqual(user.role, "user")
         self.assertFalse(verify_password("anything", user.hashed_password))
+
+    def test_asg_launch_cookie_exchanges_token_without_url_payload(self):
+        from fastapi.testclient import TestClient
+
+        from app.asg_client import ASGLaunchContext, ASGLaunchUser, ASGLaunchValidation
+        from app.main import app
+
+        validation = ASGLaunchValidation(
+            user=ASGLaunchUser(id="78", email="cookie@example.com", display_name="Cookie User"),
+            target=ASGLaunchContext(
+                target_type="ad_hoc",
+                target_id="78",
+                context={"marker_id": "Ad hoc SNP Analyze", "tag_alias": ""},
+            ),
+            scope=["snp:read", "snp:upload"],
+        )
+
+        with patch("app.routers.auth_router.validate_launch_token", return_value=validation) as validate:
+            with TestClient(app) as client:
+                client.cookies.set("snp_launch_token", "cookie-token")
+                response = client.post("/api/auth/asg-launch-cookie")
+
+        self.assertEqual(response.status_code, 200)
+        validate.assert_called_once_with("cookie-token")
+        set_cookie = response.headers.get("set-cookie", "")
+        self.assertIn("snp_auth=", set_cookie)
+        self.assertIn("snp_launch_token=", set_cookie)
+        self.assertIn("Max-Age=0", set_cookie)
+        self.assertEqual(response.json()["linked_context"]["target_type"], "ad_hoc")
 
     def test_asg_launch_is_idempotent_and_forces_user_role(self):
         from app.asg_client import ASGLaunchUser

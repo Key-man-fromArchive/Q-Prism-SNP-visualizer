@@ -25,7 +25,7 @@ from app.auth_security import (
     record_login_success,
     validate_password_strength,
 )
-from app.config import get_auth_mode, is_asg_launch_mode
+from app.config import ASG_LAUNCH_COOKIE_NAME, ASG_LAUNCH_COOKIE_PATH, get_auth_mode, is_asg_launch_mode
 from app.db import get_db
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -146,11 +146,26 @@ async def change_password(body: ChangePasswordRequest, current_user: CurrentUser
 
 @router.post("/asg-launch")
 async def asg_launch(body: ASGLaunchRequest, response: Response):
+    return _complete_asg_launch(body.token, response)
+
+
+@router.post("/asg-launch-cookie")
+async def asg_launch_cookie(request: Request, response: Response):
+    raw_token = request.cookies.get(ASG_LAUNCH_COOKIE_NAME, "")
+    if not raw_token:
+        raise HTTPException(status_code=401, detail="ASG launch cookie is missing")
+
+    payload = _complete_asg_launch(raw_token, response)
+    response.delete_cookie(key=ASG_LAUNCH_COOKIE_NAME, path=ASG_LAUNCH_COOKIE_PATH)
+    return payload
+
+
+def _complete_asg_launch(raw_token: str, response: Response):
     if not is_asg_launch_mode():
         raise HTTPException(status_code=404, detail="ASG launch is disabled")
 
     try:
-        validation = validate_launch_token(body.token)
+        validation = validate_launch_token(raw_token)
     except ASGLaunchValidationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 

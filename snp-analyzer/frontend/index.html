@@ -7,6 +7,31 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        var storageKey = "__asg_launch_token";
+        var url = new URL(window.location.href);
+        var token = url.searchParams.get("token");
+
+        if (!token && url.hash) {
+          var hashParams = new URLSearchParams(url.hash.slice(1));
+          token = hashParams.get("token");
+          hashParams.delete("token");
+          var nextHash = hashParams.toString();
+          url.hash = nextHash ? "#" + nextHash : "";
+        }
+
+        if (!token) return;
+
+        url.searchParams.delete("token");
+        try {
+          window.sessionStorage.setItem(storageKey, token);
+        } catch (err) {
+          window.__ASG_LAUNCH_TOKEN__ = token;
+        }
+        window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

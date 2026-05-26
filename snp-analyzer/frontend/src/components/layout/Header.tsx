@@ -28,10 +28,14 @@ export function Header() {
   const user = useAuthStore((s) => s.user);
   const authMode = useAuthStore((s) => s.authMode);
   const linkedContext = useAuthStore((s) => s.linkedContext);
+  const canSaveToAsg = Boolean(linkedContext?.scope?.includes("snp:save_result"));
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const [asgSaveState, setAsgSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [asgAnalysisId, setAsgAnalysisId] = useState<string | null>(null);
   const [asgSaveError, setAsgSaveError] = useState<string | null>(null);
+  const asgSaveTitle = asgSaveError || asgAnalysisId || (
+    canSaveToAsg ? "Save result to ASG Designer" : "Open from an ASG marker, design result, or order item to save"
+  );
   const asgResultRevision = useRef(0);
 
   useEffect(() => {
@@ -55,7 +59,7 @@ export function Header() {
   };
 
   const handleAsgSave = async () => {
-    if (!sessionId || !linkedContext) return;
+    if (!sessionId || !linkedContext || !canSaveToAsg) return;
     const saveRevision = asgResultRevision.current;
     setAsgSaveState("saving");
     setAsgSaveError(null);
@@ -123,8 +127,8 @@ export function Header() {
         <div className="hidden lg:flex items-center gap-1 text-xs text-text-muted border border-border rounded px-2 py-1">
           <span>{linkedContext.target_type}</span>
           <span className="text-text">{linkedContext.target_id}</span>
-          {typeof linkedContext.context.tag === "string" && (
-            <span className="badge">{linkedContext.context.tag}</span>
+          {typeof linkedContext.context.tag_alias === "string" && linkedContext.context.tag_alias && (
+            <span className="badge">{linkedContext.context.tag_alias}</span>
           )}
           {typeof linkedContext.context.marker_id === "string" && (
             <span>{linkedContext.context.marker_id}</span>
@@ -216,9 +220,9 @@ export function Header() {
             <button
               id="asg-save-result-btn"
               className="badge cursor-pointer hover:text-primary hover:border-primary transition-all disabled:opacity-40 disabled:cursor-default inline-flex items-center gap-1"
-              title={asgSaveError || asgAnalysisId || (linkedContext ? "Save result to ASG Designer" : "ASG marker link required")}
+              title={asgSaveTitle}
               onClick={handleAsgSave}
-              disabled={!linkedContext || asgSaveState === "saving"}
+              disabled={!canSaveToAsg || asgSaveState === "saving"}
             >
               {asgSaveState === "saved" ? (
                 <Check size={13} aria-hidden="true" />

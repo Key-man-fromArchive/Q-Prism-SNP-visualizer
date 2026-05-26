@@ -561,6 +561,12 @@ export async function asgLaunch(token: string): Promise<ASGLaunchResponse> {
   });
 }
 
+export async function asgLaunchCookie(): Promise<ASGLaunchResponse> {
+  return apiFetch<ASGLaunchResponse>('/api/auth/asg-launch-cookie', {
+    method: 'POST',
+  });
+}
+
 export async function logout(): Promise<void> {
   await apiFetch<{ status: string }>('/api/auth/logout', { method: 'POST' });
 }

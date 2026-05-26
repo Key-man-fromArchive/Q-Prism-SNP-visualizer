@@ -3,7 +3,7 @@ import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useAuthStore } from "@/stores/auth-store";
-import { asgLaunch, getAuthConfig, setWellTypes, getMe } from "@/lib/api";
+import { asgLaunch, asgLaunchCookie, getAuthConfig, setWellTypes, getMe } from "@/lib/api";
 import { Header } from "@/components/layout/Header";
 import { UploadZone } from "@/components/upload/UploadZone";
 import { TabNavigation, type TabId } from "@/components/layout/TabNavigation";
@@ -23,6 +23,14 @@ import { useDarkMode } from "@/hooks/use-dark-mode";
 import { useI18n } from "@/hooks/use-i18n";
 import type { WellType } from "@/types/api";
 import { KeyboardHelpOverlay } from "@/components/shared/KeyboardHelpOverlay";
+
+const ASG_LAUNCH_TOKEN_STORAGE_KEY = "__asg_launch_token";
+
+declare global {
+  interface Window {
+    __ASG_LAUNCH_TOKEN__?: string;
+  }
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>("analysis");
@@ -50,17 +58,27 @@ export default function App() {
   // Check auth or exchange a one-time ASG launch token on mount.
   useEffect(() => {
     const run = async () => {
+      const launchToken = consumeLaunchToken();
       try {
         const config = await getAuthConfig();
         setAuthMode(config.auth_mode);
-        const launchToken = readLaunchTokenFromUrl();
 
         if (config.auth_mode === "asg_launch" && launchToken) {
           const res = await asgLaunch(launchToken);
           setUser(res.user);
           setLinkedContext(res.linked_context);
-          removeLaunchTokenFromUrl();
           return;
+        }
+
+        if (config.auth_mode === "asg_launch") {
+          try {
+            const res = await asgLaunchCookie();
+            setUser(res.user);
+            setLinkedContext(res.linked_context);
+            return;
+          } catch {
+            // No pending launch cookie; continue with any existing SNP auth cookie.
+          }
         }
 
         const res = await getMe();
@@ -68,9 +86,8 @@ export default function App() {
         setLinkedContext(res.linked_context ?? null);
       } catch (err) {
         clearAuth();
-        if (readLaunchTokenFromUrl()) {
+        if (launchToken) {
           setLaunchError(err instanceof Error ? err.message : "ASG launch failed");
-          removeLaunchTokenFromUrl();
         }
       } finally {
         setLoading(false);
@@ -202,6 +219,28 @@ function readLaunchTokenFromUrl(): string | null {
     ? window.location.hash.slice(1)
     : window.location.hash;
   return new URLSearchParams(hash).get("token");
+}
+
+function consumeLaunchToken(): string | null {
+  const urlToken = readLaunchTokenFromUrl();
+  if (urlToken) {
+    removeLaunchTokenFromUrl();
+    return urlToken;
+  }
+
+  try {
+    const storedToken = window.sessionStorage.getItem(ASG_LAUNCH_TOKEN_STORAGE_KEY);
+    if (storedToken) {
+      window.sessionStorage.removeItem(ASG_LAUNCH_TOKEN_STORAGE_KEY);
+      return storedToken;
+    }
+  } catch {
+    // sessionStorage may be unavailable in restricted browser contexts.
+  }
+
+  const fallbackToken = window.__ASG_LAUNCH_TOKEN__ ?? null;
+  delete window.__ASG_LAUNCH_TOKEN__;
+  return fallbackToken;
 }
 
 function removeLaunchTokenFromUrl() {

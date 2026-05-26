@@ -39,6 +39,11 @@ ASG_SNP_SERVICE_SECRET = os.environ.get("ASG_SNP_SERVICE_SECRET", "")
 ASG_CLIENT_TIMEOUT_SECONDS = _int_env("ASG_CLIENT_TIMEOUT_SECONDS", 5)
 SNP_ROOT_PATH = os.environ.get("SNP_ROOT_PATH", "").rstrip("/")
 SNP_COOKIE_PATH = os.environ.get("SNP_COOKIE_PATH", "/") or "/"
+ASG_LAUNCH_COOKIE_NAME = os.environ.get("ASG_LAUNCH_COOKIE_NAME", "snp_launch_token")
+ASG_LAUNCH_COOKIE_PATH = os.environ.get(
+    "ASG_LAUNCH_COOKIE_PATH",
+    f"{SNP_ROOT_PATH}/api/auth" if SNP_ROOT_PATH else "/api/auth",
+)
 
 
 def get_auth_mode() -> str:
