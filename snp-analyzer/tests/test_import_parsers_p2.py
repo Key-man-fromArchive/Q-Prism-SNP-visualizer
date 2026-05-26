@@ -165,6 +165,50 @@ def test_mapping_configured_generic_table_parses_dye_rows_from_non_template_txt(
     assert run.readings[0].rfu == pytest.approx(120.1)
 
 
+def test_mapping_configured_generic_table_accepts_mixed_case_dye_row_columns(tmp_path):
+    source = FIXTURES / "generic_long" / "wt_mt.csv"
+    txt_path = tmp_path / "instrument-export.txt"
+    txt_path.write_text(source.read_text())
+    config = MappingConfig(
+        assay_mode=AssayModeId.WT_MT,
+        normalization_mode=NormalizationMode.NONE,
+        channel_roles={"FAM": ImportRole.WT, "VIC": ImportRole.MT1},
+        delimiter=",",
+        header_row=0,
+        first_data_row=1,
+        well_column="Well",
+        cycle_column="Cycle",
+        sample_column="Sample",
+        target_column="Target",
+        dye_column="Dye",
+        rfu_column="RFU",
+    )
+
+    run = GenericTableParser().parse(txt_path, txt_path.name, config)
+
+    assert len(run.readings) == 6
+    assert run.samples == {"A1": "Sample_01"}
+    assert run.targets == {"A1": "SNP1"}
+
+
+def test_mapping_configured_generic_table_accepts_mixed_case_wide_columns():
+    config = MappingConfig(
+        assay_mode=AssayModeId.WT_MT,
+        normalization_mode=NormalizationMode.NONE,
+        channel_roles={"ch1": ImportRole.WT, "ch2": ImportRole.MT1},
+        well_column="Well",
+        cycle_column="Cycle",
+        sample_column="Sample",
+        target_column="Target",
+        rfu_columns={"ch1": "Ch1_RFU", "ch2": "CH2_RFU"},
+    )
+
+    run = GenericTableParser().parse(FIXTURES / "generic_wide" / "wt_mt.csv", "wt_mt.csv", config)
+
+    assert len(run.readings) == 6
+    assert [channel.channel_id for channel in run.reporter_channels] == ["ch1", "ch2"]
+
+
 def test_mapping_configured_generic_table_parses_xlsx_channel_columns(tmp_path):
     openpyxl = pytest.importorskip("openpyxl")
     csv_path = FIXTURES / "generic_wide" / "wt_mt.csv"

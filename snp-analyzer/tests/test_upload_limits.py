@@ -24,7 +24,7 @@ class UploadLimitTest(unittest.IsolatedAsyncioTestCase):
         from app.routers import upload
 
         with self.assertRaises(HTTPException) as ctx:
-            await upload.upload_file(SimpleNamespace(user_id="u1"), FakeUploadFile([b"x"], filename="plate.txt"))
+            await upload.upload_file(SimpleNamespace(user_id="u1"), FakeUploadFile([b"x"], filename="plate.exe"))
 
         self.assertEqual(ctx.exception.status_code, 400)
 

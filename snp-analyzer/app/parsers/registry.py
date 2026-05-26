@@ -68,7 +68,7 @@ class ParserRegistry:
         return tuple(self._specs)
 
 
-PREVIEW_REQUIRED_EXTENSIONS = {".csv", ".tsv", ".rdml", ".rdm"}
+PREVIEW_REQUIRED_EXTENSIONS = {".csv", ".tsv", ".txt", ".rdml", ".rdm"}
 
 
 def requires_preview_for_extension(filename: str) -> bool:

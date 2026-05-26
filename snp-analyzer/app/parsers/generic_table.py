@@ -108,8 +108,10 @@ class GenericTableParser:
         populated_channels: set[str] = set()
 
         for row_number, row in table.iter_data_rows():
-            well = _parse_well(row.get(config.well_column or ""), row_number, config.well_column or "")
-            cycle = _parse_cycle(row.get(config.cycle_column or ""), row_number, config.cycle_column or "")
+            well_column = _column_name(config.well_column)
+            cycle_column = _column_name(config.cycle_column)
+            well = _parse_well(row.get(well_column, ""), row_number, config.well_column or "")
+            cycle = _parse_cycle(row.get(cycle_column, ""), row_number, config.cycle_column or "")
             _capture_optional(samples, well, row, config.sample_column)
             _capture_optional(targets, well, row, config.target_column)
 
@@ -117,7 +119,8 @@ class GenericTableParser:
                 role = config.channel_roles.get(channel_id, ImportRole.UNKNOWN)
                 if role in {ImportRole.EXCLUDED, ImportRole.UNKNOWN}:
                     continue
-                raw_value = row.get(column, "")
+                normalized_column = _column_name(column)
+                raw_value = row.get(normalized_column, "")
                 if raw_value == "":
                     continue
                 rfu = _parse_rfu(raw_value, row_number, column, config.decimal_separator or ".")
@@ -144,9 +147,13 @@ class GenericTableParser:
         dye_names: dict[str, str] = {}
 
         for row_number, row in table.iter_data_rows():
-            well = _parse_well(row.get(config.well_column or ""), row_number, config.well_column or "")
-            cycle = _parse_cycle(row.get(config.cycle_column or ""), row_number, config.cycle_column or "")
-            channel_id = (row.get(config.dye_column or "") or "").strip()
+            well_column = _column_name(config.well_column)
+            cycle_column = _column_name(config.cycle_column)
+            dye_column = _column_name(config.dye_column)
+            rfu_column = _column_name(config.rfu_column)
+            well = _parse_well(row.get(well_column, ""), row_number, config.well_column or "")
+            cycle = _parse_cycle(row.get(cycle_column, ""), row_number, config.cycle_column or "")
+            channel_id = (row.get(dye_column, "") or "").strip()
             if not channel_id:
                 issues.append(make_issue(ImportErrorCode.MISSING_FIELD, row=row_number, column=config.dye_column))
                 continue
@@ -160,7 +167,7 @@ class GenericTableParser:
             dye_names[channel_id] = channel_id
             _capture_optional(samples, well, row, config.sample_column)
             _capture_optional(targets, well, row, config.target_column)
-            rfu = _parse_rfu(row.get(config.rfu_column or ""), row_number, config.rfu_column or "", config.decimal_separator or ".")
+            rfu = _parse_rfu(row.get(rfu_column, ""), row_number, config.rfu_column or "", config.decimal_separator or ".")
             key = (well, cycle, channel_id)
             if key in seen:
                 issues.append(_duplicate_issue(key, row_number, config.rfu_column))
@@ -377,20 +384,24 @@ def _normalize_header(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
+def _column_name(value: str | None) -> str:
+    return _normalize_header(value)
+
+
 def _validate_mapping_shape(headers: list[str], config: MappingConfig) -> None:
     issues: list[ValidationIssue] = []
     for column in [config.well_column, config.cycle_column]:
-        if not column or column.lower() not in headers:
+        if not column or _column_name(column) not in headers:
             issues.append(make_issue(ImportErrorCode.MISSING_FIELD, column=column))
     if config.rfu_columns:
         for column in config.rfu_columns.values():
-            if column.lower() not in headers:
+            if _column_name(column) not in headers:
                 issues.append(make_issue(ImportErrorCode.MISSING_FIELD, column=column))
     elif not config.dye_column or not config.rfu_column:
         issues.append(make_issue(ImportErrorCode.MISSING_FIELD, message="RFU and dye columns are required."))
     else:
         for column in [config.dye_column, config.rfu_column]:
-            if column.lower() not in headers:
+            if _column_name(column) not in headers:
                 issues.append(make_issue(ImportErrorCode.MISSING_FIELD, column=column))
     _raise_if_issues(issues)
 
@@ -445,8 +456,9 @@ def _parse_rfu(value: str, row_number: int, column: str, decimal_separator: str)
 
 
 def _capture_optional(values: dict[str, str], well: str, row: dict[str, str], column: str | None) -> None:
-    if column and row.get(column):
-        values.setdefault(well, row[column])
+    normalized_column = _column_name(column)
+    if column and row.get(normalized_column):
+        values.setdefault(well, row[normalized_column])
 
 
 def _missing_populated_channel_issues(config: MappingConfig, populated_channels: set[str]) -> list[ValidationIssue]:
