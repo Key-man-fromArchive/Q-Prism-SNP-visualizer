@@ -57,7 +57,7 @@ const en = {
 
   // Upload
   dragDrop: 'Drag & drop your raw fluorescence file here',
-  fileFormats: 'QuantStudio (.eds) | CFX Opus (.pcrd) — also supports .xls, .xlsx, .zip exports',
+  fileFormats: 'QuantStudio (.eds) | CFX Opus (.pcrd) | mapped imports (.csv, .tsv, .txt)',
   batchHint: 'Multiple files or folders → batch upload to session list',
   browseFiles: 'Browse Files',
   browseFolder: 'Browse Folder',
@@ -71,7 +71,7 @@ const en = {
   packagingXML: (n: number) => `Packaging ${n} XML file${n > 1 ? 's' : ''}...`,
   packagingFailed: 'Packaging failed',
   noSupportedFiles: 'No supported files found',
-  noSupportedFilesDetail: 'Error: No supported files found (.eds, .xls, .xlsx, .pcrd, .zip, .xml)',
+  noSupportedFilesDetail: 'Error: No supported files found (.eds, .xls, .xlsx, .pcrd, .zip, .xml, .csv, .tsv, .txt)',
   goToProjects: 'Or manage existing sessions & projects →',
 
   // Quick Start Guide

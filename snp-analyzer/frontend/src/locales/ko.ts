@@ -59,7 +59,7 @@ const ko: Translations = {
 
   // Upload
   dragDrop: '형광 데이터 파일을 여기에 드래그 & 드롭하세요',
-  fileFormats: 'QuantStudio (.eds) | CFX Opus (.pcrd) — .xls, .xlsx, .zip 내보내기도 지원',
+  fileFormats: 'QuantStudio (.eds) | CFX Opus (.pcrd) | 매핑 가져오기 (.csv, .tsv, .txt)',
   batchHint: '여러 파일 또는 폴더 → 세션 목록에 일괄 업로드',
   browseFiles: '파일 찾아보기',
   browseFolder: '폴더 찾아보기',
@@ -73,7 +73,7 @@ const ko: Translations = {
   packagingXML: (n: number) => `XML 파일 ${n}개 패키징 중...`,
   packagingFailed: '패키징 실패',
   noSupportedFiles: '지원되는 파일이 없습니다',
-  noSupportedFilesDetail: '오류: 지원되는 파일이 없습니다 (.eds, .xls, .xlsx, .pcrd, .zip, .xml)',
+  noSupportedFilesDetail: '오류: 지원되는 파일이 없습니다 (.eds, .xls, .xlsx, .pcrd, .zip, .xml, .csv, .tsv, .txt)',
   goToProjects: '기존 세션 및 프로젝트 관리 →',
 
   // Quick Start Guide

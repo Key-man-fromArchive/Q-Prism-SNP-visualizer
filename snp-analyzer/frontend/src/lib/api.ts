@@ -24,6 +24,9 @@ import type {
   ProjectResponse,
   ProjectSummaryResponse,
   ASGSaveResultResponse,
+  ImportParseRequest,
+  ImportParseResponse,
+  ImportPreviewResponse,
 } from '@/types/api';
 import type {
   ASGLaunchResponse,
@@ -104,6 +107,61 @@ export async function uploadFile(file: File): Promise<UploadResponse> {
     method: 'POST',
     body: formData,
   });
+}
+
+export class ApiError extends Error {
+  status: number;
+  payload: unknown;
+
+  constructor(message: string, status: number, payload: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
+async function importFetch<T>(url: string, init: RequestInit, structuredStatuses: Set<number>): Promise<T> {
+  const res = await fetch(apiUrl(url), {
+    ...init,
+    credentials: 'same-origin',
+  });
+
+  const payload: unknown = await res.json().catch(() => null);
+
+  if (res.ok || structuredStatuses.has(res.status)) {
+    return payload as T;
+  }
+
+  if (res.status === 401) {
+    useAuthStore.getState().clearAuth();
+  }
+
+  let message = `HTTP ${res.status}: ${res.statusText}`;
+  if (payload && typeof payload === 'object' && 'detail' in payload) {
+    const detail = (payload as { detail: unknown }).detail;
+    message = typeof detail === 'string' ? detail : JSON.stringify(detail);
+  }
+
+  throw new ApiError(message, res.status, payload);
+}
+
+export async function previewImportFile(file: File): Promise<ImportPreviewResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  return importFetch<ImportPreviewResponse>('/api/import/preview', {
+    method: 'POST',
+    body: formData,
+  }, new Set([422]));
+}
+
+export async function parseImportPreview(request: ImportParseRequest): Promise<ImportParseResponse> {
+  return importFetch<ImportParseResponse>('/api/import/parse', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  }, new Set([409, 422]));
 }
 
 // ============================================================================
