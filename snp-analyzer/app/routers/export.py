@@ -77,7 +77,7 @@ async def export_csv(
             f"Cycle {cycle} not available. Range: {unified.cycles[0]}-{unified.cycles[-1]}",
         )
 
-    points = normalize_for_cycle(unified.data, cycle, unified.has_rox, use_rox)
+    points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
 
     cluster_assignments: dict[str, str] = {}
     if sid in cluster_store:

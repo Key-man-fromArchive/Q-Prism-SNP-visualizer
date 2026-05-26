@@ -45,7 +45,7 @@ def _build_scatter_points(
     use_rox: bool,
 ) -> list[dict]:
     """Normalize and annotate scatter points for one session."""
-    points = normalize_for_cycle(unified.data, cycle, unified.has_rox, use_rox)
+    points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
 
     cluster_assignments = {}
     if sid in cluster_store:
@@ -156,8 +156,8 @@ async def compare_stats(
     c1 = _resolve_cycle(unified1, cycle1)
     c2 = _resolve_cycle(unified2, cycle2)
 
-    pts1 = normalize_for_cycle(unified1.data, c1, unified1.has_rox, use_rox)
-    pts2 = normalize_for_cycle(unified2.data, c2, unified2.has_rox, use_rox)
+    pts1 = normalize_for_cycle(unified1, c1, use_rox=use_rox)
+    pts2 = normalize_for_cycle(unified2, c2, use_rox=use_rox)
 
     def _stats(pts, sid, instrument, cycle):
         n = len(pts)

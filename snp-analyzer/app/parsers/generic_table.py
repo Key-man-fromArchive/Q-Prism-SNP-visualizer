@@ -597,6 +597,12 @@ def _to_duplex_unified(import_run: ImportRun) -> UnifiedData:
     if wt is None or mt1 is None:
         raise ValueError("WT and MT1 channels are required for legacy UnifiedData conversion")
     normalization = channels_by_role.get(ImportRole.NORMALIZATION)
+    normalization_mode = import_run.metadata.get("normalization_mode")
+    role_channels = {
+        channel.role.value: channel.channel_id
+        for channel in import_run.reporter_channels
+        if channel.role not in {ImportRole.EXCLUDED, ImportRole.UNKNOWN}
+    }
     grouped: dict[tuple[str, int], dict[str, float]] = {}
     for reading in import_run.readings:
         grouped.setdefault((reading.well, reading.cycle), {})[reading.channel_id] = reading.rfu
@@ -604,13 +610,15 @@ def _to_duplex_unified(import_run: ImportRun) -> UnifiedData:
     for (well, cycle), values in sorted(grouped.items()):
         if wt.channel_id not in values or mt1.channel_id not in values:
             continue
+        normalization_value = values.get(normalization.channel_id) if normalization else None
         data.append(
             WellCycleData(
                 well=well,
                 cycle=cycle,
                 fam=values[wt.channel_id],
                 allele2=values[mt1.channel_id],
-                rox=values.get(normalization.channel_id) if normalization else None,
+                rox=normalization_value,
+                normalization_value=normalization_value,
             )
         )
     return UnifiedData(
@@ -621,4 +629,8 @@ def _to_duplex_unified(import_run: ImportRun) -> UnifiedData:
         data=data,
         has_rox=normalization is not None,
         sample_names=import_run.samples or None,
+        normalization_mode=normalization_mode if isinstance(normalization_mode, str) else None,
+        normalization_channel=normalization.channel_id if normalization else None,
+        normalization_dye=normalization.dye_name if normalization else None,
+        role_channels=role_channels,
     )

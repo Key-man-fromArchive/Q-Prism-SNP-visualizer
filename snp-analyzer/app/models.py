@@ -9,6 +9,7 @@ class WellCycleData(BaseModel):
     fam: float
     allele2: float     # VIC or HEX
     rox: float | None = None
+    normalization_value: float | None = None
 
 
 class NormalizedPoint(BaseModel):
@@ -38,6 +39,10 @@ class UnifiedData(BaseModel):
     protocol_steps: list[ProtocolStep] | None = None  # from .eds tcprotocol.xml
     data_windows: list[DataWindow] | None = None
     well_groups: dict[str, list[str]] | None = None
+    normalization_mode: str | None = None
+    normalization_channel: str | None = None
+    normalization_dye: str | None = None
+    role_channels: dict[str, str] | None = None
 
 
 class UploadResponse(BaseModel):

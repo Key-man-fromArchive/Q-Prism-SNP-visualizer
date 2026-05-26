@@ -47,7 +47,7 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
     if cycle not in unified.cycles:
         raise HTTPException(400, f"Cycle {cycle} not available")
 
-    points = normalize_for_cycle(unified.data, cycle, unified.has_rox)
+    points = normalize_for_cycle(unified, cycle)
     point_dicts = [
         {"well": p.well, "norm_fam": p.norm_fam, "norm_allele2": p.norm_allele2}
         for p in points
