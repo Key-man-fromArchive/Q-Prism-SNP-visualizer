@@ -1,0 +1,13 @@
+well,cycle,dye,role,rfu,sample,target,sample_type
+A1,1,FAM,WT,122.0,Sample_01,SNP1,unkn
+A1,1,VIC,MT1,97.0,Sample_01,SNP1,unkn
+A1,1,HEX,MT2,88.0,Sample_01,SNP1,unkn
+A1,1,Cy5,MT3,75.0,Sample_01,SNP1,unkn
+A1,2,FAM,WT,130.5,Sample_01,SNP1,unkn
+A1,2,VIC,MT1,104.3,Sample_01,SNP1,unkn
+A1,2,HEX,MT2,94.6,Sample_01,SNP1,unkn
+A1,2,Cy5,MT3,81.4,Sample_01,SNP1,unkn
+A1,3,FAM,WT,146.0,Sample_01,SNP1,unkn
+A1,3,VIC,MT1,116.9,Sample_01,SNP1,unkn
+A1,3,HEX,MT2,106.7,Sample_01,SNP1,unkn
+A1,3,Cy5,MT3,91.2,Sample_01,SNP1,unkn

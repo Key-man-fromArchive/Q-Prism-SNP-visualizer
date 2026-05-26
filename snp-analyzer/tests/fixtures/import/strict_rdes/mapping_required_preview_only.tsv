@@ -1,0 +1,4 @@
+Well	Sample	Sample Type	Target	Target Type	Dye	Cq	1	2	3
+A1	Sample_01	unkn	SNP1_WT	toi	FAM		120.1	124.3	131.6
+A1	Sample_01	unkn	SNP1_MT1	toi	VIC		98.2	101.5	109.4
+A1	Sample_01	unkn	PassiveRef	ref	ROX		900.0	900.8	901.1

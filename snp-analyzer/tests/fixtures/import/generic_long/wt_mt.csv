@@ -1,0 +1,7 @@
+well,cycle,dye,role,rfu,sample,target,sample_type
+A1,1,FAM,WT,120.0,Sample_01,SNP1,unkn
+A1,1,VIC,MT1,96.0,Sample_01,SNP1,unkn
+A1,2,FAM,WT,127.5,Sample_01,SNP1,unkn
+A1,2,VIC,MT1,102.2,Sample_01,SNP1,unkn
+A1,3,FAM,WT,139.8,Sample_01,SNP1,unkn
+A1,3,VIC,MT1,111.7,Sample_01,SNP1,unkn
