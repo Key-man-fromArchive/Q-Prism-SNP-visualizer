@@ -68,8 +68,48 @@ class ParserRegistry:
         return tuple(self._specs)
 
 
-PREVIEW_REQUIRED_EXTENSIONS = {".csv", ".tsv", ".rdml", ".rdm"}
+PREVIEW_REQUIRED_EXTENSIONS = {".csv", ".tsv", ".txt", ".rdml", ".rdm"}
 
 
 def requires_preview_for_extension(filename: str) -> bool:
     return Path(filename).suffix.lower() in PREVIEW_REQUIRED_EXTENSIONS
+
+
+def build_default_parser_registry() -> ParserRegistry:
+    from app.parsers.generic_table import GenericLongParser, GenericTableParser, GenericWideParser
+    from app.parsers.rdes import QPrismRDESParser
+
+    registry = ParserRegistry()
+    registry.register(
+        ParserSpec(
+            "qprism-rdes",
+            ParserTier.STANDARD,
+            (".tsv", ".txt"),
+            QPrismRDESParser(),
+        )
+    )
+    registry.register(
+        ParserSpec(
+            "generic-long",
+            ParserTier.GENERIC,
+            (".csv", ".tsv", ".txt"),
+            GenericLongParser(),
+        )
+    )
+    registry.register(
+        ParserSpec(
+            "generic-wide",
+            ParserTier.GENERIC,
+            (".csv", ".tsv", ".txt"),
+            GenericWideParser(),
+        )
+    )
+    registry.register(
+        ParserSpec(
+            "generic-table",
+            ParserTier.GENERIC,
+            (".csv", ".tsv", ".txt", ".xlsx"),
+            GenericTableParser(),
+        )
+    )
+    return registry

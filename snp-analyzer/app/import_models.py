@@ -140,6 +140,9 @@ class MappingConfig(BaseModel):
     cycle_column: str | None = None
     sample_column: str | None = None
     target_column: str | None = None
+    dye_column: str | None = None
+    role_column: str | None = None
+    rfu_column: str | None = None
     rfu_columns: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("channel_roles")

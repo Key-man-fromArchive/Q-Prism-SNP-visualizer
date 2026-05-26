@@ -41,6 +41,7 @@ async def test_upload_returns_preview_required_for_generic_csv_without_parsing()
     ("filename", "content_type"),
     [
         ("plate.tsv", "text/tab-separated-values"),
+        ("plate.txt", "text/plain"),
         ("plate.rdml", "application/zip"),
         ("plate.rdm", "application/zip"),
     ],
