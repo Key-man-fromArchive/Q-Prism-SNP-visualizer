@@ -5,6 +5,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { getScatter } from "@/lib/api";
+import { channelLabels, normalizationLabel, normalizedLabel } from "@/lib/channel-labels";
 import { WELL_TYPE_INFO, UNASSIGNED_TYPE } from "@/lib/constants";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { useWellFilter } from "@/hooks/use-well-filter";
@@ -30,7 +31,7 @@ export function ScatterPlot() {
     useSettingsStore();
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const { selectWell, selectWells, clearSelection, selectedWell } = useSelectionStore();
-  const { scatterPoints, allele2Dye, clusterAssignments, wellTypeAssignments } = useDataStore();
+  const { scatterPoints, allele2Dye, channelLabels: roleLabels, clusterAssignments, wellTypeAssignments } = useDataStore();
   const setScatterData = useDataStore((s) => s.setScatterData);
   const { isWellVisible } = useWellFilter();
 
@@ -49,7 +50,7 @@ export function ScatterPlot() {
     if (!sessionId || !currentCycle) return;
     try {
       const res = await getScatter(sessionId, currentCycle, useRox);
-      setScatterData(res.points, res.allele2_dye);
+      setScatterData(res.points, res.allele2_dye, res.channel_labels);
     } catch (err) {
       console.error("Failed to fetch scatter data:", err);
     }
@@ -79,6 +80,7 @@ export function ScatterPlot() {
     const colors = plotlyColors();
     const decimals = useRox ? 4 : 1;
     const traces: any[] = [];
+    const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
 
     // Build traces in a deterministic order
     const typeOrder = [...Object.keys(WELL_TYPE_INFO), "Unassigned"];
@@ -97,15 +99,15 @@ export function ScatterPlot() {
         name: info.label,
         customdata: points.map((p) => p.well),
         text: points.map((p) => {
-          const normLabel = useRox ? "/ROX" : "";
+          const normSuffix = useRox ? ` / ${normalizationLabel(labels)}` : "";
           return (
             `<b>${p.well}</b>${p.sample_name ? " (" + p.sample_name + ")" : ""}<br>` +
-            `FAM${normLabel}: ${p.norm_fam.toFixed(decimals)}<br>` +
-            `${allele2Dye}${normLabel}: ${p.norm_allele2.toFixed(decimals)}` +
+            `${labels.fam}${normSuffix}: ${p.norm_fam.toFixed(decimals)}<br>` +
+            `${labels.allele2}${normSuffix}: ${p.norm_allele2.toFixed(decimals)}` +
             (useRox
-              ? `<br>Raw FAM: ${p.raw_fam.toFixed(1)}<br>Raw ${allele2Dye}: ${p.raw_allele2.toFixed(1)}`
+              ? `<br>Raw ${labels.fam}: ${p.raw_fam.toFixed(1)}<br>Raw ${labels.allele2}: ${p.raw_allele2.toFixed(1)}`
               : "") +
-            (p.raw_rox != null ? `<br>ROX: ${p.raw_rox.toFixed(1)}` : "") +
+            (p.raw_rox != null ? `<br>${normalizationLabel(labels)}: ${p.raw_rox.toFixed(1)}` : "") +
             (p.auto_cluster ? `<br>Auto: ${p.auto_cluster}` : "") +
             (p.manual_type ? `<br>Manual: ${p.manual_type}` : "")
           );
@@ -122,8 +124,8 @@ export function ScatterPlot() {
       });
     }
 
-    const xLabel = useRox ? "FAM / ROX" : "FAM (raw RFU)";
-    const yLabel = useRox ? `${allele2Dye} / ROX` : `${allele2Dye} (raw RFU)`;
+    const xLabel = useRox ? normalizedLabel(labels.fam, labels, true) : `${labels.fam} (raw RFU)`;
+    const yLabel = useRox ? normalizedLabel(labels.allele2, labels, true) : `${labels.allele2} (raw RFU)`;
 
     const axisTitleFont = { size: 14, color: colors.fontColor };
 
@@ -187,6 +189,7 @@ export function ScatterPlot() {
   }, [
     scatterPoints,
     allele2Dye,
+    roleLabels,
     useRox,
     fixAxis,
     xMin,
