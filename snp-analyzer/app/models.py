@@ -1,6 +1,6 @@
 from __future__ import annotations
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class WellCycleData(BaseModel):
@@ -50,6 +50,16 @@ class UploadResponse(BaseModel):
     data_windows: list[DataWindow] | None = None
     suggested_cycle: int | None = None
     well_groups: dict[str, list[str]] | None = None
+
+
+class UploadPreviewRequiredResponse(BaseModel):
+    status: str = "preview_required"
+    reason_code: str = "mapping_required"
+    message: str
+    filename: str
+    parser_id: str | None = None
+    preview_id: str | None = None
+    supported_extensions: list[str] = Field(default_factory=list)
 
 
 class ScatterPoint(BaseModel):

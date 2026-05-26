@@ -18,13 +18,17 @@ SESSION_RETENTION_DAYS = _int_env("SESSION_RETENTION_DAYS", 30)
 MAX_UPLOAD_SIZE_MB = _int_env("MAX_UPLOAD_SIZE_MB", 50)
 MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 UPLOAD_CHUNK_SIZE = _int_env("UPLOAD_CHUNK_SIZE", 1024 * 1024)
-SUPPORTED_EXTENSIONS = {".xls", ".xlsx", ".eds", ".pcrd", ".zip"}
+SUPPORTED_EXTENSIONS = {".xls", ".xlsx", ".eds", ".pcrd", ".zip", ".csv", ".tsv", ".rdml", ".rdm"}
 SUPPORTED_UPLOAD_CONTENT_TYPES = {
     ".eds": {"application/octet-stream", "application/zip", "application/x-zip", "application/x-zip-compressed"},
     ".pcrd": {"application/octet-stream", "application/zip", "application/x-zip", "application/x-zip-compressed"},
     ".xls": {"application/octet-stream", "application/vnd.ms-excel"},
     ".xlsx": {"application/octet-stream", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
     ".zip": {"application/octet-stream", "application/zip", "application/x-zip", "application/x-zip-compressed"},
+    ".csv": {"application/octet-stream", "text/csv", "application/csv", "text/plain"},
+    ".tsv": {"application/octet-stream", "text/tab-separated-values", "text/plain"},
+    ".rdml": {"application/octet-stream", "application/zip", "application/xml", "text/xml"},
+    ".rdm": {"application/octet-stream", "application/zip", "application/xml", "text/xml"},
 }
 WELL_ROWS = "ABCDEFGH"
 WELL_COLS = 12

@@ -1,6 +1,5 @@
 import os
 import tempfile
-import uuid
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
@@ -11,8 +10,10 @@ from app.config import (
     SUPPORTED_UPLOAD_CONTENT_TYPES,
     UPLOAD_CHUNK_SIZE,
 )
-from app.models import UploadResponse
+from app.models import UploadPreviewRequiredResponse, UploadResponse
 from app.parsers.detector import detect_and_parse
+from app.parsers.registry import PREVIEW_REQUIRED_EXTENSIONS, requires_preview_for_extension
+from app.services.import_session import create_session_from_import
 
 router = APIRouter()
 
@@ -57,9 +58,19 @@ async def _write_upload_to_temp(file: UploadFile, ext: str) -> str:
     return tmp_path
 
 
-@router.post("/api/upload", response_model=UploadResponse)
+@router.post("/api/upload", response_model=UploadResponse | UploadPreviewRequiredResponse)
 async def upload_file(current_user: CurrentUser, file: UploadFile = File(...)):
     ext = _validate_upload_metadata(file)
+
+    if requires_preview_for_extension(file.filename or ""):
+        return UploadPreviewRequiredResponse(
+            filename=file.filename or "",
+            message=(
+                "This file type requires import preview and channel-to-role mapping "
+                "before an analysis session can be created."
+            ),
+            supported_extensions=sorted(PREVIEW_REQUIRED_EXTENSIONS),
+        )
 
     tmp_path = ""
     try:
@@ -73,27 +84,9 @@ async def upload_file(current_user: CurrentUser, file: UploadFile = File(...)):
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
 
-    session_id = uuid.uuid4().hex[:12]
-    sessions[session_id] = unified
-
-    # Write-through to SQLite
-    from app.db import save_session
-    save_session(session_id, unified, filename=file.filename or "", user_id=current_user.user_id)
-    from app.asg_session import bind_session_to_current_asg_launch
-    bind_session_to_current_asg_launch(session_id, current_user.user_id)
-
-    # Compute suggested display cycle via NTC detection
-    from app.processing.ntc_detection import compute_suggested_cycle
-    suggested = compute_suggested_cycle(unified)
-
-    return UploadResponse(
-        session_id=session_id,
-        instrument=unified.instrument,
-        allele2_dye=unified.allele2_dye,
-        num_wells=len(unified.wells),
-        num_cycles=len(unified.cycles),
-        has_rox=unified.has_rox,
-        data_windows=[{"name": w.name, "start_cycle": w.start_cycle, "end_cycle": w.end_cycle} for w in unified.data_windows] if unified.data_windows else None,
-        suggested_cycle=suggested,
-        well_groups=unified.well_groups,
+    return create_session_from_import(
+        unified=unified,
+        filename=file.filename or "",
+        user_id=current_user.user_id,
+        session_store=sessions,
     )
