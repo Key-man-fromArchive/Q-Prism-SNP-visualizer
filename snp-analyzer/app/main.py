@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import upload, data, clustering, export, qc, sample, compare, statistics, presets, quality, batch, asg
+from app.routers import upload, import_api, data, clustering, export, qc, sample, compare, statistics, presets, quality, batch, asg
 from app.routers import auth_router, users
 from app.auth_security import assert_auth_configuration
 from app.config import SNP_ROOT_PATH, is_asg_launch_mode
@@ -154,6 +154,7 @@ app.include_router(auth_router.router)
 app.include_router(users.router)
 app.include_router(users.admin_router)
 app.include_router(upload.router)
+app.include_router(import_api.router)
 app.include_router(data.router)
 app.include_router(clustering.router)
 app.include_router(export.router)

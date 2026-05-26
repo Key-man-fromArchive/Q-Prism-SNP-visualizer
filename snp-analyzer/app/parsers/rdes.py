@@ -61,9 +61,27 @@ class QPrismRDESParser:
             parser_id=self.parser_id,
             filename=original_filename,
             candidate_tables=[file_path.name],
+            inferred_delimiter="\t",
+            decimal_separator=".",
+            header_row=0,
+            first_data_row=1,
             inferred_headers=headers,
+            column_candidates={
+                "well": ["well"] if "well" in headers else [],
+                "sample": ["sample"] if "sample" in headers else [],
+                "target": ["target"] if "target" in headers else [],
+                "dye": ["dye"] if "dye" in headers else [],
+                "rfu": [header for header in headers if header.isdigit()],
+                "cycle": [header for header in headers if header.isdigit()],
+                "role": ["role"] if "role" in headers else [],
+            },
             sample_rows=rows[:5],
             channel_candidates=channels,
+            assay_mode_candidates=[
+                AssayModeId.WT_MT,
+                AssayModeId.WT_MT1_MT2,
+                AssayModeId.WT_MT1_MT2_MT3,
+            ],
             warnings=warnings,
         )
 
