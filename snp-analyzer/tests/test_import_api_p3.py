@@ -131,6 +131,20 @@ def test_import_preview_supports_tsv_and_ambiguous_table_candidates(
     assert payload["sample_rows"]
 
 
+def test_import_preview_supports_rdml_preview_first(import_api_client):
+    payload = _upload_preview(
+        import_api_client.client,
+        FIXTURES / "rdml" / "wt_mt.rdml",
+        "application/xml",
+    )
+
+    assert payload["parser_id"] == "rdml"
+    assert payload["candidate_tables"] == ["run-1"]
+    assert payload["metadata"]["preview_first"] is True
+    assert payload["metadata"]["runs"][0]["channels"] == ["FAM", "VIC"]
+    assert payload["channel_candidates"]
+
+
 def test_import_preview_supports_xlsx_tables(import_api_client, tmp_path):
     openpyxl = pytest.importorskip("openpyxl")
     xlsx_path = tmp_path / "plate.xlsx"
@@ -190,6 +204,42 @@ def test_import_parse_creates_session_through_shared_service(import_api_client):
     assert kwargs["user_id"] == "user-1"
     assert kwargs["session_store"] is import_api_client.upload.sessions
     assert kwargs["unified"].instrument == "Generic Wide Table"
+
+
+def test_import_parse_creates_session_from_rdml_wt_mt_mapping(import_api_client):
+    preview = _upload_preview(
+        import_api_client.client,
+        FIXTURES / "rdml" / "wt_mt.rdml",
+        "application/xml",
+    )
+    mapping = {
+        "assay_mode": "wt_mt",
+        "normalization_mode": "none",
+        "channel_roles": {"FAM": "WT", "VIC": "MT1"},
+        "rdml_run_id": "run-1",
+        "rdml_target_ids": ["WT", "MT"],
+    }
+
+    with patch.object(import_api_client.import_api, "create_session_from_import") as create_session:
+        create_session.return_value = UploadResponse(
+            session_id="rdml-sid",
+            instrument="Q-Prism Synthetic RDML",
+            allele2_dye="VIC",
+            num_wells=2,
+            num_cycles=3,
+            has_rox=False,
+        )
+        response = import_api_client.client.post(
+            "/api/import/parse",
+            json={"preview_id": preview["preview_id"], "mapping": mapping},
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["session_id"] == "rdml-sid"
+    kwargs = create_session.call_args.kwargs
+    assert kwargs["filename"] == "wt_mt.rdml"
+    assert kwargs["unified"].instrument == "Q-Prism Synthetic RDML"
+    create_session.assert_called_once()
 
 
 def test_import_parse_returns_structured_validation_errors_without_session_creation(import_api_client):

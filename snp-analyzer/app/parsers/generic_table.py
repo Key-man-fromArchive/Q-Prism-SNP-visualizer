@@ -23,6 +23,7 @@ from app.import_models import (
 )
 from app.models import UnifiedData, WellCycleData
 from app.parsers.detector import _validate_zip_archive
+from app.parsers.vendor_presets import apply_vendor_presets
 
 
 MAX_IMPORT_ROWS = 100_000
@@ -64,7 +65,7 @@ class GenericTableParser:
             channel_roles={"preview": ImportRole.UNKNOWN},
         ))
         headers = table.headers
-        return ImportPreview(
+        preview = ImportPreview(
             preview_id="",
             parser_id=self.parser_id,
             filename=original_filename,
@@ -89,6 +90,7 @@ class GenericTableParser:
                 )
             ],
         )
+        return apply_vendor_presets(preview)
 
     def parse(
         self,

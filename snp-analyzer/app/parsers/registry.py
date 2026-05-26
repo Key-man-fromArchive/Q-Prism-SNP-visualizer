@@ -77,9 +77,18 @@ def requires_preview_for_extension(filename: str) -> bool:
 
 def build_default_parser_registry() -> ParserRegistry:
     from app.parsers.generic_table import GenericLongParser, GenericTableParser, GenericWideParser
+    from app.parsers.rdml import RDMLParser
     from app.parsers.rdes import QPrismRDESParser
 
     registry = ParserRegistry()
+    registry.register(
+        ParserSpec(
+            "rdml",
+            ParserTier.STANDARD,
+            (".rdml", ".rdm"),
+            RDMLParser(),
+        )
+    )
     registry.register(
         ParserSpec(
             "qprism-rdes",

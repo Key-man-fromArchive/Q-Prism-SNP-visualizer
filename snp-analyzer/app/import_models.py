@@ -132,6 +132,7 @@ class MappingConfig(BaseModel):
     assay_mode: AssayModeId
     normalization_mode: NormalizationMode = NormalizationMode.NONE
     channel_roles: dict[str, ImportRole]
+    vendor_preset_id: str | None = None
     delimiter: str | None = None
     decimal_separator: str | None = None
     header_row: int | None = Field(default=None, ge=0)
@@ -144,6 +145,8 @@ class MappingConfig(BaseModel):
     role_column: str | None = None
     rfu_column: str | None = None
     rfu_columns: dict[str, str] = Field(default_factory=dict)
+    rdml_run_id: str | None = None
+    rdml_target_ids: list[str] = Field(default_factory=list)
 
     @field_validator("channel_roles")
     @classmethod
@@ -151,6 +154,19 @@ class MappingConfig(BaseModel):
         if not value:
             raise ValueError("channel_roles must not be empty")
         return {channel_id.strip(): role for channel_id, role in value.items()}
+
+    @field_validator("vendor_preset_id", "rdml_run_id")
+    @classmethod
+    def optional_text_must_not_be_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+    @field_validator("rdml_target_ids")
+    @classmethod
+    def rdml_target_ids_must_not_be_blank(cls, value: list[str]) -> list[str]:
+        return [target_id.strip() for target_id in value if target_id.strip()]
 
 
 class ValidationIssue(BaseModel):
