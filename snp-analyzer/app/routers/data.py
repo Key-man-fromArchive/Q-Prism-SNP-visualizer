@@ -8,6 +8,7 @@ from app.models import (
     UnifiedData,
 )
 from app.processing.normalize import normalize_for_cycle, normalize
+from app.role_labels import build_role_label_metadata
 from app.routers.upload import sessions
 from app.routers.clustering import cluster_store, welltype_store
 from app.auth import CurrentUser, check_session_access
@@ -54,6 +55,7 @@ async def scatter_data(sid: str, current_user: CurrentUser, cycle: int = Query(d
     return {
         "cycle": cycle,
         "allele2_dye": unified.allele2_dye,
+        **build_role_label_metadata(unified),
         "points": [
             ScatterPoint(
                 well=p.well,
@@ -106,7 +108,12 @@ async def plate_data(sid: str, current_user: CurrentUser, cycle: int = Query(def
             )
         )
 
-    return {"cycle": cycle, "allele2_dye": unified.allele2_dye, "wells": wells}
+    return {
+        "cycle": cycle,
+        "allele2_dye": unified.allele2_dye,
+        **build_role_label_metadata(unified),
+        "wells": wells,
+    }
 
 
 @router.get("/api/data/{sid}/amplification")
@@ -138,7 +145,11 @@ async def amplification_data(
                 )
             )
 
-    return {"allele2_dye": unified.allele2_dye, "curves": curves}
+    return {
+        "allele2_dye": unified.allele2_dye,
+        **build_role_label_metadata(unified),
+        "curves": curves,
+    }
 
 
 @router.get("/api/data/{sid}/amplification/all")
@@ -170,7 +181,11 @@ async def amplification_all(sid: str, current_user: CurrentUser, use_rox: bool =
             "effective_type": effective,
         })
 
-    return {"allele2_dye": unified.allele2_dye, "curves": curves}
+    return {
+        "allele2_dye": unified.allele2_dye,
+        **build_role_label_metadata(unified),
+        "curves": curves,
+    }
 
 
 @router.get("/api/data/{sid}/ct")
@@ -178,11 +193,19 @@ async def ct_data(sid: str, current_user: CurrentUser, use_rox: bool = Query(def
     check_session_access(sid, current_user)
     unified = _get_session(sid)
     if len(unified.cycles) < 3:
-        return {"results": {}, "allele2_dye": unified.allele2_dye}
+        return {
+            "results": {},
+            "allele2_dye": unified.allele2_dye,
+            **build_role_label_metadata(unified),
+        }
 
     from app.processing.ct_calculation import calculate_all_ct
     results = calculate_all_ct(unified, use_rox)
-    return {"results": results, "allele2_dye": unified.allele2_dye}
+    return {
+        "results": results,
+        "allele2_dye": unified.allele2_dye,
+        **build_role_label_metadata(unified),
+    }
 
 
 @router.get("/api/data/{sid}/export/pdf")

@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.models import ScatterPoint, UnifiedData
 from app.processing.normalize import normalize_for_cycle
+from app.role_labels import build_role_label_metadata
 from app.routers.clustering import cluster_store, welltype_store
 from app.routers.upload import sessions
 from app.auth import CurrentUser, check_session_access
@@ -123,6 +124,7 @@ async def compare_scatter(
             "session_id": sid1,
             "instrument": unified1.instrument,
             "allele2_dye": unified1.allele2_dye,
+            **build_role_label_metadata(unified1),
             "cycle": c1,
             "num_wells": len(unified1.wells),
             "points": points1,
@@ -131,6 +133,7 @@ async def compare_scatter(
             "session_id": sid2,
             "instrument": unified2.instrument,
             "allele2_dye": unified2.allele2_dye,
+            **build_role_label_metadata(unified2),
             "cycle": c2,
             "num_wells": len(unified2.wells),
             "points": points2,
@@ -159,12 +162,14 @@ async def compare_stats(
     pts1 = normalize_for_cycle(unified1, c1, use_rox=use_rox)
     pts2 = normalize_for_cycle(unified2, c2, use_rox=use_rox)
 
-    def _stats(pts, sid, instrument, cycle):
+    def _stats(pts, sid, unified, cycle):
         n = len(pts)
         if n == 0:
             return {
                 "session_id": sid,
-                "instrument": instrument,
+                "instrument": unified.instrument,
+                "allele2_dye": unified.allele2_dye,
+                **build_role_label_metadata(unified),
                 "cycle": cycle,
                 "mean_fam": 0.0,
                 "mean_allele2": 0.0,
@@ -185,7 +190,9 @@ async def compare_stats(
 
         return {
             "session_id": sid,
-            "instrument": instrument,
+            "instrument": unified.instrument,
+            "allele2_dye": unified.allele2_dye,
+            **build_role_label_metadata(unified),
             "cycle": cycle,
             "mean_fam": round(mean_fam, 6),
             "mean_allele2": round(mean_a2, 6),
@@ -194,8 +201,8 @@ async def compare_stats(
             "n_wells": n,
         }
 
-    run1_stats = _stats(pts1, sid1, unified1.instrument, c1)
-    run2_stats = _stats(pts2, sid2, unified2.instrument, c2)
+    run1_stats = _stats(pts1, sid1, unified1, c1)
+    run2_stats = _stats(pts2, sid2, unified2, c2)
 
     # Pearson R on matched wells (same well ID in both runs)
     well_map1 = {p.well: p for p in pts1}

@@ -6,6 +6,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { getAmplification } from "@/lib/api";
+import { channelLabels, normalizationLabel } from "@/lib/channel-labels";
 import { plotlyColors } from "@/lib/plotly-theme";
 import type { AmplificationCurve } from "@/types/api";
 
@@ -20,6 +21,7 @@ export function WellDetailPanel() {
   const { selectedWell, currentCycle } = useSelectionStore();
   const scatterPoints = useDataStore((s) => s.scatterPoints);
   const allele2Dye = useDataStore((s) => s.allele2Dye);
+  const roleLabels = useDataStore((s) => s.channelLabels);
 
   // Find point data for selected well
   const pointData = selectedWell
@@ -47,18 +49,22 @@ export function WellDetailPanel() {
 
         const curve: AmplificationCurve | undefined = res.curves[0];
         if (!curve) return;
+        const labels = channelLabels(
+          res.channel_labels ? res : { channel_labels: roleLabels ?? undefined },
+          res.allele2_dye || allele2Dye
+        );
 
         const traces: any[] = [
           {
             x: curve.cycles,
             y: curve.norm_fam,
-            name: "FAM",
+            name: labels.fam,
             line: { color: "#2563eb", width: 2 },
           },
           {
             x: curve.cycles,
             y: curve.norm_allele2,
-            name: allele2Dye || "Allele2",
+            name: labels.allele2,
             line: { color: "#dc2626", width: 2 },
           },
         ];
@@ -102,7 +108,7 @@ export function WellDetailPanel() {
     return () => {
       cancelled = true;
     };
-  }, [selectedWell, sessionId, useRox, currentCycle, allele2Dye, numCycles]);
+  }, [selectedWell, sessionId, useRox, currentCycle, allele2Dye, roleLabels, numCycles]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -163,8 +169,8 @@ export function WellDetailPanel() {
   }
 
   const decimals = useRox ? 4 : 1;
-  const normLabel = useRox ? "/ROX" : "";
-  const dye = allele2Dye || "Allele2";
+  const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
+  const normLabel = useRox ? ` / ${normalizationLabel(labels)}` : "";
 
   return (
     <div className="panel detail-panel">
@@ -200,12 +206,12 @@ export function WellDetailPanel() {
               </tr>
             )}
             <tr>
-              <td className="text-text-muted pr-3 py-0.5">FAM{normLabel}</td>
+              <td className="text-text-muted pr-3 py-0.5">{labels.fam}{normLabel}</td>
               <td>{normFam.toFixed(decimals)}</td>
             </tr>
             <tr>
               <td className="text-text-muted pr-3 py-0.5">
-                {dye}{normLabel}
+                {labels.allele2}{normLabel}
               </td>
               <td>{normAllele2.toFixed(decimals)}</td>
             </tr>
@@ -214,16 +220,16 @@ export function WellDetailPanel() {
               <td>{ratio}%</td>
             </tr>
             <tr>
-              <td className="text-text-muted pr-3 py-0.5">FAM ({t.raw})</td>
+              <td className="text-text-muted pr-3 py-0.5">{labels.fam} ({t.raw})</td>
               <td>{rawFam.toFixed(1)}</td>
             </tr>
             <tr>
-              <td className="text-text-muted pr-3 py-0.5">{dye} ({t.raw})</td>
+              <td className="text-text-muted pr-3 py-0.5">{labels.allele2} ({t.raw})</td>
               <td>{rawAllele2.toFixed(1)}</td>
             </tr>
             {rawRox != null && (
               <tr>
-                <td className="text-text-muted pr-3 py-0.5">ROX ({t.raw})</td>
+                <td className="text-text-muted pr-3 py-0.5">{normalizationLabel(labels)} ({t.raw})</td>
                 <td>{rawRox.toFixed(1)}</td>
               </tr>
             )}

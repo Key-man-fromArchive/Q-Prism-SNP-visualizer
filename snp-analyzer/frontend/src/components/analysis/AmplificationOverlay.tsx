@@ -4,6 +4,7 @@ import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useDataStore } from "@/stores/data-store";
 import { getAllAmplification } from "@/lib/api";
+import { channelLabels } from "@/lib/channel-labels";
 import { plotlyColors } from "@/lib/plotly-theme";
 
 const GENOTYPE_COLORS: Record<string, string> = {
@@ -25,6 +26,7 @@ export function AmplificationOverlay() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const useRox = useSettingsStore((s) => s.useRox);
   const allele2Dye = useDataStore((s) => s.allele2Dye);
+  const roleLabels = useDataStore((s) => s.channelLabels);
 
   const handleToggle = async () => {
     if (visible) {
@@ -49,6 +51,10 @@ export function AmplificationOverlay() {
         const curves = res.curves;
         const traces: any[] = [];
         const legendAdded = new Set<string>();
+        const labels = channelLabels(
+          res.channel_labels ? res : { channel_labels: roleLabels ?? undefined },
+          res.allele2_dye || allele2Dye
+        );
 
         for (const curve of curves) {
           // Use effective_type if available (it may be on the response)
@@ -71,7 +77,7 @@ export function AmplificationOverlay() {
           });
         }
 
-        const channelLabel = channel === "fam" ? "FAM" : (allele2Dye || "Allele2");
+        const channelLabel = channel === "fam" ? labels.fam : labels.allele2;
 
         const c = plotlyColors();
         const layout: any = {
@@ -100,7 +106,7 @@ export function AmplificationOverlay() {
     return () => {
       cancelled = true;
     };
-  }, [visible, channel, sessionId, useRox, allele2Dye]);
+  }, [visible, channel, sessionId, useRox, allele2Dye, roleLabels]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -108,6 +114,11 @@ export function AmplificationOverlay() {
       if (plotRef.current) Plotly.purge(plotRef.current);
     };
   }, []);
+
+  const selectorLabels = channelLabels(
+    { channel_labels: roleLabels ?? undefined },
+    allele2Dye
+  );
 
   return (
     <div className="panel" style={{ marginTop: "16px" }}>
@@ -128,8 +139,8 @@ export function AmplificationOverlay() {
           value={channel}
           onChange={(e) => setChannel(e.target.value as "fam" | "allele2")}
         >
-          <option value="fam">FAM</option>
-          <option value="allele2">{allele2Dye || "Allele2"}</option>
+          <option value="fam">{selectorLabels.fam}</option>
+          <option value="allele2">{selectorLabels.allele2}</option>
         </select>
       </div>
       <div

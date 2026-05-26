@@ -213,6 +213,21 @@ export type AmplificationCurve = {
   norm_allele2: number[];
 };
 
+export type ChannelLabels = {
+  fam: string;
+  allele2: string;
+  normalization?: string | null;
+};
+
+export type RoleLabelMetadata = {
+  channel_labels?: ChannelLabels;
+  role_channel_labels?: Record<string, string>;
+  role_channels?: Record<string, string>;
+  normalization_mode?: NormalizationMode | null;
+  normalization_channel?: string | null;
+  normalization_dye?: string | null;
+};
+
 // ============================================================================
 // Well Types & Clustering
 // ============================================================================
@@ -288,19 +303,19 @@ export type QualityResult = {
 // API Response Types
 // ============================================================================
 
-export type ScatterResponse = {
+export type ScatterResponse = RoleLabelMetadata & {
   cycle: number;
   allele2_dye: string;
   points: ScatterPoint[];
 };
 
-export type PlateResponse = {
+export type PlateResponse = RoleLabelMetadata & {
   cycle: number;
   allele2_dye: string;
   wells: PlateWell[];
 };
 
-export type AmplificationResponse = {
+export type AmplificationResponse = RoleLabelMetadata & {
   allele2_dye: string;
   curves: AmplificationCurve[];
 };
@@ -309,7 +324,7 @@ export type ProtocolResponse = {
   steps: ProtocolStep[];
 };
 
-export type CtResponse = {
+export type CtResponse = RoleLabelMetadata & {
   results: CtResult[];
   allele2_dye: string;
 };
@@ -341,7 +356,7 @@ export type SamplesResponse = {
 // Comparison API
 // ============================================================================
 
-export type CompareRunData = {
+export type CompareRunData = RoleLabelMetadata & {
   session_id: string;
   instrument: string;
   allele2_dye: string;
@@ -355,7 +370,7 @@ export type CompareScatterResponse = {
   run2: CompareRunData;
 };
 
-export type CompareRunStats = {
+export type CompareRunStats = RoleLabelMetadata & {
   session_id: string;
   instrument: string;
   allele2_dye: string;
