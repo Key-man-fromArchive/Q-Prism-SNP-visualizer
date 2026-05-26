@@ -1,0 +1,6 @@
+{
+  "fixture": "strict_rdes/mapping_required_preview_only.tsv",
+  "expected_status": "preview_required",
+  "direct_auto_import": false,
+  "reason": "strict_rdes_without_role_requires_channel_role_mapping"
+}

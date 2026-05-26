@@ -1,0 +1,10 @@
+{
+  "assay_mode": "WT/MT",
+  "normalization": "none",
+  "channels": {
+    "ch1_rfu": "WT",
+    "ch2_rfu": "MT1",
+    "ch3_rfu": "excluded",
+    "ch4_rfu": "excluded"
+  }
+}

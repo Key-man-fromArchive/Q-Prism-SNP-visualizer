@@ -1,0 +1,4 @@
+well,cycle,ch1_rfu,ch2_rfu,ch3_rfu,ch4_rfu,sample,target
+A1,1,120.1,98.2,900.0,,Sample_01,SNP1
+A1,2,124.3,101.5,900.8,,Sample_01,SNP1
+A1,3,131.6,109.4,901.1,,Sample_01,SNP1
