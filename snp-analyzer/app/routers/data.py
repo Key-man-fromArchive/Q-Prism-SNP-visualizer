@@ -44,7 +44,7 @@ async def scatter_data(sid: str, current_user: CurrentUser, cycle: int = Query(d
     if cycle not in unified.cycles:
         raise HTTPException(400, f"Cycle {cycle} not available. Range: {unified.cycles[0]}-{unified.cycles[-1]}")
 
-    points = normalize_for_cycle(unified.data, cycle, unified.has_rox, use_rox)
+    points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
 
     cluster_assignments = {}
     if sid in cluster_store:
@@ -79,7 +79,7 @@ async def plate_data(sid: str, current_user: CurrentUser, cycle: int = Query(def
     if cycle <= 0:
         cycle = max(unified.cycles)
 
-    points = normalize_for_cycle(unified.data, cycle, unified.has_rox, use_rox)
+    points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
 
     cluster_assignments_plate = {}
     if sid in cluster_store:
@@ -120,7 +120,7 @@ async def amplification_data(
     if not well_list:
         raise HTTPException(400, "Provide at least one well, e.g., ?wells=A5,A6")
 
-    all_normalized = normalize(unified.data, unified.has_rox, use_rox)
+    all_normalized = normalize(unified, use_rox=use_rox)
 
     curves = []
     for well in well_list:
@@ -146,7 +146,7 @@ async def amplification_all(sid: str, current_user: CurrentUser, use_rox: bool =
     """Return amplification curves for ALL wells with effective genotype type."""
     check_session_access(sid, current_user)
     unified = _get_session(sid)
-    all_normalized = normalize(unified.data, unified.has_rox, use_rox)
+    all_normalized = normalize(unified, use_rox=use_rox)
 
     # Get genotype assignments
     ca = cluster_store.get(sid)
@@ -197,7 +197,7 @@ async def export_pdf(sid: str, current_user: CurrentUser, use_rox: bool = Query(
     cycle = max(unified.cycles)
 
     # Get scatter points with effective types
-    points = normalize_for_cycle(unified.data, cycle, unified.has_rox, use_rox)
+    points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
     cluster_assignments = cluster_store.get(sid, None)
     manual_assignments = welltype_store.get(sid, {})
 

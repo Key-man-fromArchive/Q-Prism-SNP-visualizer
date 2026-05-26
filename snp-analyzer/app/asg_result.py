@@ -43,7 +43,7 @@ def build_result_snapshot(
     effective_types = get_effective_types(cluster_assignments, manual_assignments, unified.wells)
     genotype_counts = count_genotypes(effective_types)
     sample_names = _merged_sample_names(session_id)
-    selected_points = normalize_for_cycle(unified.data, cycle, unified.has_rox, use_rox)
+    selected_points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
     ct_results = calculate_all_ct(unified, use_rox) if len(unified.cycles) >= 3 else {}
 
     wells = []

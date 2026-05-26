@@ -66,6 +66,14 @@ def save_session(session_id: str, unified, filename: str = "", user_id: str | No
         metadata["data_windows"] = [w.model_dump() for w in unified.data_windows]
     if unified.well_groups:
         metadata["well_groups"] = unified.well_groups
+    if unified.normalization_mode is not None:
+        metadata["normalization_mode"] = unified.normalization_mode
+    if unified.normalization_channel is not None:
+        metadata["normalization_channel"] = unified.normalization_channel
+    if unified.normalization_dye is not None:
+        metadata["normalization_dye"] = unified.normalization_dye
+    if unified.role_channels:
+        metadata["role_channels"] = unified.role_channels
 
     conn.execute(
         """INSERT OR REPLACE INTO sessions
@@ -207,7 +215,17 @@ def load_all_sessions():
             (sid,),
         ).fetchall()
 
-        data = [WellCycleData(well=r["well"], cycle=r["cycle"], fam=r["fam"], allele2=r["allele2"], rox=r["rox"]) for r in well_rows]
+        data = [
+            WellCycleData(
+                well=r["well"],
+                cycle=r["cycle"],
+                fam=r["fam"],
+                allele2=r["allele2"],
+                rox=r["rox"],
+                normalization_value=r["rox"] if metadata.get("normalization_channel") else None,
+            )
+            for r in well_rows
+        ]
         wells = sorted(set(d.well for d in data))
         cycles = sorted(set(d.cycle for d in data))
 
@@ -232,6 +250,10 @@ def load_all_sessions():
             protocol_steps=protocol_steps,
             data_windows=data_windows,
             well_groups=well_groups,
+            normalization_mode=metadata.get("normalization_mode"),
+            normalization_channel=metadata.get("normalization_channel"),
+            normalization_dye=metadata.get("normalization_dye"),
+            role_channels=metadata.get("role_channels"),
         )
 
         # Load clustering results

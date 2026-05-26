@@ -88,7 +88,7 @@ def score_all_wells(unified_data, use_rox: bool = True) -> dict[str, dict]:
     """
     from app.processing.normalize import normalize
 
-    all_norm = normalize(unified_data.data, unified_data.has_rox, use_rox)
+    all_norm = normalize(unified_data, use_rox=use_rox)
 
     # Group by well
     well_data: dict[str, list] = {}
