@@ -50,6 +50,8 @@ class GenericTableParser:
             table = _read_table(file_path, _minimal_config())
         except ImportValidationError:
             return False
+        if suffix == ".xlsx":
+            return True
         headers = set(table.headers)
         return not (
             _GENERIC_LONG_HEADERS.issubset(headers)
@@ -67,9 +69,19 @@ class GenericTableParser:
             parser_id=self.parser_id,
             filename=original_filename,
             candidate_tables=[table.sheet_name],
+            inferred_delimiter=table.delimiter,
+            decimal_separator=table.decimal_separator,
+            header_row=0,
+            first_data_row=table.first_data_row,
             inferred_headers=headers,
+            column_candidates=_column_candidates(headers),
             sample_rows=table.rows[:5],
             channel_candidates=[ReporterChannel(channel_id=header) for header in headers if "rfu" in header.lower()],
+            assay_mode_candidates=[
+                AssayModeId.WT_MT,
+                AssayModeId.WT_MT1_MT2,
+                AssayModeId.WT_MT1_MT2_MT3,
+            ],
             warnings=[
                 make_issue(
                     ImportErrorCode.MAPPING_CONFIG_REQUIRED,
@@ -378,6 +390,27 @@ def _infer_decimal_separator(rows: list[dict[str, str]]) -> str:
             if re.fullmatch(r"-?\d+,\d+", value):
                 return ","
     return "."
+
+
+def _column_candidates(headers: list[str]) -> dict[str, list[str]]:
+    return {
+        "well": _matching_headers(headers, {"well", "position"}),
+        "cycle": _matching_headers(headers, {"cycle"}),
+        "rfu": _matching_headers(headers, {"rfu", "fluorescence", "signal"}),
+        "sample": _matching_headers(headers, {"sample"}),
+        "target": _matching_headers(headers, {"target", "assay"}),
+        "dye": _matching_headers(headers, {"dye", "channel", "reporter"}),
+        "role": _matching_headers(headers, {"role", "type"}),
+    }
+
+
+def _matching_headers(headers: list[str], tokens: set[str]) -> list[str]:
+    matches = []
+    for header in headers:
+        normalized = header.replace("_", " ").replace("-", " ")
+        if any(token in normalized for token in tokens):
+            matches.append(header)
+    return matches
 
 
 def _normalize_header(value: Any) -> str:

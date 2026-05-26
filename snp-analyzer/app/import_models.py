@@ -173,9 +173,15 @@ class ImportPreview(BaseModel):
     parser_id: str
     filename: str
     candidate_tables: list[str] = Field(default_factory=list)
+    inferred_delimiter: str | None = None
+    decimal_separator: str | None = None
+    header_row: int | None = None
+    first_data_row: int | None = None
     inferred_headers: list[str] = Field(default_factory=list)
+    column_candidates: dict[str, list[str]] = Field(default_factory=dict)
     sample_rows: list[dict[str, Any]] = Field(default_factory=list)
     channel_candidates: list[ReporterChannel] = Field(default_factory=list)
+    assay_mode_candidates: list[AssayModeId] = Field(default_factory=list)
     warnings: list[ValidationIssue] = Field(default_factory=list)
     suggested_mapping: MappingConfig | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
