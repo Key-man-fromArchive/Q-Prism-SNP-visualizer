@@ -31,7 +31,7 @@ This plan implements the qPCR import expansion described in `docs/qpcr-import-ex
 ### P0-R1-T1: Create Committed Synthetic Import Fixtures
 
 - Add fixture folders for `generic_long`, `generic_wide`, `rdes_extension`, `strict_rdes`, and invalid cases.
-- Include WT/MT, WT/MT + normalization, WT/MT1/MT2, and WT/MT1/MT2/MT3 examples.
+- Include WT/MT, WT/MT with passive-reference normalization, WT/MT1/MT2, and WT/MT1/MT2/MT3 examples.
 - Include decimal comma, semicolon delimiter, malformed well, duplicate `(well, cycle, channel)`, missing required role, missing normalization channel, inconsistent cycle count, and Cq/endpoint-only cases.
 - Maintain a fixture coverage table that maps each parser to required assay modes and invalid cases.
 - Verification: parser fixture files are small, anonymized, deterministic, and documented.
@@ -40,9 +40,9 @@ Required fixture matrix:
 
 | Parser path | Required valid cases | Required invalid/recovery cases |
 | --- | --- | --- |
-| Generic long | WT/MT, WT/MT + normalization, WT/MT1/MT2, WT/MT1/MT2/MT3 | missing role, malformed well, duplicate channel row, decimal comma, semicolon delimiter, Cq-only |
-| Generic wide | WT/MT, WT/MT + normalization, WT/MT1/MT2, WT/MT1/MT2/MT3 | missing mapping config, duplicate role binding, missing normalization channel |
-| Q-Prism RDES extension | WT/MT, WT/MT + normalization, WT/MT1/MT2 | malformed cycle columns, inconsistent cycle count, missing RFU |
+| Generic long | WT/MT, WT/MT with passive-reference normalization, WT/MT1/MT2, WT/MT1/MT2/MT3 | missing role, malformed well, duplicate channel row, decimal comma, semicolon delimiter, Cq-only |
+| Generic wide | WT/MT, WT/MT with passive-reference normalization, WT/MT1/MT2, WT/MT1/MT2/MT3 | missing mapping config, duplicate role binding, missing normalization channel |
+| Q-Prism RDES extension | WT/MT, WT/MT with passive-reference normalization, WT/MT1/MT2 | malformed cycle columns, inconsistent cycle count, missing RFU |
 | Strict RDES | mapping-required preview only | direct auto-import blocked with preview-required response |
 | RDML | public smoke fixtures, single-run synthetic fixture where possible | multi-run requires selection, missing raw curves, unsupported channel set |
 
@@ -50,12 +50,14 @@ Required fixture matrix:
 
 - Add source notes for RDML R package, RDML-tools, and tidyqpcr examples.
 - Only commit files whose licenses permit repository use; otherwise add fetch instructions.
+- Document that public Roche examples are mostly single-channel/SYBR smoke fixtures and do not prove SNP multi-channel behavior.
 - Verification: fixture provenance is documented and CI does not depend on unavailable local paths.
 
 ### P0-S1-T1: Add Static Template Files
 
 - Add `qprism-rdes-amplification-template.tsv`, `qprism-generic-long-template.csv`, and `qprism-generic-wide-template.csv`.
 - Keep template files machine-readable with no comment rows.
+- Include 2-3 valid example rows per template.
 - Verification: each downloadable template has a matching strict structure parser or mapping-required validation test.
 
 ## Phase P1: Canonical Import Backend
@@ -69,8 +71,9 @@ Required fixture matrix:
 
 ### P1-R1-T2: Implement Assay Mode Registry
 
-- Define supported modes: WT/MT, WT/MT + normalization, WT/MT1/MT2, WT/MT1/MT2/MT3.
-- Encode required roles, optional roles, and normalization rules.
+- Define assay modes as variant role sets: WT/MT, WT/MT1/MT2, WT/MT1/MT2/MT3.
+- Define normalization as an orthogonal config: `none`, `passive_reference`, and `custom/manual`.
+- Encode required roles, optional roles, and whether a normalization config requires a bound normalization channel.
 - Reject duplicate role bindings and missing required roles.
 - Verification: tests assert valid/invalid mappings for each assay mode.
 
@@ -107,7 +110,7 @@ Required fixture matrix:
 
 - Parse exact channel-neutral headers: `ch1_rfu`, `ch2_rfu`, `ch3_rfu`, `ch4_rfu`.
 - Require explicit mapping config for channel-to-role binding.
-- Verification: tests cover WT/MT, WT/MT + normalization, triplex, quadruplex, and invalid mappings.
+- Verification: tests cover WT/MT, WT/MT with passive-reference normalization, triplex, quadruplex, and invalid mappings.
 
 ### P2-R1-T3: Implement Mapping-Configured Generic Table Parser
 
@@ -155,6 +158,7 @@ Required fixture matrix:
 ### P3-S1-T1: Add Template Download UI
 
 - Add a download menu near the upload zone for RDES extension, generic long CSV, and generic wide CSV.
+- Serve templates from an explicit owned location, such as FastAPI static files or frontend public assets, and keep the URL contract stable.
 - Show only templates that can be parsed in the current release.
 - Verification: Playwright confirms each template downloads and can be uploaded into preview/import flow.
 
@@ -164,11 +168,12 @@ Required fixture matrix:
 - Separate channel detection from assay role binding.
 - Allow returning to mapping without re-uploading.
 - Show Cq/endpoint-only guidance, missing structural field recovery, duplicate blocking, decimal separator correction, and inconsistent cycle count messaging.
-- Verification: Playwright covers a successful WT/MT + normalization import, recoverable missing-role error, decimal separator correction, and Cq-only rejection.
+- Show expired/unauthorized preview handling without losing the user's selected local file when the browser still has it.
+- Verification: Playwright covers a successful WT/MT with passive-reference normalization import, return-to-mapping without re-upload, recoverable missing-role error, decimal separator correction, and Cq-only rejection.
 
 ### P3-S2-T2: Add Validation Preview UI
 
-- Display wells count, cycles range, detected channels, selected assay mode, role binding, missing values, duplicates, and representative curves/scatter.
+- Display wells count, cycles range, detected channels, selected assay mode, normalization config, role binding, missing values, duplicate `(well, cycle, channel)` rows, duplicate role bindings, and representative curves/scatter.
 - Use role-pair scatter labels, such as WT vs MT1.
 - Verification: UI test asserts validation messages and preview summaries for valid and invalid fixtures.
 
@@ -212,7 +217,7 @@ Required fixture matrix:
 
 - Refactor normalization to use selected normalization channel and mode, not a hardcoded ROX field.
 - Support raw mode when normalization is absent or disabled.
-- Verification: tests compare raw vs normalized output for WT/MT + normalization fixtures.
+- Verification: tests compare raw vs normalized output for WT/MT with passive-reference normalization fixtures.
 
 ### P5-S1-T1: Update Analysis Visualizations For Role Labels
 
@@ -232,7 +237,7 @@ Required fixture matrix:
 
 - Run Playwright upload, template download, mapping wizard, validation error, and existing upload regression specs.
 - For every downloadable template, verify template -> upload -> preview -> import -> analysis screen smoke path.
-- At minimum, render scatter, plate, amplification curve, and QC entry points for WT/MT and WT/MT + normalization template sessions.
+- At minimum, render scatter, plate, amplification curve, and QC entry points for WT/MT and WT/MT with passive-reference normalization template sessions.
 - Confirm UI routes ambiguous files to preview instead of plain failure when applicable.
 
 ### P6-V3: Documentation Gate
