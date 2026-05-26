@@ -73,6 +73,8 @@ def test_default_registry_discovers_p2_template_parsers():
     fixtures = Path(__file__).parent / "fixtures" / "import"
     registry = build_default_parser_registry()
 
+    assert registry.match(fixtures / "rdml" / "wt_mt.rdml", "wt_mt.rdml").parser_id == "rdml"
+    assert registry.match(fixtures / "rdml" / "wt_mt.rdml", "wt_mt.rdm").parser_id == "rdml"
     assert registry.match(fixtures / "rdes_extension" / "wt_mt.tsv", "wt_mt.tsv").parser_id == "qprism-rdes"
     assert registry.match(fixtures / "generic_long" / "wt_mt.csv", "wt_mt.csv").parser_id == "generic-long"
     assert registry.match(fixtures / "generic_wide" / "wt_mt.csv", "wt_mt.csv").parser_id == "generic-wide"

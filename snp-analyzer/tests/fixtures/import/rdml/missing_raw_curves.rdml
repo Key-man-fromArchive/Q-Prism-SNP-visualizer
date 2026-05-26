@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdml version="1.3">
+  <target id="WT"><dyeId>FAM</dyeId></target>
+  <target id="MT"><dyeId>VIC</dyeId></target>
+  <experiment id="exp-1">
+    <run id="run-1">
+      <react id="A1">
+        <sample id="Endpoint_Only"/>
+        <data><tar id="WT"/><cq>28.4</cq></data>
+        <data><tar id="MT"/><cq>34.1</cq></data>
+      </react>
+    </run>
+  </experiment>
+</rdml>

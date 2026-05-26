@@ -1,5 +1,8 @@
 # RDML Smoke Fixture Notes
 
-No third-party RDML files are committed in P0. Candidate public Roche/RDML smoke sources and licensing notes are tracked in `docs/import-fixtures.md`.
+The RDML fixtures in this directory are synthetic, minimal, and generated for parser tests only. They do not contain third-party instrument exports or sample identifiers.
 
-Future RDML parser tests should either use a minimal synthetic single-run RDML file generated in-repository or vendor a public file only after preserving its license and attribution.
+- `wt_mt.rdml`: single-run WT/MT raw amplification fixture.
+- `multi_run.rdml`: two-run fixture that requires explicit run selection.
+- `missing_raw_curves.rdml`: endpoint-only data that must fail mapped import.
+- `qiagen_rotor_gene.rdml`: synthetic Rotor-Gene metadata used to test non-authoritative vendor presets.
