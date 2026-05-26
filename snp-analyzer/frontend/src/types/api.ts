@@ -69,6 +69,98 @@ export type UploadResponse = {
   well_groups: Record<string, string[]> | null;
 };
 
+export type ImportRole =
+  | 'WT'
+  | 'MT1'
+  | 'MT2'
+  | 'MT3'
+  | 'normalization'
+  | 'excluded'
+  | 'unknown';
+
+export type AssayModeId = 'wt_mt' | 'wt_mt1_mt2' | 'wt_mt1_mt2_mt3';
+
+export type NormalizationMode = 'none' | 'passive_reference' | 'custom' | 'manual';
+
+export type ReporterChannel = {
+  channel_id: string;
+  dye_name: string | null;
+  role: ImportRole;
+};
+
+export type ValidationIssue = {
+  code: string;
+  message: string;
+  recoverable: boolean;
+  row: number | null;
+  column: string | null;
+  channel_id: string | null;
+  context: Record<string, unknown>;
+};
+
+export type MappingConfig = {
+  assay_mode: AssayModeId;
+  normalization_mode: NormalizationMode;
+  channel_roles: Record<string, ImportRole>;
+  delimiter: string | null;
+  decimal_separator: string | null;
+  header_row: number | null;
+  first_data_row: number | null;
+  well_column: string | null;
+  cycle_column: string | null;
+  sample_column: string | null;
+  target_column: string | null;
+  dye_column: string | null;
+  role_column: string | null;
+  rfu_column: string | null;
+  rfu_columns: Record<string, string>;
+};
+
+export type ImportPreview = {
+  preview_id: string;
+  parser_id: string;
+  filename: string;
+  candidate_tables: string[];
+  inferred_delimiter: string | null;
+  decimal_separator: string | null;
+  header_row: number | null;
+  first_data_row: number | null;
+  inferred_headers: string[];
+  column_candidates: Record<string, string[]>;
+  sample_rows: Record<string, unknown>[];
+  channel_candidates: ReporterChannel[];
+  assay_mode_candidates: AssayModeId[];
+  warnings: ValidationIssue[];
+  suggested_mapping: MappingConfig | null;
+  metadata: Record<string, unknown>;
+};
+
+export type ImportParseRequest = {
+  preview_id: string;
+  mapping: MappingConfig;
+};
+
+export type ImportValidationErrorResponse = {
+  status: 'validation_failed';
+  issues: ValidationIssue[];
+};
+
+export type UnsupportedAnalysisModeResponse = {
+  status: 'unsupported_analysis_mode';
+  reason_code: string;
+  assay_mode: AssayModeId;
+  message: string;
+};
+
+export type ImportPreviewErrorResponse = ImportValidationErrorResponse;
+
+export type ImportPreviewResponse = ImportPreview | ImportPreviewErrorResponse;
+
+export type ImportParseResponse =
+  | UploadResponse
+  | ImportValidationErrorResponse
+  | UnsupportedAnalysisModeResponse;
+
 export type ASGSaveResultResponse = {
   status: string;
   analysis_run_id: string | null;

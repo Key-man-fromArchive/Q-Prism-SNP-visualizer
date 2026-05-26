@@ -1,10 +1,30 @@
 import { useCallback, useRef, useState } from "react";
 import { useSessionStore } from "@/stores/session-store";
-import { uploadFile as apiUpload } from "@/lib/api";
+import { previewImportFile, uploadFile as apiUpload } from "@/lib/api";
 import JSZip from "jszip";
 import { useI18n } from "@/hooks/use-i18n";
+import { Download } from "lucide-react";
+import { ImportMappingWizard } from "@/components/upload/ImportMappingWizard";
+import type { ImportPreview, ImportPreviewResponse, ValidationIssue } from "@/types/api";
 
 const RAW_EXTENSIONS = [".eds", ".xls", ".xlsx", ".pcrd", ".zip"];
+const GENERIC_IMPORT_EXTENSIONS = [".csv", ".tsv", ".txt"];
+const ACCEPTED_EXTENSIONS = [...RAW_EXTENSIONS, ".xml", ...GENERIC_IMPORT_EXTENSIONS].join(",");
+
+const TEMPLATE_LINKS = [
+  {
+    href: "/templates/qprism-rdes-amplification-template.tsv",
+    label: "RDES amplification TSV",
+  },
+  {
+    href: "/templates/qprism-generic-long-template.csv",
+    label: "Generic long CSV",
+  },
+  {
+    href: "/templates/qprism-generic-wide-template.csv",
+    label: "Generic wide CSV",
+  },
+] as const;
 
 type UploadZoneProps = {
   onGoToProject?: () => void;
@@ -16,6 +36,10 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [dragover, setDragover] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [importPreviewIssues, setImportPreviewIssues] = useState<ValidationIssue[]>([]);
+  const [previewingImport, setPreviewingImport] = useState(false);
 
   const {
     uploadState,
@@ -26,9 +50,53 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
     setUploadError,
   } = useSessionStore();
 
+  const clearImportState = useCallback(() => {
+    setImportFile(null);
+    setImportPreview(null);
+    setImportPreviewIssues([]);
+    setPreviewingImport(false);
+  }, []);
+
+  const handleImportPreview = useCallback(
+    async (file: File) => {
+      setImportFile(file);
+      setImportPreview(null);
+      setImportPreviewIssues([]);
+      setPreviewingImport(true);
+      setUploadState("uploading");
+      setUploadProgress(35);
+      setUploadError(null);
+      setStatusMessage(`Previewing import: ${file.name}`);
+
+      try {
+        const response = await previewImportFile(file);
+        setUploadProgress(100);
+        if (isImportValidationResponse(response)) {
+          setImportPreviewIssues(response.issues);
+          setUploadState("error");
+          setUploadError(response.issues.map((issue) => issue.message).join("; "));
+          setStatusMessage("Import preview needs attention");
+          return;
+        }
+        setImportPreview(response);
+        setUploadState("success");
+        setStatusMessage(`Preview ready: ${response.filename || file.name}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : t.uploadFailed;
+        setUploadState("error");
+        setUploadError(msg);
+        setStatusMessage(`Error: ${msg}`);
+      } finally {
+        setPreviewingImport(false);
+      }
+    },
+    [t.uploadFailed, setUploadState, setUploadProgress, setUploadError],
+  );
+
   /** Upload a single file and go to Analysis tab */
   const handleSingleUpload = useCallback(
     async (file: File) => {
+      clearImportState();
       setUploadState("uploading");
       setUploadProgress(30);
       setUploadError(null);
@@ -51,12 +119,13 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         setStatusMessage(`Error: ${msg}`);
       }
     },
-    [t, setSession, setUploadState, setUploadProgress, setUploadError],
+    [t, setSession, setUploadState, setUploadProgress, setUploadError, clearImportState],
   );
 
   /** Upload multiple files as separate sessions, then go to Project tab */
   const handleBatchUpload = useCallback(
     async (files: File[]) => {
+      clearImportState();
       setUploadState("uploading");
       setUploadProgress(0);
       setUploadError(null);
@@ -94,13 +163,27 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         onGoToProject?.();
       }, 800);
     },
-    [t, setUploadState, setUploadProgress, setUploadError, onGoToProject],
+    [t, setUploadState, setUploadProgress, setUploadError, onGoToProject, clearImportState],
   );
 
   /** Handle multiple files: XML → zip as one, raw files → batch upload */
   const handleMultipleFiles = useCallback(
     async (files: File[]) => {
       const lowerName = (f: File) => f.name.toLowerCase();
+      const genericImportFiles = files.filter((f) =>
+        GENERIC_IMPORT_EXTENSIONS.some((ext) => lowerName(f).endsWith(ext)),
+      );
+      if (genericImportFiles.length > 0) {
+        if (files.length > 1 || genericImportFiles.length > 1) {
+          setUploadState("error");
+          setUploadError("Select one CSV, TSV, or TXT import file at a time for mapping.");
+          setStatusMessage("Error: Select one mapped import file at a time.");
+          return;
+        }
+        await handleImportPreview(genericImportFiles[0]);
+        return;
+      }
+
       const xmlFiles = files.filter((f) => lowerName(f).endsWith(".xml"));
       const rawFiles = files.filter((f) =>
         RAW_EXTENSIONS.some((ext) => lowerName(f).endsWith(ext)),
@@ -149,7 +232,15 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         await handleBatchUpload(uploadItems);
       }
     },
-    [t, handleSingleUpload, handleBatchUpload, setUploadState, setUploadProgress, setUploadError],
+    [
+      t,
+      handleSingleUpload,
+      handleBatchUpload,
+      handleImportPreview,
+      setUploadState,
+      setUploadProgress,
+      setUploadError,
+    ],
   );
 
   const onDrop = useCallback(
@@ -174,14 +265,16 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         await handleMultipleFiles(Array.from(e.dataTransfer.files));
       } else if (e.dataTransfer.files.length === 1) {
         const file = e.dataTransfer.files[0];
-        if (file.name.toLowerCase().endsWith(".xml")) {
+        if (isGenericImportFile(file)) {
+          await handleImportPreview(file);
+        } else if (file.name.toLowerCase().endsWith(".xml")) {
           await handleMultipleFiles([file]);
         } else {
           await handleSingleUpload(file);
         }
       }
     },
-    [handleSingleUpload, handleMultipleFiles],
+    [handleSingleUpload, handleMultipleFiles, handleImportPreview],
   );
 
   const onFileChange = useCallback(
@@ -193,7 +286,9 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         await handleMultipleFiles(files);
       } else if (files.length === 1) {
         const file = files[0];
-        if (file.name.toLowerCase().endsWith(".xml")) {
+        if (isGenericImportFile(file)) {
+          await handleImportPreview(file);
+        } else if (file.name.toLowerCase().endsWith(".xml")) {
           await handleMultipleFiles([file]);
         } else {
           await handleSingleUpload(file);
@@ -201,7 +296,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       }
       e.target.value = "";
     },
-    [handleSingleUpload, handleMultipleFiles],
+    [handleSingleUpload, handleMultipleFiles, handleImportPreview],
   );
 
   const onFolderChange = useCallback(
@@ -267,7 +362,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           ref={fileInputRef}
           type="file"
           id="file-input"
-          accept=".eds,.xls,.xlsx,.pcrd,.zip,.xml"
+          accept={ACCEPTED_EXTENSIONS}
           multiple
           hidden
           onChange={onFileChange}
@@ -281,6 +376,30 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           hidden
           onChange={onFolderChange}
         />
+      </div>
+
+      <div className="mt-4 border border-border rounded-lg bg-surface p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold">Import templates</h3>
+            <p className="text-[12px] text-text-muted">
+              Download a Q-Prism template, then upload it here for preview and mapping.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {TEMPLATE_LINKS.map((template) => (
+              <a
+                key={template.href}
+                href={template.href}
+                download
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-[12px] hover:bg-bg"
+              >
+                <Download size={14} />
+                {template.label}
+              </a>
+            ))}
+          </div>
+        </div>
       </div>
 
       {uploadState !== "idle" && (
@@ -299,6 +418,58 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           >
             {statusMessage}
           </p>
+        </div>
+      )}
+
+      {importFile && importPreview && (
+        <ImportMappingWizard
+          file={importFile}
+          preview={importPreview}
+          previewIssues={importPreviewIssues}
+          previewing={previewingImport}
+          onPreviewAgain={() => handleImportPreview(importFile)}
+          onCancel={() => {
+            clearImportState();
+            setUploadState("idle");
+            setUploadProgress(0);
+            setUploadError(null);
+            setStatusMessage(null);
+          }}
+          onImported={(info) => {
+            setUploadProgress(100);
+            setUploadState("success");
+            setStatusMessage(t.parsed(info.instrument, info.num_wells, info.num_cycles));
+            setTimeout(() => {
+              setSession(info.session_id, info);
+            }, 500);
+          }}
+        />
+      )}
+
+      {importFile && !importPreview && importPreviewIssues.length > 0 && (
+        <div className="mt-4 rounded-md border border-danger bg-red-50 p-4 text-sm text-danger">
+          <p className="font-medium">Import preview failed for {importFile.name}</p>
+          <ul className="mt-2 list-disc list-inside space-y-1">
+            {importPreviewIssues.map((issue, index) => (
+              <li key={`${issue.code}-${index}`}>{issue.message}</li>
+            ))}
+          </ul>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => handleImportPreview(importFile)}
+              className="px-3 py-2 border border-danger rounded-md text-[12px]"
+            >
+              Retry preview
+            </button>
+            <button
+              type="button"
+              onClick={clearImportState}
+              className="px-3 py-2 border border-border rounded-md text-[12px] text-text"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
@@ -384,6 +555,15 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       </div>
     </div>
   );
+}
+
+function isGenericImportFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return GENERIC_IMPORT_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
+
+function isImportValidationResponse(response: ImportPreviewResponse): response is Extract<ImportPreviewResponse, { status: "validation_failed" }> {
+  return "status" in response && response.status === "validation_failed";
 }
 
 /** Recursively read files from dropped folder entries */
