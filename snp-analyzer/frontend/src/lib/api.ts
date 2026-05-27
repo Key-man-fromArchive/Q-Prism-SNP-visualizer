@@ -37,6 +37,7 @@ import type {
   AdminDashboardResponse
 } from '@/types/auth';
 import { useAuthStore } from '@/stores/auth-store';
+import { runtimeApiBasePath } from '@/lib/runtime-paths';
 
 /**
  * Build query string from params object, skipping undefined values
@@ -49,12 +50,7 @@ function buildQuery(params: Record<string, string | number | boolean | undefined
   return entries.length > 0 ? `?${entries.join('&')}` : '';
 }
 
-function trimTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value.replace(/\/+$/, "") : value;
-}
-
-const defaultApiBase = `${import.meta.env.BASE_URL || "/"}api`;
-const apiBasePath = trimTrailingSlash(import.meta.env.VITE_API_BASE_PATH || defaultApiBase);
+const apiBasePath = runtimeApiBasePath();
 
 function apiUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) return path;

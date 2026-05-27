@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useSessionStore } from "@/stores/session-store";
 import { previewImportFile, uploadFile as apiUpload } from "@/lib/api";
+import { runtimeAssetPath } from "@/lib/runtime-paths";
 import JSZip from "jszip";
 import { useI18n } from "@/hooks/use-i18n";
 import { Download } from "lucide-react";
@@ -390,7 +391,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
             {TEMPLATE_LINKS.map((template) => (
               <a
                 key={template.href}
-                href={template.href}
+                href={runtimeAssetPath(template.href)}
                 download
                 className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-[12px] hover:bg-bg"
               >
