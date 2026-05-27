@@ -1,6 +1,9 @@
 # Stage 1: Build React frontend
 FROM node:22-slim AS frontend-build
 
+ARG VITE_APP_BASE_PATH=/
+ENV VITE_APP_BASE_PATH=${VITE_APP_BASE_PATH}
+
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
