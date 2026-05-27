@@ -57,7 +57,7 @@ const en = {
 
   // Upload
   dragDrop: 'Drag & drop your raw fluorescence file here',
-  fileFormats: 'QuantStudio (.eds) | CFX Opus (.pcrd) | mapped imports (.csv, .tsv, .txt)',
+  fileFormats: 'Raw: .eds, .pcrd, .xls, .xlsx, .zip/XML | Imports: RDML/RDM, RDES TSV, CSV/TSV/TXT',
   batchHint: 'Multiple files or folders → batch upload to session list',
   browseFiles: 'Browse Files',
   browseFolder: 'Browse Folder',
@@ -71,13 +71,13 @@ const en = {
   packagingXML: (n: number) => `Packaging ${n} XML file${n > 1 ? 's' : ''}...`,
   packagingFailed: 'Packaging failed',
   noSupportedFiles: 'No supported files found',
-  noSupportedFilesDetail: 'Error: No supported files found (.eds, .xls, .xlsx, .pcrd, .zip, .xml, .csv, .tsv, .txt)',
+  noSupportedFilesDetail: 'Error: No supported files found (.eds, .xls, .xlsx, .pcrd, .zip, .xml, .rdml, .rdm, .csv, .tsv, .txt)',
   goToProjects: 'Or manage existing sessions & projects →',
 
   // Quick Start Guide
   guideTitle: 'Quick Start Guide',
   guideStep1Title: 'Upload',
-  guideStep1Desc: 'Drop your PCR raw data file above. Recommended: QuantStudio (.eds) or CFX Opus (.pcrd).',
+  guideStep1Desc: 'Drop a raw instrument file or a mapped amplification import above.',
   guideStep2Title: 'Analyze',
   guideStep2Desc: 'View scatter plot, plate map, and amplification curves. Assign genotypes manually or with auto-clustering.',
   guideStep3Title: 'Compare',
@@ -86,9 +86,11 @@ const en = {
   guideStep4Desc: 'Export results as CSV, PNG, or PDF. Organize sessions into projects for batch analysis.',
   guideSupportedFormats: 'Supported Formats',
   guideQS: 'QuantStudio',
-  guideQSFormats: '.eds (raw binary) — recommended',
+  guideQSFormats: '.eds raw, .xls export',
   guideCFX: 'CFX Opus',
-  guideCFXFormats: '.pcrd (raw binary) — recommended',
+  guideCFXFormats: '.pcrd raw, .xlsx export, .zip/XML export',
+  guideImports: 'Open standards / mapped imports',
+  guideImportFormats: 'RDML/RDM, RDES TSV, generic CSV/TSV/TXT',
   guideTips: 'Tips',
   guideTip1: 'Keyboard shortcut ? opens the shortcuts panel',
   guideTip2: 'Right-click selected wells to assign genotypes',

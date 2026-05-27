@@ -9,8 +9,14 @@ import { ImportMappingWizard } from "@/components/upload/ImportMappingWizard";
 import type { ImportPreview, ImportPreviewResponse, ValidationIssue } from "@/types/api";
 
 const RAW_EXTENSIONS = [".eds", ".xls", ".xlsx", ".pcrd", ".zip"];
-const GENERIC_IMPORT_EXTENSIONS = [".csv", ".tsv", ".txt"];
-const ACCEPTED_EXTENSIONS = [...RAW_EXTENSIONS, ".xml", ...GENERIC_IMPORT_EXTENSIONS].join(",");
+const MAPPED_IMPORT_EXTENSIONS = [".csv", ".tsv", ".txt"];
+const STANDARD_IMPORT_EXTENSIONS = [".rdml", ".rdm"];
+const PREVIEW_IMPORT_EXTENSIONS = [...MAPPED_IMPORT_EXTENSIONS, ...STANDARD_IMPORT_EXTENSIONS];
+const ACCEPTED_EXTENSIONS = [
+  ...RAW_EXTENSIONS,
+  ".xml",
+  ...PREVIEW_IMPORT_EXTENSIONS,
+].join(",");
 
 const TEMPLATE_LINKS = [
   {
@@ -114,13 +120,26 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           setSession(info.session_id, info);
         }, 500);
       } catch (err) {
+        if (isSpreadsheetImportFallbackFile(file)) {
+          setStatusMessage(`Raw parser failed; opening import mapping for ${file.name}`);
+          await handleImportPreview(file);
+          return;
+        }
         setUploadState("error");
         const msg = err instanceof Error ? err.message : t.uploadFailed;
         setUploadError(msg);
         setStatusMessage(`Error: ${msg}`);
       }
     },
-    [t, setSession, setUploadState, setUploadProgress, setUploadError, clearImportState],
+    [
+      t,
+      setSession,
+      setUploadState,
+      setUploadProgress,
+      setUploadError,
+      clearImportState,
+      handleImportPreview,
+    ],
   );
 
   /** Upload multiple files as separate sessions, then go to Project tab */
@@ -171,17 +190,17 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
   const handleMultipleFiles = useCallback(
     async (files: File[]) => {
       const lowerName = (f: File) => f.name.toLowerCase();
-      const genericImportFiles = files.filter((f) =>
-        GENERIC_IMPORT_EXTENSIONS.some((ext) => lowerName(f).endsWith(ext)),
+      const previewImportFiles = files.filter((f) =>
+        PREVIEW_IMPORT_EXTENSIONS.some((ext) => lowerName(f).endsWith(ext)),
       );
-      if (genericImportFiles.length > 0) {
-        if (files.length > 1 || genericImportFiles.length > 1) {
+      if (previewImportFiles.length > 0) {
+        if (files.length > 1 || previewImportFiles.length > 1) {
           setUploadState("error");
-          setUploadError("Select one CSV, TSV, or TXT import file at a time for mapping.");
-          setStatusMessage("Error: Select one mapped import file at a time.");
+          setUploadError("Select one RDML, CSV, TSV, or TXT import file at a time for mapping.");
+          setStatusMessage("Error: Select one import file at a time.");
           return;
         }
-        await handleImportPreview(genericImportFiles[0]);
+        await handleImportPreview(previewImportFiles[0]);
         return;
       }
 
@@ -266,7 +285,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         await handleMultipleFiles(Array.from(e.dataTransfer.files));
       } else if (e.dataTransfer.files.length === 1) {
         const file = e.dataTransfer.files[0];
-        if (isGenericImportFile(file)) {
+        if (isPreviewImportFile(file)) {
           await handleImportPreview(file);
         } else if (file.name.toLowerCase().endsWith(".xml")) {
           await handleMultipleFiles([file]);
@@ -287,7 +306,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         await handleMultipleFiles(files);
       } else if (files.length === 1) {
         const file = files[0];
-        if (isGenericImportFile(file)) {
+        if (isPreviewImportFile(file)) {
           await handleImportPreview(file);
         } else if (file.name.toLowerCase().endsWith(".xml")) {
           await handleMultipleFiles([file]);
@@ -539,6 +558,10 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
                     <span className="font-medium">{t.guideCFX}</span>
                     <span className="text-text-muted block">{t.guideCFXFormats}</span>
                   </div>
+                  <div className="p-2 rounded bg-[var(--bg)]">
+                    <span className="font-medium">{t.guideImports}</span>
+                    <span className="text-text-muted block">{t.guideImportFormats}</span>
+                  </div>
                 </div>
               </div>
               <div>
@@ -558,9 +581,13 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
   );
 }
 
-function isGenericImportFile(file: File): boolean {
+function isPreviewImportFile(file: File): boolean {
   const name = file.name.toLowerCase();
-  return GENERIC_IMPORT_EXTENSIONS.some((ext) => name.endsWith(ext));
+  return PREVIEW_IMPORT_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
+
+function isSpreadsheetImportFallbackFile(file: File): boolean {
+  return file.name.toLowerCase().endsWith(".xlsx");
 }
 
 function isImportValidationResponse(response: ImportPreviewResponse): response is Extract<ImportPreviewResponse, { status: "validation_failed" }> {

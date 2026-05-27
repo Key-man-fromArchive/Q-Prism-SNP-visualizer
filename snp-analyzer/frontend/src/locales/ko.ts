@@ -59,7 +59,7 @@ const ko: Translations = {
 
   // Upload
   dragDrop: '형광 데이터 파일을 여기에 드래그 & 드롭하세요',
-  fileFormats: 'QuantStudio (.eds) | CFX Opus (.pcrd) | 매핑 가져오기 (.csv, .tsv, .txt)',
+  fileFormats: '원시: .eds, .pcrd, .xls, .xlsx, .zip/XML | 가져오기: RDML/RDM, RDES TSV, CSV/TSV/TXT',
   batchHint: '여러 파일 또는 폴더 → 세션 목록에 일괄 업로드',
   browseFiles: '파일 찾아보기',
   browseFolder: '폴더 찾아보기',
@@ -73,13 +73,13 @@ const ko: Translations = {
   packagingXML: (n: number) => `XML 파일 ${n}개 패키징 중...`,
   packagingFailed: '패키징 실패',
   noSupportedFiles: '지원되는 파일이 없습니다',
-  noSupportedFilesDetail: '오류: 지원되는 파일이 없습니다 (.eds, .xls, .xlsx, .pcrd, .zip, .xml, .csv, .tsv, .txt)',
+  noSupportedFilesDetail: '오류: 지원되는 파일이 없습니다 (.eds, .xls, .xlsx, .pcrd, .zip, .xml, .rdml, .rdm, .csv, .tsv, .txt)',
   goToProjects: '기존 세션 및 프로젝트 관리 →',
 
   // Quick Start Guide
   guideTitle: '빠른 시작 가이드',
   guideStep1Title: '업로드',
-  guideStep1Desc: '위에 PCR 원시 데이터 파일을 드롭하세요. 권장: QuantStudio (.eds) 또는 CFX Opus (.pcrd).',
+  guideStep1Desc: '위에 장비 원시 파일 또는 매핑된 증폭 데이터 파일을 드롭하세요.',
   guideStep2Title: '분석',
   guideStep2Desc: '산점도, 플레이트 맵, 증폭 곡선을 확인하세요. 수동 또는 자동 클러스터링으로 유전자형을 지정합니다.',
   guideStep3Title: '비교',
@@ -88,9 +88,11 @@ const ko: Translations = {
   guideStep4Desc: '결과를 CSV, PNG, PDF로 내보내세요. 세션을 프로젝트로 정리하여 일괄 분석할 수 있습니다.',
   guideSupportedFormats: '지원 파일 형식',
   guideQS: 'QuantStudio',
-  guideQSFormats: '.eds (원시 바이너리) — 권장',
+  guideQSFormats: '.eds 원시 파일, .xls 내보내기',
   guideCFX: 'CFX Opus',
-  guideCFXFormats: '.pcrd (원시 바이너리) — 권장',
+  guideCFXFormats: '.pcrd 원시 파일, .xlsx 내보내기, .zip/XML 내보내기',
+  guideImports: '공개 표준 / 매핑 가져오기',
+  guideImportFormats: 'RDML/RDM, RDES TSV, 일반 CSV/TSV/TXT',
   guideTips: '사용 팁',
   guideTip1: '키보드 단축키 ?를 누르면 단축키 패널이 열립니다',
   guideTip2: '선택한 웰을 우클릭하여 유전자형을 지정할 수 있습니다',
