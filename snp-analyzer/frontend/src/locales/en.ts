@@ -76,13 +76,13 @@ const en = {
   importTemplatesTitle: 'Import templates',
   importTemplatesDescription: 'Download a Q-Prism template, then upload it here for preview and mapping.',
   importTemplatesHelpLabel: 'Import template help',
-  importTemplatesHelp: 'Use these templates when your qPCR software can export well-by-cycle fluorescence values but not a directly supported raw file. Fill in channels and roles, then upload the file for mapping.',
+  importTemplatesHelp: 'Use these templates when your qPCR software can export well-by-cycle fluorescence values but not a directly supported raw file. Each template opens a preview step where channel roles and WT/MT mapping are confirmed.',
   templateRdes: 'RDES amplification TSV',
-  templateRdesHelp: 'Recommended structured TSV for well, cycle, dye, role, sample, target, and RFU columns.',
+  templateRdesHelp: 'Recommended Q-Prism standard template. It explicitly records well, cycle, dye, role (WT/MT/normalization), sample, target, and RFU columns for stable instrument-independent mapping.',
   templateGenericLong: 'Generic long CSV',
-  templateGenericLongHelp: 'Use when each row is one well-cycle-channel reading.',
+  templateGenericLongHelp: 'Use when each row is one well-cycle-channel reading, such as A1, cycle 12, FAM, RFU 1532. Best for exports where dye/channel values repeat as rows.',
   templateGenericWide: 'Generic wide CSV',
-  templateGenericWideHelp: 'Use when each row is one well-cycle and fluorescence channels are separate columns.',
+  templateGenericWideHelp: 'Use when each row is one well-cycle and fluorescence channels such as FAM, HEX/VIC, and ROX are separate columns. Best for spreadsheet-style channel tables.',
 
   // Quick Start Guide
   guideTitle: 'Quick Start Guide',

@@ -78,13 +78,13 @@ const ko: Translations = {
   importTemplatesTitle: '가져오기 양식',
   importTemplatesDescription: 'Q-Prism 양식을 내려받아 작성한 뒤, 여기로 업로드해 미리보기와 매핑을 진행하세요.',
   importTemplatesHelpLabel: '가져오기 양식 도움말',
-  importTemplatesHelp: 'qPCR 소프트웨어가 직접 지원되는 원시 파일을 내보내지 못하더라도 웰별·사이클별 형광값을 내보낼 수 있으면 이 양식을 사용하세요. 채널과 역할을 채운 뒤 업로드하면 매핑 단계로 진행됩니다.',
+  importTemplatesHelp: 'qPCR 소프트웨어가 직접 지원되는 원시 파일을 내보내지 못하더라도 웰별·사이클별 형광값을 내보낼 수 있으면 이 양식을 사용하세요. 각 양식은 업로드 후 채널 역할과 WT/MT 매핑을 확인하는 단계로 이어집니다.',
   templateRdes: 'RDES 증폭 TSV',
-  templateRdesHelp: '웰, 사이클, 염료, 역할, 샘플, 타깃, RFU 컬럼을 포함하는 권장 구조의 TSV 양식입니다.',
+  templateRdesHelp: '가장 권장되는 Q-Prism 표준 양식입니다. 웰, 사이클, 염료, 역할(WT/MT/normalization), 샘플, 타깃, RFU 컬럼을 명시해 장비 종류와 무관하게 안정적으로 매핑할 수 있습니다.',
   templateGenericLong: '일반 long CSV',
-  templateGenericLongHelp: '각 행이 하나의 웰-사이클-채널 측정값인 형식에 사용합니다.',
+  templateGenericLongHelp: '각 행이 하나의 웰-사이클-채널 측정값인 형식입니다. 예: A1, cycle 12, FAM, RFU 1532처럼 염료/채널이 행으로 반복되는 장비 export에 적합합니다.',
   templateGenericWide: '일반 wide CSV',
-  templateGenericWideHelp: '각 행이 하나의 웰-사이클이고 형광 채널이 별도 컬럼인 형식에 사용합니다.',
+  templateGenericWideHelp: '각 행이 하나의 웰-사이클이고 FAM, HEX/VIC, ROX 같은 형광 채널이 별도 컬럼으로 나뉜 형식입니다. Excel에서 채널별 열을 가진 표를 CSV로 저장할 때 적합합니다.',
 
   // Quick Start Guide
   guideTitle: '빠른 시작 가이드',

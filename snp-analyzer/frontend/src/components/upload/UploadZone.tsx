@@ -50,6 +50,8 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importPreviewIssues, setImportPreviewIssues] = useState<ValidationIssue[]>([]);
   const [previewingImport, setPreviewingImport] = useState(false);
+  const [showTemplateHelp, setShowTemplateHelp] = useState(false);
+  const [activeTemplateTooltip, setActiveTemplateTooltip] = useState<string | null>(null);
 
   const {
     uploadState,
@@ -407,16 +409,21 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
             <div className="flex items-center gap-1.5">
               <h3 className="text-sm font-semibold">{t.importTemplatesTitle}</h3>
               <span
-                className="group relative inline-flex h-5 w-5 items-center justify-center rounded-full text-text-muted hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
+                className="relative inline-flex h-5 w-5 items-center justify-center rounded-full text-text-muted hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
                 tabIndex={0}
                 role="img"
                 aria-label={t.importTemplatesHelpLabel}
-                title={t.importTemplatesHelp}
+                onMouseEnter={() => setShowTemplateHelp(true)}
+                onMouseLeave={() => setShowTemplateHelp(false)}
+                onFocus={() => setShowTemplateHelp(true)}
+                onBlur={() => setShowTemplateHelp(false)}
               >
                 <CircleHelp size={15} />
-                <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 hidden w-64 -translate-x-1/2 rounded-md border border-border bg-surface px-3 py-2 text-left text-[12px] font-normal leading-snug text-text shadow-lg group-hover:block group-focus:block">
-                  {t.importTemplatesHelp}
-                </span>
+                {showTemplateHelp && (
+                  <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-72 -translate-x-1/2 rounded-md border border-border bg-surface px-3 py-2 text-left text-[12px] font-normal leading-snug text-text shadow-lg">
+                    {t.importTemplatesHelp}
+                  </span>
+                )}
               </span>
             </div>
             <p className="text-[12px] text-text-muted">
@@ -425,16 +432,32 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           </div>
           <div className="flex flex-wrap gap-2">
             {TEMPLATE_LINKS.map((template) => (
-              <a
+              <span
                 key={template.href}
-                href={runtimeAssetPath(template.href)}
-                download
-                title={t[template.helpKey]}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-[12px] hover:bg-bg"
+                className="relative inline-flex"
+                onMouseEnter={() => setActiveTemplateTooltip(template.labelKey)}
+                onMouseLeave={() => setActiveTemplateTooltip(null)}
+                onFocus={() => setActiveTemplateTooltip(template.labelKey)}
+                onBlur={() => setActiveTemplateTooltip(null)}
               >
-                <Download size={14} />
-                {t[template.labelKey]}
-              </a>
+                <a
+                  href={runtimeAssetPath(template.href)}
+                  download
+                  aria-describedby={`${template.labelKey}-tooltip`}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-[12px] hover:bg-bg focus:outline-none focus:ring-2 focus:ring-primary/40"
+                >
+                  <Download size={14} />
+                  {t[template.labelKey]}
+                </a>
+                {activeTemplateTooltip === template.labelKey && (
+                  <span
+                    id={`${template.labelKey}-tooltip`}
+                    className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-72 -translate-x-1/2 rounded-md border border-border bg-surface px-3 py-2 text-left text-[12px] leading-snug text-text shadow-lg"
+                  >
+                    {t[template.helpKey]}
+                  </span>
+                )}
+              </span>
             ))}
           </div>
         </div>
