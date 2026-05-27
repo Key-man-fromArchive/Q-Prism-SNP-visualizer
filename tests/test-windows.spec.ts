@@ -1,19 +1,12 @@
 import { test, expect } from "@playwright/test";
-import path from "path";
+import { uploadAndWait } from "./helpers";
 
 const EDS_FILE = "/mnt/ivt-ngs1/5.work-AI/SNP-dsicrimination/RAW-data/260126-QS3.eds";
 
 test.describe("Data Window Selection (.eds)", () => {
 
   test("upload .eds and verify window buttons appear", async ({ page }) => {
-    await page.goto("http://localhost:8002");
-
-    // Upload .eds file
-    const fileInput = page.locator("#file-input");
-    await fileInput.setInputFiles(EDS_FILE);
-
-    // Wait for analysis panel
-    await page.waitForSelector("#analysis-panel:not(.hidden)", { timeout: 15000 });
+    await uploadAndWait(page, EDS_FILE);
 
     // Screenshot: initial state (should show Amplification window active)
     await page.waitForTimeout(1000);
@@ -44,11 +37,7 @@ test.describe("Data Window Selection (.eds)", () => {
   });
 
   test("click Pre-read hides slider, shows baseline data", async ({ page }) => {
-    await page.goto("http://localhost:8002");
-    const fileInput = page.locator("#file-input");
-    await fileInput.setInputFiles(EDS_FILE);
-    await page.waitForSelector("#analysis-panel:not(.hidden)", { timeout: 15000 });
-    await page.waitForTimeout(1000);
+    await uploadAndWait(page, EDS_FILE);
 
     // Click Pre-read button
     const preReadBtn = page.locator(".window-btn", { hasText: "Pre-read" });
@@ -71,11 +60,7 @@ test.describe("Data Window Selection (.eds)", () => {
   });
 
   test("click Post-read hides slider, shows endpoint data", async ({ page }) => {
-    await page.goto("http://localhost:8002");
-    const fileInput = page.locator("#file-input");
-    await fileInput.setInputFiles(EDS_FILE);
-    await page.waitForSelector("#analysis-panel:not(.hidden)", { timeout: 15000 });
-    await page.waitForTimeout(1000);
+    await uploadAndWait(page, EDS_FILE);
 
     // Click Post-read button
     const postReadBtn = page.locator(".window-btn", { hasText: "Post-read" });
@@ -96,11 +81,7 @@ test.describe("Data Window Selection (.eds)", () => {
   });
 
   test("click back to Amplification restores slider", async ({ page }) => {
-    await page.goto("http://localhost:8002");
-    const fileInput = page.locator("#file-input");
-    await fileInput.setInputFiles(EDS_FILE);
-    await page.waitForSelector("#analysis-panel:not(.hidden)", { timeout: 15000 });
-    await page.waitForTimeout(1000);
+    await uploadAndWait(page, EDS_FILE);
 
     // Click Pre-read first
     await page.locator(".window-btn", { hasText: "Pre-read" }).click();
@@ -126,11 +107,7 @@ test.describe("Data Window Selection (.eds)", () => {
   });
 
   test("well click shows amplification curve with all 25 points", async ({ page }) => {
-    await page.goto("http://localhost:8002");
-    const fileInput = page.locator("#file-input");
-    await fileInput.setInputFiles(EDS_FILE);
-    await page.waitForSelector("#analysis-panel:not(.hidden)", { timeout: 15000 });
-    await page.waitForTimeout(1000);
+    await uploadAndWait(page, EDS_FILE);
 
     // Click a non-empty well in the plate view (skip empty wells)
     const well = page.locator(".plate-well:not(.empty)").first();

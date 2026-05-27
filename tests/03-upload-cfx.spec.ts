@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { login, uploadAndWait } from './helpers';
 
 const CFX_DIR = '/mnt/ivt-ngs1/5.work-AI/SNP-dsicrimination/CFX-opus';
 
@@ -18,7 +19,7 @@ const CFX_ALLELIC = path.resolve(
 
 test.describe('CFX Opus Amplification Results Upload', () => {
   test('upload succeeds and shows CFX Opus badge', async ({ page }) => {
-    await page.goto('/');
+    await login(page);
     await page.locator('#file-input').setInputFiles(CFX_AMPLIFICATION);
 
     const status = page.locator('#upload-status');
@@ -27,10 +28,7 @@ test.describe('CFX Opus Amplification Results Upload', () => {
   });
 
   test('single-cycle data hides cycle slider', async ({ page }) => {
-    await page.goto('/');
-    await page.locator('#file-input').setInputFiles(CFX_AMPLIFICATION);
-    await expect(page.locator('#upload-status')).toContainText('Parsed', { timeout: 15000 });
-    await expect(page.locator('#analysis-panel')).not.toHaveClass(/hidden/, { timeout: 5000 });
+    await uploadAndWait(page, CFX_AMPLIFICATION);
 
     // Cycle slider should be hidden for single-cycle data
     const cycleControl = page.locator('#cycle-control');
@@ -38,10 +36,7 @@ test.describe('CFX Opus Amplification Results Upload', () => {
   });
 
   test('96 wells render in plate view', async ({ page }) => {
-    await page.goto('/');
-    await page.locator('#file-input').setInputFiles(CFX_AMPLIFICATION);
-    await expect(page.locator('#upload-status')).toContainText('Parsed', { timeout: 15000 });
-    await expect(page.locator('#analysis-panel')).not.toHaveClass(/hidden/, { timeout: 5000 });
+    await uploadAndWait(page, CFX_AMPLIFICATION);
     await page.waitForTimeout(2000);
 
     await expect(page.locator('#wells-badge')).toContainText('96 wells');
@@ -51,10 +46,7 @@ test.describe('CFX Opus Amplification Results Upload', () => {
   });
 
   test('scatter plot renders with data', async ({ page }) => {
-    await page.goto('/');
-    await page.locator('#file-input').setInputFiles(CFX_AMPLIFICATION);
-    await expect(page.locator('#upload-status')).toContainText('Parsed', { timeout: 15000 });
-    await expect(page.locator('#analysis-panel')).not.toHaveClass(/hidden/, { timeout: 5000 });
+    await uploadAndWait(page, CFX_AMPLIFICATION);
     await page.waitForTimeout(2000);
 
     const hasPlot = await page.evaluate(() => {
@@ -67,7 +59,7 @@ test.describe('CFX Opus Amplification Results Upload', () => {
 
 test.describe('CFX Opus End Point Results Upload', () => {
   test('endpoint data parses and renders', async ({ page }) => {
-    await page.goto('/');
+    await login(page);
     await page.locator('#file-input').setInputFiles(CFX_ENDPOINT);
 
     const status = page.locator('#upload-status');
@@ -79,7 +71,7 @@ test.describe('CFX Opus End Point Results Upload', () => {
 
 test.describe('CFX Opus Allelic Discrimination Results Upload', () => {
   test('allelic discrimination data parses and renders', async ({ page }) => {
-    await page.goto('/');
+    await login(page);
     await page.locator('#file-input').setInputFiles(CFX_ALLELIC);
 
     const status = page.locator('#upload-status');

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { loginRequest, uploadAndWait } from './helpers';
 
 const QS_MULTICOMPONENT = path.resolve(
   '/mnt/ivt-ngs1/5.work-AI/SNP-dsicrimination/Quantstudio3/ASG-PCR-NTCtest_Multicomponent Data.xls'
@@ -8,14 +9,6 @@ const CFX_AMPLIFICATION = path.resolve(
   '/mnt/ivt-ngs1/5.work-AI/SNP-dsicrimination/CFX-opus',
   'admin_2026-02-16 11-12-20_783BR20183 -  Quantification Amplification Results.xlsx'
 );
-
-async function uploadAndWait(page, filePath: string) {
-  await page.goto('/');
-  await page.locator('#file-input').setInputFiles(filePath);
-  await expect(page.locator('#upload-status')).toContainText('Parsed', { timeout: 15000 });
-  await expect(page.locator('#analysis-panel')).not.toHaveClass(/hidden/, { timeout: 5000 });
-  await page.waitForTimeout(2000);
-}
 
 test.describe('Plate View Interaction', () => {
   test('clicking a plate well updates detail panel', async ({ page }) => {
@@ -188,6 +181,7 @@ test.describe('QuantStudio Multi-Cycle Features', () => {
 
 test.describe('API Endpoints Direct', () => {
   test('upload API returns correct response', async ({ request }) => {
+    await loginRequest(request);
     const filePath = QS_MULTICOMPONENT;
     const fs = require('fs');
     const fileBuffer = fs.readFileSync(filePath);
@@ -240,6 +234,7 @@ test.describe('API Endpoints Direct', () => {
   });
 
   test('scatter data has valid normalized values', async ({ request }) => {
+    await loginRequest(request);
     const fs = require('fs');
     const fileBuffer = fs.readFileSync(QS_MULTICOMPONENT);
 
@@ -269,11 +264,13 @@ test.describe('API Endpoints Direct', () => {
   });
 
   test('invalid session returns 404', async ({ request }) => {
+    await loginRequest(request);
     const res = await request.get('/api/data/nonexistent/scatter?cycle=1');
     expect(res.status()).toBe(404);
   });
 
   test('invalid cycle returns 400', async ({ request }) => {
+    await loginRequest(request);
     const fs = require('fs');
     const fileBuffer = fs.readFileSync(QS_MULTICOMPONENT);
 

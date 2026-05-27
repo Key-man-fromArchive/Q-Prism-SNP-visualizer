@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { login } from './helpers';
 
 const QS_DIR = '/mnt/ivt-ngs1/5.work-AI/SNP-dsicrimination/Quantstudio3';
 const CFX_DIR = '/mnt/ivt-ngs1/5.work-AI/SNP-dsicrimination/CFX-opus';
 
 test.describe('QuantStudio Non-Usable File Rejection', () => {
   test('Raw Data file shows helpful error', async ({ page }) => {
-    await page.goto('/');
+    await login(page);
     await page.locator('#file-input').setInputFiles(
       path.resolve(QS_DIR, 'ASG-PCR-NTCtest_Raw Data.xls')
     );
@@ -17,7 +18,7 @@ test.describe('QuantStudio Non-Usable File Rejection', () => {
   });
 
   test('Results file shows helpful error', async ({ page }) => {
-    await page.goto('/');
+    await login(page);
     await page.locator('#file-input').setInputFiles(
       path.resolve(QS_DIR, 'ASG-PCR-NTCtest_Results.xls')
     );
@@ -28,7 +29,7 @@ test.describe('QuantStudio Non-Usable File Rejection', () => {
   });
 
   test('Sample Setup file shows helpful error', async ({ page }) => {
-    await page.goto('/');
+    await login(page);
     await page.locator('#file-input').setInputFiles(
       path.resolve(QS_DIR, 'ASG-PCR-NTCtest_Sample Setup.xls')
     );
@@ -41,7 +42,7 @@ test.describe('QuantStudio Non-Usable File Rejection', () => {
 
 test.describe('CFX Opus Non-Usable File Rejection', () => {
   test('Quantification Cq Results shows error', async ({ page }) => {
-    await page.goto('/');
+    await login(page);
     await page.locator('#file-input').setInputFiles(
       path.resolve(CFX_DIR, 'admin_2026-02-16 11-12-20_783BR20183 -  Quantification Cq Results.xlsx')
     );
@@ -51,7 +52,7 @@ test.describe('CFX Opus Non-Usable File Rejection', () => {
   });
 
   test('Melt Curve file shows error', async ({ page }) => {
-    await page.goto('/');
+    await login(page);
     await page.locator('#file-input').setInputFiles(
       path.resolve(CFX_DIR, 'admin_2026-02-16 11-12-20_783BR20183 -  Melt Curve Plate View Results.xlsx')
     );
@@ -61,7 +62,7 @@ test.describe('CFX Opus Non-Usable File Rejection', () => {
   });
 
   test('ANOVA Results shows error', async ({ page }) => {
-    await page.goto('/');
+    await login(page);
     await page.locator('#file-input').setInputFiles(
       path.resolve(CFX_DIR, 'admin_2026-02-16 11-12-20_783BR20183 -  ANOVA Results.xlsx')
     );
@@ -71,7 +72,7 @@ test.describe('CFX Opus Non-Usable File Rejection', () => {
   });
 
   test('Standard Curve Results shows error', async ({ page }) => {
-    await page.goto('/');
+    await login(page);
     await page.locator('#file-input').setInputFiles(
       path.resolve(CFX_DIR, 'admin_2026-02-16 11-12-20_783BR20183 -  Standard Curve Results.xlsx')
     );
@@ -81,7 +82,7 @@ test.describe('CFX Opus Non-Usable File Rejection', () => {
   });
 
   test('Gene Expression Results shows error', async ({ page }) => {
-    await page.goto('/');
+    await login(page);
     await page.locator('#file-input').setInputFiles(
       path.resolve(CFX_DIR, 'admin_2026-02-16 11-12-20_783BR20183 -  Gene Expression Results - Bar Chart.xlsx')
     );
@@ -91,7 +92,7 @@ test.describe('CFX Opus Non-Usable File Rejection', () => {
   });
 
   test('Quantification Summary shows error', async ({ page }) => {
-    await page.goto('/');
+    await login(page);
     await page.locator('#file-input').setInputFiles(
       path.resolve(CFX_DIR, 'admin_2026-02-16 11-12-20_783BR20183 -  Quantification Summary.xlsx')
     );
@@ -101,7 +102,7 @@ test.describe('CFX Opus Non-Usable File Rejection', () => {
   });
 
   test('Quantification Plate View shows error', async ({ page }) => {
-    await page.goto('/');
+    await login(page);
     await page.locator('#file-input').setInputFiles(
       path.resolve(CFX_DIR, 'admin_2026-02-16 11-12-20_783BR20183 -  Quantification Plate View Results.xlsx')
     );
