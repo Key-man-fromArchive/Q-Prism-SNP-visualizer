@@ -73,6 +73,16 @@ const en = {
   noSupportedFiles: 'No supported files found',
   noSupportedFilesDetail: 'Error: No supported files found (.eds, .xls, .xlsx, .pcrd, .zip, .xml, .rdml, .rdm, .csv, .tsv, .txt)',
   goToProjects: 'Or manage existing sessions & projects →',
+  importTemplatesTitle: 'Import templates',
+  importTemplatesDescription: 'Download a Q-Prism template, then upload it here for preview and mapping.',
+  importTemplatesHelpLabel: 'Import template help',
+  importTemplatesHelp: 'Use these templates when your qPCR software can export well-by-cycle fluorescence values but not a directly supported raw file. Fill in channels and roles, then upload the file for mapping.',
+  templateRdes: 'RDES amplification TSV',
+  templateRdesHelp: 'Recommended structured TSV for well, cycle, dye, role, sample, target, and RFU columns.',
+  templateGenericLong: 'Generic long CSV',
+  templateGenericLongHelp: 'Use when each row is one well-cycle-channel reading.',
+  templateGenericWide: 'Generic wide CSV',
+  templateGenericWideHelp: 'Use when each row is one well-cycle and fluorescence channels are separate columns.',
 
   // Quick Start Guide
   guideTitle: 'Quick Start Guide',
