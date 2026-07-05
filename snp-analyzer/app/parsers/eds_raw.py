@@ -15,12 +15,15 @@ Data hierarchy in .eds:
 """
 
 import re
+import string
 import zipfile
 import xml.etree.ElementTree as ET
 
 from app.models import UnifiedData, WellCycleData, ProtocolStep, DataWindow
 
 WELL_ROWS = "ABCDEFGH"
+# Row labels for well IDs: A..Z, enough for 96 (8 rows) and 384 (16 rows) plates.
+ROW_LABELS = string.ascii_uppercase
 
 # Stage flag labels from tcprotocol.xml
 STAGE_LABELS = {
@@ -31,11 +34,27 @@ STAGE_LABELS = {
 }
 
 
-def well_index_to_id(idx: int) -> str:
-    """Convert 0-based row-major well index to A1-H12 format."""
-    row = idx // 12
-    col = idx % 12 + 1
-    return f"{WELL_ROWS[row]}{col}"
+def well_index_to_id(idx: int, cols: int = 12) -> str:
+    """Convert 0-based row-major well index to a well ID (e.g. A1, H12, P24).
+
+    ``cols`` is the plate column count: 12 for 96-well (8x12),
+    24 for 384-well (16x24).
+    """
+    row = idx // cols
+    col = idx % cols + 1
+    return f"{ROW_LABELS[row]}{col}"
+
+
+def _parse_plate_dims(xml_data: bytes) -> tuple[int, int] | None:
+    """Determine (rows, cols) from experiment.xml PlateTypeID, e.g. TYPE_16X24.
+
+    Returns None if no recognizable plate type is present, so the caller can
+    fall back to inferring geometry from the observed well indices.
+    """
+    m = re.search(rb"TYPE_(\d+)X(\d+)", xml_data)
+    if m:
+        return (int(m.group(1)), int(m.group(2)))
+    return None
 
 
 def _parse_bracket_array(text: str) -> list[float]:
@@ -77,6 +96,12 @@ def parse_eds(file_path: str) -> UnifiedData:
 
         mc_xml = zf.read(mc_path)
         dye_map, signal_map, stage_flags = _parse_multicomponent(mc_xml)
+
+        # Find experiment.xml (optional, for plate geometry: 96-well vs 384-well)
+        plate_dims: tuple[int, int] | None = None
+        exp_path = _find_file(names, "experiment.xml")
+        if exp_path:
+            plate_dims = _parse_plate_dims(zf.read(exp_path))
 
         # Find plate_setup.xml (optional, for sample names and marker groups)
         sample_names = {}
@@ -162,6 +187,18 @@ def parse_eds(file_path: str) -> UnifiedData:
             "This .eds file may not be from an SNP discrimination experiment."
         )
 
+    # Determine plate geometry (96-well = 8x12, 384-well = 16x24, etc.).
+    # Prefer the declared plate type; otherwise infer from the highest well index.
+    if plate_dims:
+        plate_rows, plate_cols = plate_dims
+    else:
+        max_idx = max([*signal_map.keys(), *dye_map.keys(), 0])
+        if max_idx >= 96:
+            plate_rows, plate_cols = 16, 24
+        else:
+            plate_rows, plate_cols = 8, 12
+    num_wells = plate_rows * plate_cols
+
     # Build WellCycleData for all data points (pre-read + amplification + post-read)
     all_indices = pre_read_indices + amp_indices + post_read_indices
     data: list[WellCycleData] = []
@@ -174,7 +211,7 @@ def parse_eds(file_path: str) -> UnifiedData:
             continue
 
         cycle_arrays = signal_map[well_idx]  # list of arrays, one per dye
-        well_id = well_index_to_id(well_idx)
+        well_id = well_index_to_id(well_idx, plate_cols)
 
         fam_array = cycle_arrays[fam_dye_idx]
         allele2_array = cycle_arrays[allele2_dye_idx]
@@ -214,22 +251,22 @@ def parse_eds(file_path: str) -> UnifiedData:
     # Convert sample names from well index to well ID
     sample_names_by_id = {}
     for well_idx, name in sample_names.items():
-        if 0 <= well_idx < 96:
-            sample_names_by_id[well_index_to_id(well_idx)] = name
+        if 0 <= well_idx < num_wells:
+            sample_names_by_id[well_index_to_id(well_idx, plate_cols)] = name
 
     # Convert marker groups from well indices to well IDs, filter to assigned wells
     well_groups: dict[str, list[str]] | None = None
     if marker_groups_raw:
         well_groups = {}
         for marker_name, indices in marker_groups_raw.items():
-            ids = [well_index_to_id(idx) for idx in indices if 0 <= idx < 96 and well_index_to_id(idx) in wells_set]
+            ids = [well_index_to_id(idx, plate_cols) for idx in indices if 0 <= idx < num_wells and well_index_to_id(idx, plate_cols) in wells_set]
             if ids:
                 well_groups[marker_name] = sorted(ids, key=_well_sort_key)
         if len(well_groups) <= 1:
             well_groups = None
 
     return UnifiedData(
-        instrument="QuantStudio 3 (raw)",
+        instrument="QuantStudio 3 (raw)" if num_wells == 96 else f"QuantStudio (raw, {num_wells}-well)",
         allele2_dye=allele2_dye,
         wells=sorted(wells_set, key=_well_sort_key),
         cycles=sorted(cycles_set),
