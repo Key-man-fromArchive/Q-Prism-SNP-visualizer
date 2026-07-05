@@ -34,7 +34,14 @@ export function AnalysisTab() {
   // Show popup when multiple wells are selected (right-click or multi-select)
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => {
-      const wells = useSelectionStore.getState().selectedWells;
+      let wells = useSelectionStore.getState().selectedWells;
+      // If nothing is selected, right-clicking directly on a well targets it
+      // (so a single well can be omitted without selecting it first).
+      if (wells.length === 0) {
+        const el = (e.target as HTMLElement).closest('[data-well]');
+        const wellId = el?.getAttribute('data-well');
+        if (wellId) wells = [wellId];
+      }
       if (wells.length > 0) {
         e.preventDefault();
         setPopupPos({ x: e.clientX, y: e.clientY });

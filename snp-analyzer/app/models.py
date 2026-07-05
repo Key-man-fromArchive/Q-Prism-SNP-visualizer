@@ -117,6 +117,7 @@ class WellType(str, Enum):
     HETEROZYGOUS = "Heterozygous"
     UNDETERMINED = "Undetermined"
     EMPTY = "Empty"
+    OMIT = "Omit"  # well has data but is excluded from plots/clustering (e.g. bad/spiked reading)
 
 
 class ClusteringAlgorithm(str, Enum):

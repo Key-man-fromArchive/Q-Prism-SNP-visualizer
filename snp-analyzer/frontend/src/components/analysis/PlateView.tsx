@@ -59,7 +59,8 @@ export function PlateView() {
     fetchPlateData();
   }, [sessionId, currentCycle, useRox, setPlateData, refetchTrigger]);
 
-  const { visibleRows, visibleCols } = useWellFilter();
+  const { plateRows, plateCols, isWellVisible } = useWellFilter();
+  const isLargePlate = plateCols.length > 12;
 
   // Build wellMap for quick lookup
   const wellMap = useMemo(() => {
@@ -191,18 +192,19 @@ export function PlateView() {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      <h3 className="text-sm font-semibold mb-3 text-text">Plate View ({visibleRows.length}×{visibleCols.length})</h3>
+      <h3 className="text-sm font-semibold mb-3 text-text">Plate View ({plateRows.length}×{plateCols.length})</h3>
 
+      <div style={{ overflowX: 'auto' }}>
       <div
         id="plate-grid"
         className="plate-grid select-none"
         ref={gridRef}
         style={{
           display: 'grid',
-          gridTemplateColumns: `auto repeat(${visibleCols.length}, 1fr)`,
-          gridTemplateRows: `auto repeat(${visibleRows.length}, 1fr)`,
+          gridTemplateColumns: `auto repeat(${plateCols.length}, 1fr)`,
+          gridTemplateRows: `auto repeat(${plateRows.length}, 1fr)`,
           gap: '2px',
-          maxWidth: '500px',
+          maxWidth: isLargePlate ? '820px' : '500px',
           margin: '0 auto'
         }}
       >
@@ -210,32 +212,40 @@ export function PlateView() {
         <div className="plate-label" />
 
         {/* Column headers */}
-        {visibleCols.map(col => (
+        {plateCols.map(col => (
           <div
             key={`col-${col}`}
-            className="plate-label text-center text-xs text-text-muted font-medium py-1"
+            className="plate-label text-center text-text-muted font-medium py-1"
+            style={{ fontSize: isLargePlate ? '0.6rem' : '0.75rem' }}
           >
             {col}
           </div>
         ))}
 
         {/* Rows with wells */}
-        {visibleRows.map(row => (
+        {plateRows.map(row => (
           <Fragment key={row}>
             {/* Row header */}
-            <div className="plate-label text-center text-xs text-text-muted font-medium px-2">
+            <div
+              className="plate-label text-center text-text-muted font-medium px-2"
+              style={{ fontSize: isLargePlate ? '0.6rem' : '0.75rem' }}
+            >
               {row}
             </div>
 
             {/* Wells in this row */}
-            {visibleCols.map(col => {
+            {plateCols.map(col => {
               const wellId = `${row}${col}`;
               const wellData = wellMap.get(wellId);
               const isSelected = selectedWell === wellId;
               const isMultiSelected = selectedWells.includes(wellId);
-              const isEmpty = !wellData;
+              const hasData = !!wellData;
+              const isEmpty = !hasData;
+              // Has data but excluded from plots (omitted, group-filtered, or hidden Empty)
+              const isExcluded = hasData && !isWellVisible(wellId);
 
               const wellColor = isEmpty ? '' : getWellColor(wellData);
+              const cellSize = isLargePlate ? '18px' : '28px';
 
               return (
                 <div
@@ -248,22 +258,28 @@ export function PlateView() {
                     transition-all
                     duration-200
                     ${isEmpty ? 'empty bg-gray-800 opacity-30' : ''}
+                    ${isExcluded ? 'opacity-40' : ''}
                     ${isSelected ? 'selected ring-2 ring-black dark:ring-white ring-offset-1' : ''}
                     ${isMultiSelected && !isSelected ? 'ring-1 ring-white/40' : ''}
                   `}
                   style={{
                     backgroundColor: wellColor || undefined,
-                    minWidth: '28px',
-                    minHeight: '28px',
+                    minWidth: cellSize,
+                    minHeight: cellSize,
                     aspectRatio: '1',
                   }}
                   onClick={(e) => !isEmpty && handleWellClick(wellId, e)}
-                  title={wellData ? `${wellId}: ${wellData.sample_name || 'No sample'}` : wellId}
+                  title={
+                    wellData
+                      ? `${wellId}: ${wellData.sample_name || 'No sample'}${isExcluded ? ' (excluded)' : ''}`
+                      : wellId
+                  }
                 />
               );
             })}
           </Fragment>
         ))}
+      </div>
       </div>
 
       {/* Drag selection rectangle */}

@@ -15,6 +15,7 @@ const LABEL_MAP: Record<string, string> = {
   Unknown: "Unk",
   Undetermined: "Und",
   Empty: "E",
+  Omit: "Om",
   Unassigned: "",
 };
 

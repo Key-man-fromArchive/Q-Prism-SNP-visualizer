@@ -19,11 +19,13 @@ export function useWellFilter() {
 
   const isWellVisible = useCallback(
     (wellId: string) => {
-      // 1. Empty check: manually typed as Empty → hidden unless showEmptyWells
+      // 1. Omit: manually excluded (bad/spiked reading) → always hidden from plots
+      if (wellTypeAssignments[wellId] === 'Omit') return false;
+      // 2. Empty check: manually typed as Empty → hidden unless showEmptyWells
       if (!showEmptyWells && wellTypeAssignments[wellId] === 'Empty') return false;
-      // 2. No data → always hidden
+      // 3. No data → always hidden
       if (!dataWells.has(wellId)) return false;
-      // 3. Group filter: if a group is selected, only show wells in that group
+      // 4. Group filter: if a group is selected, only show wells in that group
       if (selectedGroup && wellGroups?.[selectedGroup]) {
         return wellGroups[selectedGroup].includes(wellId);
       }
@@ -44,12 +46,42 @@ export function useWellFilter() {
       }
     }
 
-    const rowOrder = 'ABCDEFGH';
-    const sortedRows = [...rows].sort((a, b) => rowOrder.indexOf(a) - rowOrder.indexOf(b));
+    const sortedRows = [...rows].sort((a, b) => ROW_ALPHABET.indexOf(a) - ROW_ALPHABET.indexOf(b));
     const sortedCols = [...cols].sort((a, b) => a - b);
 
     return { visibleRows: sortedRows, visibleCols: sortedCols };
   }, [plateWells, isWellVisible]);
 
-  return { isWellVisible, visibleRows, visibleCols, dataWells };
+  // Detect the full physical plate layout (96 = 8×12, 384 = 16×24, 1536 = 32×48)
+  // from the highest occupied row/column, so the plate view can render every
+  // well position — not just the ones that happen to contain data.
+  const { plateRows, plateCols } = useMemo(() => {
+    let maxRowIdx = 0;
+    let maxCol = 1;
+    for (const w of plateWells) {
+      const rowIdx = ROW_ALPHABET.indexOf(w.well[0]);
+      if (rowIdx > maxRowIdx) maxRowIdx = rowIdx;
+      const col = parseInt(w.well.slice(1), 10);
+      if (col > maxCol) maxCol = col;
+    }
+
+    let rows = 8;
+    let cols = 12;
+    if (maxRowIdx > 15 || maxCol > 24) {
+      rows = 32;
+      cols = 48;
+    } else if (maxRowIdx > 7 || maxCol > 12) {
+      rows = 16;
+      cols = 24;
+    }
+
+    return {
+      plateRows: ROW_ALPHABET.slice(0, rows).split(''),
+      plateCols: Array.from({ length: cols }, (_, i) => i + 1),
+    };
+  }, [plateWells]);
+
+  return { isWellVisible, visibleRows, visibleCols, plateRows, plateCols, dataWells };
 }
+
+const ROW_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';

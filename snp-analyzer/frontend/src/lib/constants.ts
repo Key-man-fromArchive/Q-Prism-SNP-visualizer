@@ -8,6 +8,7 @@ export const WELL_TYPE_INFO = {
   Heterozygous: { label: "Heterozygous", color: "#10b981", symbol: "circle" },
   Undetermined: { label: "Undetermined", color: "#d1d5db", symbol: "circle" },
   Empty: { label: "Empty", color: "#374151", symbol: "x" },
+  Omit: { label: "Omit (exclude)", color: "#a16207", symbol: "x" },
 } as const;
 
 export const UNASSIGNED_TYPE = {

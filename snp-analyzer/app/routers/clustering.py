@@ -8,6 +8,7 @@ from app.models import (
     ClusteringResult,
     ManualWellTypeUpdate,
     ThresholdConfig,
+    WellType,
 )
 from app.processing.clustering import cluster_kmeans, cluster_threshold
 from app.processing.normalize import normalize_for_cycle
@@ -48,9 +49,17 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
         raise HTTPException(400, f"Cycle {cycle} not available")
 
     points = normalize_for_cycle(unified, cycle)
+    # Wells manually marked as "Omit" have data but should not skew clustering
+    # (bad/spiked readings would drag kmeans centroids or threshold ratios).
+    omitted = {
+        well
+        for well, wtype in welltype_store.get(sid, {}).items()
+        if wtype == WellType.OMIT.value
+    }
     point_dicts = [
         {"well": p.well, "norm_fam": p.norm_fam, "norm_allele2": p.norm_allele2}
         for p in points
+        if p.well not in omitted
     ]
 
     if req.algorithm == ClusteringAlgorithm.THRESHOLD:

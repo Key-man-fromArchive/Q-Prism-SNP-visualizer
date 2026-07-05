@@ -25,6 +25,7 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
     Heterozygous: t.wellTypeHeterozygous,
     Undetermined: t.wellTypeUndetermined,
     Empty: t.wellTypeEmpty,
+    Omit: 'Omit (exclude from analysis)',
   };
 
   // Close on outside click
@@ -80,7 +81,7 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
       </div>
 
       {Object.entries(WELL_TYPE_INFO)
-        .filter(([type]) => type !== 'Empty')
+        .filter(([type]) => type !== 'Empty' && type !== 'Omit')
         .map(([type, info]) => (
           <button
             key={type}
@@ -93,6 +94,16 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
         ))}
 
       <div className="border-t border-border my-1" />
+
+      {WELL_TYPE_INFO['Omit'] && (
+        <button
+          className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-bg cursor-pointer border-none bg-transparent flex items-center gap-2"
+          style={{ borderLeft: `3px solid ${WELL_TYPE_INFO['Omit'].color}` }}
+          onClick={() => onAssign('Omit')}
+        >
+          {wellTypeLabels['Omit'] || WELL_TYPE_INFO['Omit'].label}
+        </button>
+      )}
 
       {WELL_TYPE_INFO['Empty'] && (
         <button
