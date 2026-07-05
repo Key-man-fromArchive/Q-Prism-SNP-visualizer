@@ -64,8 +64,12 @@ export function ScatterPlot() {
   useEffect(() => {
     if (!plotRef.current || scatterPoints.length === 0) return;
 
-    // Filter to only visible wells before grouping
-    const visiblePoints = scatterPoints.filter((p) => isWellVisible(p.well));
+    // Filter to only visible wells before grouping. Omitted wells are dropped
+    // entirely (by manual_type, authoritative from the backend) so they never
+    // become plot markers OR influence the auto-ranged x/y axes.
+    const visiblePoints = scatterPoints.filter(
+      (p) => p.manual_type !== "Omit" && isWellVisible(p.well)
+    );
 
     // Group points by effective type
     const typeGroups = new Map<string, ScatterPoint[]>();

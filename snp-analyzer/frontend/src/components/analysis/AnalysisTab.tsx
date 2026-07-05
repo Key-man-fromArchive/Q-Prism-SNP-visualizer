@@ -1,10 +1,10 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useDataStore } from "@/stores/data-store";
-import { setWellTypes, getWellGroups } from "@/lib/api";
+import { setWellTypes, getWellGroups, getWellTypes, runClustering as apiRunClustering } from "@/lib/api";
 import { CycleControl } from "./CycleControl";
 import { ScatterPlot } from "./ScatterPlot";
 import { PlateView } from "./PlateView";
@@ -25,6 +25,15 @@ export function AnalysisTab() {
   const setGroup = useSelectionStore((s) => s.setGroup);
   const { showEmptyWells, setShowEmptyWells } = useSettingsStore();
   const wellTypeAssignments = useDataStore((s) => s.wellTypeAssignments);
+  const setWellTypeAssignments = useDataStore((s) => s.setWellTypeAssignments);
+
+  // Auto-clustering inputs
+  const currentCycle = useSelectionStore((s) => s.currentCycle);
+  const clusterAssignments = useDataStore((s) => s.clusterAssignments);
+  const setClusterAssignments = useDataStore((s) => s.setClusterAssignments);
+  const { clusterAlgorithm, ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters } =
+    useSettingsStore();
+  const autoClusteredSession = useRef<string | null>(null);
 
   const [showGroupManager, setShowGroupManager] = useState(false);
 
@@ -104,6 +113,69 @@ export function AnalysisTab() {
       }
     })();
   }, [sessionId, setWellGroups]);
+
+  // Keep the well-type store in sync with the backend so filters that depend
+  // on it (Omit/Empty exclusion in scatter, plate, results) actually work.
+  useEffect(() => {
+    if (!sessionId) return;
+    const load = async () => {
+      try {
+        const res = await getWellTypes(sessionId);
+        setWellTypeAssignments(res.assignments || {});
+      } catch {
+        // welltypes endpoint may be empty for a fresh session
+      }
+    };
+    load();
+    window.addEventListener("welltypes-changed", load);
+    return () => window.removeEventListener("welltypes-changed", load);
+  }, [sessionId, setWellTypeAssignments]);
+
+  // Automatically run genotype clustering once per session as soon as data is
+  // available, so WT/MT calls appear without the user opening Settings.
+  useEffect(() => {
+    if (!sessionId || !currentCycle) return;
+    if (autoClusteredSession.current === sessionId) return;
+    // If clustering already exists (e.g. restored session), don't recompute.
+    if (Object.keys(clusterAssignments).length > 0) {
+      autoClusteredSession.current = sessionId;
+      return;
+    }
+    autoClusteredSession.current = sessionId;
+    (async () => {
+      try {
+        const result = await apiRunClustering(sessionId, {
+          algorithm: clusterAlgorithm,
+          cycle: currentCycle,
+          threshold_config:
+            clusterAlgorithm === "threshold"
+              ? {
+                  ntc_threshold: ntcThreshold,
+                  allele1_ratio_max: allele1RatioMax,
+                  allele2_ratio_min: allele2RatioMin,
+                }
+              : null,
+          n_clusters: nClusters,
+        });
+        setClusterAssignments(result.assignments);
+        // Force scatter/plate to re-fetch so points pick up auto_cluster calls.
+        window.dispatchEvent(new CustomEvent("welltypes-changed"));
+      } catch (err) {
+        console.error("Auto-clustering failed:", err);
+        autoClusteredSession.current = null; // allow retry
+      }
+    })();
+  }, [
+    sessionId,
+    currentCycle,
+    clusterAssignments,
+    clusterAlgorithm,
+    ntcThreshold,
+    allele1RatioMax,
+    allele2RatioMin,
+    nClusters,
+    setClusterAssignments,
+  ]);
 
   // Check if any wells are typed as Empty
   const hasEmptyWells = useMemo(
