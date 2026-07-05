@@ -124,8 +124,8 @@ export function StatisticsTab() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-text-muted font-medium text-left py-2 px-3">Allele</th>
-                    <th className="text-text-muted font-medium text-left py-2 px-3">Frequency</th>
+                    <th className="text-text-muted font-medium text-left py-2 px-3">{t.statAllele}</th>
+                    <th className="text-text-muted font-medium text-left py-2 px-3">{t.statFrequency}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -168,7 +168,7 @@ export function StatisticsTab() {
               <table className="w-full text-sm mb-3">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-text-muted font-medium text-left py-2 px-3">Genotype</th>
+                    <th className="text-text-muted font-medium text-left py-2 px-3">{t.genotype}</th>
                     <th className="text-text-muted font-medium text-left py-2 px-3">{t.observed}</th>
                     <th className="text-text-muted font-medium text-left py-2 px-3">{t.expected}</th>
                   </tr>

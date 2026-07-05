@@ -187,7 +187,7 @@ export function SettingsTab() {
             <button
               id="delete-preset-btn"
               className="badge cursor-pointer text-danger"
-              title="Delete selected preset"
+              title={t.deleteSelectedPreset}
               onClick={handleDeletePreset}
               disabled={!selectedPresetId}
             >

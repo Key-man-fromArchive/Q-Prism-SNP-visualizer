@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { AlertCircle, RotateCcw, UploadCloud } from "lucide-react";
 import { ApiError, parseImportPreview } from "@/lib/api";
+import { useI18n } from "@/hooks/use-i18n";
 import type {
   AssayModeId,
   ImportPreview,
@@ -42,6 +43,7 @@ export function ImportMappingWizard({
   onCancel,
   onImported,
 }: ImportMappingWizardProps) {
+  const { t } = useI18n();
   const [structure, setStructure] = useState<TableStructure>(() => inferStructure(preview));
   const [mapping, setMapping] = useState<MappingConfig>(() => buildInitialMapping(preview, inferStructure(preview)));
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
@@ -185,7 +187,7 @@ export function ImportMappingWizard({
     <div className="mt-5 panel space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[12px] uppercase text-text-muted">Import mapping</p>
+          <p className="text-[12px] uppercase text-text-muted">{t.imwImportMapping}</p>
           <h3 className="text-lg font-semibold">{preview.filename || file.name}</h3>
           <p className="text-[12px] text-text-muted">
             {preview.parser_id} · {formatBytes(file.size)}
@@ -199,77 +201,77 @@ export function ImportMappingWizard({
             className="inline-flex items-center gap-1.5 px-3 py-2 border border-border rounded-md text-sm hover:bg-[var(--color-bg)] disabled:opacity-60"
           >
             <RotateCcw size={15} />
-            {previewing ? "Previewing..." : "Re-preview"}
+            {previewing ? t.imwPreviewing : t.imwRePreview}
           </button>
           <button
             type="button"
             onClick={onCancel}
             className="px-3 py-2 border border-border rounded-md text-sm hover:bg-[var(--color-bg)]"
           >
-            Cancel
+            {t.cancel}
           </button>
         </div>
       </div>
 
       <section className="grid gap-3 md:grid-cols-4">
-        <SummaryItem label="Wells" value={summary.wells} />
-        <SummaryItem label="Cycles" value={summary.cycles} />
-        <SummaryItem label="Channels" value={channels.length ? channels.join(", ") : "None"} />
-        <SummaryItem label="Rows shown" value={`${preview.sample_rows.length}`} />
+        <SummaryItem label={t.imwWells} value={summary.wells} />
+        <SummaryItem label={t.imwCycles} value={summary.cycles} />
+        <SummaryItem label={t.imwChannels} value={channels.length ? channels.join(", ") : t.imwNone} />
+        <SummaryItem label={t.imwRowsShown} value={`${preview.sample_rows.length}`} />
       </section>
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium">Table structure</span>
+          <span className="text-sm font-medium">{t.imwTableStructure}</span>
           <SegmentedButton
             active={structure === "long"}
             onClick={() => setStructureMode("long")}
           >
-            Long RFU rows
+            {t.imwLongRfuRows}
           </SegmentedButton>
           <SegmentedButton
             active={structure === "wide"}
             onClick={() => setStructureMode("wide")}
           >
-            Wide RFU columns
+            {t.imwWideRfuColumns}
           </SegmentedButton>
         </div>
 
         <div className="grid gap-3 md:grid-cols-4">
-          <Field label="Table">
+          <Field label={t.imwTable}>
             <select
               value={preview.candidate_tables[0] ?? ""}
               disabled
               className="w-full border border-border rounded-md px-2 py-2 text-sm bg-surface"
             >
-              {(preview.candidate_tables.length ? preview.candidate_tables : ["Detected table"]).map((table) => (
+              {(preview.candidate_tables.length ? preview.candidate_tables : [t.imwDetectedTable]).map((table) => (
                 <option key={table} value={table}>{table}</option>
               ))}
             </select>
           </Field>
-          <Field label="Delimiter">
+          <Field label={t.imwDelimiter}>
             <select
               value={mapping.delimiter ?? ""}
               onChange={(event) => setColumn("delimiter", event.target.value || null)}
               className="w-full border border-border rounded-md px-2 py-2 text-sm bg-surface"
             >
-              <option value="">Auto</option>
-              <option value=",">Comma</option>
-              <option value="\t">Tab</option>
-              <option value=";">Semicolon</option>
+              <option value="">{t.imwAuto}</option>
+              <option value=",">{t.imwComma}</option>
+              <option value="\t">{t.imwTab}</option>
+              <option value=";">{t.imwSemicolon}</option>
             </select>
           </Field>
-          <Field label="Decimal">
+          <Field label={t.imwDecimal}>
             <select
               value={mapping.decimal_separator ?? "."}
               onChange={(event) => setColumn("decimal_separator", event.target.value)}
               className="w-full border border-border rounded-md px-2 py-2 text-sm bg-surface"
             >
-              <option value=".">Dot</option>
-              <option value=",">Comma</option>
+              <option value=".">{t.imwDot}</option>
+              <option value=",">{t.imwComma}</option>
             </select>
           </Field>
-          <Field label="Header / data row">
+          <Field label={t.imwHeaderDataRow}>
             <div className="grid grid-cols-2 gap-2">
               <input
                 type="number"
@@ -277,7 +279,7 @@ export function ImportMappingWizard({
                 value={mapping.header_row ?? 0}
                 onChange={(event) => setColumn("header_row", numberOrNull(event.target.value))}
                 className="w-full border border-border rounded-md px-2 py-2 text-sm bg-surface"
-                aria-label="Header row"
+                aria-label={t.imwHeaderRow}
               />
               <input
                 type="number"
@@ -285,7 +287,7 @@ export function ImportMappingWizard({
                 value={mapping.first_data_row ?? 1}
                 onChange={(event) => setColumn("first_data_row", numberOrNull(event.target.value))}
                 className="w-full border border-border rounded-md px-2 py-2 text-sm bg-surface"
-                aria-label="First data row"
+                aria-label={t.imwFirstDataRow}
               />
             </div>
           </Field>
@@ -294,21 +296,21 @@ export function ImportMappingWizard({
 
       <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
         <div className="space-y-3">
-          <h4 className="text-sm font-semibold">Column mapping</h4>
+          <h4 className="text-sm font-semibold">{t.imwColumnMapping}</h4>
           <div className="grid gap-3 md:grid-cols-2">
-            <ColumnSelect label="Well" value={mapping.well_column} headers={preview.inferred_headers} onChange={(value) => setColumn("well_column", value)} />
-            <ColumnSelect label="Cycle" value={mapping.cycle_column} headers={preview.inferred_headers} onChange={(value) => setColumn("cycle_column", value)} />
-            <ColumnSelect label="Sample" value={mapping.sample_column} headers={preview.inferred_headers} onChange={(value) => setColumn("sample_column", value)} optional />
-            <ColumnSelect label="Target" value={mapping.target_column} headers={preview.inferred_headers} onChange={(value) => setColumn("target_column", value)} optional />
+            <ColumnSelect label={t.imwWell} value={mapping.well_column} headers={preview.inferred_headers} onChange={(value) => setColumn("well_column", value)} />
+            <ColumnSelect label={t.imwCycle} value={mapping.cycle_column} headers={preview.inferred_headers} onChange={(value) => setColumn("cycle_column", value)} />
+            <ColumnSelect label={t.imwSample} value={mapping.sample_column} headers={preview.inferred_headers} onChange={(value) => setColumn("sample_column", value)} optional />
+            <ColumnSelect label={t.imwTarget} value={mapping.target_column} headers={preview.inferred_headers} onChange={(value) => setColumn("target_column", value)} optional />
             {structure === "long" ? (
               <>
-                <ColumnSelect label="Dye/channel" value={mapping.dye_column} headers={preview.inferred_headers} onChange={(value) => setColumn("dye_column", value)} />
-                <ColumnSelect label="RFU" value={mapping.rfu_column} headers={preview.inferred_headers} onChange={(value) => setColumn("rfu_column", value)} />
-                <ColumnSelect label="Role" value={mapping.role_column} headers={preview.inferred_headers} onChange={(value) => setColumn("role_column", value)} optional />
+                <ColumnSelect label={t.imwDyeChannel} value={mapping.dye_column} headers={preview.inferred_headers} onChange={(value) => setColumn("dye_column", value)} />
+                <ColumnSelect label={t.imwRfu} value={mapping.rfu_column} headers={preview.inferred_headers} onChange={(value) => setColumn("rfu_column", value)} />
+                <ColumnSelect label={t.imwRole} value={mapping.role_column} headers={preview.inferred_headers} onChange={(value) => setColumn("role_column", value)} optional />
               </>
             ) : (
               <div className="md:col-span-2 space-y-2">
-                <p className="text-[12px] text-text-muted">RFU channel columns</p>
+                <p className="text-[12px] text-text-muted">{t.imwRfuChannelColumns}</p>
                 {channels.map((channel) => (
                   <ColumnSelect
                     key={channel}
@@ -329,7 +331,7 @@ export function ImportMappingWizard({
         </div>
 
         <div className="space-y-3">
-          <h4 className="text-sm font-semibold">Assay role binding</h4>
+          <h4 className="text-sm font-semibold">{t.imwAssayRoleBinding}</h4>
           <div className="flex flex-wrap gap-2">
             {ASSAY_MODES.map((mode) => (
               <SegmentedButton
@@ -357,29 +359,29 @@ export function ImportMappingWizard({
               </div>
             ))}
           </div>
-          <Field label="Normalization">
+          <Field label={t.imwNormalization}>
             <select
               value={mapping.normalization_mode}
               disabled={mapping.assay_mode !== "wt_mt"}
               onChange={(event) => setColumn("normalization_mode", event.target.value as NormalizationMode)}
               className="w-full border border-border rounded-md px-2 py-2 text-sm bg-surface disabled:opacity-60"
             >
-              <option value="none">None</option>
-              <option value="passive_reference">Passive reference</option>
+              <option value="none">{t.imwNone}</option>
+              <option value="passive_reference">{t.imwPassiveReference}</option>
             </select>
           </Field>
           <p className="text-[12px] text-text-muted">
-            Required roles: {requiredRoles.join(", ")}. Normalization can be selected for WT / MT duplex imports only.
+            {t.imwRequiredRoles(requiredRoles.join(", "))}
           </p>
         </div>
       </section>
 
       <section className="space-y-3">
-        <h4 className="text-sm font-semibold">Validation preview</h4>
+        <h4 className="text-sm font-semibold">{t.imwValidationPreview}</h4>
         <div className="grid gap-3 md:grid-cols-3">
-          <SummaryItem label="Assay mode" value={modeLabel(mapping.assay_mode)} />
-          <SummaryItem label="Normalization" value={normalizationLabel(mapping.normalization_mode)} />
-          <SummaryItem label="Role binding" value={roleBindingSummary(mapping.channel_roles)} />
+          <SummaryItem label={t.imwAssayMode} value={modeLabel(mapping.assay_mode)} />
+          <SummaryItem label={t.imwNormalization} value={normalizationLabel(mapping.normalization_mode)} />
+          <SummaryItem label={t.imwRoleBinding} value={roleBindingSummary(mapping.channel_roles)} />
         </div>
         {allIssues.length > 0 && (
           <div className="space-y-2">
@@ -411,7 +413,7 @@ export function ImportMappingWizard({
               className="inline-flex items-center gap-1 rounded-md border border-danger px-2 py-1 text-[12px]"
             >
               <RotateCcw size={13} />
-              Re-preview selected file
+              {t.imwRePreviewSelectedFile}
             </button>
           </div>
         )}
@@ -448,7 +450,7 @@ export function ImportMappingWizard({
           className="inline-flex items-center gap-2 px-5 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary-hover disabled:opacity-60"
         >
           <UploadCloud size={16} />
-          {importing ? "Importing..." : "Import"}
+          {importing ? t.imwImporting : t.imwImport}
         </button>
       </div>
     </div>
@@ -477,14 +479,15 @@ function ColumnSelect({
   onChange: (value: string | null) => void;
   optional?: boolean;
 }) {
+  const { t } = useI18n();
   return (
-    <Field label={`${label}${optional ? " (optional)" : ""}`}>
+    <Field label={`${label}${optional ? ` (${t.imwOptional})` : ""}`}>
       <select
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value || null)}
         className="w-full border border-border rounded-md px-2 py-2 text-sm bg-surface"
       >
-        <option value="">Not mapped</option>
+        <option value="">{t.imwNotMapped}</option>
         {headers.map((header) => (
           <option key={header} value={header}>{header}</option>
         ))}
@@ -527,6 +530,7 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
 }
 
 function IssueRow({ issue, onUseCommaDecimal }: { issue: ValidationIssue; onUseCommaDecimal?: () => void }) {
+  const { t } = useI18n();
   return (
     <div className={`flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm ${
       issue.recoverable
@@ -553,7 +557,7 @@ function IssueRow({ issue, onUseCommaDecimal }: { issue: ValidationIssue; onUseC
           onClick={onUseCommaDecimal}
           className="rounded-md border border-amber-400 px-2 py-1 text-[12px]"
         >
-          Use comma decimal
+          {t.imwUseCommaDecimal}
         </button>
       )}
     </div>

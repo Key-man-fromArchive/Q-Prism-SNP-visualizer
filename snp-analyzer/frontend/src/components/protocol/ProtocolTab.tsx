@@ -148,7 +148,7 @@ export function ProtocolTab() {
                           style={{ width: '100%', padding: '4px 8px', fontSize: '13px' }}
                         />
                         {isReadingStep(step.label) && (
-                          <span style={{ marginLeft: '6px', fontSize: '14px' }} title="Data Collection">{'\uD83D\uDCF7'}</span>
+                          <span style={{ marginLeft: '6px', fontSize: '14px' }} title={t.dataCollection}>{'\uD83D\uDCF7'}</span>
                         )}
                       </td>
                       <td style={{ padding: '8px' }}>

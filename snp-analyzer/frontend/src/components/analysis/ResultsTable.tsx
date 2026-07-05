@@ -4,6 +4,7 @@ import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { WELL_TYPE_INFO, UNASSIGNED_TYPE } from "@/lib/constants";
 import { useWellFilter } from "@/hooks/use-well-filter";
+import { useI18n } from "@/hooks/use-i18n";
 import type { ScatterPoint } from "@/types/api";
 
 const LABEL_MAP: Record<string, string> = {
@@ -39,6 +40,7 @@ function effectiveType(
 }
 
 export function ResultsTable() {
+  const { t } = useI18n();
   const scatterPoints = useDataStore((s) => s.scatterPoints);
   const { selectWell } = useSelectionStore();
   const { showAutoCluster, showManualTypes } = useSettingsStore();
@@ -53,7 +55,7 @@ export function ResultsTable() {
 
   return (
     <div className="panel results-panel">
-      <h3 className="text-sm font-semibold mb-2 text-text">Genotype Results</h3>
+      <h3 className="text-sm font-semibold mb-2 text-text">{t.genotypeResults}</h3>
 
       <div
         id="results-plate"

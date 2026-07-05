@@ -9,6 +9,7 @@ import { useDataStore } from '@/stores/data-store';
 import { getPlate } from '@/lib/api';
 import { WELL_TYPE_INFO } from '@/lib/constants';
 import { useWellFilter } from '@/hooks/use-well-filter';
+import { useI18n } from '@/hooks/use-i18n';
 
 interface DragRect {
   left: number;
@@ -18,6 +19,7 @@ interface DragRect {
 }
 
 export function PlateView() {
+  const { t } = useI18n();
   const panelRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -192,7 +194,7 @@ export function PlateView() {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      <h3 className="text-sm font-semibold mb-3 text-text">Plate View ({plateRows.length}×{plateCols.length})</h3>
+      <h3 className="text-sm font-semibold mb-3 text-text">{t.plateView} ({plateRows.length}×{plateCols.length})</h3>
 
       <div style={{ overflowX: 'auto' }}>
       <div

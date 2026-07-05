@@ -363,7 +363,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left py-2 px-3 text-text-muted font-medium">Name</th>
+                  <th className="text-left py-2 px-3 text-text-muted font-medium">{t.nameLabel}</th>
                   <th className="text-left py-2 px-3 text-text-muted font-medium">{t.sessions}</th>
                   <th className="text-left py-2 px-3 text-text-muted font-medium">{t.created}</th>
                   <th className="text-left py-2 px-3 text-text-muted font-medium">{t.actions}</th>

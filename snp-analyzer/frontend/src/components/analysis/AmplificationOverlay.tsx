@@ -6,6 +6,7 @@ import { useDataStore } from "@/stores/data-store";
 import { getAllAmplification } from "@/lib/api";
 import { channelLabels } from "@/lib/channel-labels";
 import { plotlyColors } from "@/lib/plotly-theme";
+import { useI18n } from "@/hooks/use-i18n";
 
 const GENOTYPE_COLORS: Record<string, string> = {
   "Allele 1 Homo": "#2563eb",
@@ -18,6 +19,7 @@ const GENOTYPE_COLORS: Record<string, string> = {
 };
 
 export function AmplificationOverlay() {
+  const { t } = useI18n();
   const plotRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [channel, setChannel] = useState<"fam" | "allele2">("fam");
@@ -124,7 +126,7 @@ export function AmplificationOverlay() {
     <div className="panel" style={{ marginTop: "16px" }}>
       <div className="flex items-center gap-3 mb-3">
         <h3 className="text-sm font-semibold text-text mb-0">
-          Amplification Overlay
+          {t.amplificationOverlay}
         </h3>
         <button
           id="toggle-overlay-btn"

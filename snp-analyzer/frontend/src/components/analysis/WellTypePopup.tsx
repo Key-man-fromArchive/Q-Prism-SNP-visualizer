@@ -25,7 +25,7 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
     Heterozygous: t.wellTypeHeterozygous,
     Undetermined: t.wellTypeUndetermined,
     Empty: t.wellTypeEmpty,
-    Omit: 'Omit (exclude from analysis)',
+    Omit: t.wellTypeOmit,
   };
 
   // Close on outside click

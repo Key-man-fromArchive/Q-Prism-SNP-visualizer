@@ -521,14 +521,14 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
               onClick={() => handleImportPreview(importFile)}
               className="px-3 py-2 border border-danger rounded-md text-[12px]"
             >
-              Retry preview
+              {t.retryPreview}
             </button>
             <button
               type="button"
               onClick={clearImportState}
               className="px-3 py-2 border border-border rounded-md text-[12px] text-text"
             >
-              Cancel
+              {t.cancel}
             </button>
           </div>
         </div>

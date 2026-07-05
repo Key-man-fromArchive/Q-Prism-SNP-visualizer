@@ -9,6 +9,7 @@ import { channelLabels, normalizationLabel, normalizedLabel } from "@/lib/channe
 import { WELL_TYPE_INFO, UNASSIGNED_TYPE } from "@/lib/constants";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { useWellFilter } from "@/hooks/use-well-filter";
+import { useI18n } from "@/hooks/use-i18n";
 import type { ScatterPoint } from "@/types/api";
 
 function effectiveType(
@@ -23,6 +24,7 @@ function effectiveType(
 }
 
 export function ScatterPlot() {
+  const { t } = useI18n();
   const plotRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
 
@@ -86,6 +88,20 @@ export function ScatterPlot() {
     const traces: any[] = [];
     const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
 
+    // Localized genotype names for the plot legend
+    const typeLabels: Record<string, string> = {
+      NTC: t.wellTypeNTC,
+      Unknown: t.wellTypeUnknown,
+      "Positive Control": t.wellTypePositiveControl,
+      "Allele 1 Homo": t.wellTypeAllele1Homo,
+      "Allele 2 Homo": t.wellTypeAllele2Homo,
+      Heterozygous: t.wellTypeHeterozygous,
+      Undetermined: t.wellTypeUndetermined,
+      Empty: t.wellTypeEmpty,
+      Omit: t.wellTypeOmit,
+      Unassigned: t.wellTypeUnassigned,
+    };
+
     // Build traces in a deterministic order
     const typeOrder = [...Object.keys(WELL_TYPE_INFO), "Unassigned"];
     for (const typeKey of typeOrder) {
@@ -100,7 +116,7 @@ export function ScatterPlot() {
         y: points.map((p) => p.norm_allele2),
         mode: "markers",
         type: "scattergl",
-        name: info.label,
+        name: typeLabels[typeKey] || info.label,
         customdata: points.map((p) => p.well),
         text: points.map((p) => {
           const normSuffix = useRox ? ` / ${normalizationLabel(labels)}` : "";
@@ -208,6 +224,7 @@ export function ScatterPlot() {
     selectWell,
     selectWells,
     clearSelection,
+    t,
   ]);
 
   // Highlight selected well
@@ -265,7 +282,7 @@ export function ScatterPlot() {
 
   return (
     <div className="panel scatter-panel">
-      <h3 className="text-sm font-semibold mb-2 text-text">Allele Discrimination</h3>
+      <h3 className="text-sm font-semibold mb-2 text-text">{t.alleleDiscrimination}</h3>
       <div id="scatter-plot" ref={plotRef} style={{ width: "100%", height: "400px" }} />
     </div>
   );
