@@ -1,10 +1,17 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useDataStore } from "@/stores/data-store";
-import { setWellTypes, getWellGroups, getWellTypes, runClustering as apiRunClustering } from "@/lib/api";
+import {
+  setWellTypes,
+  getWellGroups,
+  getWellTypes,
+  runClustering as apiRunClustering,
+  suggestCycle,
+  type CycleSuggestion,
+} from "@/lib/api";
 import { CycleControl } from "./CycleControl";
 import { ScatterPlot } from "./ScatterPlot";
 import { PlateView } from "./PlateView";
@@ -27,13 +34,14 @@ export function AnalysisTab() {
   const wellTypeAssignments = useDataStore((s) => s.wellTypeAssignments);
   const setWellTypeAssignments = useDataStore((s) => s.setWellTypeAssignments);
 
-  // Auto-clustering inputs
+  // Clustering / analysis
   const currentCycle = useSelectionStore((s) => s.currentCycle);
-  const clusterAssignments = useDataStore((s) => s.clusterAssignments);
   const setClusterAssignments = useDataStore((s) => s.setClusterAssignments);
   const { clusterAlgorithm, ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters } =
     useSettingsStore();
-  const autoClusteredSession = useRef<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<CycleSuggestion | null>(null);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
   const [showGroupManager, setShowGroupManager] = useState(false);
 
@@ -131,50 +139,54 @@ export function AnalysisTab() {
     return () => window.removeEventListener("welltypes-changed", load);
   }, [sessionId, setWellTypeAssignments]);
 
-  // Automatically run genotype clustering once per session as soon as data is
-  // available, so WT/MT calls appear without the user opening Settings.
-  useEffect(() => {
-    if (!sessionId || !currentCycle) return;
-    if (autoClusteredSession.current === sessionId) return;
-    // If clustering already exists (e.g. restored session), don't recompute.
-    if (Object.keys(clusterAssignments).length > 0) {
-      autoClusteredSession.current = sessionId;
-      return;
-    }
-    autoClusteredSession.current = sessionId;
-    (async () => {
-      try {
-        const result = await apiRunClustering(sessionId, {
-          algorithm: clusterAlgorithm,
-          cycle: currentCycle,
-          threshold_config:
-            clusterAlgorithm === "threshold"
-              ? {
-                  ntc_threshold: ntcThreshold,
-                  allele1_ratio_max: allele1RatioMax,
-                  allele2_ratio_min: allele2RatioMin,
-                }
-              : null,
-          n_clusters: nClusters,
-        });
-        setClusterAssignments(result.assignments);
-        // Force scatter/plate to re-fetch so points pick up auto_cluster calls.
-        window.dispatchEvent(new CustomEvent("welltypes-changed"));
-      } catch (err) {
-        console.error("Auto-clustering failed:", err);
-        autoClusteredSession.current = null; // allow retry
+  // Intelligent one-click analysis: suggest the best cycle (max separation
+  // before NTC background rises), jump the cycle control to it, and cluster.
+  const handleAnalyze = useCallback(async () => {
+    if (!sessionId) return;
+    setAnalyzing(true);
+    setAnalyzeError(null);
+    try {
+      const suggestion = await suggestCycle(sessionId);
+      const cycle = suggestion.suggested_cycle ?? currentCycle ?? 0;
+      if (suggestion.suggested_cycle) {
+        // Move the cycle control (and thus scatter/plate) to the suggested cycle.
+        window.dispatchEvent(
+          new CustomEvent("goto-cycle", { detail: suggestion.suggested_cycle })
+        );
       }
-    })();
+      const result = await apiRunClustering(sessionId, {
+        algorithm: clusterAlgorithm,
+        cycle,
+        threshold_config:
+          clusterAlgorithm === "threshold"
+            ? {
+                ntc_threshold: ntcThreshold,
+                allele1_ratio_max: allele1RatioMax,
+                allele2_ratio_min: allele2RatioMin,
+              }
+            : null,
+        n_clusters: nClusters,
+      });
+      setClusterAssignments(result.assignments);
+      setAnalysis(suggestion);
+      // Force scatter/plate to re-fetch so points pick up auto_cluster calls.
+      window.dispatchEvent(new CustomEvent("welltypes-changed"));
+    } catch (err) {
+      setAnalyzeError(err instanceof Error ? err.message : t.analyzeFailed);
+      console.error("Analysis failed:", err);
+    } finally {
+      setAnalyzing(false);
+    }
   }, [
     sessionId,
     currentCycle,
-    clusterAssignments,
     clusterAlgorithm,
     ntcThreshold,
     allele1RatioMax,
     allele2RatioMin,
     nClusters,
     setClusterAssignments,
+    t,
   ]);
 
   // Check if any wells are typed as Empty
@@ -202,6 +214,30 @@ export function AnalysisTab() {
     <div>
       {/* Cycle Control */}
       <CycleControl />
+
+      {/* Analyze bar */}
+      <div
+        className="flex flex-wrap items-center gap-3 px-6 py-2"
+        style={{ borderBottom: "1px solid var(--border)" }}
+      >
+        <button
+          onClick={handleAnalyze}
+          disabled={analyzing || !sessionId}
+          title={t.analyzeHint}
+          className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary-hover disabled:opacity-60 cursor-pointer"
+        >
+          {analyzing ? t.analyzing : `🎯 ${t.analyzeButton}`}
+        </button>
+        {analysis && !analyzeError && (
+          <span className="text-xs text-text-muted">
+            {analysis.suggested_cycle != null && t.analyzeSuggestedCycle(analysis.suggested_cycle)}
+            {analysis.ntc_onset_cycle != null
+              ? ` · ${t.analyzeNtcOnset(analysis.ntc_onset_cycle)}`
+              : ` · ${t.analyzeNtcNone}`}
+          </span>
+        )}
+        {analyzeError && <span className="text-xs text-danger">{analyzeError}</span>}
+      </div>
 
       {/* Group Filter Bar */}
       {(groupNames.length > 0 || hasEmptyWells) && (

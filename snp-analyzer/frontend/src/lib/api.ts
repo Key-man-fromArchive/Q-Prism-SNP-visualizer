@@ -255,6 +255,18 @@ export async function getCluster(sid: string): Promise<ClusteringResult> {
   return apiFetch<ClusteringResult>(`/api/data/${sid}/cluster`);
 }
 
+export type CycleSuggestion = {
+  suggested_cycle: number | null;
+  ntc_onset_cycle: number | null;
+  ntc_wells: string[];
+  amp_start: number | null;
+  amp_end: number | null;
+};
+
+export async function suggestCycle(sid: string): Promise<CycleSuggestion> {
+  return apiFetch<CycleSuggestion>(`/api/data/${sid}/suggest-cycle`);
+}
+
 export async function setWellTypes(
   sid: string,
   req: ManualWellTypeUpdate

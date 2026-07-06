@@ -34,6 +34,16 @@ def _get_session(sid: str) -> UnifiedData:
     return sessions[sid]
 
 
+@router.get("/api/data/{sid}/suggest-cycle")
+async def suggest_cycle(sid: str, current_user: CurrentUser):
+    """Suggest the best analysis cycle (max separation before NTC rises)."""
+    check_session_access(sid, current_user)
+    unified = _get_session(sid)
+    from app.processing.ntc_detection import compute_cycle_suggestion
+
+    return compute_cycle_suggestion(unified)
+
+
 @router.get("/api/data/{sid}/scatter")
 async def scatter_data(sid: str, current_user: CurrentUser, cycle: int = Query(default=0), use_rox: bool = Query(default=True)):
     check_session_access(sid, current_user)

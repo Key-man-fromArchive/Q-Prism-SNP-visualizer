@@ -94,6 +94,28 @@ export function CycleControl() {
     };
   }, [isPlaying, windowCycles, activeWindow, setCycle]);
 
+  // External "go to cycle" (e.g. the Analyze button jumping to the suggested cycle)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const target = (e as CustomEvent<number>).detail;
+      if (typeof target !== "number") return;
+      let idx = activeWindowIdx;
+      if (windows && windows.length > 0) {
+        const found = windows.findIndex(
+          (w) => target >= w.start_cycle && target <= w.end_cycle
+        );
+        if (found >= 0) idx = found;
+      }
+      const win = windows?.[idx];
+      setActiveWindowIdx(idx);
+      setRelativeValue(win ? target - win.start_cycle + 1 : target);
+      if (win) setDataWindow(win.name);
+      setCycle(target);
+    };
+    window.addEventListener("goto-cycle", handler);
+    return () => window.removeEventListener("goto-cycle", handler);
+  }, [windows, activeWindowIdx, setCycle, setDataWindow]);
+
   // Hide if single cycle and no multiple windows
   const shouldHide =
     sessionInfo &&

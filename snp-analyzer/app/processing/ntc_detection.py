@@ -12,35 +12,63 @@ from app.models import UnifiedData, DataWindow
 def compute_suggested_cycle(unified: UnifiedData) -> int | None:
     """Compute suggested display cycle based on NTC amplification onset.
 
+    Thin wrapper over :func:`compute_cycle_suggestion` for callers that only
+    need the cycle number.
+    """
+    return compute_cycle_suggestion(unified)["suggested_cycle"]
+
+
+def compute_cycle_suggestion(unified: UnifiedData) -> dict:
+    """Suggest the best display/analysis cycle, with the reasoning behind it.
+
     Algorithm:
     1. Find the amplification window
     2. Auto-detect NTC wells using signal delta gap analysis
-    3. For each NTC well, compute 2nd derivative Ct
-    4. If any NTC shows real amplification, return earliest Ct - 1
-    5. Otherwise return last amplification cycle (no contamination)
+    3. For each NTC well, compute 2nd derivative Ct (onset of amplification)
+    4. If any NTC shows real amplification, suggest earliest onset Ct - 1
+       (the boundary just before NTC background starts to rise)
+    5. Otherwise suggest the last amplification cycle (no contamination)
 
-    Returns:
-        Suggested cycle number (absolute), or None if no amplification window
+    Returns a dict with:
+        suggested_cycle: int | None  — recommended cycle (absolute)
+        ntc_onset_cycle: int | None  — cycle where NTC begins amplifying
+        ntc_wells: list[str]         — auto-detected NTC wells
+        amp_start / amp_end: int | None — amplification window bounds
     """
+    result: dict = {
+        "suggested_cycle": None,
+        "ntc_onset_cycle": None,
+        "ntc_wells": [],
+        "amp_start": None,
+        "amp_end": None,
+    }
+
     amp_window = _get_amplification_window(unified.data_windows)
     if not amp_window:
-        return None
+        return result
+
+    result["amp_start"] = amp_window.start_cycle
+    result["amp_end"] = amp_window.end_cycle
 
     amp_cycles = list(range(amp_window.start_cycle, amp_window.end_cycle + 1))
     if len(amp_cycles) < 5:
-        return amp_window.end_cycle
+        result["suggested_cycle"] = amp_window.end_cycle
+        return result
 
     # Build per-well signal curves (raw FAM + allele2, no normalization)
     well_curves = _build_well_curves(unified, amp_cycles)
     if len(well_curves) < 3:
-        return amp_window.end_cycle
+        result["suggested_cycle"] = amp_window.end_cycle
+        return result
 
     # Detect NTC wells via gap analysis
     ntc_wells = _detect_ntc_wells(well_curves, amp_cycles)
+    result["ntc_wells"] = ntc_wells
     if not ntc_wells:
-        return amp_window.end_cycle
+        result["suggested_cycle"] = amp_window.end_cycle
+        return result
 
-    # Compute 2nd derivative Ct for each NTC well
+    # Compute 2nd derivative Ct for each NTC well (onset of NTC amplification)
     earliest_ct = None
     for well in ntc_wells:
         curve = well_curves[well]
@@ -49,11 +77,16 @@ def compute_suggested_cycle(unified: UnifiedData) -> int | None:
             earliest_ct = ct
 
     if earliest_ct is None:
-        return amp_window.end_cycle
+        result["suggested_cycle"] = amp_window.end_cycle
+        return result
 
     # Suggested cycle = one before NTC amplification starts
+    result["ntc_onset_cycle"] = earliest_ct
     suggested = earliest_ct - 1
-    return max(amp_window.start_cycle, min(suggested, amp_window.end_cycle))
+    result["suggested_cycle"] = max(
+        amp_window.start_cycle, min(suggested, amp_window.end_cycle)
+    )
+    return result
 
 
 def _get_amplification_window(windows: list[DataWindow] | None) -> DataWindow | None:

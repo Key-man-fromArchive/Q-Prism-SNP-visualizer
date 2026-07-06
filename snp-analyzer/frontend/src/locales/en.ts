@@ -357,6 +357,15 @@ const en = {
   dataCollection: 'Data Collection',
   nameLabel: 'Name',
 
+  // Analyze button (smart clustering + optimal cycle)
+  analyzeButton: 'Analyze',
+  analyzing: 'Analyzing...',
+  analyzeHint: 'Suggest the best cycle (before NTC rises) and auto-cluster genotypes',
+  analyzeFailed: 'Analysis failed',
+  analyzeSuggestedCycle: (c: number) => `Suggested cycle: ${c}`,
+  analyzeNtcOnset: (c: number) => `NTC rises at cycle ${c}`,
+  analyzeNtcNone: 'no NTC contamination detected',
+
   // Import mapping wizard
   imwImportMapping: 'Import mapping',
   imwRePreview: 'Re-preview',
