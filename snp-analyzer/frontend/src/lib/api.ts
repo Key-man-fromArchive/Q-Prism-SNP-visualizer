@@ -257,6 +257,8 @@ export async function getCluster(sid: string): Promise<ClusteringResult> {
 
 export type CycleSuggestion = {
   suggested_cycle: number | null;
+  suggested_low: number | null;
+  suggested_high: number | null;
   ntc_onset_cycle: number | null;
   ntc_wells: string[];
   amp_start: number | null;

@@ -44,6 +44,8 @@ def compute_cycle_suggestion(unified: UnifiedData) -> dict:
     """
     result: dict = {
         "suggested_cycle": None,
+        "suggested_low": None,
+        "suggested_high": None,
         "ntc_onset_cycle": None,
         "ntc_wells": [],
         "amp_start": None,
@@ -71,8 +73,15 @@ def compute_cycle_suggestion(unified: UnifiedData) -> dict:
     if floor > cap:
         floor = info["amp_start"]
 
-    best = _best_separation_cycle(unified, floor, cap, set(info["ntc_wells"]))
-    result["suggested_cycle"] = best if best is not None else cap
+    band = _best_separation_cycle(unified, floor, cap, set(info["ntc_wells"]))
+    if band is not None:
+        result["suggested_cycle"] = band["best"]
+        result["suggested_low"] = band["low"]
+        result["suggested_high"] = band["high"]
+    else:
+        result["suggested_cycle"] = cap
+        result["suggested_low"] = cap
+        result["suggested_high"] = cap
     return result
 
 
@@ -113,13 +122,16 @@ def _analyze_amplification(unified: UnifiedData) -> dict | None:
 
 
 def _best_separation_cycle(
-    unified: UnifiedData, floor: int, cap: int, ntc_set: set[str]
-) -> int | None:
-    """Cycle in [floor, cap] with the cleanest genotype cluster separation.
+    unified: UnifiedData, floor: int, cap: int, ntc_set: set[str], tol: float = 0.02
+) -> dict | None:
+    """Best-separating cycle in [floor, cap] plus the surrounding "good" band.
 
     Scores each cycle by the silhouette of a KMeans clustering on the
-    ROX-normalized (fam, allele2) points, excluding NTC wells. Returns the
-    highest-scoring cycle, or None if no cycle can be scored.
+    ROX-normalized (fam, allele2) points, excluding NTC wells. Returns:
+        {"best": int, "low": int, "high": int}
+    where best is the peak cycle and [low, high] is the contiguous band of
+    cycles whose separation is within ``tol`` of the peak (so the UI can show
+    a range like "14~16"). Returns None if no cycle can be scored.
     """
     if cap < floor:
         return None
@@ -130,8 +142,7 @@ def _best_separation_cycle(
     except Exception:
         return None
 
-    best_cycle: int | None = None
-    best_score: float | None = None
+    scores: dict[int, float] = {}
     for c in range(floor, cap + 1):
         pts = [
             p
@@ -149,13 +160,25 @@ def _best_separation_cycle(
             labels = KMeans(n_clusters=k, n_init=3, random_state=42).fit_predict(coords)
             if len(set(labels)) < 2:
                 continue
-            score = silhouette_score(coords, labels)
+            scores[c] = silhouette_score(coords, labels)
         except Exception:
             continue
-        if best_score is None or score > best_score:
-            best_score, best_cycle = score, c
 
-    return best_cycle
+    if not scores:
+        return None
+
+    best_cycle = max(scores, key=lambda c: scores[c])
+    peak = scores[best_cycle]
+
+    # Grow a contiguous band around the peak while separation stays within tol.
+    low = best_cycle
+    while (low - 1) in scores and scores[low - 1] >= peak - tol:
+        low -= 1
+    high = best_cycle
+    while (high + 1) in scores and scores[high + 1] >= peak - tol:
+        high += 1
+
+    return {"best": best_cycle, "low": low, "high": high}
 
 
 def _get_amplification_window(windows: list[DataWindow] | None) -> DataWindow | None:

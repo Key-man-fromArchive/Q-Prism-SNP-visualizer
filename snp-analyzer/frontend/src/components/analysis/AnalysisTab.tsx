@@ -217,9 +217,25 @@ export function AnalysisTab() {
 
       {/* Analyze bar */}
       <div
-        className="flex flex-wrap items-center gap-3 px-6 py-2"
+        className="flex flex-wrap items-center justify-end gap-3 px-6 py-2"
         style={{ borderBottom: "1px solid var(--border)" }}
       >
+        {analysis && !analyzeError && (
+          <span className="text-xs text-text-muted">
+            {analysis.suggested_cycle != null &&
+              t.analyzeSuggestedCycle(
+                analysis.suggested_low != null &&
+                  analysis.suggested_high != null &&
+                  analysis.suggested_low !== analysis.suggested_high
+                  ? `${analysis.suggested_low}~${analysis.suggested_high}`
+                  : String(analysis.suggested_cycle)
+              )}
+            {analysis.ntc_onset_cycle != null
+              ? ` · ${t.analyzeNtcOnset(analysis.ntc_onset_cycle)}`
+              : ` · ${t.analyzeNtcNone}`}
+          </span>
+        )}
+        {analyzeError && <span className="text-xs text-danger">{analyzeError}</span>}
         <button
           onClick={handleAnalyze}
           disabled={analyzing || !sessionId}
@@ -228,15 +244,6 @@ export function AnalysisTab() {
         >
           {analyzing ? t.analyzing : `🎯 ${t.analyzeButton}`}
         </button>
-        {analysis && !analyzeError && (
-          <span className="text-xs text-text-muted">
-            {analysis.suggested_cycle != null && t.analyzeSuggestedCycle(analysis.suggested_cycle)}
-            {analysis.ntc_onset_cycle != null
-              ? ` · ${t.analyzeNtcOnset(analysis.ntc_onset_cycle)}`
-              : ` · ${t.analyzeNtcNone}`}
-          </span>
-        )}
-        {analyzeError && <span className="text-xs text-danger">{analyzeError}</span>}
       </div>
 
       {/* Group Filter Bar */}

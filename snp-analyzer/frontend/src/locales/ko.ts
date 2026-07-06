@@ -364,7 +364,7 @@ const ko: Translations = {
   analyzing: '분석 중...',
   analyzeHint: '최적 사이클(NTC 상승 전)을 제안하고 유전자형을 자동 그룹핑합니다',
   analyzeFailed: '분석 실패',
-  analyzeSuggestedCycle: (c: number) => `제안 사이클: ${c}`,
+  analyzeSuggestedCycle: (c: string) => `제안 사이클: ${c}`,
   analyzeNtcOnset: (c: number) => `NTC 상승 시작: ${c} 사이클`,
   analyzeNtcNone: 'NTC 오염 없음',
 
