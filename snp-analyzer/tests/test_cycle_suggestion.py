@@ -52,6 +52,50 @@ def test_no_ntc_contamination_suggests_last_cycle():
     assert result["ntc_wells"]  # NTC wells were detected
 
 
+def _unified_three_clusters(n_cycles: int = 12) -> UnifiedData:
+    """Three well-separated genotype clusters + NTC, so separation is scored."""
+    cycles = list(range(1, n_cycles + 1))
+    data: list[WellCycleData] = []
+    groups = {
+        "allele1": (100.0, 10.0),
+        "allele2": (10.0, 100.0),
+        "het": (60.0, 60.0),
+    }
+    wells: list[str] = []
+    row = "ABC"
+    for gi, (fam, a2) in enumerate(groups.values()):
+        for j in range(3):
+            w = f"{row[gi]}{j + 1}"
+            wells.append(w)
+            for c in cycles:
+                data.append(WellCycleData(well=w, cycle=c, fam=fam, allele2=a2, rox=None))
+    for j in range(2):  # NTC
+        w = f"H{j + 1}"
+        wells.append(w)
+        for c in cycles:
+            data.append(WellCycleData(well=w, cycle=c, fam=2.0, allele2=2.0, rox=None))
+
+    return UnifiedData(
+        instrument="QuantStudio 3",
+        allele2_dye="VIC",
+        wells=wells,
+        cycles=cycles,
+        data=data,
+        has_rox=False,
+        data_windows=[DataWindow(name="Amplification", start_cycle=1, end_cycle=n_cycles)],
+    )
+
+
+def test_separation_picks_cycle_within_window():
+    unified = _unified_three_clusters(12)
+    result = compute_cycle_suggestion(unified)
+    # A real cycle inside the amplification window, past the early baseline floor
+    assert result["suggested_cycle"] is not None
+    assert result["amp_start"] <= result["suggested_cycle"] <= result["amp_end"]
+    # Window is 1..12, so the baseline floor is ~cycle 6; must not pick a baseline cycle
+    assert result["suggested_cycle"] >= result["amp_start"] + 4
+
+
 def test_no_amplification_window_returns_none():
     unified = _unified_with_amp(12)
     unified.data_windows = None

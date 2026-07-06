@@ -6,28 +6,35 @@ The suggested display cycle is set just before NTC amplification starts.
 """
 from __future__ import annotations
 
+import math
+
 from app.models import UnifiedData, DataWindow
+from app.processing.normalize import normalize_for_cycle
 
 
 def compute_suggested_cycle(unified: UnifiedData) -> int | None:
-    """Compute suggested display cycle based on NTC amplification onset.
+    """Lightweight suggestion for the initial display cycle (used at upload).
 
-    Thin wrapper over :func:`compute_cycle_suggestion` for callers that only
-    need the cycle number.
+    Returns the cycle just before NTC amplification onset, or the last
+    amplification cycle when there is no contamination. This is cheap (no
+    clustering) so it stays fast on the upload path.
     """
-    return compute_cycle_suggestion(unified)["suggested_cycle"]
+    info = _analyze_amplification(unified)
+    if info is None:
+        return None
+    if info["ntc_onset_cycle"] is not None:
+        return max(info["amp_start"], min(info["ntc_onset_cycle"] - 1, info["amp_end"]))
+    return info["amp_end"]
 
 
 def compute_cycle_suggestion(unified: UnifiedData) -> dict:
-    """Suggest the best display/analysis cycle, with the reasoning behind it.
+    """Suggest the best analysis cycle, with the reasoning behind it.
 
-    Algorithm:
-    1. Find the amplification window
-    2. Auto-detect NTC wells using signal delta gap analysis
-    3. For each NTC well, compute 2nd derivative Ct (onset of amplification)
-    4. If any NTC shows real amplification, suggest earliest onset Ct - 1
-       (the boundary just before NTC background starts to rise)
-    5. Otherwise suggest the last amplification cycle (no contamination)
+    The cycle where NTC background starts rising is used as an upper boundary
+    (reading past it lets contamination creep in). Within that boundary — and
+    skipping early baseline cycles — the recommended cycle is the one where the
+    genotype clusters are most cleanly separated (max silhouette). This is the
+    heavy path used by the Analyze button.
 
     Returns a dict with:
         suggested_cycle: int | None  — recommended cycle (absolute)
@@ -43,50 +50,112 @@ def compute_cycle_suggestion(unified: UnifiedData) -> dict:
         "amp_end": None,
     }
 
-    amp_window = _get_amplification_window(unified.data_windows)
-    if not amp_window:
+    info = _analyze_amplification(unified)
+    if info is None:
         return result
 
-    result["amp_start"] = amp_window.start_cycle
-    result["amp_end"] = amp_window.end_cycle
+    result["amp_start"] = info["amp_start"]
+    result["amp_end"] = info["amp_end"]
+    result["ntc_wells"] = info["ntc_wells"]
+    result["ntc_onset_cycle"] = info["ntc_onset_cycle"]
+
+    # Upper boundary: don't read past where NTC background starts rising.
+    if info["ntc_onset_cycle"] is not None:
+        cap = max(info["amp_start"], info["ntc_onset_cycle"] - 1)
+    else:
+        cap = info["amp_end"]
+
+    # Lower boundary: skip early baseline cycles (amplification not yet meaningful).
+    wlen = info["amp_end"] - info["amp_start"] + 1
+    floor = info["amp_start"] + math.ceil(0.4 * wlen)
+    if floor > cap:
+        floor = info["amp_start"]
+
+    best = _best_separation_cycle(unified, floor, cap, set(info["ntc_wells"]))
+    result["suggested_cycle"] = best if best is not None else cap
+    return result
+
+
+def _analyze_amplification(unified: UnifiedData) -> dict | None:
+    """Shared analysis: amplification window, NTC wells, and NTC onset cycle."""
+    amp_window = _get_amplification_window(unified.data_windows)
+    if not amp_window:
+        return None
+
+    info: dict = {
+        "amp_start": amp_window.start_cycle,
+        "amp_end": amp_window.end_cycle,
+        "ntc_wells": [],
+        "ntc_onset_cycle": None,
+    }
 
     amp_cycles = list(range(amp_window.start_cycle, amp_window.end_cycle + 1))
     if len(amp_cycles) < 5:
-        result["suggested_cycle"] = amp_window.end_cycle
-        return result
+        return info
 
-    # Build per-well signal curves (raw FAM + allele2, no normalization)
+    # Per-well signal curves (raw FAM + allele2, no normalization)
     well_curves = _build_well_curves(unified, amp_cycles)
     if len(well_curves) < 3:
-        result["suggested_cycle"] = amp_window.end_cycle
-        return result
+        return info
 
-    # Detect NTC wells via gap analysis
     ntc_wells = _detect_ntc_wells(well_curves, amp_cycles)
-    result["ntc_wells"] = ntc_wells
+    info["ntc_wells"] = ntc_wells
     if not ntc_wells:
-        result["suggested_cycle"] = amp_window.end_cycle
-        return result
+        return info
 
-    # Compute 2nd derivative Ct for each NTC well (onset of NTC amplification)
     earliest_ct = None
     for well in ntc_wells:
-        curve = well_curves[well]
-        ct = _second_derivative_ct(curve, amp_cycles)
+        ct = _second_derivative_ct(well_curves[well], amp_cycles)
         if ct is not None and (earliest_ct is None or ct < earliest_ct):
             earliest_ct = ct
+    info["ntc_onset_cycle"] = earliest_ct
+    return info
 
-    if earliest_ct is None:
-        result["suggested_cycle"] = amp_window.end_cycle
-        return result
 
-    # Suggested cycle = one before NTC amplification starts
-    result["ntc_onset_cycle"] = earliest_ct
-    suggested = earliest_ct - 1
-    result["suggested_cycle"] = max(
-        amp_window.start_cycle, min(suggested, amp_window.end_cycle)
-    )
-    return result
+def _best_separation_cycle(
+    unified: UnifiedData, floor: int, cap: int, ntc_set: set[str]
+) -> int | None:
+    """Cycle in [floor, cap] with the cleanest genotype cluster separation.
+
+    Scores each cycle by the silhouette of a KMeans clustering on the
+    ROX-normalized (fam, allele2) points, excluding NTC wells. Returns the
+    highest-scoring cycle, or None if no cycle can be scored.
+    """
+    if cap < floor:
+        return None
+    try:
+        import numpy as np
+        from sklearn.cluster import KMeans
+        from sklearn.metrics import silhouette_score
+    except Exception:
+        return None
+
+    best_cycle: int | None = None
+    best_score: float | None = None
+    for c in range(floor, cap + 1):
+        pts = [
+            p
+            for p in normalize_for_cycle(unified, c, use_rox=unified.has_rox)
+            if p.well not in ntc_set
+        ]
+        if len(pts) < 6:
+            continue
+        coords = np.array([[p.norm_fam, p.norm_allele2] for p in pts])
+        n_unique = len(np.unique(coords, axis=0))
+        if n_unique < 2:
+            continue
+        k = 3 if n_unique >= 3 else 2
+        try:
+            labels = KMeans(n_clusters=k, n_init=3, random_state=42).fit_predict(coords)
+            if len(set(labels)) < 2:
+                continue
+            score = silhouette_score(coords, labels)
+        except Exception:
+            continue
+        if best_score is None or score > best_score:
+            best_score, best_cycle = score, c
+
+    return best_cycle
 
 
 def _get_amplification_window(windows: list[DataWindow] | None) -> DataWindow | None:

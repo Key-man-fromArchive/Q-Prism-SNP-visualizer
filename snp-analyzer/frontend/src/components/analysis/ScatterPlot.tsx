@@ -283,7 +283,7 @@ export function ScatterPlot() {
   return (
     <div className="panel scatter-panel">
       <h3 className="text-sm font-semibold mb-2 text-text">{t.alleleDiscrimination}</h3>
-      <div id="scatter-plot" ref={plotRef} style={{ width: "100%", height: "400px" }} />
+      <div id="scatter-plot" ref={plotRef} style={{ width: "100%", height: "560px" }} />
     </div>
   );
 }
