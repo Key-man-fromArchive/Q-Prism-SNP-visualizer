@@ -371,6 +371,7 @@ const ko: Translations = {
   stageAmplification: '증폭(Amplification)',
   stagePostRead: '포스트리드(Post-read)',
   confidence: '신뢰도',
+  qcWarnings: (n: number) => `⚠ 경고 ${n}건`,
 
   // 가져오기 매핑 마법사
   imwImportMapping: '가져오기 매핑',

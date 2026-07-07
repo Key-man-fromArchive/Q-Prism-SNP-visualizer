@@ -341,6 +341,7 @@ export type QcResponse = {
     details: string;
   };
   cluster_separation: number | null;
+  warnings?: string[];
 };
 
 export type WellTypesResponse = {

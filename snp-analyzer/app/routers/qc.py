@@ -13,9 +13,13 @@ from app.auth import CurrentUser, check_session_access
 
 router = APIRouter()
 
-# Thresholds
-_UNDETERMINED_THRESHOLD = 0.1
-_NTC_SIGNAL_THRESHOLD = 0.2
+# All QC thresholds are scale-invariant (a fraction of the plate's own median
+# signal), never an absolute magnitude — ROX concentration varies between kits.
+# An NTC well is contamination-flagged when its signal reaches this fraction of
+# the plate's median total signal:
+_NTC_HOT_FRAC = 0.3
+# Fallback (no clustering) undetermined cutoff, as a fraction of median signal:
+_UNDETERMINED_FRAC = 0.2
 
 
 class NtcWell(BaseModel):
@@ -34,6 +38,7 @@ class QcResult(BaseModel):
     n_total: int
     ntc_check: NtcCheck
     cluster_separation: float | None
+    warnings: list[str] = []
 
 
 def _get_session(sid: str) -> UnifiedData:
@@ -48,10 +53,14 @@ def _determine_genotype(
     norm_allele2: float,
     cluster_assignments: dict[str, str],
     manual_assignments: dict[str, str],
+    undetermined_min: float = 0.0,
 ) -> str:
     """Determine effective genotype for a well.
 
-    Priority: manual_type > auto_cluster > ratio-based fallback.
+    Priority: manual_type > auto_cluster > ratio-based fallback. The fallback is
+    only reached when a well has neither a manual nor an auto call.
+    ``undetermined_min`` is a scale-relative low-signal cutoff supplied by the
+    caller (never an absolute constant).
     """
     if well in manual_assignments:
         return manual_assignments[well]
@@ -60,7 +69,7 @@ def _determine_genotype(
         return cluster_assignments[well]
 
     total = norm_fam + norm_allele2
-    if total <= _UNDETERMINED_THRESHOLD:
+    if total <= undetermined_min:
         return "Undetermined"
 
     ratio = norm_fam / total
@@ -158,31 +167,49 @@ async def qc_metrics(
         cluster_assignments = cluster_store[sid].assignments
     manual_assignments = welltype_store.get(sid, {})
 
+    # Scale reference: the plate's own median total signal. Every threshold below
+    # is a fraction of this, so a low-ROX kit (large magnitudes) works unchanged.
+    signals = sorted(p.norm_fam + p.norm_allele2 for p in points)
+    median_signal = signals[len(signals) // 2] if signals else 0.0
+    undetermined_min = _UNDETERMINED_FRAC * median_signal
+    ntc_hot = _NTC_HOT_FRAC * median_signal
+
     # --- Call rate ---
     n_total = len(points)
     n_called = 0
     for p in points:
         genotype = _determine_genotype(
             p.well, p.norm_fam, p.norm_allele2,
-            cluster_assignments, manual_assignments,
+            cluster_assignments, manual_assignments, undetermined_min,
         )
         if genotype not in ("Undetermined", "NTC"):
             n_called += 1
 
     call_rate = n_called / n_total if n_total > 0 else 0.0
 
-    # --- NTC check ---
-    # Find wells marked as NTC (manual_type takes priority)
+    # --- NTC check + control QC warnings ---
     ntc_flagged: list[NtcWell] = []
     ntc_ok = True
+    warnings: list[str] = []
 
     for p in points:
         effective_type = manual_assignments.get(p.well) or cluster_assignments.get(p.well)
+        signal = p.norm_fam + p.norm_allele2
         if effective_type == "NTC":
-            signal = p.norm_fam + p.norm_allele2
             ntc_flagged.append(NtcWell(well=p.well, signal=round(signal, 6)))
-            if signal >= _NTC_SIGNAL_THRESHOLD:
+            # Contamination / NTC-overlap: an NTC well as bright as real samples.
+            if median_signal > 0 and signal >= ntc_hot:
                 ntc_ok = False
+                warnings.append(
+                    f"NTC {p.well} shows genotype-level signal "
+                    f"({round(signal / median_signal * 100)}% of median) — possible contamination."
+                )
+        elif effective_type == "Positive Control":
+            # A positive control should amplify; near-NTC signal means it failed.
+            if signal <= undetermined_min:
+                warnings.append(
+                    f"Positive control {p.well} shows no amplification — check the run."
+                )
 
     ntc_check = NtcCheck(ok=ntc_ok, wells=ntc_flagged)
 
@@ -195,4 +222,5 @@ async def qc_metrics(
         n_total=n_total,
         ntc_check=ntc_check,
         cluster_separation=cluster_separation,
+        warnings=warnings,
     )

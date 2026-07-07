@@ -106,6 +106,17 @@ export function QcBadges() {
           {t.sep(qcData.cluster_separation.toFixed(2))}
         </span>
       )}
+
+      {/* Control / NTC-overlap QC warnings */}
+      {qcData.warnings && qcData.warnings.length > 0 && (
+        <span
+          className="badge qc-badge"
+          style={{ borderColor: '#f59e0b', color: '#f59e0b', fontWeight: 600 }}
+          title={qcData.warnings.join('\n')}
+        >
+          {t.qcWarnings(qcData.warnings.length)}
+        </span>
+      )}
     </>
   );
 }

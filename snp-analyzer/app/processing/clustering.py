@@ -45,7 +45,9 @@ def cluster_threshold(
 
 
 def cluster_auto(
-    points: list[dict], ntc_threshold: float = 0.1
+    points: list[dict],
+    ntc_threshold: float = 0.1,
+    control_wells: dict[str, str] | None = None,
 ) -> tuple[dict[str, str], dict[str, float]]:
     """Data-driven genotype clustering, fully scale-invariant.
 
@@ -80,14 +82,28 @@ def cluster_auto(
     if not points:
         return {}, {}
 
-    wells = [p["well"] for p in points]
-    fam = np.array([p["norm_fam"] for p in points], dtype=float)
-    allele2 = np.array([p["norm_allele2"] for p in points], dtype=float)
-    total = fam + allele2
-    ratio = np.where(total > 0, fam / np.where(total > 0, total, 1.0), 0.5)
-
+    control_wells = control_wells or {}
     assignments: dict[str, str] = {}
     confidences: dict[str, float] = {}
+
+    # Honor user-marked controls (NTC / Positive Control) and exclude them from
+    # the clustering input so a control can't distort the genotype clusters.
+    work = []
+    for p in points:
+        ctype = control_wells.get(p["well"])
+        if ctype in (WellType.NTC.value, WellType.POSITIVE_CONTROL.value):
+            assignments[p["well"]] = ctype
+            confidences[p["well"]] = 1.0
+        else:
+            work.append(p)
+    if not work:
+        return assignments, confidences
+
+    wells = [p["well"] for p in work]
+    fam = np.array([p["norm_fam"] for p in work], dtype=float)
+    allele2 = np.array([p["norm_allele2"] for p in work], dtype=float)
+    total = fam + allele2
+    ratio = np.where(total > 0, fam / np.where(total > 0, total, 1.0), 0.5)
 
     # 1. NTC = very low total signal RELATIVE to this plate's own signal level.
     #    NO absolute cutoff: ROX concentration varies between kits, so the axis
@@ -119,7 +135,7 @@ def cluster_auto(
     best_labels = None
     best_score = None
     for k in (2, 3):
-        if n_unique <= k:
+        if n_unique < k:
             continue
         labels = KMeans(n_clusters=k, n_init=10, random_state=42).fit_predict(coords)
         if len(set(labels)) < k:

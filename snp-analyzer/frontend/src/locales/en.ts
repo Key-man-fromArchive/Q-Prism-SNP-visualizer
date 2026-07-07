@@ -369,6 +369,7 @@ const en = {
   stageAmplification: 'Amplification',
   stagePostRead: 'Post-read',
   confidence: 'Confidence',
+  qcWarnings: (n: number) => `⚠ ${n} warning${n === 1 ? '' : 's'}`,
 
   // Import mapping wizard
   imwImportMapping: 'Import mapping',
