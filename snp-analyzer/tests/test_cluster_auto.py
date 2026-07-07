@@ -51,18 +51,30 @@ def test_auto_cluster_counts():
     assert counts["NTC"] == 3
 
 
-def test_weak_outlier_is_undetermined_not_forced_into_a_cluster():
-    """A weak reaction far from every cluster (but above the NTC floor) must be
-    Undetermined rather than force-assigned to the nearest genotype."""
+def test_ratio_gap_well_is_undetermined():
+    """A well sitting in the ratio gap between two genotypes (here midway between
+    Het ~0.62 and Allele 1 ~0.92) is ambiguous -> Undetermined."""
     pts = _points()
-    # Low-signal well near the origin: above NTC floor, far from all 3 clusters.
-    pts.append({"well": "OUT", "norm_fam": 0.15, "norm_allele2": 0.05})
+    # Full-magnitude well, ratio ~0.77 = midpoint of Het and Allele 1 centres.
+    pts.append({"well": "GAP", "norm_fam": 0.77, "norm_allele2": 0.23})
 
     assign = cluster_auto(pts, ntc_threshold=0.1)
-    assert assign["OUT"] == "Undetermined", assign["OUT"]
-    # The real clusters are unaffected.
+    assert assign["GAP"] == "Undetermined", assign["GAP"]
     assert all(assign[f"H{i}"] == "Heterozygous" for i in range(10))
     assert all(assign[f"A{i}"] == "Allele 1 Homo" for i in range(10))
+
+
+def test_low_signal_but_clear_ratio_het_is_called_het():
+    """A genuine het with weak signal (near the origin along the het direction)
+    must be called Het — genotype is the RATIO, not the magnitude. Regression
+    for wells like I12 being wrongly flagged Undetermined by euclidean distance."""
+    pts = _points()
+    # ratio ~0.63 (Het direction) but total signal ~0.30, far below the ~1.0
+    # signal of the main het cluster.
+    pts.append({"well": "LOWHET", "norm_fam": 0.19, "norm_allele2": 0.11})
+
+    assign = cluster_auto(pts, ntc_threshold=0.1)
+    assert assign["LOWHET"] == "Heterozygous", assign["LOWHET"]
 
 
 def test_monomorphic_plate_is_not_split_into_false_genotypes():

@@ -6,7 +6,7 @@ export const WELL_TYPE_INFO = {
   "Allele 1 Homo": { label: "Allele 1 Homo", color: "#2563eb", symbol: "circle" },
   "Allele 2 Homo": { label: "Allele 2 Homo", color: "#dc2626", symbol: "circle" },
   Heterozygous: { label: "Heterozygous", color: "#10b981", symbol: "circle" },
-  Undetermined: { label: "Undetermined", color: "#d1d5db", symbol: "circle" },
+  Undetermined: { label: "Undetermined", color: "#6b7280", symbol: "x" },
   Empty: { label: "Empty", color: "#374151", symbol: "x" },
   Omit: { label: "Omit (exclude)", color: "#a16207", symbol: "x" },
 } as const;

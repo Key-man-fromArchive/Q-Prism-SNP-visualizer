@@ -2,14 +2,22 @@ from __future__ import annotations
 
 from app.models import ThresholdConfig, WellType
 
-# How many robust standard deviations from a cluster centroid before a well is
-# treated as an outlier (Undetermined) rather than a confident call.
-_OUTLIER_K = 4.0
+# All thresholds below are scale-invariant (a fraction of the plate's own signal,
+# a dimensionless ratio, or a ratio of distances) — never an absolute magnitude,
+# because ROX concentration varies between kits and rescales the whole plate.
+
+# NTC = total signal below this fraction of the plate's median total signal.
+_NTC_SIGNAL_FRAC = 0.2
 
 # Minimum ratio of inter-cluster spacing to within-cluster spread required to
 # accept a multi-cluster (polymorphic) solution; below this the plate is treated
 # as a single genotype to avoid splitting noise into fake genotypes.
 _SEP_FACTOR = 2.0
+
+# A well is Undetermined when its distance (in fam-fraction) to the nearest
+# genotype centre is more than this fraction of its distance to the 2nd-nearest
+# — i.e. it sits in the ambiguous gap between two genotypes.
+_AMBIG_RATIO = 0.8
 
 
 def cluster_threshold(
@@ -35,19 +43,25 @@ def cluster_threshold(
 
 
 def cluster_auto(points: list[dict], ntc_threshold: float = 0.1) -> dict[str, str]:
-    """Data-driven genotype clustering that does not assume a fixed allele ratio.
+    """Data-driven genotype clustering, fully scale-invariant.
 
-    Heterozygote clusters often do not sit at ratio 0.5 — dye efficiencies
-    differ, so the het cloud can lean strongly toward one allele. Fixed ratio
-    cutoffs (e.g. >0.6 -> Allele 1) then misclassify skewed hets as a
-    homozygote. Instead:
+    Genotype is the fam-fraction (angle), not the signal magnitude, and the ROX
+    scale varies between kits — so this never hard-filters on an absolute value.
 
-    1. Split off NTC wells by low total signal (relative to the population).
-    2. KMeans the remaining wells in (fam, allele2) space, choosing k=2 or 3 by
-       silhouette (whichever separates better).
-    3. Label clusters by the RANK of their mean fam-fraction, not absolute
-       thresholds: highest -> Allele 1 Homo, lowest -> Allele 2 Homo, and the
-       middle cluster (when k=3) -> Heterozygous.
+    1. NTC: total signal below a fraction of the plate's median total.
+    2. KMeans the rest in (fam, allele2) space, k=2/3 by silhouette. A
+       separation gate collapses to a single genotype (monomorphic) when the
+       clusters are not clearly separated relative to their own scatter.
+    3. Label each cluster by the ABSOLUTE fam-fraction of its centroid
+       (dimensionless 0.65/0.35 cutoffs); the middle cluster is the heterozygote
+       when both homozygotes are present (handles hets skewed off 0.5).
+    4. Confidence in ratio space: assign each well to the nearest genotype
+       ratio-centre; wells in the gap between two genotypes — or in singleton
+       clusters — are Undetermined. Low-signal wells are NOT penalised for
+       magnitude, only for ambiguous ratio.
+
+    ``ntc_threshold`` is accepted for API compatibility but no longer used as an
+    absolute cutoff (NTC is now purely relative).
     """
     import numpy as np
     from sklearn.cluster import KMeans
@@ -64,25 +78,19 @@ def cluster_auto(points: list[dict], ntc_threshold: float = 0.1) -> dict[str, st
 
     assignments: dict[str, str] = {}
 
-    # 1. NTC = very low total signal. Use the larger of the configured absolute
-    #    threshold and a fraction of the median signal (robust to raw vs
-    #    normalized magnitudes).
+    # 1. NTC = very low total signal RELATIVE to this plate's own signal level.
+    #    NO absolute cutoff: ROX concentration varies between kits, so the axis
+    #    scale (numeric magnitude) can differ enormously. Every decision here is
+    #    scale-invariant — a fraction of the plate's median, or the dimensionless
+    #    fam-fraction ratio.
     positive = total[total > 0]
     median_total = float(np.median(positive)) if positive.size else 0.0
-    ntc_cut = max(ntc_threshold, 0.15 * median_total)
-    ntc_mask = total < ntc_cut
+    ntc_mask = total < _NTC_SIGNAL_FRAC * median_total
     for w, is_ntc in zip(wells, ntc_mask):
         if is_ntc:
             assignments[w] = WellType.NTC.value
 
     sig_idx = [i for i in range(len(wells)) if not ntc_mask[i]]
-    if len(sig_idx) < 2:
-        for i in sig_idx:
-            assignments[wells[i]] = WellType.UNKNOWN.value
-        return assignments
-
-    coords = np.column_stack([fam[sig_idx], allele2[sig_idx]])
-    n_unique = len(np.unique(coords, axis=0))
 
     # Too few signal wells to cluster reliably — call by absolute ratio.
     if len(sig_idx) < 4:
@@ -90,8 +98,11 @@ def cluster_auto(points: list[dict], ntc_threshold: float = 0.1) -> dict[str, st
             assignments[wells[i]] = _label_by_ratio(ratio[i])
         return assignments
 
-    # 2. Pick k = 2 or 3 by silhouette. Require more unique points than clusters
-    #    so silhouette is well-defined, and reject solutions with an empty cluster.
+    coords = np.column_stack([fam[sig_idx], allele2[sig_idx]])
+    n_unique = len(np.unique(coords, axis=0))
+
+    # 2. Pick k = 2 or 3 by silhouette (need more unique points than clusters
+    #    so silhouette is defined, and reject solutions with an empty cluster).
     best_labels = None
     best_score = None
     for k in (2, 3):
@@ -109,19 +120,16 @@ def cluster_auto(points: list[dict], ntc_threshold: float = 0.1) -> dict[str, st
         for local_i, global_i in enumerate(sig_idx):
             members.setdefault(int(best_labels[local_i]), []).append(global_i)
 
-    # Centroids + robust within-cluster spread.
+    # Centroids + within-cluster spread (used only for the separation gate,
+    # a ratio of two distances in the same space — scale-invariant).
     centroids: dict[int, tuple[float, float]] = {}
-    cutoffs: dict[int, float] = {}
     spreads: list[float] = []
     for lab, idxs in members.items():
         cx = float(np.mean(fam[idxs]))
         cy = float(np.mean(allele2[idxs]))
         centroids[lab] = (cx, cy)
         d = np.hypot(fam[idxs] - cx, allele2[idxs] - cy)
-        med = float(np.median(d))
-        mad = float(np.median(np.abs(d - med)))
-        cutoffs[lab] = med + _OUTLIER_K * max(1.4826 * mad, 1e-9)
-        spreads.append(med)
+        spreads.append(float(np.median(d)))
 
     cvals = list(centroids.values())
     if len(cvals) >= 2:
@@ -143,20 +151,16 @@ def cluster_auto(points: list[dict], ntc_threshold: float = 0.1) -> dict[str, st
             assignments[wells[i]] = _label_by_ratio(ratio[i])
         return assignments
 
-    # 3. Label clusters. Anchor each cluster by the ABSOLUTE fam-fraction of its
-    #    centroid (homozygotes sit near the axes, so wide 0.65/0.35 cutoffs are
-    #    safe) rather than by pure rank — otherwise a monomorphic plate whose
-    #    single genotype KMeans split in two would get a false second genotype.
-    #    In a genuine 3-cluster solution the middle cluster is the heterozygote,
-    #    even if dye skew pushes its ratio toward one homozygote, so force it.
+    # 3. Label clusters by the ABSOLUTE fam-fraction of their centroid ratio
+    #    (dimensionless, so ROX scale is irrelevant; homozygotes sit near the
+    #    axes so 0.65/0.35 cutoffs are safe). In a genuine 3-cluster solution the
+    #    middle cluster is the heterozygote — even when dye skew pushes its ratio
+    #    toward a homozygote — but only claim it when both homozygotes are present.
     cluster_ratio = {
-        lab: float(np.mean([ratio[i] for i in idxs])) for lab, idxs in members.items()
+        lab: float(np.median([ratio[i] for i in idxs])) for lab, idxs in members.items()
     }
     order = sorted(members, key=lambda lab: cluster_ratio[lab])
     label_map = {lab: _label_by_ratio(cluster_ratio[lab]) for lab in members}
-    # Only claim a middle heterozygote cluster when both homozygotes are actually
-    # present (top cluster fam-dominant, bottom allele2-dominant). Otherwise the
-    # extra clusters are just a split of one genotype and keep their own label.
     spans_both = (
         label_map[order[-1]] == WellType.ALLELE1_HOMO.value
         and label_map[order[0]] == WellType.ALLELE2_HOMO.value
@@ -165,19 +169,33 @@ def cluster_auto(points: list[dict], ntc_threshold: float = 0.1) -> dict[str, st
         for mid in order[1:-1]:
             label_map[mid] = WellType.HETEROZYGOUS.value
 
-    # 4. Confidence pass: hard KMeans forces every well into its nearest cluster.
-    #    Flag wells far from their centroid (weak/failed reactions) and tiny
-    #    clusters (n<2, which the distance test can't catch) as Undetermined.
+    # 4. Confidence in RATIO (angle) space. Genotype is the fam-fraction, not the
+    #    signal magnitude, so a genuine low-signal het must NOT be penalised for
+    #    being closer to the origin. Build one ratio-centre per genotype, assign
+    #    each signal well to the nearest centre, and mark wells that sit in the
+    #    gap between two genotypes (nearest/second-nearest ratio distance above
+    #    _AMBIG_RATIO) as Undetermined. Singleton clusters are Undetermined.
+    tiny_labels = {lab for lab, idxs in members.items() if len(idxs) < 2}
+    genotype_ratio: dict[str, list[float]] = {}
     for lab, idxs in members.items():
-        cx, cy = centroids[lab]
-        cutoff = max(cutoffs[lab], 0.5 * min_inter)
-        tiny = len(idxs) < 2
+        if lab in tiny_labels:
+            continue
+        genotype_ratio.setdefault(label_map[lab], []).extend(float(ratio[i]) for i in idxs)
+    centres = {g: float(np.median(v)) for g, v in genotype_ratio.items()}
+    centre_items = list(centres.items())
+
+    for lab, idxs in members.items():
         for i in idxs:
-            dist = float(np.hypot(fam[i] - cx, allele2[i] - cy))
-            if tiny or dist > cutoff:
+            if lab in tiny_labels or not centre_items:
+                assignments[wells[i]] = WellType.UNDETERMINED.value
+                continue
+            ranked = sorted(centre_items, key=lambda gc: abs(ratio[i] - gc[1]))
+            nearest_d = abs(ratio[i] - ranked[0][1])
+            second_d = abs(ratio[i] - ranked[1][1]) if len(ranked) >= 2 else None
+            if second_d is not None and second_d > 0 and nearest_d / second_d > _AMBIG_RATIO:
                 assignments[wells[i]] = WellType.UNDETERMINED.value
             else:
-                assignments[wells[i]] = label_map.get(lab, WellType.HETEROZYGOUS.value)
+                assignments[wells[i]] = ranked[0][0]
 
     return assignments
 
