@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
@@ -8,6 +8,7 @@ import {
   setWellTypes,
   getWellGroups,
   getWellTypes,
+  getCluster,
   runClustering as apiRunClustering,
   suggestCycle,
   type CycleSuggestion,
@@ -41,6 +42,7 @@ export function AnalysisTab() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<CycleSuggestion | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const autoRanSession = useRef<string | null>(null);
 
   const stageLabel = (w: string) =>
     w === "Pre-read"
@@ -194,6 +196,27 @@ export function AnalysisTab() {
     setClusterAssignments,
     t,
   ]);
+
+  // Run the analysis automatically the first time a session's data is ready, so
+  // the allele-discrimination plot opens already grouped instead of a raw mess.
+  // Skip if the session was already analysed (don't clobber an existing result).
+  useEffect(() => {
+    if (!sessionId || !currentCycle) return;
+    if (autoRanSession.current === sessionId) return;
+    autoRanSession.current = sessionId;
+    (async () => {
+      try {
+        const existing = await getCluster(sessionId);
+        if (existing?.assignments && Object.keys(existing.assignments).length > 0) {
+          setClusterAssignments(existing.assignments);
+          return;
+        }
+      } catch {
+        // no existing clustering — fall through to auto-analyse
+      }
+      handleAnalyze();
+    })();
+  }, [sessionId, currentCycle, handleAnalyze, setClusterAssignments]);
 
   // Check if any wells are typed as Empty
   const hasEmptyWells = useMemo(
