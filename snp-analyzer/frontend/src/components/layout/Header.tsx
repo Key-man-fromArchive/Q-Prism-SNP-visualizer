@@ -20,7 +20,7 @@ export function Header() {
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const useRox = useSettingsStore((s) => s.useRox);
   const { isDark, toggle: toggleDarkMode } = useDarkMode();
-  const { downloadCSV, exportPNG, exportPDF, printReport } = useExports();
+  const { downloadCSV, exportPNG, exportPDF, exportXLSX, printReport } = useExports();
   const { undo, redo, canUndo, canRedo } = useUndoRedo();
   const { t } = useI18n();
   const { language, setLanguage } = useLanguageStore();
@@ -205,6 +205,14 @@ export function Header() {
             onClick={safeExport(exportPDF, t.pdfExportFailed)}
           >
             {t.exportPDF}
+          </button>
+          <button
+            id="export-xlsx-btn"
+            className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
+            title={t.exportXLSXTooltip}
+            onClick={safeExport(exportXLSX, t.xlsxExportFailed)}
+          >
+            {t.exportXLSX}
           </button>
           <button
             id="new-upload-btn"

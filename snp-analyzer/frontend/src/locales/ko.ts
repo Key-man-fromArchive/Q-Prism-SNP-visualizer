@@ -29,6 +29,7 @@ const ko: Translations = {
   exportPNG: 'PNG',
   exportPrint: '인쇄',
   exportPDF: 'PDF',
+  exportXLSX: 'XLSX',
   newUpload: '+ 새 파일',
   logout: '로그아웃',
   signOut: '로그아웃',
@@ -40,12 +41,14 @@ const ko: Translations = {
   exportPNGTooltip: '산점도 PNG 내보내기',
   exportPrintTooltip: '보고서 인쇄',
   exportPDFTooltip: 'PDF 보고서 내보내기',
+  exportXLSXTooltip: 'XLSX 내보내기 (플롯 + 결과표)',
   uploadAnother: '다른 파일 업로드',
   wells: '웰',
   cycles: '사이클',
   csvExportFailed: 'CSV 내보내기',
   pngExportFailed: 'PNG 내보내기',
   pdfExportFailed: 'PDF 내보내기',
+  xlsxExportFailed: 'XLSX 내보내기',
   exportFailed: (label: string, msg: string) => `${label} 실패: ${msg}`,
 
   // Login

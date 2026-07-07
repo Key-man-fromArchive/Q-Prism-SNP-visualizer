@@ -27,6 +27,7 @@ const en = {
   exportPNG: 'PNG',
   exportPrint: 'Print',
   exportPDF: 'PDF',
+  exportXLSX: 'XLSX',
   newUpload: '+ New',
   logout: 'Logout',
   signOut: 'Sign out',
@@ -38,12 +39,14 @@ const en = {
   exportPNGTooltip: 'Export scatter PNG',
   exportPrintTooltip: 'Print report',
   exportPDFTooltip: 'Export PDF report',
+  exportXLSXTooltip: 'Export XLSX (plot + results table)',
   uploadAnother: 'Upload another file',
   wells: 'wells',
   cycles: 'cycles',
   csvExportFailed: 'CSV export',
   pngExportFailed: 'PNG export',
   pdfExportFailed: 'PDF export',
+  xlsxExportFailed: 'XLSX export',
   exportFailed: (label: string, msg: string) => `${label} failed: ${msg}`,
 
   // Login

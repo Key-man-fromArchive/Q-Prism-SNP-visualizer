@@ -221,6 +221,20 @@ export async function exportPdf(
   return res.blob();
 }
 
+export async function exportXlsx(
+  sid: string,
+  useRox?: boolean
+): Promise<Blob> {
+  const query = buildQuery({ use_rox: useRox });
+  const res = await fetch(apiUrl(`/api/data/${sid}/export/xlsx${query}`), { credentials: 'same-origin' });
+
+  if (!res.ok) {
+    throw new Error(`Failed to export XLSX: ${res.statusText}`);
+  }
+
+  return res.blob();
+}
+
 export async function getProtocol(sid: string): Promise<ProtocolResponse> {
   return apiFetch<ProtocolResponse>(`/api/data/${sid}/protocol`);
 }

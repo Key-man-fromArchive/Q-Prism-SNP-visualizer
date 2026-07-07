@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
-import { exportCsv, exportPdf } from '@/lib/api';
+import { exportCsv, exportPdf, exportXlsx } from '@/lib/api';
 import Plotly from 'plotly.js-dist-min';
 
 /**
@@ -11,6 +11,7 @@ export function useExports(): {
   downloadCSV: () => Promise<void>;
   exportPNG: () => Promise<void>;
   exportPDF: () => Promise<void>;
+  exportXLSX: () => Promise<void>;
   printReport: () => void;
 } {
   const sessionId = useSessionStore((state) => state.sessionId);
@@ -84,6 +85,27 @@ export function useExports(): {
     }
   }, [sessionId, useRox]);
 
+  const exportXLSX = useCallback(async () => {
+    if (!sessionId) {
+      throw new Error('No active session');
+    }
+
+    try {
+      const blob = await exportXlsx(sessionId, useRox);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `snp-report-${sessionId}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export XLSX:', error);
+      throw error;
+    }
+  }, [sessionId, useRox]);
+
   const printReport = useCallback(() => {
     window.print();
   }, []);
@@ -92,6 +114,7 @@ export function useExports(): {
     downloadCSV,
     exportPNG,
     exportPDF,
+    exportXLSX,
     printReport,
   };
 }
