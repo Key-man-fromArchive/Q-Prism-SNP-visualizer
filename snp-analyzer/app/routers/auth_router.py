@@ -25,7 +25,7 @@ from app.auth_security import (
     record_login_success,
     validate_password_strength,
 )
-from app.config import ASG_LAUNCH_COOKIE_NAME, ASG_LAUNCH_COOKIE_PATH, get_auth_mode, is_asg_launch_mode
+from app.config import ASG_HOME_URL, ASG_LAUNCH_COOKIE_NAME, ASG_LAUNCH_COOKIE_PATH, get_auth_mode, is_asg_launch_mode
 from app.db import get_db
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -47,7 +47,7 @@ class ASGLaunchRequest(BaseModel):
 
 @router.get("/config")
 async def auth_config():
-    return {"auth_mode": get_auth_mode()}
+    return {"auth_mode": get_auth_mode(), "asg_home_url": ASG_HOME_URL}
 
 
 @router.post("/login")

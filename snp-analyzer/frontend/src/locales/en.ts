@@ -370,6 +370,10 @@ const en = {
   stagePostRead: 'Post-read',
   confidence: 'Confidence',
   qcWarnings: (n: number) => `⚠ ${n} warning${n === 1 ? '' : 's'}`,
+  asgLaunchTitle: 'Session expired or login required',
+  asgLaunchMessage: 'Open SNP Analyze from an ASG Designer marker, design result, or order item.',
+  asgLaunchExpiredNote: 'Your session may have expired after being away for a while.',
+  backToAsgDesigner: 'Back to ASG Designer',
 
   // Import mapping wizard
   imwImportMapping: 'Import mapping',

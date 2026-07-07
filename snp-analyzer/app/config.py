@@ -40,6 +40,9 @@ MAX_ZIP_UNCOMPRESSED_BYTES = MAX_ZIP_UNCOMPRESSED_MB * 1024 * 1024
 MAX_ZIP_COMPRESSION_RATIO = _int_env("MAX_ZIP_COMPRESSION_RATIO", 100)
 
 ASG_BASE_URL = os.environ.get("ASG_BASE_URL", "http://asg-saas-v2-web:8000").rstrip("/")
+# Browser-facing URL of the ASG Designer home (same origin by default), used for
+# the "Back to ASG Designer" link on the launch-required screen.
+ASG_HOME_URL = os.environ.get("SNP_ASG_HOME_URL", "/") or "/"
 ASG_SNP_SERVICE_SECRET = os.environ.get("ASG_SNP_SERVICE_SECRET", "")
 ASG_CLIENT_TIMEOUT_SECONDS = _int_env("ASG_CLIENT_TIMEOUT_SECONDS", 5)
 SNP_ROOT_PATH = os.environ.get("SNP_ROOT_PATH", "").rstrip("/")

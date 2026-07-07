@@ -372,6 +372,10 @@ const ko: Translations = {
   stagePostRead: '포스트리드(Post-read)',
   confidence: '신뢰도',
   qcWarnings: (n: number) => `⚠ 경고 ${n}건`,
+  asgLaunchTitle: '세션이 만료되었거나 로그인이 필요합니다',
+  asgLaunchMessage: 'ASG Designer의 마커, 디자인 결과 또는 주문 항목에서 SNP 분석을 다시 열어주세요.',
+  asgLaunchExpiredNote: '오랫동안 자리를 비우면 세션이 만료될 수 있습니다.',
+  backToAsgDesigner: 'ASG Designer로 돌아가기',
 
   // 가져오기 매핑 마법사
   imwImportMapping: '가져오기 매핑',

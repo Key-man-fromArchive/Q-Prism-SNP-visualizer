@@ -54,6 +54,7 @@ export default function App() {
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const authMode = useAuthStore((s) => s.authMode);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [asgHomeUrl, setAsgHomeUrl] = useState<string>("/");
 
   // Check auth or exchange a one-time ASG launch token on mount.
   useEffect(() => {
@@ -62,6 +63,7 @@ export default function App() {
       try {
         const config = await getAuthConfig();
         setAuthMode(config.auth_mode);
+        if (config.asg_home_url) setAsgHomeUrl(config.asg_home_url);
 
         if (config.auth_mode === "asg_launch" && launchToken) {
           const res = await asgLaunch(launchToken);
@@ -168,10 +170,16 @@ export default function App() {
       return (
         <div className="min-h-screen bg-bg flex items-center justify-center px-6">
           <div className="max-w-md text-center">
-            <h1 className="text-lg font-semibold text-text mb-2">ASG launch required</h1>
-            <p className="text-sm text-text-muted">
-              {launchError || "Open SNP Analyze from an ASG Designer marker, design result, or order item."}
-            </p>
+            <h1 className="text-lg font-semibold text-text mb-2">{t.asgLaunchTitle}</h1>
+            <p className="text-sm text-text-muted mb-1">{t.asgLaunchMessage}</p>
+            <p className="text-xs text-text-muted mb-4">{t.asgLaunchExpiredNote}</p>
+            {launchError && <p className="text-xs text-danger mb-4">{launchError}</p>}
+            <a
+              href={asgHomeUrl}
+              className="inline-block px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary-hover"
+            >
+              {t.backToAsgDesigner}
+            </a>
           </div>
         </div>
       );

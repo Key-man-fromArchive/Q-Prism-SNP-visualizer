@@ -19,6 +19,7 @@ export type LoginResponse = {
 
 export type AuthConfigResponse = {
   auth_mode: AuthMode;
+  asg_home_url?: string;
 };
 
 export type LinkedASGContext = {
