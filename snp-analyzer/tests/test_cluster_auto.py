@@ -51,5 +51,47 @@ def test_auto_cluster_counts():
     assert counts["NTC"] == 3
 
 
+def test_weak_outlier_is_undetermined_not_forced_into_a_cluster():
+    """A weak reaction far from every cluster (but above the NTC floor) must be
+    Undetermined rather than force-assigned to the nearest genotype."""
+    pts = _points()
+    # Low-signal well near the origin: above NTC floor, far from all 3 clusters.
+    pts.append({"well": "OUT", "norm_fam": 0.15, "norm_allele2": 0.05})
+
+    assign = cluster_auto(pts, ntc_threshold=0.1)
+    assert assign["OUT"] == "Undetermined", assign["OUT"]
+    # The real clusters are unaffected.
+    assert all(assign[f"H{i}"] == "Heterozygous" for i in range(10))
+    assert all(assign[f"A{i}"] == "Allele 1 Homo" for i in range(10))
+
+
+def test_monomorphic_plate_is_not_split_into_false_genotypes():
+    """A plate with a single genotype (all Allele 1) must not be split by
+    KMeans noise into invented Het/Allele 2 calls."""
+    pts = [
+        {
+            "well": f"W{i}",
+            "norm_fam": 0.90 + ((i * 7) % 13 - 6) * 0.004,
+            "norm_allele2": 0.08 + ((i * 5) % 11 - 5) * 0.003,
+        }
+        for i in range(40)
+    ]
+    counts = Counter(cluster_auto(pts, ntc_threshold=0.1).values())
+    assert counts.get("Allele 2 Homo", 0) == 0
+    assert counts.get("Heterozygous", 0) == 0
+    assert counts["Allele 1 Homo"] == 40
+
+
+def test_partial_spectrum_het_not_called_homozygote():
+    """Allele 1 + Het only (no Allele 2 present): the het cluster must stay Het,
+    not be rank-labeled as the missing Allele 2 homozygote."""
+    pts = [{"well": f"A{i}", "norm_fam": 0.92, "norm_allele2": 0.08} for i in range(15)]
+    pts += [{"well": f"H{i}", "norm_fam": 0.60, "norm_allele2": 0.40} for i in range(15)]
+    counts = Counter(cluster_auto(pts, ntc_threshold=0.1).values())
+    assert counts.get("Allele 2 Homo", 0) == 0
+    assert counts["Allele 1 Homo"] == 15
+    assert counts["Heterozygous"] == 15
+
+
 def test_empty_returns_empty():
     assert cluster_auto([], ntc_threshold=0.1) == {}
