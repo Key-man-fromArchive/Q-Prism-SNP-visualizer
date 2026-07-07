@@ -201,7 +201,14 @@ export default function App() {
         <div id="analysis-panel" className={!sessionId && !showProjectOnly ? "hidden" : ""}>
           <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} hasSession={!!sessionId} isAdmin={isAdmin} />
 
-          {sessionId && activeTab === "analysis" && <AnalysisTab />}
+          {/* Keep Analysis mounted across tab switches so the analysed cycle,
+              clustering and view state persist (and it isn't re-initialised to
+              the amplification default when you return). */}
+          {sessionId && (
+            <div className={activeTab === "analysis" ? "" : "hidden"}>
+              <AnalysisTab />
+            </div>
+          )}
           {sessionId && activeTab === "protocol" && <ProtocolTab />}
           {sessionId && activeTab === "settings" && <SettingsTab />}
           {sessionId && activeTab === "quality" && <QualityTab />}
