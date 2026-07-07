@@ -248,6 +248,7 @@ export type WellType = typeof WellType[keyof typeof WellType];
 export const ClusteringAlgorithm = {
   THRESHOLD: 'threshold',
   KMEANS: 'kmeans',
+  AUTO: 'auto',
 } as const;
 
 export type ClusteringAlgorithm = typeof ClusteringAlgorithm[keyof typeof ClusteringAlgorithm];

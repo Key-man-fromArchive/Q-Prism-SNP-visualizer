@@ -37,8 +37,7 @@ export function AnalysisTab() {
   // Clustering / analysis
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const setClusterAssignments = useDataStore((s) => s.setClusterAssignments);
-  const { clusterAlgorithm, ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters } =
-    useSettingsStore();
+  const { ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters } = useSettingsStore();
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<CycleSuggestion | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
@@ -163,17 +162,16 @@ export function AnalysisTab() {
           new CustomEvent("goto-cycle", { detail: suggestion.suggested_cycle })
         );
       }
+      // "auto" = data-driven, rank-based labeling (handles hets that lean to
+      // one allele instead of sitting at ratio 0.5).
       const result = await apiRunClustering(sessionId, {
-        algorithm: clusterAlgorithm,
+        algorithm: "auto",
         cycle,
-        threshold_config:
-          clusterAlgorithm === "threshold"
-            ? {
-                ntc_threshold: ntcThreshold,
-                allele1_ratio_max: allele1RatioMax,
-                allele2_ratio_min: allele2RatioMin,
-              }
-            : null,
+        threshold_config: {
+          ntc_threshold: ntcThreshold,
+          allele1_ratio_max: allele1RatioMax,
+          allele2_ratio_min: allele2RatioMin,
+        },
         n_clusters: nClusters,
       });
       setClusterAssignments(result.assignments);
@@ -189,7 +187,6 @@ export function AnalysisTab() {
   }, [
     sessionId,
     currentCycle,
-    clusterAlgorithm,
     ntcThreshold,
     allele1RatioMax,
     allele2RatioMin,

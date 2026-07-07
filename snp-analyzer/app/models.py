@@ -123,6 +123,7 @@ class WellType(str, Enum):
 class ClusteringAlgorithm(str, Enum):
     THRESHOLD = "threshold"
     KMEANS = "kmeans"
+    AUTO = "auto"
 
 
 class ThresholdConfig(BaseModel):

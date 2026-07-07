@@ -10,7 +10,7 @@ from app.models import (
     ThresholdConfig,
     WellType,
 )
-from app.processing.clustering import cluster_kmeans, cluster_threshold
+from app.processing.clustering import cluster_auto, cluster_kmeans, cluster_threshold
 from app.processing.normalize import normalize_for_cycle
 from app.routers.upload import sessions
 from app.auth import CurrentUser, check_session_access
@@ -62,7 +62,10 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
         if p.well not in omitted
     ]
 
-    if req.algorithm == ClusteringAlgorithm.THRESHOLD:
+    if req.algorithm == ClusteringAlgorithm.AUTO:
+        config = req.threshold_config or ThresholdConfig()
+        assignments = cluster_auto(point_dicts, ntc_threshold=config.ntc_threshold)
+    elif req.algorithm == ClusteringAlgorithm.THRESHOLD:
         config = req.threshold_config or ThresholdConfig()
         assignments = cluster_threshold(point_dicts, config)
     else:
