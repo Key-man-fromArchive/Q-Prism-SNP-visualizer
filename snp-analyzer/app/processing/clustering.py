@@ -16,7 +16,9 @@ _SEP_FACTOR = 2.0
 
 # A well is Undetermined when its distance (in fam-fraction) to the nearest
 # genotype centre is more than this fraction of its distance to the 2nd-nearest
-# — i.e. it sits in the ambiguous gap between two genotypes.
+# — i.e. it sits in the ambiguous gap between two genotypes. The per-call
+# confidence is the margin (1 - nearest/second); the no-call cutoff is therefore
+# confidence < (1 - _AMBIG_RATIO).
 _AMBIG_RATIO = 0.8
 
 
@@ -42,8 +44,16 @@ def cluster_threshold(
     return assignments
 
 
-def cluster_auto(points: list[dict], ntc_threshold: float = 0.1) -> dict[str, str]:
+def cluster_auto(
+    points: list[dict], ntc_threshold: float = 0.1
+) -> tuple[dict[str, str], dict[str, float]]:
     """Data-driven genotype clustering, fully scale-invariant.
+
+    Returns ``(assignments, confidences)`` where confidence is a 0..1 margin
+    score: how far the well sits from the genotype decision boundary
+    (1 - nearest/second-nearest distance in fam-fraction space). A well is
+    Undetermined (no-call) when that margin drops below ``1 - _AMBIG_RATIO``.
+
 
     Genotype is the fam-fraction (angle), not the signal magnitude, and the ROX
     scale varies between kits — so this never hard-filters on an absolute value.
@@ -68,7 +78,7 @@ def cluster_auto(points: list[dict], ntc_threshold: float = 0.1) -> dict[str, st
     from sklearn.metrics import silhouette_score
 
     if not points:
-        return {}
+        return {}, {}
 
     wells = [p["well"] for p in points]
     fam = np.array([p["norm_fam"] for p in points], dtype=float)
@@ -77,6 +87,7 @@ def cluster_auto(points: list[dict], ntc_threshold: float = 0.1) -> dict[str, st
     ratio = np.where(total > 0, fam / np.where(total > 0, total, 1.0), 0.5)
 
     assignments: dict[str, str] = {}
+    confidences: dict[str, float] = {}
 
     # 1. NTC = very low total signal RELATIVE to this plate's own signal level.
     #    NO absolute cutoff: ROX concentration varies between kits, so the axis
@@ -89,6 +100,7 @@ def cluster_auto(points: list[dict], ntc_threshold: float = 0.1) -> dict[str, st
     for w, is_ntc in zip(wells, ntc_mask):
         if is_ntc:
             assignments[w] = WellType.NTC.value
+            confidences[w] = 1.0
 
     sig_idx = [i for i in range(len(wells)) if not ntc_mask[i]]
 
@@ -96,7 +108,8 @@ def cluster_auto(points: list[dict], ntc_threshold: float = 0.1) -> dict[str, st
     if len(sig_idx) < 4:
         for i in sig_idx:
             assignments[wells[i]] = _label_by_ratio(ratio[i])
-        return assignments
+            confidences[wells[i]] = 1.0
+        return assignments, confidences
 
     coords = np.column_stack([fam[sig_idx], allele2[sig_idx]])
     n_unique = len(np.unique(coords, axis=0))
@@ -149,7 +162,8 @@ def cluster_auto(points: list[dict], ntc_threshold: float = 0.1) -> dict[str, st
     if best_labels is None or len(cvals) < 2 or min_inter < _SEP_FACTOR * pooled_spread:
         for i in sig_idx:
             assignments[wells[i]] = _label_by_ratio(ratio[i])
-        return assignments
+            confidences[wells[i]] = 1.0
+        return assignments, confidences
 
     # 3. Label clusters by the ABSOLUTE fam-fraction of their centroid ratio
     #    (dimensionless, so ROX scale is irrelevant; homozygotes sit near the
@@ -186,18 +200,27 @@ def cluster_auto(points: list[dict], ntc_threshold: float = 0.1) -> dict[str, st
 
     for lab, idxs in members.items():
         for i in idxs:
+            w = wells[i]
             if lab in tiny_labels or not centre_items:
-                assignments[wells[i]] = WellType.UNDETERMINED.value
+                assignments[w] = WellType.UNDETERMINED.value
+                confidences[w] = 0.0
                 continue
             ranked = sorted(centre_items, key=lambda gc: abs(ratio[i] - gc[1]))
             nearest_d = abs(ratio[i] - ranked[0][1])
             second_d = abs(ratio[i] - ranked[1][1]) if len(ranked) >= 2 else None
-            if second_d is not None and second_d > 0 and nearest_d / second_d > _AMBIG_RATIO:
-                assignments[wells[i]] = WellType.UNDETERMINED.value
+            if second_d is None:
+                # Only one genotype present — a confident single-cluster call.
+                assignments[w] = ranked[0][0]
+                confidences[w] = 1.0
+                continue
+            frac = nearest_d / second_d if second_d > 0 else 0.0
+            confidences[w] = max(0.0, min(1.0, 1.0 - frac))
+            if frac > _AMBIG_RATIO:
+                assignments[w] = WellType.UNDETERMINED.value
             else:
-                assignments[wells[i]] = ranked[0][0]
+                assignments[w] = ranked[0][0]
 
-    return assignments
+    return assignments, confidences
 
 
 def _label_by_ratio(r: float) -> str:

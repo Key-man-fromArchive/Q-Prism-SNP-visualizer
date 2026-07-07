@@ -31,7 +31,7 @@ def _points():
 
 
 def test_skewed_hets_are_not_called_allele1():
-    assign = cluster_auto(_points(), ntc_threshold=0.1)
+    assign, conf = cluster_auto(_points(), ntc_threshold=0.1)
 
     # Every het well (ratio ~0.62) must be Heterozygous, not Allele 1 Homo
     for i in range(10):
@@ -42,9 +42,13 @@ def test_skewed_hets_are_not_called_allele1():
     assert all(assign[f"B{i}"] == "Allele 2 Homo" for i in range(10))
     assert all(assign[f"N{i}"] == "NTC" for i in range(3))
 
+    # Clean, well-separated calls are high confidence (0..1)
+    assert conf["A0"] > 0.8 and conf["H0"] > 0.8 and conf["B0"] > 0.8
+
 
 def test_auto_cluster_counts():
-    counts = Counter(cluster_auto(_points(), ntc_threshold=0.1).values())
+    assign, _ = cluster_auto(_points(), ntc_threshold=0.1)
+    counts = Counter(assign.values())
     assert counts["Allele 1 Homo"] == 10
     assert counts["Heterozygous"] == 10
     assert counts["Allele 2 Homo"] == 10
@@ -53,13 +57,14 @@ def test_auto_cluster_counts():
 
 def test_ratio_gap_well_is_undetermined():
     """A well sitting in the ratio gap between two genotypes (here midway between
-    Het ~0.62 and Allele 1 ~0.92) is ambiguous -> Undetermined."""
+    Het ~0.62 and Allele 1 ~0.92) is ambiguous -> Undetermined with low confidence."""
     pts = _points()
     # Full-magnitude well, ratio ~0.77 = midpoint of Het and Allele 1 centres.
     pts.append({"well": "GAP", "norm_fam": 0.77, "norm_allele2": 0.23})
 
-    assign = cluster_auto(pts, ntc_threshold=0.1)
+    assign, conf = cluster_auto(pts, ntc_threshold=0.1)
     assert assign["GAP"] == "Undetermined", assign["GAP"]
+    assert conf["GAP"] < 0.2  # near the decision boundary -> low confidence
     assert all(assign[f"H{i}"] == "Heterozygous" for i in range(10))
     assert all(assign[f"A{i}"] == "Allele 1 Homo" for i in range(10))
 
@@ -73,8 +78,9 @@ def test_low_signal_but_clear_ratio_het_is_called_het():
     # signal of the main het cluster.
     pts.append({"well": "LOWHET", "norm_fam": 0.19, "norm_allele2": 0.11})
 
-    assign = cluster_auto(pts, ntc_threshold=0.1)
+    assign, conf = cluster_auto(pts, ntc_threshold=0.1)
     assert assign["LOWHET"] == "Heterozygous", assign["LOWHET"]
+    assert conf["LOWHET"] > 0.2  # clearly a het, not a boundary no-call
 
 
 def test_monomorphic_plate_is_not_split_into_false_genotypes():
@@ -88,7 +94,8 @@ def test_monomorphic_plate_is_not_split_into_false_genotypes():
         }
         for i in range(40)
     ]
-    counts = Counter(cluster_auto(pts, ntc_threshold=0.1).values())
+    assign, _ = cluster_auto(pts, ntc_threshold=0.1)
+    counts = Counter(assign.values())
     assert counts.get("Allele 2 Homo", 0) == 0
     assert counts.get("Heterozygous", 0) == 0
     assert counts["Allele 1 Homo"] == 40
@@ -99,11 +106,12 @@ def test_partial_spectrum_het_not_called_homozygote():
     not be rank-labeled as the missing Allele 2 homozygote."""
     pts = [{"well": f"A{i}", "norm_fam": 0.92, "norm_allele2": 0.08} for i in range(15)]
     pts += [{"well": f"H{i}", "norm_fam": 0.60, "norm_allele2": 0.40} for i in range(15)]
-    counts = Counter(cluster_auto(pts, ntc_threshold=0.1).values())
+    assign, _ = cluster_auto(pts, ntc_threshold=0.1)
+    counts = Counter(assign.values())
     assert counts.get("Allele 2 Homo", 0) == 0
     assert counts["Allele 1 Homo"] == 15
     assert counts["Heterozygous"] == 15
 
 
 def test_empty_returns_empty():
-    assert cluster_auto([], ntc_threshold=0.1) == {}
+    assert cluster_auto([], ntc_threshold=0.1) == ({}, {})

@@ -80,8 +80,10 @@ async def export_csv(
     points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
 
     cluster_assignments: dict[str, str] = {}
+    confidences: dict[str, float] = {}
     if sid in cluster_store:
         cluster_assignments = cluster_store[sid].assignments
+        confidences = cluster_store[sid].confidences or {}
     manual_assignments = welltype_store.get(sid, {})
 
     sample_names = unified.sample_names or {}
@@ -95,6 +97,7 @@ async def export_csv(
         "Well",
         "Sample Name",
         "Genotype",
+        "Confidence (%)",
         "FAM (norm)",
         f"{unified.allele2_dye} (norm)",
         "FAM (raw)",
@@ -108,10 +111,12 @@ async def export_csv(
             p.well, p.norm_fam, p.norm_allele2,
             cluster_assignments, manual_assignments,
         )
+        conf = confidences.get(p.well)
         writer.writerow([
             p.well,
             sample_names.get(p.well, ""),
             genotype,
+            round(conf * 100, 1) if conf is not None else "",
             round(p.norm_fam, 6),
             round(p.norm_allele2, 6),
             round(p.raw_fam, 4),

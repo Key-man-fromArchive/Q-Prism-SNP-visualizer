@@ -43,6 +43,13 @@ def _run_migrations(conn: sqlite3.Connection):
             conn.execute("ALTER TABLE sessions ADD COLUMN user_id TEXT REFERENCES users(id)")
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (1)")
 
+    if current < 2:
+        # Migration 2: Add per-well confidence column to clustering_results
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(clustering_results)").fetchall()]
+        if "confidences_json" not in cols:
+            conn.execute("ALTER TABLE clustering_results ADD COLUMN confidences_json TEXT")
+        conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (2)")
+
     conn.commit()
 
 
@@ -99,8 +106,14 @@ def save_clustering(session_id: str, result):
     """Write clustering result to DB."""
     conn = get_db()
     conn.execute(
-        "INSERT OR REPLACE INTO clustering_results (session_id, labels_json, method, cycle) VALUES (?, ?, ?, ?)",
-        (session_id, json.dumps(result.assignments), result.algorithm, result.cycle),
+        "INSERT OR REPLACE INTO clustering_results (session_id, labels_json, method, cycle, confidences_json) VALUES (?, ?, ?, ?, ?)",
+        (
+            session_id,
+            json.dumps(result.assignments),
+            result.algorithm,
+            result.cycle,
+            json.dumps(result.confidences) if result.confidences else None,
+        ),
     )
     conn.commit()
 
@@ -260,9 +273,11 @@ def load_all_sessions():
         clustering = None
         cr = conn.execute("SELECT * FROM clustering_results WHERE session_id = ?", (sid,)).fetchone()
         if cr:
+            conf_json = cr["confidences_json"] if "confidences_json" in cr.keys() else None
             clustering = ClusteringResult(
                 algorithm=cr["method"], cycle=cr["cycle"],
                 assignments=json.loads(cr["labels_json"]),
+                confidences=json.loads(conf_json) if conf_json else None,
             )
 
         # Load manual welltypes

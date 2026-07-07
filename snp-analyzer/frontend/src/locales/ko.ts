@@ -370,6 +370,7 @@ const ko: Translations = {
   stagePreRead: '프리리드(Pre-read)',
   stageAmplification: '증폭(Amplification)',
   stagePostRead: '포스트리드(Post-read)',
+  confidence: '신뢰도',
 
   // 가져오기 매핑 마법사
   imwImportMapping: '가져오기 매핑',

@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS clustering_results (
     labels_json TEXT NOT NULL,
     method TEXT NOT NULL,
     cycle INTEGER NOT NULL,
+    confidences_json TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 );

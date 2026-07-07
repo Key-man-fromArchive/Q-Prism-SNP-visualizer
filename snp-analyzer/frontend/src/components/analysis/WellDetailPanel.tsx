@@ -150,6 +150,7 @@ export function WellDetailPanel() {
     sample_name: sampleName,
     auto_cluster: autoCluster,
     manual_type: manualType,
+    confidence,
     norm_fam: normFam,
     norm_allele2: normAllele2,
     raw_fam: rawFam,
@@ -203,6 +204,12 @@ export function WellDetailPanel() {
               <tr>
                 <td className="text-text-muted pr-3 py-0.5">{t.manualType}</td>
                 <td>{manualType}</td>
+              </tr>
+            )}
+            {confidence != null && (
+              <tr>
+                <td className="text-text-muted pr-3 py-0.5">{t.confidence}</td>
+                <td>{Math.round(confidence * 100)}%</td>
               </tr>
             )}
             <tr>

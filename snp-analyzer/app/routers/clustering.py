@@ -62,9 +62,10 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
         if p.well not in omitted
     ]
 
+    confidences: dict[str, float] = {}
     if req.algorithm == ClusteringAlgorithm.AUTO:
         config = req.threshold_config or ThresholdConfig()
-        assignments = cluster_auto(point_dicts, ntc_threshold=config.ntc_threshold)
+        assignments, confidences = cluster_auto(point_dicts, ntc_threshold=config.ntc_threshold)
     elif req.algorithm == ClusteringAlgorithm.THRESHOLD:
         config = req.threshold_config or ThresholdConfig()
         assignments = cluster_threshold(point_dicts, config)
@@ -72,7 +73,10 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
         assignments = cluster_kmeans(point_dicts, req.n_clusters)
 
     result = ClusteringResult(
-        algorithm=req.algorithm.value, cycle=cycle, assignments=assignments
+        algorithm=req.algorithm.value,
+        cycle=cycle,
+        assignments=assignments,
+        confidences=confidences or None,
     )
     cluster_store[sid] = result
 

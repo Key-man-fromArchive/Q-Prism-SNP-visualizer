@@ -77,6 +77,7 @@ class ScatterPoint(BaseModel):
     sample_name: str | None = None
     auto_cluster: str | None = None
     manual_type: str | None = None
+    confidence: float | None = None  # 0..1 auto-call confidence
 
 
 class PlateWell(BaseModel):
@@ -89,6 +90,7 @@ class PlateWell(BaseModel):
     sample_name: str | None = None
     auto_cluster: str | None = None
     manual_type: str | None = None
+    confidence: float | None = None  # 0..1 auto-call confidence
 
 
 class AmplificationCurve(BaseModel):
@@ -143,6 +145,7 @@ class ClusteringResult(BaseModel):
     algorithm: str
     cycle: int
     assignments: dict[str, str]
+    confidences: dict[str, float] | None = None  # well -> 0..1 call confidence
 
 
 class ManualWellTypeUpdate(BaseModel):

@@ -58,8 +58,10 @@ async def scatter_data(sid: str, current_user: CurrentUser, cycle: int = Query(d
     points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
 
     cluster_assignments = {}
+    confidences = {}
     if sid in cluster_store:
         cluster_assignments = cluster_store[sid].assignments
+        confidences = cluster_store[sid].confidences or {}
     manual_assignments = welltype_store.get(sid, {})
 
     return {
@@ -77,6 +79,7 @@ async def scatter_data(sid: str, current_user: CurrentUser, cycle: int = Query(d
                 sample_name=(unified.sample_names or {}).get(p.well),
                 auto_cluster=cluster_assignments.get(p.well),
                 manual_type=manual_assignments.get(p.well),
+                confidence=confidences.get(p.well),
             )
             for p in points
         ],
@@ -94,8 +97,10 @@ async def plate_data(sid: str, current_user: CurrentUser, cycle: int = Query(def
     points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
 
     cluster_assignments_plate = {}
+    confidences_plate = {}
     if sid in cluster_store:
         cluster_assignments_plate = cluster_store[sid].assignments
+        confidences_plate = cluster_store[sid].confidences or {}
     manual_assignments_plate = welltype_store.get(sid, {})
 
     wells = []
@@ -115,6 +120,7 @@ async def plate_data(sid: str, current_user: CurrentUser, cycle: int = Query(def
                 sample_name=(unified.sample_names or {}).get(p.well),
                 auto_cluster=cluster_assignments_plate.get(p.well),
                 manual_type=manual_assignments_plate.get(p.well),
+                confidence=confidences_plate.get(p.well),
             )
         )
 

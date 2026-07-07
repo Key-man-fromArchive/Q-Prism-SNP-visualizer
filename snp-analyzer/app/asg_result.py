@@ -39,6 +39,7 @@ def build_result_snapshot(
 
     cluster = cluster_store.get(session_id)
     cluster_assignments = cluster.assignments if cluster else {}
+    confidences = (cluster.confidences or {}) if cluster else {}
     manual_assignments = welltype_store.get(session_id, {})
     effective_types = get_effective_types(cluster_assignments, manual_assignments, unified.wells)
     genotype_counts = count_genotypes(effective_types)
@@ -61,6 +62,7 @@ def build_result_snapshot(
                 "auto_cluster": cluster_assignments.get(point.well),
                 "manual_type": manual_assignments.get(point.well),
                 "effective_type": effective_types.get(point.well, "Unknown"),
+                "confidence": confidences.get(point.well),
                 "fam_ct": ct.get("fam_ct"),
                 "allele2_ct": ct.get("allele2_ct"),
             }

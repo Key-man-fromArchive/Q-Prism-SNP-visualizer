@@ -129,7 +129,8 @@ export function ScatterPlot() {
               : "") +
             (p.raw_rox != null ? `<br>${normalizationLabel(labels)}: ${p.raw_rox.toFixed(1)}` : "") +
             (p.auto_cluster ? `<br>Auto: ${p.auto_cluster}` : "") +
-            (p.manual_type ? `<br>Manual: ${p.manual_type}` : "")
+            (p.manual_type ? `<br>Manual: ${p.manual_type}` : "") +
+            (p.confidence != null ? `<br>${t.confidence}: ${Math.round(p.confidence * 100)}%` : "")
           );
         }),
         hoverinfo: "text",

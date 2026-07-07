@@ -192,6 +192,7 @@ export type ScatterPoint = {
   sample_name: string | null;
   auto_cluster: string | null;
   manual_type: string | null;
+  confidence?: number | null;
 };
 
 export type PlateWell = {
@@ -204,6 +205,7 @@ export type PlateWell = {
   sample_name: string | null;
   auto_cluster: string | null;
   manual_type: string | null;
+  confidence?: number | null;
 };
 
 export type AmplificationCurve = {

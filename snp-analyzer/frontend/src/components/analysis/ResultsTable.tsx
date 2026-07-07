@@ -125,11 +125,14 @@ export function ResultsTable() {
               const bgColor = type ? info.color : "transparent";
               const textColor = type && !isLightColor(info.color) ? "#ffffff" : "#1a1a2e";
 
+              const confPct =
+                point.confidence != null ? ` · ${t.confidence} ${Math.round(point.confidence * 100)}%` : "";
               return (
                 <div
                   key={well}
                   className="result-cell text-center cursor-pointer hover:opacity-80"
                   data-well={well}
+                  title={`${well}${type ? ": " + type : ""}${confPct}`}
                   style={{
                     padding: "4px 2px",
                     borderRadius: "3px",

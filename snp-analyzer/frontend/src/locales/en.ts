@@ -368,6 +368,7 @@ const en = {
   stagePreRead: 'Pre-read',
   stageAmplification: 'Amplification',
   stagePostRead: 'Post-read',
+  confidence: 'Confidence',
 
   // Import mapping wizard
   imwImportMapping: 'Import mapping',
