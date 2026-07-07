@@ -259,6 +259,7 @@ export type CycleSuggestion = {
   suggested_cycle: number | null;
   suggested_low: number | null;
   suggested_high: number | null;
+  suggested_window: string | null;
   ntc_onset_cycle: number | null;
   ntc_wells: string[];
   amp_start: number | null;

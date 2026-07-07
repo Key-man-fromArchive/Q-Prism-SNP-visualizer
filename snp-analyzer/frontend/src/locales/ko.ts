@@ -367,6 +367,9 @@ const ko: Translations = {
   analyzeSuggestedCycle: (c: string) => `제안 사이클: ${c}`,
   analyzeNtcOnset: (c: number) => `NTC 상승 시작: ${c} 사이클`,
   analyzeNtcNone: 'NTC 오염 없음',
+  stagePreRead: '프리리드(Pre-read)',
+  stageAmplification: '증폭(Amplification)',
+  stagePostRead: '포스트리드(Post-read)',
 
   // 가져오기 매핑 마법사
   imwImportMapping: '가져오기 매핑',

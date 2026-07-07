@@ -365,6 +365,9 @@ const en = {
   analyzeSuggestedCycle: (c: string) => `Suggested cycle: ${c}`,
   analyzeNtcOnset: (c: number) => `NTC rises at cycle ${c}`,
   analyzeNtcNone: 'no NTC contamination detected',
+  stagePreRead: 'Pre-read',
+  stageAmplification: 'Amplification',
+  stagePostRead: 'Post-read',
 
   // Import mapping wizard
   imwImportMapping: 'Import mapping',

@@ -96,6 +96,43 @@ def test_separation_picks_cycle_within_window():
     assert result["suggested_cycle"] >= result["amp_start"] + 4
 
 
+def test_post_read_chosen_when_it_separates_best():
+    """LGC/3CR endpoint chemistry: amplification is flat, discrimination is in
+    the single low-temperature post-read → suggestion must land on Post-read."""
+    amp_cycles = list(range(2, 12))  # flat amplification
+    post_cycle = 12
+    data: list[WellCycleData] = []
+    clusters = [(100.0, 10.0), (10.0, 100.0), (60.0, 60.0)]
+    wells: list[str] = []
+    row = "ABC"
+    for gi, (fam, a2) in enumerate(clusters):
+        for j in range(3):
+            w = f"{row[gi]}{j + 1}"
+            wells.append(w)
+            for c in [1] + amp_cycles:  # pre-read + amplification: all identical/flat
+                data.append(WellCycleData(well=w, cycle=c, fam=50.0, allele2=50.0, rox=None))
+            # post-read: clusters separate
+            data.append(WellCycleData(well=w, cycle=post_cycle, fam=fam, allele2=a2, rox=None))
+
+    unified = UnifiedData(
+        instrument="QuantStudio 3",
+        allele2_dye="VIC",
+        wells=wells,
+        cycles=[1] + amp_cycles + [post_cycle],
+        data=data,
+        has_rox=False,
+        data_windows=[
+            DataWindow(name="Pre-read", start_cycle=1, end_cycle=1),
+            DataWindow(name="Amplification", start_cycle=2, end_cycle=11),
+            DataWindow(name="Post-read", start_cycle=post_cycle, end_cycle=post_cycle),
+        ],
+    )
+
+    result = compute_cycle_suggestion(unified)
+    assert result["suggested_cycle"] == post_cycle
+    assert result["suggested_window"] == "Post-read"
+
+
 def test_no_amplification_window_returns_none():
     unified = _unified_with_amp(12)
     unified.data_windows = None

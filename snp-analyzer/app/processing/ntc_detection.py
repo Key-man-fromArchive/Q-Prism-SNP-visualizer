@@ -46,6 +46,7 @@ def compute_cycle_suggestion(unified: UnifiedData) -> dict:
         "suggested_cycle": None,
         "suggested_low": None,
         "suggested_high": None,
+        "suggested_window": None,
         "ntc_onset_cycle": None,
         "ntc_wells": [],
         "amp_start": None,
@@ -61,19 +62,28 @@ def compute_cycle_suggestion(unified: UnifiedData) -> dict:
     result["ntc_wells"] = info["ntc_wells"]
     result["ntc_onset_cycle"] = info["ntc_onset_cycle"]
 
-    # Upper boundary: don't read past where NTC background starts rising.
+    # Amplification candidates (ASG-PCR reads the plateau):
+    #   upper boundary = just before NTC background rises,
+    #   lower boundary = skip early baseline cycles.
     if info["ntc_onset_cycle"] is not None:
         cap = max(info["amp_start"], info["ntc_onset_cycle"] - 1)
     else:
         cap = info["amp_end"]
-
-    # Lower boundary: skip early baseline cycles (amplification not yet meaningful).
     wlen = info["amp_end"] - info["amp_start"] + 1
     floor = info["amp_start"] + math.ceil(0.4 * wlen)
     if floor > cap:
         floor = info["amp_start"]
+    candidates = set(range(floor, cap + 1))
 
-    band = _best_separation_cycle(unified, floor, cap, set(info["ntc_wells"]))
+    # Post-read candidates (LGC / 3CR endpoint chemistries discriminate at the
+    # low-temperature post-read, not during amplification). Pre-read is only an
+    # outlier check, so it is never a candidate. Let cluster separation decide
+    # which stage actually carries the genotype signal.
+    for w in unified.data_windows or []:
+        if w.name == "Post-read":
+            candidates.update(range(w.start_cycle, w.end_cycle + 1))
+
+    band = _best_separation_cycle(unified, sorted(candidates), set(info["ntc_wells"]))
     if band is not None:
         result["suggested_cycle"] = band["best"]
         result["suggested_low"] = band["low"]
@@ -82,7 +92,20 @@ def compute_cycle_suggestion(unified: UnifiedData) -> dict:
         result["suggested_cycle"] = cap
         result["suggested_low"] = cap
         result["suggested_high"] = cap
+
+    result["suggested_window"] = _window_name_for_cycle(
+        unified.data_windows, result["suggested_cycle"]
+    )
     return result
+
+
+def _window_name_for_cycle(windows: list[DataWindow] | None, cycle: int | None) -> str | None:
+    if windows is None or cycle is None:
+        return None
+    for w in windows:
+        if w.start_cycle <= cycle <= w.end_cycle:
+            return w.name
+    return None
 
 
 def _analyze_amplification(unified: UnifiedData) -> dict | None:
@@ -122,18 +145,19 @@ def _analyze_amplification(unified: UnifiedData) -> dict | None:
 
 
 def _best_separation_cycle(
-    unified: UnifiedData, floor: int, cap: int, ntc_set: set[str], tol: float = 0.02
+    unified: UnifiedData, candidate_cycles: list[int], ntc_set: set[str], tol: float = 0.02
 ) -> dict | None:
-    """Best-separating cycle in [floor, cap] plus the surrounding "good" band.
+    """Best-separating cycle among ``candidate_cycles`` plus its "good" band.
 
-    Scores each cycle by the silhouette of a KMeans clustering on the
+    Scores each candidate by the silhouette of a KMeans clustering on the
     ROX-normalized (fam, allele2) points, excluding NTC wells. Returns:
         {"best": int, "low": int, "high": int}
     where best is the peak cycle and [low, high] is the contiguous band of
     cycles whose separation is within ``tol`` of the peak (so the UI can show
-    a range like "14~16"). Returns None if no cycle can be scored.
+    a range like "14~16"). Non-contiguous candidates (e.g. a lone post-read
+    cycle) naturally yield a single-cycle band. Returns None if nothing scores.
     """
-    if cap < floor:
+    if not candidate_cycles:
         return None
     try:
         import numpy as np
@@ -143,7 +167,7 @@ def _best_separation_cycle(
         return None
 
     scores: dict[int, float] = {}
-    for c in range(floor, cap + 1):
+    for c in candidate_cycles:
         pts = [
             p
             for p in normalize_for_cycle(unified, c, use_rox=unified.has_rox)

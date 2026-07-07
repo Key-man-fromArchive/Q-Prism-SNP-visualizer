@@ -43,6 +43,15 @@ export function AnalysisTab() {
   const [analysis, setAnalysis] = useState<CycleSuggestion | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
+  const stageLabel = (w: string) =>
+    w === "Pre-read"
+      ? t.stagePreRead
+      : w === "Amplification"
+      ? t.stageAmplification
+      : w === "Post-read"
+      ? t.stagePostRead
+      : w;
+
   const [showGroupManager, setShowGroupManager] = useState(false);
 
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
@@ -224,11 +233,14 @@ export function AnalysisTab() {
           <span className="text-xs text-text-muted">
             {analysis.suggested_cycle != null &&
               t.analyzeSuggestedCycle(
-                analysis.suggested_low != null &&
-                  analysis.suggested_high != null &&
-                  analysis.suggested_low !== analysis.suggested_high
+                (analysis.suggested_low != null &&
+                analysis.suggested_high != null &&
+                analysis.suggested_low !== analysis.suggested_high
                   ? `${analysis.suggested_low}~${analysis.suggested_high}`
-                  : String(analysis.suggested_cycle)
+                  : String(analysis.suggested_cycle)) +
+                  (analysis.suggested_window
+                    ? ` (${stageLabel(analysis.suggested_window)})`
+                    : "")
               )}
             {analysis.ntc_onset_cycle != null
               ? ` · ${t.analyzeNtcOnset(analysis.ntc_onset_cycle)}`
