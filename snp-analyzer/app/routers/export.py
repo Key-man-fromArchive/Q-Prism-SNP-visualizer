@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from app.models import UnifiedData
+from app.processing.genotype_vocab import DEFAULT_PLOIDY, label_by_ratio
 from app.processing.normalize import normalize_for_cycle
 from app.routers.upload import sessions
 from app.routers.clustering import cluster_store, welltype_store
@@ -14,8 +15,9 @@ from app.auth import CurrentUser, check_session_access
 
 router = APIRouter()
 
-# Genotype determination threshold (total normalized signal)
-_UNDETERMINED_THRESHOLD = 0.1
+# NTC / low-signal fallback is a fraction of the plate's own median total signal
+# (scale-invariant), never an absolute magnitude — ROX concentration varies by kit.
+_UNDETERMINED_FRAC = 0.2
 
 
 def _get_session(sid: str) -> UnifiedData:
@@ -30,31 +32,35 @@ def _determine_genotype(
     norm_allele2: float,
     cluster_assignments: dict[str, str],
     manual_assignments: dict[str, str],
+    ploidy: int = DEFAULT_PLOIDY,
+    undetermined_min: float = 0.0,
 ) -> str:
     """Determine effective genotype for a well.
 
-    Priority: manual_type > auto_cluster > ratio-based fallback.
+    Priority: manual_type > auto_cluster > ratio-based fallback. The fallback is
+    ploidy-aware (dosage by fam-fraction via the central vocabulary) and only
+    reached when a well has neither a manual nor an auto call. ``undetermined_min``
+    is a scale-relative low-signal cutoff supplied by the caller.
     """
-    # 1. Manual type takes highest priority
     if well in manual_assignments:
         return manual_assignments[well]
-
-    # 2. Auto-cluster assignment
     if well in cluster_assignments:
         return cluster_assignments[well]
 
-    # 3. Ratio-based fallback
     total = norm_fam + norm_allele2
-    if total <= _UNDETERMINED_THRESHOLD:
+    if total <= undetermined_min:
         return "Undetermined"
+    return label_by_ratio(norm_fam / total, ploidy)
 
-    ratio = norm_fam / total
-    if ratio > 0.6:
-        return "Allele 1 Homo"
-    elif ratio < 0.4:
-        return "Allele 2 Homo"
-    else:
-        return "Heterozygous"
+
+def _undetermined_min(points) -> float:
+    """Scale-relative low-signal cutoff = a fraction of the plate median total."""
+    totals = [p.norm_fam + p.norm_allele2 for p in points]
+    positive = sorted(t for t in totals if t > 0)
+    if not positive:
+        return 0.0
+    median = positive[len(positive) // 2]
+    return _UNDETERMINED_FRAC * median
 
 
 @router.get("/api/data/{sid}/export/csv")
@@ -106,10 +112,12 @@ async def export_csv(
     ])
 
     # Data rows (sorted by well for consistent output)
+    ploidy = getattr(unified, "ploidy", 2)
+    umin = _undetermined_min(points)
     for p in sorted(points, key=lambda pt: (pt.well[0], int(pt.well[1:]))):
         genotype = _determine_genotype(
             p.well, p.norm_fam, p.norm_allele2,
-            cluster_assignments, manual_assignments,
+            cluster_assignments, manual_assignments, ploidy, umin,
         )
         conf = confidences.get(p.well)
         writer.writerow([
@@ -159,14 +167,16 @@ async def export_xlsx(sid: str, current_user: CurrentUser, use_rox: bool = Query
     manual_assignments = welltype_store.get(sid, {})
     sample_names = unified.sample_names or {}
 
+    ploidy = getattr(unified, "ploidy", 2)
     effective_types = get_effective_types(cluster_assignments, manual_assignments, unified.wells)
-    genotype_counts = count_genotypes(effective_types)
+    genotype_counts = count_genotypes(effective_types, ploidy)
 
     scatter_points: list[dict] = []
     table_rows: list[list] = []
+    umin = _undetermined_min(points)
     for p in sorted(points, key=lambda pt: (pt.well[0], int(pt.well[1:]))):
         gt = _determine_genotype(
-            p.well, p.norm_fam, p.norm_allele2, cluster_assignments, manual_assignments
+            p.well, p.norm_fam, p.norm_allele2, cluster_assignments, manual_assignments, ploidy, umin
         )
         scatter_points.append({
             "well": p.well,

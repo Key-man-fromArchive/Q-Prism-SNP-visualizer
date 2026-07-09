@@ -248,7 +248,7 @@ KASP genotyping의 표준 feature는 두 정규화 신호 x,y에서 유도한 **
 - **Phase 0 — 배관/중앙화 (무회귀) ✅ 완료 (2026-07-10)**: 아래 §12 참조. `genotype_vocab` 레지스트리 신설, `ploidy` 배관(기본 2). 158 tests green, 이배체 동작 불변. **미착수 이월**: 중복 이배체 ratio-폴백 3곳(`qc.py:76`/`export.py:52`(둘 다 0.6/0.4)·`clustering.py:_label_by_ratio`(0.65/0.35)·`WellDetailPanel.tsx`) 수렴은 상수가 서로 달라 무회귀로 합칠 수 없어 **Phase 1로 이월**(알고리즘 교체 시 함께).
 - **Phase 1 — 통합 mixture 엔진 ✅ 완료 (2026-07-10)**: 아래 §13 참조. `cluster_auto`를 ploidy-aware GMM(arcsine-sqrt, K∈1..P+1 BIC, σ공유 tied, `p.free`)+근접병합+DP dosage 라벨로 교체. 164 tests green(diploid 회귀 7 + 합성 다배체 6). **Phase 2로 이관**: 제안 경계컷 emit·`cluster_threshold` P-컷 일반화(드래그 UI 계약과 함께). **Phase 3로 이관**: qc/export ratio-폴백 수렴(`count_genotypes` ploidy 관통과 함께).
 - **Phase 2 — 드래그 UX + 프론트 ✅ 완료 (2026-07-10)**: §15 참조. 2a(ploidy 셀렉터 + dosage 어휘/색 일반화) + 2b(드래그 방사 경계선 추가/삭제/토글) + 백엔드(`cluster_threshold` P-컷, `genotype_boundaries` emit). tsc+vite build 통과. 드래그 핵심 로직 Plotly 하니스로 검증(좌표 변환 Plotly와 정확 일치, grab/이동/클램프 정상). 잔여: dblclick 추가삭제·persist 왕복·전체앱 E2E(로그인 차단). ASG context default는 Phase 4.
-- **Phase 3 — 통계/리포트**: `count_genotypes(_, ploidy)`를 stats/export/asg 호출부에 관통(현재 ploidy 없이 호출 → 다배체에서 전부 excluded 버그), qc/export ratio-폴백을 `genotype_vocab.label_by_ratio`로 수렴, polysomic freq(HW 옵션시), PDF·차트.
+- **Phase 3 — 통계/리포트 ✅ 완료 (2026-07-10)**: §16 참조. `count_genotypes(_, ploidy)`를 statistics/export/asg에 관통(다배체 excluded 버그 해소), qc/export ratio-폴백을 `genotype_vocab.label_by_ratio`로 수렴 + export 절대컷→상대컷(비평 P2 버그) 수정, freq/HWE는 diploid 가드. 170 tests. **잔여**: polysomic freq/HWE(미지원, 다배체는 null), PDF 리포트(`reporting/charts.py`/`pdf_builder.py`) 어휘 일반화 미착수.
 - **Phase 4 — 교차서비스 계약**: `schema_version:2`(+`ploidy`, dosage counts), ASG(`asg-saas_v2`) 수신부 동반 수정, `effective_type`↔`genotype_call` 필드 정합화, e2e 검증.
 
 ## 11. 남은 미결정 (Phase 0 착수 전 확정 권장)
@@ -344,3 +344,17 @@ Claude·Fable·Codex 3개 모델로 하드코딩 비율 상수를 교차 비평.
 - 좌표 변환(`_fullLayout.xaxis._offset/_length/range` 기반 수동 pixel→ratio)이 Plotly 자체 `xaxis.p2l()`와 **완전 일치**(0.23736842… 동일). `_offset/_length` 필드 존재 확인.
 - 드래그: 커서 근처 방사선을 정확히 grab(0.625→grabbed 0.622), 커서 비율로 이동(→0.519, 목표 0.52 오차 ~0.001), 이웃 경계 불변, 클램프 정상.
 - **미검증(잔여)**: dblclick 추가/삭제(하니스 미포함 — 공유 좌표함수 + splice/push/sort 자명), persist 왕복(threshold 클러스터 재호출→refetch), 전체 앱 E2E(로컬 로그인 자격증명 필요로 차단). dblclick capture ↔ Plotly autoscale 경합은 실앱에서 확인 권장.
+
+---
+
+## 16. Phase 3 구현 결과 (2026-07-10)
+
+집계·통계·내보내기·QC·ASG가 세션 ploidy를 소비하도록 관통. 다배체 세션이 이제 dosage 라벨로 올바르게 집계됨(이전엔 전부 `excluded`).
+
+- `routers/statistics.py`: `count_genotypes(effective, ploidy)`. `genotype_distribution`은 이미 effective 라벨 기반이라 다배체 자동 대응. allele_freq/HWE는 **ploidy==2에서만** 계산(그 외 zero/null → 프론트가 이미 숨김).
+- `routers/export.py`: `_determine_genotype`를 ploidy-aware(`label_by_ratio`)로 + **절대 `_UNDETERMINED_THRESHOLD=0.1` → 상대 `_UNDETERMINED_FRAC=0.2×median`**(비평 P2 scale-invariance 버그 수정, `_undetermined_min()` 헬퍼). CSV/XLSX 둘 다 ploidy+상대컷 전달. `count_genotypes(_, ploidy)`. `build_xlsx`는 `genotype_counts.items()`만 순회 → dosage 키 안전.
+- `routers/qc.py`: 콜레이트 폴백 `_determine_genotype`를 ploidy-aware(`label_by_ratio`)로 수렴.
+- `asg_result.py`: `count_genotypes(_, ploidy)` + payload에 `ploidy` 추가. allele_freq/HWE는 diploid에서만(다배체는 null → **`genotype_counts["AA"]` KeyError 방지**). schema_version은 1 유지(v2 계약은 Phase 4).
+- 테스트 `tests/test_polyploid_aggregation.py`(4): export/qc 폴백 ploidy-aware, 상대 undetermined 컷, tetraploid 분포 키. **170 green**.
+
+**이월**: polysomic allele-freq/HWE(다배체 통계 미지원) → Phase 3+ 또는 별도. PDF 리포트(`reporting/charts.py:13`, `pdf_builder.py:94`) dosage 어휘 일반화 미착수. ASG 교차서비스 계약 v2(dosage counts 수신부) → Phase 4.
