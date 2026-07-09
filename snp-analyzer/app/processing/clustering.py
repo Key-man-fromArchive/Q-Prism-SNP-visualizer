@@ -19,12 +19,12 @@ _NTC_SIGNAL_FRAC = 0.2
 # (1/ploidy) are treated as one dosage class that BIC over-split on noise.
 _DOSAGE_MERGE_FRAC = 0.5
 
-# A well is Undetermined when its distance (in fam-fraction) to the nearest
-# genotype centre is more than this fraction of its distance to the 2nd-nearest
-# — i.e. it sits in the ambiguous gap between two genotypes. The per-call
-# confidence is the margin (1 - nearest/second); the no-call cutoff is therefore
-# confidence < (1 - _AMBIG_RATIO).
-_AMBIG_RATIO = 0.8
+# No-call rules, evaluated against the fitted mixture (so they scale with the
+# data's own spread and ploidy, not a fixed ratio gap):
+#   - a well whose best posterior probability is below this is "between classes"
+_CALL_MIN_POSTERIOR = 0.9
+#   - a well more than this many pooled SDs from EVERY class mean is an outlier
+_OUTLIER_SD = 4.0
 
 
 def cluster_threshold(
@@ -212,44 +212,100 @@ def cluster_auto(
     dosages = _assign_dosages([cluster_ratio[lab] for lab in order], ploidy)
     label_map = {lab: genotype_label(d, ploidy) for lab, d in zip(order, dosages)}
 
-    # 4. Confidence in RATIO (angle) space. Genotype is the fam-fraction, not the
-    #    signal magnitude, so a genuine low-signal het must NOT be penalised for
-    #    being closer to the origin. Build one ratio-centre per genotype, assign
-    #    each signal well to the nearest centre, and mark wells that sit in the
-    #    gap between two genotypes (nearest/second-nearest ratio distance above
-    #    _AMBIG_RATIO) as Undetermined. Singleton clusters are Undetermined.
+    # 4. Call + confidence from the fitted mixture, evaluated in the SAME
+    #    arcsine-sqrt space the clusters were found in (not a raw-ratio margin).
+    #    Reconstruct one Gaussian per FINAL dosage cluster (mean + shared pooled
+    #    SD, weight = cluster size); each well is assigned to its maximum-posterior
+    #    class and the confidence IS that posterior. A well is Undetermined when
+    #    the model is unsure: the best posterior is weak (it sits between two
+    #    classes) OR it is an outlier many SDs from every class. Both criteria
+    #    scale with the fitted spread and ploidy. Genotype is still the ratio, not
+    #    the magnitude — a genuine low-signal het stays on its cluster's angle.
+    rt_by_global = {global_i: float(rt[j]) for j, global_i in enumerate(sig_idx)}
     tiny_labels = {lab for lab, idxs in members.items() if len(idxs) < 2}
-    genotype_ratio: dict[str, list[float]] = {}
+
+    means: dict[int, float] = {}
+    within: list[float] = []
     for lab, idxs in members.items():
         if lab in tiny_labels:
             continue
-        genotype_ratio.setdefault(label_map[lab], []).extend(float(ratio[i]) for i in idxs)
-    centres = {g: float(np.median(v)) for g, v in genotype_ratio.items()}
-    centre_items = list(centres.items())
+        vals = np.array([rt_by_global[i] for i in idxs], dtype=float)
+        means[lab] = float(vals.mean())
+        within.append(float(vals.var()))
+    pooled_var = float(np.mean(within)) if within else 1e-4
+    sigma = float(np.sqrt(max(pooled_var, 1e-4)))
+    live = [lab for lab in members if lab not in tiny_labels]
 
     for lab, idxs in members.items():
         for i in idxs:
             w = wells[i]
-            if lab in tiny_labels or not centre_items:
+            if lab in tiny_labels or not live:
                 assignments[w] = WellType.UNDETERMINED.value
                 confidences[w] = 0.0
                 continue
-            ranked = sorted(centre_items, key=lambda gc: abs(ratio[i] - gc[1]))
-            nearest_d = abs(ratio[i] - ranked[0][1])
-            second_d = abs(ratio[i] - ranked[1][1]) if len(ranked) >= 2 else None
-            if second_d is None:
-                # Only one genotype present — a confident single-cluster call.
-                assignments[w] = ranked[0][0]
-                confidences[w] = 1.0
-                continue
-            frac = nearest_d / second_d if second_d > 0 else 0.0
-            confidences[w] = max(0.0, min(1.0, 1.0 - frac))
-            if frac > _AMBIG_RATIO:
+            rt_i = rt_by_global[i]
+            # Posterior over the live clusters (log weight = log cluster size).
+            log_scores = {
+                g: np.log(len(members[g])) - 0.5 * ((rt_i - means[g]) / sigma) ** 2
+                for g in live
+            }
+            m = max(log_scores.values())
+            exps = {g: np.exp(s - m) for g, s in log_scores.items()}
+            z = sum(exps.values())
+            post = {g: v / z for g, v in exps.items()}
+            best = max(post, key=post.get)
+            best_post = float(post[best])
+            nearest_sd = min(abs(rt_i - means[g]) / sigma for g in live)
+            if nearest_sd > _OUTLIER_SD:
                 assignments[w] = WellType.UNDETERMINED.value
+                confidences[w] = 0.0
+            elif best_post < _CALL_MIN_POSTERIOR:
+                assignments[w] = WellType.UNDETERMINED.value
+                confidences[w] = best_post
             else:
-                assignments[w] = ranked[0][0]
+                assignments[w] = label_map[best]
+                confidences[w] = best_post
 
     return assignments, confidences
+
+
+def genotype_boundaries(
+    points: list[dict], assignments: dict[str, str], ploidy: int = DEFAULT_PLOIDY
+) -> list[float]:
+    """Suggested fam-fraction boundaries (P values, descending) between adjacent
+    dosage classes — the seed positions for the draggable radial lines in the UI.
+
+    A boundary between dosage d and d+1 is the midpoint of the two dosages'
+    empirical median ratios when both are present, else the equal-spacing default
+    ``(d + 0.5) / P``. Returned high-r first, matching genotype_vocab cut order so
+    ``dosage_by_ratio`` reproduces the calls."""
+    from app.processing.genotype_vocab import default_ratio_cuts, dosage_of_label
+
+    validate_ploidy(ploidy)
+    ratio_by_dosage: dict[int, list[float]] = {}
+    for p in points:
+        d = dosage_of_label(assignments.get(p["well"], ""), ploidy)
+        if d is None:
+            continue
+        total = p["norm_fam"] + p["norm_allele2"]
+        if total > 0:
+            ratio_by_dosage.setdefault(d, []).append(p["norm_fam"] / total)
+
+    import statistics as _stats
+
+    centre = {
+        d: _stats.median(rs) for d, rs in ratio_by_dosage.items() if rs
+    }
+    defaults = default_ratio_cuts(ploidy)  # descending, index j <-> boundary(P-1-j, P-j)
+    cuts: list[float] = []
+    for j, dflt in enumerate(defaults):
+        hi = ploidy - j        # higher dosage of the pair
+        lo = hi - 1            # lower dosage of the pair
+        if hi in centre and lo in centre:
+            cuts.append((centre[hi] + centre[lo]) / 2.0)
+        else:
+            cuts.append(dflt)
+    return cuts
 
 
 def _assign_dosages(sorted_ratios: list[float], ploidy: int) -> list[int]:

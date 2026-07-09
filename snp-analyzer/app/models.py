@@ -148,6 +148,10 @@ class ClusteringResult(BaseModel):
     cycle: int
     assignments: dict[str, str]
     confidences: dict[str, float] | None = None  # well -> 0..1 call confidence
+    ploidy: int = 2
+    # Suggested fam-fraction boundaries (P values, descending) between adjacent
+    # dosage classes; seed positions for the draggable radial lines in the UI.
+    boundaries: list[float] | None = None
 
 
 class ManualWellTypeUpdate(BaseModel):

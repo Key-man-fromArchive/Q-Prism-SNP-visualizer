@@ -290,7 +290,7 @@ KASP genotyping의 표준 feature는 두 정규화 신호 x,y에서 유도한 **
 2. signal well의 `r`을 **arcsine-sqrt 변환** `rt=arcsin(√r)` → 1D `GaussianMixture(covariance_type='tied', n_init=5, random_state=42)`를 **k=1..P+1**로 적합, **BIC 최소** 선택. (tied=σ공유, weights 자유=`p.free`. BIC가 기존 silhouette+분리게이트 대체; k=1=monomorphic.)
 3. **근접 클러스터 병합**(`_DOSAGE_MERGE_FRAC=0.5`): 인접 클러스터 간 비율차가 `0.5/P` 미만이면 BIC 과분할로 보고 병합 — DP가 노이즈 분할을 가짜 dosage로 승격시키는 것 방지 + monomorphic 안정성 강화.
 4. **DP dosage 배정**(`_assign_dosages`): 클러스터를 비율 오름차순 정렬 후 이상값 `d/P`에 대한 **단조증가 최적 배정**(rank 보존 → 스큐된 homozygote가 이웃과 순서 뒤바뀌지 않음, k=P+1이면 전 dosage 강제). `genotype_label(d, ploidy)`로 라벨.
-5. **confidence/Undetermined — 기존 그대로**: 비율공간 최근접/차근접 genotype 중심 margin(`_AMBIG_RATIO=0.8`), 싱글턴=Undetermined. ploidy 무관하게 재사용됨.
+5. **confidence/Undetermined — §14에서 개정됨**: 초기엔 비율공간 margin(`_AMBIG_RATIO`)이었으나, 3-AI 비평 후 **arcsine 공간 GMM posterior + SD-거리 outlier no-call**로 교체(§14 항목 1).
 - `<4 signal wells` 폴백은 `genotype_vocab.label_by_ratio(r, ploidy)`로 수렴(1/3 폴백 처리; qc/export는 Phase 3).
 - 미사용된 `_SEP_FACTOR` 제거.
 
@@ -301,3 +301,25 @@ KASP genotyping의 표준 feature는 두 정규화 신호 x,y에서 유도한 **
 **이월**: 제안 경계컷 emit·`cluster_threshold` P-컷 일반화 → Phase 2(드래그 UI 계약과 함께). `count_genotypes` ploidy 관통 + qc/export 폴백 수렴 → Phase 3.
 
 **주의(다배체 미완성)**: 판정 엔진은 P를 소비하지만, **집계/통계/내보내기/ASG는 아직 diploid**. `count_genotypes(effective_types)`가 ploidy 인자 없이 호출되어(export.py:163/asg_result.py:45/statistics.py:26) 다배체 세션은 dosage 라벨이 전부 `excluded`로 집계됨 → Phase 3에서 수정.
+
+---
+
+## 14. 하드코딩 비율 3-AI 비평 & 개선 (2026-07-10)
+
+Claude·Fable·Codex 3개 모델로 하드코딩 비율 상수를 교차 비평. 세 모델이 아래에 **만장일치 합의**:
+
+**합의 결함 (심각도순)**
+- **P0 — `d/P` 선형-dosage 가정**(`default_ratio_cuts`, `_assign_dosages`): KASP endpoint 형광비는 이항 count가 아니라 비선형(dye 밝기·allele별 증폭효율·plateau 압축). 클러스터가 `d/P`에서 벗어나며 고배수성일수록 치명(Codex: α-bias로 4/8=0.5→0.58, 8배체 경계 0.5625 넘어 거짓 5/8). GMM이 자유 적합해도 결국 `d/P` 최근접 스냅으로 선형 가정 재유입.
+- **P1 — `_AMBIG_RATIO=0.8`**: GMM posterior를 버리고 비율-margin 재계산. ploidy-blind(8배체 애매구간 ~0.014 비율단위). → **posterior 기반으로**.
+- **P2 — 중복 `0.6/0.4` 폴백**(`qc.py`·`export.py`·`ThresholdConfig`·프론트): 단일출처 우회, P>2에서 전부 Het 붕괴, 대칭컷이 dye bias 무시. + export의 **절대 `_UNDETERMINED_THRESHOLD=0.1`** vs qc의 상대컷 = scale-invariance 위반 버그.
+- **P3 — `_NTC_SIGNAL_FRAC=0.2`**: median 안정성 가정, 실패/약신호 플레이트서 붕괴 → 컨트롤/background 모델.
+- **P4 — `_DOSAGE_MERGE_FRAC=0.5`**: 이상간격 기반 하드병합이 비선형 압축으로 가까워진 **진짜** 인접 dosage를 지울 위험 → 증거기반(posterior 겹침/pooled SD)으로.
+
+**모델별 고유**: Fable=arcsine-fit공간 vs raw-결정공간 불일치, `confidence=1-frac`가 확률 아닌데 확률로 export, tied 공분산 등분산 가정·ICL>BIC. Codex=arcsine-sqrt 자체가 이항용(endpoint는 비이항)이란 의문, 보정모델 `r=offset+scale·αx/(αx+1−x)`, 고배수성은 정확 dosage 대신 "resolved group" 보고, 검증 테스트 α=1.3–1.6. **이견**: arcsine 변환 정당성(Fable OK/Codex 의심), `_DOSAGE_MERGE_FRAC`(Claude 안전강화 vs Fable·Codex 위험).
+
+**반영: 항목 1 (지금 완료)** — `cluster_auto` step 4를 **arcsine 공간 GMM posterior + SD-거리 outlier no-call**로 교체:
+- 최종 dosage 클러스터별 Gaussian(평균 arcsine, pooled tied SD, weight=크기) 재구성 → 각 well을 max-posterior 클래스에 배정, **confidence = 그 posterior**(진짜 확률).
+- no-call = (best posterior < `_CALL_MIN_POSTERIOR=0.9`) OR (모든 클래스 평균에서 `_OUTLIER_SD=4.0` pooled-SD 초과 = outlier). 둘 다 데이터 spread·ploidy에 스케일.
+- `_AMBIG_RATIO` 제거. Fable의 "공간 불일치" 중 confidence 부분 해소(arcsine 공간에서 평가). 164 tests green(GAP=outlier→Undetermined, 중심 well posterior≈1, LOWHET 유지).
+
+**이월 (Phase 2b/3)**: 항목 2 경계·중심 mixture-derived + `d/P`는 seed만 / 항목 3 merge·DP도 arcsine 공간 일관 / 항목 4 폴백 4종 `genotype_vocab` 수렴 + export 상대컷 / 항목 5 신뢰-배수성 상한·"resolved group" / 항목 6 per-assay 보정 + α-bias 합성 회귀테스트. (드래그 경계가 mixture-derived로 가는 Phase 2b에서 항목 2와 자연 통합)
