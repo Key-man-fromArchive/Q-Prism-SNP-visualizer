@@ -86,11 +86,15 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
         if wtype in (WellType.NTC.value, WellType.POSITIVE_CONTROL.value)
     }
 
+    ploidy = getattr(unified, "ploidy", 2)
     confidences: dict[str, float] = {}
     if req.algorithm == ClusteringAlgorithm.AUTO:
         config = req.threshold_config or ThresholdConfig()
         assignments, confidences = cluster_auto(
-            point_dicts, ntc_threshold=config.ntc_threshold, control_wells=control_wells
+            point_dicts,
+            ntc_threshold=config.ntc_threshold,
+            control_wells=control_wells,
+            ploidy=ploidy,
         )
     elif req.algorithm == ClusteringAlgorithm.THRESHOLD:
         config = req.threshold_config or ThresholdConfig()

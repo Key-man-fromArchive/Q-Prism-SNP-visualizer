@@ -246,9 +246,9 @@ KASP genotyping의 표준 feature는 두 정규화 신호 x,y에서 유도한 **
 ## 10. 확정 구현 계획 (결정 반영)
 
 - **Phase 0 — 배관/중앙화 (무회귀) ✅ 완료 (2026-07-10)**: 아래 §12 참조. `genotype_vocab` 레지스트리 신설, `ploidy` 배관(기본 2). 158 tests green, 이배체 동작 불변. **미착수 이월**: 중복 이배체 ratio-폴백 3곳(`qc.py:76`/`export.py:52`(둘 다 0.6/0.4)·`clustering.py:_label_by_ratio`(0.65/0.35)·`WellDetailPanel.tsx`) 수렴은 상수가 서로 달라 무회귀로 합칠 수 없어 **Phase 1로 이월**(알고리즘 교체 시 함께).
-- **Phase 1 — 통합 mixture 엔진**: `cluster_auto`를 ploidy-aware 1D GMM(arcsine-sqrt, K=P+1, σ 공유, `p.free`, BIC 축소)으로 교체. 제안 경계컷 P개 emit. `cluster_threshold`를 P-컷 배열로 일반화. **합성 tetraploid 산점도 단위테스트 + P=2 현행 일치 회귀테스트**.
-- **Phase 2 — 드래그 UX + 프론트**: 산점도 방사 경계선(드래그·실시간 재집계), ploidy 셀렉터(2x–8x, 클러스터 컨트롤 옆, 세션 저장, ASG context default), dosage 다색·범례·결과테이블·통계탭 어휘. (§3 표 #10 목록 P+1 일반화)
-- **Phase 3 — 통계/리포트**: `count_genotypes` P+1 버킷, polysomic freq(HW 옵션시), PDF·차트.
+- **Phase 1 — 통합 mixture 엔진 ✅ 완료 (2026-07-10)**: 아래 §13 참조. `cluster_auto`를 ploidy-aware GMM(arcsine-sqrt, K∈1..P+1 BIC, σ공유 tied, `p.free`)+근접병합+DP dosage 라벨로 교체. 164 tests green(diploid 회귀 7 + 합성 다배체 6). **Phase 2로 이관**: 제안 경계컷 emit·`cluster_threshold` P-컷 일반화(드래그 UI 계약과 함께). **Phase 3로 이관**: qc/export ratio-폴백 수렴(`count_genotypes` ploidy 관통과 함께).
+- **Phase 2 — 드래그 UX + 프론트**: 산점도 방사 경계선(드래그·실시간 재집계), 이를 위한 `cluster_threshold` P-컷 배열 일반화 + `cluster_auto` 제안 경계컷 emit(ClusteringResult 필드), ploidy 셀렉터(2x–8x, 클러스터 컨트롤 옆, 세션 저장, ASG context default), dosage 다색·범례·결과테이블·통계탭 어휘. (§3 표 #10 목록 P+1 일반화)
+- **Phase 3 — 통계/리포트**: `count_genotypes(_, ploidy)`를 stats/export/asg 호출부에 관통(현재 ploidy 없이 호출 → 다배체에서 전부 excluded 버그), qc/export ratio-폴백을 `genotype_vocab.label_by_ratio`로 수렴, polysomic freq(HW 옵션시), PDF·차트.
 - **Phase 4 — 교차서비스 계약**: `schema_version:2`(+`ploidy`, dosage counts), ASG(`asg-saas_v2`) 수신부 동반 수정, `effective_type`↔`genotype_call` 필드 정합화, e2e 검증.
 
 ## 11. 남은 미결정 (Phase 0 착수 전 확정 권장)
@@ -278,3 +278,26 @@ KASP genotyping의 표준 feature는 두 정규화 신호 x,y에서 유도한 **
 **검증**: 158 tests green(기존 147 + 신규 11). `count_genotypes()` 기본 출력 = `{AA,AB,BB,excluded}` 불변 확인.
 
 **다음(Phase 1) 진입점**: `clustering.py:cluster_auto`를 `unified.ploidy`(라우터에서 인자로 전달) 소비하도록 교체 — arcsine-sqrt 변환 + K=P+1 GMM(σ공유, `p.free`, BIC 축소) + 제안 경계컷 P개 emit. `cluster_threshold`를 P-컷 배열로 일반화하고 위 3개 ratio-폴백을 `genotype_vocab.label_by_ratio`로 수렴. 합성 tetraploid 단위테스트 + P=2 현행 일치 회귀테스트.
+
+---
+
+## 13. Phase 1 구현 결과 (2026-07-10)
+
+`cluster_auto`(AUTO 알고리즘)를 diploid 전용 휴리스틱 → **ploidy-aware model-based**로 교체. fitPoly/fitTetra 방식(§7.2)을 우리 판정 구조에 이식.
+
+**알고리즘 (`app/processing/clustering.py:cluster_auto(points, ntc_threshold, control_wells, ploidy=2)`)**
+1. 컨트롤·NTC 처리 — **기존 그대로**(상대 median 20%).
+2. signal well의 `r`을 **arcsine-sqrt 변환** `rt=arcsin(√r)` → 1D `GaussianMixture(covariance_type='tied', n_init=5, random_state=42)`를 **k=1..P+1**로 적합, **BIC 최소** 선택. (tied=σ공유, weights 자유=`p.free`. BIC가 기존 silhouette+분리게이트 대체; k=1=monomorphic.)
+3. **근접 클러스터 병합**(`_DOSAGE_MERGE_FRAC=0.5`): 인접 클러스터 간 비율차가 `0.5/P` 미만이면 BIC 과분할로 보고 병합 — DP가 노이즈 분할을 가짜 dosage로 승격시키는 것 방지 + monomorphic 안정성 강화.
+4. **DP dosage 배정**(`_assign_dosages`): 클러스터를 비율 오름차순 정렬 후 이상값 `d/P`에 대한 **단조증가 최적 배정**(rank 보존 → 스큐된 homozygote가 이웃과 순서 뒤바뀌지 않음, k=P+1이면 전 dosage 강제). `genotype_label(d, ploidy)`로 라벨.
+5. **confidence/Undetermined — 기존 그대로**: 비율공간 최근접/차근접 genotype 중심 margin(`_AMBIG_RATIO=0.8`), 싱글턴=Undetermined. ploidy 무관하게 재사용됨.
+- `<4 signal wells` 폴백은 `genotype_vocab.label_by_ratio(r, ploidy)`로 수렴(1/3 폴백 처리; qc/export는 Phase 3).
+- 미사용된 `_SEP_FACTOR` 제거.
+
+**변경**: `routers/clustering.py`가 `cluster_auto(..., ploidy=unified.ploidy)` 전달.
+
+**테스트**: `tests/test_cluster_auto.py` 7개 **전부 그대로 통과**(P=2 무회귀: 스큐된 het/GAP undetermined/monomorphic/부분스펙트럼). 신규 `tests/test_cluster_auto_polyploid.py` 6개(전 tetraploid 5클래스/부분스펙트럼 rank/monomorphic/NTC/ploidy검증/hexaploid). **총 164 green**. 수동 확인: P=5 6클래스 완전 분해.
+
+**이월**: 제안 경계컷 emit·`cluster_threshold` P-컷 일반화 → Phase 2(드래그 UI 계약과 함께). `count_genotypes` ploidy 관통 + qc/export 폴백 수렴 → Phase 3.
+
+**주의(다배체 미완성)**: 판정 엔진은 P를 소비하지만, **집계/통계/내보내기/ASG는 아직 diploid**. `count_genotypes(effective_types)`가 ploidy 인자 없이 호출되어(export.py:163/asg_result.py:45/statistics.py:26) 다배체 세션은 dosage 라벨이 전부 `excluded`로 집계됨 → Phase 3에서 수정.

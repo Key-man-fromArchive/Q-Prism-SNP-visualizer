@@ -1,6 +1,12 @@
 from __future__ import annotations
 
 from app.models import ThresholdConfig, WellType
+from app.processing.genotype_vocab import (
+    DEFAULT_PLOIDY,
+    genotype_label,
+    label_by_ratio,
+    validate_ploidy,
+)
 
 # All thresholds below are scale-invariant (a fraction of the plate's own signal,
 # a dimensionless ratio, or a ratio of distances) — never an absolute magnitude,
@@ -9,10 +15,9 @@ from app.models import ThresholdConfig, WellType
 # NTC = total signal below this fraction of the plate's median total signal.
 _NTC_SIGNAL_FRAC = 0.2
 
-# Minimum ratio of inter-cluster spacing to within-cluster spread required to
-# accept a multi-cluster (polymorphic) solution; below this the plate is treated
-# as a single genotype to avoid splitting noise into fake genotypes.
-_SEP_FACTOR = 2.0
+# Two fitted clusters closer than this fraction of the ideal dosage spacing
+# (1/ploidy) are treated as one dosage class that BIC over-split on noise.
+_DOSAGE_MERGE_FRAC = 0.5
 
 # A well is Undetermined when its distance (in fam-fraction) to the nearest
 # genotype centre is more than this fraction of its distance to the 2nd-nearest
@@ -48,25 +53,34 @@ def cluster_auto(
     points: list[dict],
     ntc_threshold: float = 0.1,
     control_wells: dict[str, str] | None = None,
+    ploidy: int = DEFAULT_PLOIDY,
 ) -> tuple[dict[str, str], dict[str, float]]:
-    """Data-driven genotype clustering, fully scale-invariant.
+    """Model-based, ploidy-aware genotype clustering, fully scale-invariant.
+
+    Generalizes to any ploidy P (2=diploid .. 8): a locus resolves into up to
+    ``P + 1`` allele-dosage classes along the fam-fraction axis. The genotyping
+    model follows fitPoly/fitTetra: the per-well ratio ``r = fam/(fam+allele2)``
+    is arcsine-sqrt transformed (variance stabilization), then a 1-D Gaussian
+    mixture with a shared (tied) variance and free mixing proportions is fitted;
+    the number of present dosage classes is chosen by BIC (this replaces the old
+    diploid-only silhouette + separation gate). Fitted clusters are mapped to
+    dosages by a monotonic best-fit against the ideal ratios ``d/P``, so a skewed
+    homozygote (e.g. r~0.30 from dye imbalance) is still ranked correctly.
 
     Returns ``(assignments, confidences)`` where confidence is a 0..1 margin
     score: how far the well sits from the genotype decision boundary
     (1 - nearest/second-nearest distance in fam-fraction space). A well is
     Undetermined (no-call) when that margin drops below ``1 - _AMBIG_RATIO``.
 
-
     Genotype is the fam-fraction (angle), not the signal magnitude, and the ROX
     scale varies between kits — so this never hard-filters on an absolute value.
 
     1. NTC: total signal below a fraction of the plate's median total.
-    2. KMeans the rest in (fam, allele2) space, k=2/3 by silhouette. A
-       separation gate collapses to a single genotype (monomorphic) when the
-       clusters are not clearly separated relative to their own scatter.
-    3. Label each cluster by the ABSOLUTE fam-fraction of its centroid
-       (dimensionless 0.65/0.35 cutoffs); the middle cluster is the heterozygote
-       when both homozygotes are present (handles hets skewed off 0.5).
+    2. Fit an arcsine-sqrt-ratio Gaussian mixture (tied variance), K present
+       dosage classes chosen by BIC over 1..P+1. K=1 => monomorphic plate.
+    3. Map each cluster to an allele dosage by a monotonic best-fit of the
+       cluster ratios to the ideal ``d/P`` positions (rank-preserving, so skew
+       cannot reorder dosages), then label via the genotype vocabulary.
     4. Confidence in ratio space: assign each well to the nearest genotype
        ratio-centre; wells in the gap between two genotypes — or in singleton
        clusters — are Undetermined. Low-signal wells are NOT penalised for
@@ -76,8 +90,9 @@ def cluster_auto(
     absolute cutoff (NTC is now purely relative).
     """
     import numpy as np
-    from sklearn.cluster import KMeans
-    from sklearn.metrics import silhouette_score
+    from sklearn.mixture import GaussianMixture
+
+    validate_ploidy(ploidy)
 
     if not points:
         return {}, {}
@@ -123,81 +138,79 @@ def cluster_auto(
     # Too few signal wells to cluster reliably — call by absolute ratio.
     if len(sig_idx) < 4:
         for i in sig_idx:
-            assignments[wells[i]] = _label_by_ratio(ratio[i])
+            assignments[wells[i]] = label_by_ratio(ratio[i], ploidy)
             confidences[wells[i]] = 1.0
         return assignments, confidences
 
-    coords = np.column_stack([fam[sig_idx], allele2[sig_idx]])
-    n_unique = len(np.unique(coords, axis=0))
+    # 2. Fit a 1-D Gaussian mixture on the arcsine-sqrt-transformed ratio
+    #    (variance stabilization, fitPoly/fitTetra). Tied covariance = one shared
+    #    variance across dosage classes; free weights = no segregation assumption
+    #    (p.free). The number of PRESENT dosage classes K is chosen by BIC over
+    #    1..P+1 — K=1 is a monomorphic plate, so BIC replaces the old silhouette +
+    #    separation gate and will not split measurement noise into fake genotypes.
+    rt = np.arcsin(np.sqrt(np.clip(ratio[sig_idx], 0.0, 1.0)))
+    X = rt.reshape(-1, 1)
+    n_unique = len(np.unique(np.round(rt, 9)))
+    k_max = min(ploidy + 1, n_unique)
 
-    # 2. Pick k = 2 or 3 by silhouette (need more unique points than clusters
-    #    so silhouette is defined, and reject solutions with an empty cluster).
-    best_labels = None
-    best_score = None
-    for k in (2, 3):
-        if n_unique < k:
-            continue
-        labels = KMeans(n_clusters=k, n_init=10, random_state=42).fit_predict(coords)
-        if len(set(labels)) < k:
-            continue
-        score = silhouette_score(coords, labels)
-        if best_score is None or score > best_score:
-            best_score, best_labels = score, labels
-
-    members: dict[int, list[int]] = {}
-    if best_labels is not None:
-        for local_i, global_i in enumerate(sig_idx):
-            members.setdefault(int(best_labels[local_i]), []).append(global_i)
-
-    # Centroids + within-cluster spread (used only for the separation gate,
-    # a ratio of two distances in the same space — scale-invariant).
-    centroids: dict[int, tuple[float, float]] = {}
-    spreads: list[float] = []
-    for lab, idxs in members.items():
-        cx = float(np.mean(fam[idxs]))
-        cy = float(np.mean(allele2[idxs]))
-        centroids[lab] = (cx, cy)
-        d = np.hypot(fam[idxs] - cx, allele2[idxs] - cy)
-        spreads.append(float(np.median(d)))
-
-    cvals = list(centroids.values())
-    if len(cvals) >= 2:
-        min_inter = min(
-            float(np.hypot(cvals[i][0] - cvals[j][0], cvals[i][1] - cvals[j][1]))
-            for i in range(len(cvals))
-            for j in range(i + 1, len(cvals))
+    best_gmm = None
+    best_bic = None
+    for k in range(1, k_max + 1):
+        gmm = GaussianMixture(
+            n_components=k,
+            covariance_type="tied",
+            random_state=42,
+            n_init=5,
+            reg_covar=1e-6,
         )
-    else:
-        min_inter = 0.0
-    pooled_spread = float(np.median(spreads)) if spreads else 0.0
+        gmm.fit(X)
+        bic = gmm.bic(X)
+        if best_bic is None or bic < best_bic:
+            best_bic, best_gmm = bic, gmm
 
-    # Separation gate: if the "clusters" are not clearly separated relative to
-    # their own scatter, the plate is effectively a single genotype (monomorphic)
-    # — KMeans would otherwise split measurement noise into fake genotypes. Fall
-    # back to labeling each well by its absolute allele ratio.
-    if best_labels is None or len(cvals) < 2 or min_inter < _SEP_FACTOR * pooled_spread:
-        for i in sig_idx:
-            assignments[wells[i]] = _label_by_ratio(ratio[i])
-            confidences[wells[i]] = 1.0
-        return assignments, confidences
+    comp = best_gmm.predict(X)
+    members: dict[int, list[int]] = {}
+    for local_i, global_i in enumerate(sig_idx):
+        members.setdefault(int(comp[local_i]), []).append(global_i)
 
-    # 3. Label clusters by the ABSOLUTE fam-fraction of their centroid ratio
-    #    (dimensionless, so ROX scale is irrelevant; homozygotes sit near the
-    #    axes so 0.65/0.35 cutoffs are safe). In a genuine 3-cluster solution the
-    #    middle cluster is the heterozygote — even when dye skew pushes its ratio
-    #    toward a homozygote — but only claim it when both homozygotes are present.
+    # 3. Map each present cluster to an allele dosage. Sort clusters by their
+    #    median ratio and pick the monotonically increasing dosage assignment
+    #    (subset of 0..P) that best matches the ideal d/P positions. Rank order is
+    #    preserved, so a skewed homozygote (r far from 0 or 1) can never be
+    #    reordered past a neighbouring cluster — only snapped to its dosage.
     cluster_ratio = {
         lab: float(np.median([ratio[i] for i in idxs])) for lab, idxs in members.items()
     }
     order = sorted(members, key=lambda lab: cluster_ratio[lab])
-    label_map = {lab: _label_by_ratio(cluster_ratio[lab]) for lab in members}
-    spans_both = (
-        label_map[order[-1]] == WellType.ALLELE1_HOMO.value
-        and label_map[order[0]] == WellType.ALLELE2_HOMO.value
-    )
-    if spans_both:
-        for mid in order[1:-1]:
-            label_map[mid] = WellType.HETEROZYGOUS.value
+
+    # Merge adjacent clusters that sit far closer than the ideal dosage spacing
+    # (1/P): they are one dosage that BIC over-split on noise, not two dosages.
+    # Without this the dosage DP below (which forces distinct dosages) would
+    # promote a noise-split into a spurious neighbouring dosage class.
+    if len(order) > 1:
+        min_sep = _DOSAGE_MERGE_FRAC / ploidy
+        groups: list[list[int]] = [[order[0]]]
+        for lab in order[1:]:
+            if cluster_ratio[lab] - cluster_ratio[groups[-1][-1]] < min_sep:
+                groups[-1].append(lab)
+            else:
+                groups.append([lab])
+        if len(groups) < len(order):
+            merged: dict[int, list[int]] = {}
+            for gi, group in enumerate(groups):
+                idxs: list[int] = []
+                for lab in group:
+                    idxs.extend(members[lab])
+                merged[gi] = idxs
+            members = merged
+            cluster_ratio = {
+                lab: float(np.median([ratio[i] for i in idxs]))
+                for lab, idxs in members.items()
+            }
+            order = sorted(members, key=lambda lab: cluster_ratio[lab])
+
+    dosages = _assign_dosages([cluster_ratio[lab] for lab in order], ploidy)
+    label_map = {lab: genotype_label(d, ploidy) for lab, d in zip(order, dosages)}
 
     # 4. Confidence in RATIO (angle) space. Genotype is the fam-fraction, not the
     #    signal magnitude, so a genuine low-signal het must NOT be penalised for
@@ -239,15 +252,39 @@ def cluster_auto(
     return assignments, confidences
 
 
-def _label_by_ratio(r: float) -> str:
-    """Fallback single-well genotype call by absolute fam-fraction, used when
-    clustering is not reliable (monomorphic plate or very few wells).
-    Homozygotes sit near the axes, so wide cutoffs keep skewed hets as Het."""
-    if r >= 0.65:
-        return WellType.ALLELE1_HOMO.value
-    if r <= 0.35:
-        return WellType.ALLELE2_HOMO.value
-    return WellType.HETEROZYGOUS.value
+def _assign_dosages(sorted_ratios: list[float], ploidy: int) -> list[int]:
+    """Assign a strictly increasing allele dosage to each cluster ratio.
+
+    Given cluster median ratios sorted ascending, choose the increasing dosage
+    sequence ``0 <= d0 < d1 < ... < d(k-1) <= P`` minimizing the total distance
+    to the ideal positions ``d/P``. Preserving rank order means a dye-skewed
+    homozygote is snapped to its dosage but never reordered past a neighbour; a
+    full ``k = P+1`` solution is forced to use every dosage. Small DP over
+    (cluster index, dosage)."""
+    k = len(sorted_ratios)
+    ideals = [d / ploidy for d in range(ploidy + 1)]
+    inf = float("inf")
+    # cost[i][d] = best total cost for clusters 0..i with cluster i taking dosage d
+    cost = [[inf] * (ploidy + 1) for _ in range(k)]
+    back = [[-1] * (ploidy + 1) for _ in range(k)]
+    for d in range(ploidy + 1):
+        cost[0][d] = abs(sorted_ratios[0] - ideals[d])
+    for i in range(1, k):
+        for d in range(ploidy + 1):
+            best_prev, best_pd = inf, -1
+            for pd in range(d):
+                if cost[i - 1][pd] < best_prev:
+                    best_prev, best_pd = cost[i - 1][pd], pd
+            if best_pd >= 0:
+                cost[i][d] = best_prev + abs(sorted_ratios[i] - ideals[d])
+                back[i][d] = best_pd
+    # best final dosage
+    last = min(range(ploidy + 1), key=lambda d: cost[k - 1][d])
+    dosages = [0] * k
+    dosages[k - 1] = last
+    for i in range(k - 1, 0, -1):
+        dosages[i - 1] = back[i][dosages[i]]
+    return dosages
 
 
 def cluster_kmeans(points: list[dict], n_clusters: int = 4) -> dict[str, str]:
