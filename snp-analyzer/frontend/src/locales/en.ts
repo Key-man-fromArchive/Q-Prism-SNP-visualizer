@@ -363,6 +363,9 @@ const en = {
   // Analyze button (smart clustering + optimal cycle)
   analyzeButton: 'Analyze',
   analyzing: 'Analyzing...',
+  ploidyLabel: 'Ploidy',
+  ploidyDiploid: '2x (diploid)',
+  ploidyHint: 'Allele copies per locus. Higher ploidy resolves more dosage classes (2x–8x).',
   analyzeHint: 'Suggest the best cycle (before NTC rises) and auto-cluster genotypes',
   analyzeFailed: 'Analysis failed',
   analyzeSuggestedCycle: (c: string) => `Suggested cycle: ${c}`,

@@ -39,6 +39,8 @@ export function AnalysisTab() {
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const setClusterAssignments = useDataStore((s) => s.setClusterAssignments);
   const { ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters } = useSettingsStore();
+  const ploidy = useSettingsStore((s) => s.ploidy);
+  const setPloidy = useSettingsStore((s) => s.setPloidy);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<CycleSuggestion | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
@@ -175,6 +177,7 @@ export function AnalysisTab() {
           allele2_ratio_min: allele2RatioMin,
         },
         n_clusters: nClusters,
+        ploidy: useSettingsStore.getState().ploidy,
       });
       setClusterAssignments(result.assignments);
       setAnalysis(suggestion);
@@ -268,6 +271,26 @@ export function AnalysisTab() {
           </span>
         )}
         {analyzeError && <span className="text-xs text-danger">{analyzeError}</span>}
+        <label className="flex items-center gap-1.5 text-xs text-text-muted" title={t.ploidyHint}>
+          {t.ploidyLabel}
+          <select
+            value={ploidy}
+            onChange={(e) => {
+              setPloidy(Number(e.target.value));
+              // Re-cluster with the new ploidy (handleAnalyze reads it fresh).
+              handleAnalyze();
+            }}
+            disabled={analyzing || !sessionId}
+            className="rounded-md border px-1.5 py-1 text-sm bg-surface cursor-pointer"
+            style={{ borderColor: "var(--border)" }}
+          >
+            {[2, 3, 4, 5, 6, 7, 8].map((p) => (
+              <option key={p} value={p}>
+                {p === 2 ? t.ploidyDiploid : `${p}x`}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           onClick={handleAnalyze}
           disabled={analyzing || !sessionId}

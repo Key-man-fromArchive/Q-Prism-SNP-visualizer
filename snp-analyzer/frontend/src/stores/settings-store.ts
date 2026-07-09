@@ -13,6 +13,7 @@ interface SettingsState {
   allele1RatioMax: number;
   allele2RatioMin: number;
   nClusters: number;
+  ploidy: number; // allele copies per locus (2=diploid .. 8)
   showAutoCluster: boolean;
   showManualTypes: boolean;
   showEmptyWells: boolean;
@@ -28,6 +29,7 @@ interface SettingsState {
   setAllele1RatioMax: (v: number) => void;
   setAllele2RatioMin: (v: number) => void;
   setNClusters: (n: number) => void;
+  setPloidy: (n: number) => void;
   setShowAutoCluster: (v: boolean) => void;
   setShowManualTypes: (v: boolean) => void;
   setShowEmptyWells: (v: boolean) => void;
@@ -46,6 +48,7 @@ const defaults = {
   allele1RatioMax: 0.4,
   allele2RatioMin: 0.6,
   nClusters: 4,
+  ploidy: 2,
   showAutoCluster: true,
   showManualTypes: true,
   showEmptyWells: false,
@@ -67,6 +70,7 @@ export const useSettingsStore = create<SettingsState>()(
       setAllele1RatioMax: (v) => set({ allele1RatioMax: v }),
       setAllele2RatioMin: (v) => set({ allele2RatioMin: v }),
       setNClusters: (n) => set({ nClusters: n }),
+      setPloidy: (n) => set({ ploidy: n }),
       setShowAutoCluster: (v) => set({ showAutoCluster: v }),
       setShowManualTypes: (v) => set({ showManualTypes: v }),
       setShowEmptyWells: (v) => set({ showEmptyWells: v }),

@@ -2,7 +2,8 @@ import { Fragment, useMemo } from "react";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
-import { WELL_TYPE_INFO, UNASSIGNED_TYPE } from "@/lib/constants";
+import { UNASSIGNED_TYPE } from "@/lib/constants";
+import { wellInfo, genotypeShortLabel } from "@/lib/genotype";
 import { useWellFilter } from "@/hooks/use-well-filter";
 import { useI18n } from "@/hooks/use-i18n";
 import type { ScatterPoint } from "@/types/api";
@@ -44,6 +45,7 @@ export function ResultsTable() {
   const scatterPoints = useDataStore((s) => s.scatterPoints);
   const { selectWell } = useSelectionStore();
   const { showAutoCluster, showManualTypes } = useSettingsStore();
+  const ploidy = useSettingsStore((s) => s.ploidy);
 
   const { visibleRows, visibleCols } = useWellFilter();
 
@@ -118,10 +120,8 @@ export function ResultsTable() {
                 showAutoCluster,
                 showManualTypes
               );
-              const info = type
-                ? WELL_TYPE_INFO[type as keyof typeof WELL_TYPE_INFO] || UNASSIGNED_TYPE
-                : UNASSIGNED_TYPE;
-              const label = type ? LABEL_MAP[type] ?? type : "";
+              const info = type ? wellInfo(type, ploidy) : UNASSIGNED_TYPE;
+              const label = type ? LABEL_MAP[type] ?? genotypeShortLabel(type, ploidy) : "";
               const bgColor = type ? info.color : "transparent";
               const textColor = type && !isLightColor(info.color) ? "#ffffff" : "#1a1a2e";
 

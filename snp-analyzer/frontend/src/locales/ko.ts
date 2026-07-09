@@ -365,6 +365,9 @@ const ko: Translations = {
   // 분석 버튼 (지능형 클러스터링 + 최적 사이클)
   analyzeButton: '분석',
   analyzing: '분석 중...',
+  ploidyLabel: '배수성',
+  ploidyDiploid: '2배체 (2x)',
+  ploidyHint: '유전자좌당 대립유전자 copy 수. 배수성이 높을수록 dosage 클래스가 세분됩니다 (2x–8x).',
   analyzeHint: '최적 사이클(NTC 상승 전)을 제안하고 유전자형을 자동 그룹핑합니다',
   analyzeFailed: '분석 실패',
   analyzeSuggestedCycle: (c: string) => `제안 사이클: ${c}`,

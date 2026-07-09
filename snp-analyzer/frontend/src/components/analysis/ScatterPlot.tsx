@@ -6,7 +6,8 @@ import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { getScatter } from "@/lib/api";
 import { channelLabels, normalizationLabel, normalizedLabel } from "@/lib/channel-labels";
-import { WELL_TYPE_INFO, UNASSIGNED_TYPE } from "@/lib/constants";
+import { WELL_TYPE_INFO } from "@/lib/constants";
+import { genotypeClasses, wellInfo } from "@/lib/genotype";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { useWellFilter } from "@/hooks/use-well-filter";
 import { useI18n } from "@/hooks/use-i18n";
@@ -31,6 +32,7 @@ export function ScatterPlot() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const { useRox, fixAxis, xMin, xMax, yMin, yMax, showAutoCluster, showManualTypes } =
     useSettingsStore();
+  const ploidy = useSettingsStore((s) => s.ploidy);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const { selectWell, selectWells, clearSelection, selectedWell } = useSelectionStore();
   const { scatterPoints, allele2Dye, channelLabels: roleLabels, clusterAssignments, wellTypeAssignments } = useDataStore();
@@ -102,14 +104,19 @@ export function ScatterPlot() {
       Unassigned: t.wellTypeUnassigned,
     };
 
-    // Build traces in a deterministic order
-    const typeOrder = [...Object.keys(WELL_TYPE_INFO), "Unassigned"];
+    // Build traces in a deterministic order: dosage genotype classes (for the
+    // current ploidy, highest dosage first), then control/non-genotype types,
+    // then unassigned. WELL_TYPE_INFO keeps only the fixed control types here;
+    // the diploid genotype trio comes from genotypeClasses so ploidy drives it.
+    const diploidGeno = new Set(["Allele 1 Homo", "Allele 2 Homo", "Heterozygous"]);
+    const genoKeys = genotypeClasses(ploidy).map((c) => c.key);
+    const controlKeys = Object.keys(WELL_TYPE_INFO).filter((k) => !diploidGeno.has(k));
+    const typeOrder = [...genoKeys, ...controlKeys, "Unassigned"];
     for (const typeKey of typeOrder) {
       const points = typeGroups.get(typeKey);
       if (!points || points.length === 0) continue;
 
-      const info =
-        WELL_TYPE_INFO[typeKey as keyof typeof WELL_TYPE_INFO] || UNASSIGNED_TYPE;
+      const info = wellInfo(typeKey, ploidy);
 
       traces.push({
         x: points.map((p) => p.norm_fam),
@@ -221,6 +228,7 @@ export function ScatterPlot() {
     showManualTypes,
     clusterAssignments,
     wellTypeAssignments,
+    ploidy,
     isWellVisible,
     selectWell,
     selectWells,
