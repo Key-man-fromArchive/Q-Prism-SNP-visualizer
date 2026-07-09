@@ -98,7 +98,7 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
         )
     elif req.algorithm == ClusteringAlgorithm.THRESHOLD:
         config = req.threshold_config or ThresholdConfig()
-        assignments = cluster_threshold(point_dicts, config)
+        assignments = cluster_threshold(point_dicts, config, ploidy=ploidy)
     else:
         assignments = cluster_kmeans(point_dicts, req.n_clusters)
 

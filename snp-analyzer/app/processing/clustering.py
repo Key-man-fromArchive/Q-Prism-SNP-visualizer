@@ -28,10 +28,20 @@ _OUTLIER_SD = 4.0
 
 
 def cluster_threshold(
-    points: list[dict], config: ThresholdConfig | None = None
+    points: list[dict],
+    config: ThresholdConfig | None = None,
+    ploidy: int = DEFAULT_PLOIDY,
 ) -> dict[str, str]:
+    """Threshold labeling by absolute fam-fraction cuts.
+
+    When ``config.boundaries`` is set (the P draggable radial-line positions),
+    each well is labeled by dosage via those cuts for the given ``ploidy``.
+    Otherwise the legacy diploid two-cutoff behavior is preserved exactly.
+    """
     if config is None:
         config = ThresholdConfig()
+    validate_ploidy(ploidy)
+    cuts = config.boundaries
 
     assignments: dict[str, str] = {}
     for p in points:
@@ -40,7 +50,9 @@ def cluster_threshold(
             assignments[p["well"]] = WellType.NTC.value
             continue
         ratio = p["norm_fam"] / total
-        if ratio > config.allele2_ratio_min:
+        if cuts:
+            assignments[p["well"]] = label_by_ratio(ratio, ploidy, cuts)
+        elif ratio > config.allele2_ratio_min:
             assignments[p["well"]] = WellType.ALLELE1_HOMO.value
         elif ratio < config.allele1_ratio_max:
             assignments[p["well"]] = WellType.ALLELE2_HOMO.value

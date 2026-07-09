@@ -82,6 +82,38 @@ def test_invalid_ploidy_rejected():
             cluster_auto(pts, ploidy=bad)
 
 
+def test_threshold_with_boundaries_labels_by_dosage():
+    # The draggable-line backend: P cuts (descending) label wells by dosage.
+    from app.models import ThresholdConfig
+    from app.processing.clustering import cluster_threshold
+
+    pts = [
+        {"well": "hi", "norm_fam": 0.9, "norm_allele2": 0.1},   # r=0.90 -> AAAA
+        {"well": "mid", "norm_fam": 0.5, "norm_allele2": 0.5},  # r=0.50 -> AABB
+        {"well": "lo", "norm_fam": 0.1, "norm_allele2": 0.9},   # r=0.10 -> BBBB
+    ]
+    cfg = ThresholdConfig(ntc_threshold=0.0, boundaries=[0.875, 0.625, 0.375, 0.125])
+    out = cluster_threshold(pts, cfg, ploidy=4)
+    assert out["hi"] == "AAAA"
+    assert out["mid"] == "AABB"
+    assert out["lo"] == "BBBB"
+
+
+def test_threshold_without_boundaries_preserves_diploid():
+    from app.models import ThresholdConfig
+    from app.processing.clustering import cluster_threshold
+
+    pts = [
+        {"well": "a1", "norm_fam": 0.8, "norm_allele2": 0.2},
+        {"well": "het", "norm_fam": 0.5, "norm_allele2": 0.5},
+        {"well": "a2", "norm_fam": 0.2, "norm_allele2": 0.8},
+    ]
+    out = cluster_threshold(pts, ThresholdConfig(ntc_threshold=0.0))
+    assert out["a1"] == "Allele 1 Homo"
+    assert out["het"] == "Heterozygous"
+    assert out["a2"] == "Allele 2 Homo"
+
+
 def test_hexaploid_labels_used():
     # Sanity: hexaploid (P=6) produces 7-class labels from the vocab.
     specs = [(6, 1.0), (3, 0.5), (0, 0.0)]

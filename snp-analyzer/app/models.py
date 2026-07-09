@@ -133,6 +133,10 @@ class ThresholdConfig(BaseModel):
     ntc_threshold: float = 0.1
     allele1_ratio_max: float = 0.4
     allele2_ratio_min: float = 0.6
+    # Polyploid: P descending fam-fraction cuts between adjacent dosage classes
+    # (from the draggable radial lines). When set, these override the two diploid
+    # cutoffs above and label by dosage for the session's ploidy.
+    boundaries: list[float] | None = None
 
 
 class ClusteringRequest(BaseModel):
