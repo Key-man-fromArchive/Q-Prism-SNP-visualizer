@@ -66,6 +66,24 @@ export function genotypeColor(dosage: number, ploidy: number): string {
   return lerp(HET_RGB, A1_RGB, (f - 0.5) / 0.5);
 }
 
+/** Descending fam-fraction midpoints (d+0.5)/P — equal-spacing first approximation. */
+export function defaultRatioCuts(ploidy: number): number[] {
+  const cuts: number[] = [];
+  for (let d = ploidy - 1; d >= 0; d--) cuts.push((d + 0.5) / ploidy);
+  return cuts;
+}
+
+/** Dosage (0..P) for fam-fraction r given descending boundary cuts. */
+export function dosageByRatio(r: number, ploidy: number, cuts?: number[]): number {
+  const c = cuts ?? defaultRatioCuts(ploidy);
+  return c.reduce((n, cut) => (r >= cut ? n + 1 : n), 0);
+}
+
+/** Genotype label for fam-fraction r given descending boundary cuts. */
+export function labelByRatio(r: number, ploidy: number, cuts?: number[]): string {
+  return genotypeLabel(dosageByRatio(r, ploidy, cuts), ploidy);
+}
+
 export type GenotypeClass = {
   key: string; // the assignment string stored on the well
   label: string;

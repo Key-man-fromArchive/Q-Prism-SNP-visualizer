@@ -38,9 +38,13 @@ export function AnalysisTab() {
   // Clustering / analysis
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const setClusterAssignments = useDataStore((s) => s.setClusterAssignments);
+  const setBoundaries = useDataStore((s) => s.setBoundaries);
   const { ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters } = useSettingsStore();
   const ploidy = useSettingsStore((s) => s.ploidy);
   const setPloidy = useSettingsStore((s) => s.setPloidy);
+  const showManualTypes = useSettingsStore((s) => s.showManualTypes);
+  const showBoundaryLines = useSettingsStore((s) => s.showBoundaryLines);
+  const setShowBoundaryLines = useSettingsStore((s) => s.setShowBoundaryLines);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<CycleSuggestion | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
@@ -180,6 +184,7 @@ export function AnalysisTab() {
         ploidy: useSettingsStore.getState().ploidy,
       });
       setClusterAssignments(result.assignments);
+      setBoundaries(result.boundaries ?? null);
       setAnalysis(suggestion);
       // Force scatter/plate to re-fetch so points pick up auto_cluster calls.
       window.dispatchEvent(new CustomEvent("welltypes-changed"));
@@ -212,6 +217,7 @@ export function AnalysisTab() {
         const existing = await getCluster(sessionId);
         if (existing?.assignments && Object.keys(existing.assignments).length > 0) {
           setClusterAssignments(existing.assignments);
+          setBoundaries(existing.boundaries ?? null);
           return;
         }
       } catch {
@@ -291,6 +297,20 @@ export function AnalysisTab() {
             ))}
           </select>
         </label>
+        {/* Draggable genotype-boundary lines — only meaningful in manual mode */}
+        <button
+          onClick={() => setShowBoundaryLines(!showBoundaryLines)}
+          disabled={!showManualTypes || !sessionId}
+          title={showManualTypes ? t.boundaryLinesHint : t.boundaryLinesManualOnly}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer disabled:opacity-50 ${
+            showBoundaryLines && showManualTypes
+              ? "bg-primary text-white"
+              : "border text-text"
+          }`}
+          style={showBoundaryLines && showManualTypes ? undefined : { borderColor: "var(--border)" }}
+        >
+          📏 {t.boundaryLines}
+        </button>
         <button
           onClick={handleAnalyze}
           disabled={analyzing || !sessionId}

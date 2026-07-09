@@ -14,6 +14,7 @@ interface SettingsState {
   allele2RatioMin: number;
   nClusters: number;
   ploidy: number; // allele copies per locus (2=diploid .. 8)
+  showBoundaryLines: boolean; // draggable radial genotype-boundary lines (manual mode)
   showAutoCluster: boolean;
   showManualTypes: boolean;
   showEmptyWells: boolean;
@@ -30,6 +31,7 @@ interface SettingsState {
   setAllele2RatioMin: (v: number) => void;
   setNClusters: (n: number) => void;
   setPloidy: (n: number) => void;
+  setShowBoundaryLines: (v: boolean) => void;
   setShowAutoCluster: (v: boolean) => void;
   setShowManualTypes: (v: boolean) => void;
   setShowEmptyWells: (v: boolean) => void;
@@ -49,6 +51,7 @@ const defaults = {
   allele2RatioMin: 0.6,
   nClusters: 4,
   ploidy: 2,
+  showBoundaryLines: false,
   showAutoCluster: true,
   showManualTypes: true,
   showEmptyWells: false,
@@ -71,6 +74,7 @@ export const useSettingsStore = create<SettingsState>()(
       setAllele2RatioMin: (v) => set({ allele2RatioMin: v }),
       setNClusters: (n) => set({ nClusters: n }),
       setPloidy: (n) => set({ ploidy: n }),
+      setShowBoundaryLines: (v) => set({ showBoundaryLines: v }),
       setShowAutoCluster: (v) => set({ showAutoCluster: v }),
       setShowManualTypes: (v) => set({ showManualTypes: v }),
       setShowEmptyWells: (v) => set({ showEmptyWells: v }),

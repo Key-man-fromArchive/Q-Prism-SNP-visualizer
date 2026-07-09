@@ -247,7 +247,7 @@ KASP genotyping의 표준 feature는 두 정규화 신호 x,y에서 유도한 **
 
 - **Phase 0 — 배관/중앙화 (무회귀) ✅ 완료 (2026-07-10)**: 아래 §12 참조. `genotype_vocab` 레지스트리 신설, `ploidy` 배관(기본 2). 158 tests green, 이배체 동작 불변. **미착수 이월**: 중복 이배체 ratio-폴백 3곳(`qc.py:76`/`export.py:52`(둘 다 0.6/0.4)·`clustering.py:_label_by_ratio`(0.65/0.35)·`WellDetailPanel.tsx`) 수렴은 상수가 서로 달라 무회귀로 합칠 수 없어 **Phase 1로 이월**(알고리즘 교체 시 함께).
 - **Phase 1 — 통합 mixture 엔진 ✅ 완료 (2026-07-10)**: 아래 §13 참조. `cluster_auto`를 ploidy-aware GMM(arcsine-sqrt, K∈1..P+1 BIC, σ공유 tied, `p.free`)+근접병합+DP dosage 라벨로 교체. 164 tests green(diploid 회귀 7 + 합성 다배체 6). **Phase 2로 이관**: 제안 경계컷 emit·`cluster_threshold` P-컷 일반화(드래그 UI 계약과 함께). **Phase 3로 이관**: qc/export ratio-폴백 수렴(`count_genotypes` ploidy 관통과 함께).
-- **Phase 2 — 드래그 UX + 프론트**: 산점도 방사 경계선(드래그·실시간 재집계), 이를 위한 `cluster_threshold` P-컷 배열 일반화 + `cluster_auto` 제안 경계컷 emit(ClusteringResult 필드), ploidy 셀렉터(2x–8x, 클러스터 컨트롤 옆, 세션 저장, ASG context default), dosage 다색·범례·결과테이블·통계탭 어휘. (§3 표 #10 목록 P+1 일반화)
+- **Phase 2 — 드래그 UX + 프론트 ✅ 구현 완료 (2026-07-10, 런타임 검증 대기)**: §15 참조. 2a(ploidy 셀렉터 + dosage 어휘/색 일반화) + 2b(드래그 방사 경계선 추가/삭제/토글) + 백엔드(`cluster_threshold` P-컷, `genotype_boundaries` emit). tsc+vite build 통과. **드래그 인터랙션 실브라우저 검증 미완**. ASG context default는 Phase 4.
 - **Phase 3 — 통계/리포트**: `count_genotypes(_, ploidy)`를 stats/export/asg 호출부에 관통(현재 ploidy 없이 호출 → 다배체에서 전부 excluded 버그), qc/export ratio-폴백을 `genotype_vocab.label_by_ratio`로 수렴, polysomic freq(HW 옵션시), PDF·차트.
 - **Phase 4 — 교차서비스 계약**: `schema_version:2`(+`ploidy`, dosage counts), ASG(`asg-saas_v2`) 수신부 동반 수정, `effective_type`↔`genotype_call` 필드 정합화, e2e 검증.
 
@@ -323,3 +323,21 @@ Claude·Fable·Codex 3개 모델로 하드코딩 비율 상수를 교차 비평.
 - `_AMBIG_RATIO` 제거. Fable의 "공간 불일치" 중 confidence 부분 해소(arcsine 공간에서 평가). 164 tests green(GAP=outlier→Undetermined, 중심 well posterior≈1, LOWHET 유지).
 
 **이월 (Phase 2b/3)**: 항목 2 경계·중심 mixture-derived + `d/P`는 seed만 / 항목 3 merge·DP도 arcsine 공간 일관 / 항목 4 폴백 4종 `genotype_vocab` 수렴 + export 상대컷 / 항목 5 신뢰-배수성 상한·"resolved group" / 항목 6 per-assay 보정 + α-bias 합성 회귀테스트. (드래그 경계가 mixture-derived로 가는 Phase 2b에서 항목 2와 자연 통합)
+
+---
+
+## 15. Phase 2 프론트엔드 구현 결과 (2026-07-10)
+
+**2a — ploidy 선택 + dosage 어휘/색 일반화**
+- `frontend/src/lib/genotype.ts`(신규): 백엔드 `genotype_vocab` 미러. `genotypeLabels/genotypeLabel/dosageOfLabel/genotypeShortLabel`(P=2 레거시, 3x+ "AAAB"), diverging 팔레트 `genotypeColor`(dosage0=red/mid=green/top=blue → P=2 레거시색 정확 재현), `wellInfo`(dosage/컨트롤/미배정 통합 해석), `genotypeClasses(ploidy)`, `defaultRatioCuts/dosageByRatio/labelByRatio`(클라 재라벨).
+- `settings-store`: `ploidy`(영속), `showBoundaryLines`. `types/api.ts`: ClusteringRequest.ploidy, ClusteringResult.ploidy/boundaries, ThresholdConfig.boundaries. `data-store`: `boundaries`.
+- `AnalysisTab`: 분석바에 **ploidy 셀렉터(2x–8x, 변경 시 재분석)** + 결과 boundaries 저장.
+- ScatterPlot/ResultsTable/PlateView/AmplificationOverlay/WellTypePopup/StatisticsTab/WellDetailPanel: 색·라벨·범례·수동배정목록·분포표를 `genotypeClasses/wellInfo` 기반으로. 다배체에선 biallelic freq/HWE 패널 숨김. locale ploidy 키.
+- **이월(폴리시)**: use-keyboard-shortcuts/KeyboardHelpOverlay 키 4/5/6(회귀위험+6클래스 초과 단일키 한계).
+
+**2b — 드래그 방사 경계선**
+- 기하: 원점에서 방향 `(r, 1−r)` 방사선 = 비율 r 등고선. **선 개수 = ploidy**(P 선 → P+1 wedge). 표시 조건 = `showManualTypes && showBoundaryLines`(매뉴얼 활성 시에만).
+- ScatterPlot(Plotly): `layout.shapes`로 방사선 P개(데이터 extent까지, autorange 왜곡 방지), `dragmode=false`(편집 중). 네이티브 포인터 핸들러 — 커서→비율 변환(축 `_offset/_length/range` 수동), **드래그=최근접 선 이동**(이웃 사이 클램프), **더블클릭: 선 위=삭제(ploidy−1)/빈 곳=추가(ploidy+1)**, 2..8 제한. 드래그 중 wedge 실시간 재라벨(`labelByRatio(r, 선개수, cuts)`). commit 시 `setBoundaries`+`setPloidy(선개수)`+threshold 클러스터링 persist(→ welltypes-changed 리페치).
+- `AnalysisTab`에 "📏 경계선" 토글(매뉴얼 비활성 시 disabled). `cluster_threshold`가 boundaries 소비(Phase 2b 백엔드, 166 tests).
+
+**검증 상태**: 백엔드 166 tests green. 프론트 `tsc -b` + `vite build` 통과. **미완**: 드래그 인터랙션 실브라우저 런타임 검증(좌표 변환/Plotly shape 갱신/persist 왕복) — Playwright 또는 수동 확인 필요. 잠재 리스크: Plotly `_fullLayout` 내부 필드(`_offset/_length`) 의존, dblclick capture가 Plotly autoscale과 경합 가능.

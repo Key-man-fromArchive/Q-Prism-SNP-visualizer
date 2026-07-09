@@ -8,6 +8,7 @@ interface DataState {
   channelLabels: ChannelLabels | null;
   clusterAssignments: Record<string, string>;
   wellTypeAssignments: Record<string, string>;
+  boundaries: number[] | null; // suggested/edited radial-line positions (descending fam-fraction)
   // Actions
   setScatterData: (
     points: ScatterPoint[],
@@ -17,6 +18,7 @@ interface DataState {
   setPlateData: (wells: PlateWell[]) => void;
   setClusterAssignments: (assignments: Record<string, string>) => void;
   setWellTypeAssignments: (assignments: Record<string, string>) => void;
+  setBoundaries: (boundaries: number[] | null) => void;
   clearData: () => void;
 }
 
@@ -27,6 +29,7 @@ export const useDataStore = create<DataState>((set) => ({
   channelLabels: null,
   clusterAssignments: {},
   wellTypeAssignments: {},
+  boundaries: null,
 
   setScatterData: (points, allele2Dye, channelLabels) =>
     set({ scatterPoints: points, allele2Dye, channelLabels: channelLabels ?? null }),
@@ -35,6 +38,7 @@ export const useDataStore = create<DataState>((set) => ({
     set({ clusterAssignments: assignments }),
   setWellTypeAssignments: (assignments) =>
     set({ wellTypeAssignments: assignments }),
+  setBoundaries: (boundaries) => set({ boundaries }),
   clearData: () =>
     set({
       scatterPoints: [],
@@ -43,5 +47,6 @@ export const useDataStore = create<DataState>((set) => ({
       channelLabels: null,
       clusterAssignments: {},
       wellTypeAssignments: {},
+      boundaries: null,
     }),
 }));
