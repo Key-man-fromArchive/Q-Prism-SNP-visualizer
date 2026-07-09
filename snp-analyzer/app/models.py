@@ -43,6 +43,7 @@ class UnifiedData(BaseModel):
     normalization_channel: str | None = None
     normalization_dye: str | None = None
     role_channels: dict[str, str] | None = None
+    ploidy: int = 2                  # allele copies per locus (2=diploid .. 8)
 
 
 class UploadResponse(BaseModel):
@@ -139,6 +140,7 @@ class ClusteringRequest(BaseModel):
     cycle: int = 0
     threshold_config: ThresholdConfig | None = None
     n_clusters: int = 4
+    ploidy: int | None = None        # None => use the session's stored ploidy (default 2)
 
 
 class ClusteringResult(BaseModel):
