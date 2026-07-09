@@ -259,10 +259,12 @@ export type ThresholdConfig = {
   ntc_threshold: number;
   allele1_ratio_max: number;
   allele2_ratio_min: number;
-  // Polyploid: P descending fam-fraction cuts between adjacent dosage classes
-  // (from the draggable radial lines). When present, overrides the two diploid
-  // cutoffs above.
+  // Polyploid: K-1 descending fam-fraction cuts between the observed dosage
+  // classes (from the draggable radial lines). When present, overrides the two
+  // diploid cutoffs above.
   boundaries?: number[] | null;
+  // Dosage of the lowest observed class (places the window within 0..ploidy).
+  offset?: number | null;
 };
 
 export type ClusteringRequest = {
@@ -279,7 +281,9 @@ export type ClusteringResult = {
   assignments: Record<string, string>;
   confidences?: Record<string, number> | null;
   ploidy?: number;
-  boundaries?: number[] | null; // suggested radial-line positions (descending fam-fraction)
+  boundaries?: number[] | null; // K-1 internal radial-line positions (descending fam-fraction)
+  offset?: number;              // dosage of the lowest observed class
+  offset_uncertain?: boolean;   // true when the offset is a low-confidence guess
 };
 
 export type ManualWellTypeUpdate = {

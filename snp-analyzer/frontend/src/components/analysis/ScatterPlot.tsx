@@ -7,14 +7,7 @@ import { useDataStore } from "@/stores/data-store";
 import { getScatter, runClustering } from "@/lib/api";
 import { channelLabels, normalizationLabel, normalizedLabel } from "@/lib/channel-labels";
 import { WELL_TYPE_INFO } from "@/lib/constants";
-import {
-  genotypeClasses,
-  wellInfo,
-  labelByRatio,
-  defaultRatioCuts,
-  MIN_PLOIDY,
-  MAX_PLOIDY,
-} from "@/lib/genotype";
+import { genotypeClasses, wellInfo, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { useWellFilter } from "@/hooks/use-well-filter";
 import { useI18n } from "@/hooks/use-i18n";
@@ -40,7 +33,6 @@ export function ScatterPlot() {
   const { useRox, fixAxis, xMin, xMax, yMin, yMax, showAutoCluster, showManualTypes } =
     useSettingsStore();
   const ploidy = useSettingsStore((s) => s.ploidy);
-  const setPloidy = useSettingsStore((s) => s.setPloidy);
   const ntcThreshold = useSettingsStore((s) => s.ntcThreshold);
   const showBoundaryLines = useSettingsStore((s) => s.showBoundaryLines);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
@@ -49,6 +41,8 @@ export function ScatterPlot() {
   const setScatterData = useDataStore((s) => s.setScatterData);
   const boundaries = useDataStore((s) => s.boundaries);
   const setBoundaries = useDataStore((s) => s.setBoundaries);
+  const offset = useDataStore((s) => s.offset);
+  const setOffset = useDataStore((s) => s.setOffset);
   const { isWellVisible } = useWellFilter();
 
   // Draggable radial genotype-boundary lines (manual mode). Rendered only when
@@ -110,9 +104,10 @@ export function ScatterPlot() {
     );
 
     // In boundary mode the wedges between the radial lines define the genotype
-    // live: relabel each well by its fam-fraction against the current cuts
-    // (controls/NTC and manual overrides still win). The line count is the
-    // effective ploidy.
+    // live: relabel each well by its fam-fraction against the current cuts +
+    // window offset (controls/NTC and manual overrides still win). ploidy is the
+    // fixed organism ploidy; the offset says which absolute dosages these zones
+    // are (a 6x marker may show 3 zones = dosages 0,1,2 or 4,5,6).
     const bnd = linesActive ? editBoundaries : null;
     const boundaryType = (point: ScatterPoint): string => {
       if (showManualTypes && point.manual_type) return point.manual_type;
@@ -120,7 +115,7 @@ export function ScatterPlot() {
       if (auto === "NTC" || auto === "Positive Control") return auto;
       const total = point.norm_fam + point.norm_allele2;
       if (total <= 0) return "Unassigned";
-      return labelByRatio(point.norm_fam / total, bnd!.length, bnd!);
+      return labelByRatio(point.norm_fam / total, ploidy, bnd!, offset);
     };
 
     // Group points by effective type
@@ -303,6 +298,7 @@ export function ScatterPlot() {
     ploidy,
     linesActive,
     editBoundaries,
+    offset,
     isWellVisible,
     selectWell,
     selectWells,
@@ -377,9 +373,9 @@ export function ScatterPlot() {
       return Math.max(0, Math.min(1, dx / total));
     };
 
-    const persist = async (cuts: number[]) => {
+    const persist = async (cuts: number[], off: number) => {
       setBoundaries(cuts);
-      setPloidy(cuts.length);
+      setOffset(off);
       if (!sessionId) return;
       try {
         await runClustering(sessionId, {
@@ -390,9 +386,10 @@ export function ScatterPlot() {
             allele1_ratio_max: 0.4,
             allele2_ratio_min: 0.6,
             boundaries: cuts,
+            offset: off,
           },
           n_clusters: 4,
-          ploidy: cuts.length,
+          ploidy, // fixed organism ploidy, NOT the line count
         });
         window.dispatchEvent(new CustomEvent("welltypes-changed"));
       } catch (err) {
@@ -439,15 +436,20 @@ export function ScatterPlot() {
     const onUp = () => {
       if (dragIndexRef.current == null) return;
       dragIndexRef.current = null;
-      if (editRef.current) persist(editRef.current);
+      if (editRef.current) persist(editRef.current, useDataStore.getState().offset);
     };
 
+    // Double-click a ray to delete a class boundary (K-1), empty space to add one
+    // (K+1). The line count is the number of OBSERVED classes minus one; ploidy
+    // (the full ladder) is fixed. Adding shifts the offset down if the window
+    // would otherwise run past the top dosage.
     const onDblClick = (e: MouseEvent) => {
       const r = clientToRatio(e.clientX, e.clientY);
       if (r == null) return;
       e.preventDefault();
       e.stopPropagation();
       const cuts = editRef.current ? [...editRef.current] : [];
+      const curOffset = useDataStore.getState().offset;
       let near = -1;
       let bd = Infinity;
       cuts.forEach((c, i) => {
@@ -457,17 +459,19 @@ export function ScatterPlot() {
           near = i;
         }
       });
-      if (near >= 0 && bd < NEAR && cuts.length > MIN_PLOIDY) {
-        cuts.splice(near, 1); // delete the ray -> ploidy - 1
-      } else if (cuts.length < MAX_PLOIDY) {
-        cuts.push(r); // add a ray -> ploidy + 1
+      let newOffset = curOffset;
+      if (near >= 0 && bd < NEAR && cuts.length > 1) {
+        cuts.splice(near, 1); // delete a class boundary (>=2 classes remain)
+      } else if (cuts.length < ploidy) {
+        cuts.push(r); // add a class boundary
         cuts.sort((a, b) => b - a);
+        newOffset = Math.min(curOffset, ploidy - cuts.length); // keep window in range
       } else {
         return;
       }
       editRef.current = cuts;
       setEditBoundaries(cuts);
-      persist(cuts);
+      persist(cuts, newOffset);
     };
 
     gd.addEventListener("mousedown", onDown, true);
@@ -480,7 +484,7 @@ export function ScatterPlot() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [linesActive, sessionId, currentCycle, ntcThreshold, setBoundaries, setPloidy]);
+  }, [linesActive, sessionId, currentCycle, ntcThreshold, ploidy, setBoundaries, setOffset]);
 
   // Cleanup
   useEffect(() => {

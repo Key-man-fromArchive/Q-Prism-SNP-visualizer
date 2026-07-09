@@ -39,6 +39,11 @@ export function AnalysisTab() {
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const setClusterAssignments = useDataStore((s) => s.setClusterAssignments);
   const setBoundaries = useDataStore((s) => s.setBoundaries);
+  const setOffset = useDataStore((s) => s.setOffset);
+  const setOffsetUncertain = useDataStore((s) => s.setOffsetUncertain);
+  const boundaries = useDataStore((s) => s.boundaries);
+  const offset = useDataStore((s) => s.offset);
+  const offsetUncertain = useDataStore((s) => s.offsetUncertain);
   const { ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters } = useSettingsStore();
   const ploidy = useSettingsStore((s) => s.ploidy);
   const setPloidy = useSettingsStore((s) => s.setPloidy);
@@ -185,6 +190,8 @@ export function AnalysisTab() {
       });
       setClusterAssignments(result.assignments);
       setBoundaries(result.boundaries ?? null);
+      setOffset(result.offset ?? 0);
+      setOffsetUncertain(result.offset_uncertain ?? false);
       setAnalysis(suggestion);
       // Force scatter/plate to re-fetch so points pick up auto_cluster calls.
       window.dispatchEvent(new CustomEvent("welltypes-changed"));
@@ -205,6 +212,38 @@ export function AnalysisTab() {
     t,
   ]);
 
+  // Shift the observed-dosage window offset (which absolute dosages the observed
+  // classes are). Re-labels via a threshold clustering with the current cuts +
+  // new offset; ploidy is the fixed organism ploidy, never the line count.
+  const shiftOffset = useCallback(
+    async (delta: number) => {
+      const st = useDataStore.getState();
+      const bnd = st.boundaries;
+      const newOffset = st.offset + delta;
+      setOffset(newOffset);
+      if (!sessionId || !bnd) return;
+      try {
+        await apiRunClustering(sessionId, {
+          algorithm: "threshold",
+          cycle: currentCycle ?? 0,
+          threshold_config: {
+            ntc_threshold: ntcThreshold,
+            allele1_ratio_max: 0.4,
+            allele2_ratio_min: 0.6,
+            boundaries: bnd,
+            offset: newOffset,
+          },
+          n_clusters: nClusters,
+          ploidy: useSettingsStore.getState().ploidy,
+        });
+        window.dispatchEvent(new CustomEvent("welltypes-changed"));
+      } catch (err) {
+        console.error("Offset shift failed:", err);
+      }
+    },
+    [sessionId, currentCycle, ntcThreshold, nClusters, setOffset]
+  );
+
   // Run the analysis automatically the first time a session's data is ready, so
   // the allele-discrimination plot opens already grouped instead of a raw mess.
   // Skip if the session was already analysed (don't clobber an existing result).
@@ -218,6 +257,8 @@ export function AnalysisTab() {
         if (existing?.assignments && Object.keys(existing.assignments).length > 0) {
           setClusterAssignments(existing.assignments);
           setBoundaries(existing.boundaries ?? null);
+          setOffset(existing.offset ?? 0);
+          setOffsetUncertain(existing.offset_uncertain ?? false);
           return;
         }
       } catch {
@@ -311,6 +352,34 @@ export function AnalysisTab() {
         >
           📏 {t.boundaryLines}
         </button>
+        {/* Observed-window offset: which absolute dosages the observed classes are */}
+        {showManualTypes && showBoundaryLines && boundaries && (
+          <span className="flex items-center gap-1 text-xs text-text-muted" title={t.offsetHint}>
+            {t.offsetLabel}
+            <button
+              onClick={() => shiftOffset(-1)}
+              disabled={offset <= 0}
+              className="px-1.5 py-0.5 rounded border cursor-pointer disabled:opacity-40"
+              style={{ borderColor: "var(--border)" }}
+            >
+              ◀
+            </button>
+            <span className="tabular-nums font-medium text-text">{offset}</span>
+            <button
+              onClick={() => shiftOffset(1)}
+              disabled={offset >= ploidy - boundaries.length}
+              className="px-1.5 py-0.5 rounded border cursor-pointer disabled:opacity-40"
+              style={{ borderColor: "var(--border)" }}
+            >
+              ▶
+            </button>
+            {offsetUncertain && (
+              <span className="text-amber-500" title={t.offsetUncertainHint}>
+                ⚠
+              </span>
+            )}
+          </span>
+        )}
         <button
           onClick={handleAnalyze}
           disabled={analyzing || !sessionId}

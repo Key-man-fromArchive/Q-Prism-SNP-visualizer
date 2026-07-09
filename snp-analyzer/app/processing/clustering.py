@@ -51,7 +51,7 @@ def cluster_threshold(
             continue
         ratio = p["norm_fam"] / total
         if cuts:
-            assignments[p["well"]] = label_by_ratio(ratio, ploidy, cuts)
+            assignments[p["well"]] = label_by_ratio(ratio, ploidy, cuts, config.offset)
         elif ratio > config.allele2_ratio_min:
             assignments[p["well"]] = WellType.ALLELE1_HOMO.value
         elif ratio < config.allele1_ratio_max:
@@ -281,16 +281,23 @@ def cluster_auto(
     return assignments, confidences
 
 
-def genotype_boundaries(
+def genotype_window(
     points: list[dict], assignments: dict[str, str], ploidy: int = DEFAULT_PLOIDY
-) -> list[float]:
-    """Suggested fam-fraction boundaries (P values, descending) between adjacent
-    dosage classes — the seed positions for the draggable radial lines in the UI.
+) -> dict:
+    """Describe the OBSERVED dosage window for the draggable-line UI.
 
-    A boundary between dosage d and d+1 is the midpoint of the two dosages'
-    empirical median ratios when both are present, else the equal-spacing default
-    ``(d + 0.5) / P``. Returned high-r first, matching genotype_vocab cut order so
-    ``dosage_by_ratio`` reproduces the calls."""
+    A polyploid marker often resolves only a contiguous SUBSET of the 0..P dosage
+    ladder, and its absolute position (offset) is marker-dependent and frequently
+    not identifiable from fluorescence alone (e.g. sweetpotato 6x often shows 3
+    classes that could be dosages 0,1,2 or 4,5,6). This returns:
+      - ``boundaries``: the K-1 internal fam-fraction cuts (descending) between the
+        observed classes — the seed positions for the radial lines,
+      - ``offset``: the proposed dosage of the lowest observed class,
+      - ``offset_uncertain``: True when no observed class sits near an axis
+        extreme (r~0 = dosage 0, r~1 = dosage P), so the offset is a guess the
+        user should confirm/shift.
+    Cuts between two present classes use their empirical midpoint; gaps fall back
+    to the equal-spacing ideal ``(d+0.5)/P``."""
     from app.processing.genotype_vocab import default_ratio_cuts, dosage_of_label
 
     validate_ploidy(ploidy)
@@ -303,21 +310,28 @@ def genotype_boundaries(
         if total > 0:
             ratio_by_dosage.setdefault(d, []).append(p["norm_fam"] / total)
 
+    if not ratio_by_dosage:
+        # No genotype calls yet — offer the full ladder, offset 0, flagged uncertain.
+        return {"boundaries": default_ratio_cuts(ploidy), "offset": 0, "offset_uncertain": True}
+
     import statistics as _stats
 
-    centre = {
-        d: _stats.median(rs) for d, rs in ratio_by_dosage.items() if rs
-    }
-    defaults = default_ratio_cuts(ploidy)  # descending, index j <-> boundary(P-1-j, P-j)
+    centre = {d: _stats.median(rs) for d, rs in ratio_by_dosage.items()}
+    present = sorted(centre)
+    offset, top = present[0], present[-1]
+
+    # K-1 internal cuts across the observed window [offset, top], high-r first.
     cuts: list[float] = []
-    for j, dflt in enumerate(defaults):
-        hi = ploidy - j        # higher dosage of the pair
-        lo = hi - 1            # lower dosage of the pair
-        if hi in centre and lo in centre:
-            cuts.append((centre[hi] + centre[lo]) / 2.0)
+    for d in range(top - 1, offset - 1, -1):  # boundary between dosage d and d+1
+        if d in centre and (d + 1) in centre:
+            cuts.append((centre[d] + centre[d + 1]) / 2.0)
         else:
-            cuts.append(dflt)
-    return cuts
+            cuts.append((d + 0.5) / ploidy)
+
+    # The offset is anchored only if an observed class hugs an axis extreme.
+    lowest, highest = min(centre.values()), max(centre.values())
+    anchored = lowest < (0.5 / ploidy) or highest > (1.0 - 0.5 / ploidy)
+    return {"boundaries": cuts, "offset": offset, "offset_uncertain": not anchored}
 
 
 def _assign_dosages(sorted_ratios: list[float], ploidy: int) -> list[int]:

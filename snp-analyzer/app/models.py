@@ -133,10 +133,13 @@ class ThresholdConfig(BaseModel):
     ntc_threshold: float = 0.1
     allele1_ratio_max: float = 0.4
     allele2_ratio_min: float = 0.6
-    # Polyploid: P descending fam-fraction cuts between adjacent dosage classes
-    # (from the draggable radial lines). When set, these override the two diploid
-    # cutoffs above and label by dosage for the session's ploidy.
+    # Polyploid: K-1 descending fam-fraction cuts between the observed dosage
+    # classes (from the draggable radial lines). When set, these override the two
+    # diploid cutoffs above and label by dosage for the session's ploidy.
     boundaries: list[float] | None = None
+    # Dosage of the lowest observed class — places the K observed zones within the
+    # full 0..ploidy ladder (see genotype_window / the offset control).
+    offset: int = 0
 
 
 class ClusteringRequest(BaseModel):
@@ -153,9 +156,12 @@ class ClusteringResult(BaseModel):
     assignments: dict[str, str]
     confidences: dict[str, float] | None = None  # well -> 0..1 call confidence
     ploidy: int = 2
-    # Suggested fam-fraction boundaries (P values, descending) between adjacent
-    # dosage classes; seed positions for the draggable radial lines in the UI.
+    # Observed dosage window for the draggable-line UI: K-1 internal fam-fraction
+    # cuts (descending), the dosage of the lowest observed class, and whether that
+    # offset is a low-confidence guess (no class near an axis extreme).
     boundaries: list[float] | None = None
+    offset: int = 0
+    offset_uncertain: bool = False
 
 
 class ManualWellTypeUpdate(BaseModel):

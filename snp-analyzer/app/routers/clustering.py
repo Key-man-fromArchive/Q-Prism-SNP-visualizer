@@ -102,15 +102,18 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
     else:
         assignments = cluster_kmeans(point_dicts, req.n_clusters)
 
-    from app.processing.clustering import genotype_boundaries
+    from app.processing.clustering import genotype_window
 
+    window = genotype_window(point_dicts, assignments, ploidy)
     result = ClusteringResult(
         algorithm=req.algorithm.value,
         cycle=cycle,
         assignments=assignments,
         confidences=confidences or None,
         ploidy=ploidy,
-        boundaries=genotype_boundaries(point_dicts, assignments, ploidy),
+        boundaries=window["boundaries"],
+        offset=window["offset"],
+        offset_uncertain=window["offset_uncertain"],
     )
     cluster_store[sid] = result
 

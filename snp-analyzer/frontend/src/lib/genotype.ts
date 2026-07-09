@@ -73,15 +73,16 @@ export function defaultRatioCuts(ploidy: number): number[] {
   return cuts;
 }
 
-/** Dosage (0..P) for fam-fraction r given descending boundary cuts. */
-export function dosageByRatio(r: number, ploidy: number, cuts?: number[]): number {
+/** Dosage for fam-fraction r given descending cuts. ``offset`` places the observed
+ * window of classes within the 0..P ladder (dosage = offset + zone index). */
+export function dosageByRatio(r: number, ploidy: number, cuts?: number[], offset = 0): number {
   const c = cuts ?? defaultRatioCuts(ploidy);
-  return c.reduce((n, cut) => (r >= cut ? n + 1 : n), 0);
+  return offset + c.reduce((n, cut) => (r >= cut ? n + 1 : n), 0);
 }
 
-/** Genotype label for fam-fraction r given descending boundary cuts. */
-export function labelByRatio(r: number, ploidy: number, cuts?: number[]): string {
-  return genotypeLabel(dosageByRatio(r, ploidy, cuts), ploidy);
+/** Genotype label for fam-fraction r given descending cuts + window offset. */
+export function labelByRatio(r: number, ploidy: number, cuts?: number[], offset = 0): string {
+  return genotypeLabel(dosageByRatio(r, ploidy, cuts, offset), ploidy);
 }
 
 export type GenotypeClass = {

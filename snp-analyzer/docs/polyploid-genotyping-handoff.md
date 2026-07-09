@@ -358,3 +358,30 @@ Claude·Fable·Codex 3개 모델로 하드코딩 비율 상수를 교차 비평.
 - 테스트 `tests/test_polyploid_aggregation.py`(4): export/qc 폴백 ploidy-aware, 상대 undetermined 컷, tetraploid 분포 키. **170 green**.
 
 **이월**: polysomic allele-freq/HWE(다배체 통계 미지원) → Phase 3+ 또는 별도. PDF 리포트(`reporting/charts.py:13`, `pdf_builder.py:94`) dosage 어휘 일반화 미착수. ASG 교차서비스 계약 v2(dosage counts 수신부) → Phase 4.
+
+---
+
+## 17. 관측 dosage 창 + 오프셋 (2026-07-10) — 사배체/고구마 부분-거동 대응
+
+**문제(연구자 제기)**: 고구마는 6x지만 마커에 따라 관측 클래스가 0..6 전체가 아니라 **연속 부분창**만 나타남(예: subgenome 고정으로 3클래스가 dosage `{0,1,2}` 또는 `{4,5,6}`처럼). 그리고 **오프셋(절대 위치)은 fam-fraction만으로 식별 불가**할 때가 많음(극단 r≈0/1에 앵커가 없고 비선형까지 겹치면).
+
+**결정(사용자)**: **관측창 + 오프셋 모델** + **추정+불확실 플래그**.
+
+**모델**: ploidy P는 생물종 배수성(고정). 관측 클래스 K는 별개. **offset**(최저 관측 클래스의 절대 dosage)이 K개 zone을 0..P 사다리 안에 배치. wedge i = 절대 dosage `offset+i` → `genotype_label(offset+i, P)`. 선 개수 = **K−1**(관측 클래스 경계), ploidy와 무관.
+
+**백엔드**:
+- `genotype_vocab.dosage_by_ratio/label_by_ratio(..., offset=0)` — dosage = offset + Σ(cuts). 기본 0=무회귀.
+- `ThresholdConfig.offset`, `cluster_threshold`가 offset 전달.
+- `clustering.genotype_window(points, assignments, ploidy)` (기존 genotype_boundaries 대체) → `{boundaries: K−1 내부컷, offset: min 관측 dosage, offset_uncertain: 극단 앵커 없으면 True}`.
+- `ClusteringResult.offset/offset_uncertain`, 라우터가 채움.
+
+**프론트**:
+- `genotype.labelByRatio(..., offset)`. data-store `offset`/`offsetUncertain`.
+- ScatterPlot: wedge 색/라벨 = `labelByRatio(r, ploidy, cuts, offset)`. **persist는 ploidy=세션 고정**(선개수 아님). 더블클릭 추가/삭제는 **K 변경**(offset 자동 클램프), ploidy 불변.
+- AnalysisTab: **오프셋 컨트롤 ◀ N ▶**(`shiftOffset` → threshold 재클러스터, `offset+K−1<=P` 범위) + **불확실 시 ⚠ 배지**. locale `offsetLabel/offsetHint/offsetUncertainHint`.
+
+**Phase 2b 모델 교정**: 이전의 "선 개수=ploidy, 추가=ploidy±1"을 폐기 → "ploidy 고정, 선=K−1, offset로 창 이동". `setPloidy(lineCount)` 제거.
+
+**테스트**: `test_cluster_auto_polyploid.py`에 window 앵커/불확실, label offset, threshold offset 추가. 174 tests green. tsc+vite build 통과. **미검증**: offset 컨트롤/창 드래그의 실앱 E2E(로그인 차단, §15와 동일).
+
+**잔여 caveat**: 오프셋 자동추정은 여전히 `d/P` 근접 기반(비평 P0) — 앵커 없으면 uncertain 플래그로 정직 노출하고 사용자 선언에 의존. per-assay 보정/부모 dosage prior 도입 시 자동해소(향후).

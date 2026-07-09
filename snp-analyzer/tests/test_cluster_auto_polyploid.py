@@ -114,6 +114,64 @@ def test_threshold_without_boundaries_preserves_diploid():
     assert out["a2"] == "Allele 2 Homo"
 
 
+def test_genotype_window_offset_anchored():
+    # Hexaploid marker showing only 3 classes near the FAM axis -> dosages 4,5,6.
+    # The top class hugs r~1, so the offset is anchored (not uncertain).
+    from app.processing.clustering import genotype_window
+
+    pts, assign = [], {}
+    for d, r in [(4, 0.667), (5, 0.833), (6, 0.99)]:
+        label = "A" * d + "B" * (6 - d)
+        for i in range(6):
+            w = f"{label}_{i}"
+            pts.append({"well": w, "norm_fam": r, "norm_allele2": 1 - r})
+            assign[w] = label
+    win = genotype_window(pts, assign, ploidy=6)
+    assert win["offset"] == 4
+    assert len(win["boundaries"]) == 2          # 3 classes -> 2 internal cuts
+    assert win["offset_uncertain"] is False     # top class near r=1 anchors it
+
+
+def test_genotype_window_offset_uncertain_when_mid_range():
+    # 3 classes all in the middle (dosages 2,3,4) -> offset can't be anchored.
+    from app.processing.clustering import genotype_window
+
+    pts, assign = [], {}
+    for d, r in [(2, 0.40), (3, 0.52), (4, 0.64)]:
+        label = "A" * d + "B" * (6 - d)
+        for i in range(6):
+            w = f"{label}_{i}"
+            pts.append({"well": w, "norm_fam": r, "norm_allele2": 1 - r})
+            assign[w] = label
+    win = genotype_window(pts, assign, ploidy=6)
+    assert win["offset"] == 2
+    assert win["offset_uncertain"] is True
+
+
+def test_label_by_ratio_offset_shifts_window():
+    from app.processing.genotype_vocab import label_by_ratio
+    cuts = [0.75, 0.5]  # 2 cuts -> 3 zones
+    # offset 4: zones are dosages 4,5,6 of a hexaploid
+    assert label_by_ratio(0.9, 6, cuts, 4) == "AAAAAA"   # dosage 6
+    assert label_by_ratio(0.6, 6, cuts, 4) == "AAAAAB"   # dosage 5
+    assert label_by_ratio(0.3, 6, cuts, 4) == "AAAABB"   # dosage 4
+    # offset 0: same cuts -> dosages 0,1,2
+    assert label_by_ratio(0.9, 6, cuts, 0) == "AABBBB"   # dosage 2
+
+
+def test_threshold_with_offset():
+    from app.models import ThresholdConfig
+    from app.processing.clustering import cluster_threshold
+    pts = [
+        {"well": "hi", "norm_fam": 0.9, "norm_allele2": 0.1},
+        {"well": "lo", "norm_fam": 0.3, "norm_allele2": 0.7},
+    ]
+    cfg = ThresholdConfig(ntc_threshold=0.0, boundaries=[0.75, 0.5], offset=4)
+    out = cluster_threshold(pts, cfg, ploidy=6)
+    assert out["hi"] == "AAAAAA"  # dosage 6
+    assert out["lo"] == "AAAABB"  # dosage 4
+
+
 def test_hexaploid_labels_used():
     # Sanity: hexaploid (P=6) produces 7-class labels from the vocab.
     specs = [(6, 1.0), (3, 0.5), (0, 0.0)]

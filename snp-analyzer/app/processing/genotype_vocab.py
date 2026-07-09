@@ -86,20 +86,31 @@ def default_ratio_cuts(ploidy: int = DEFAULT_PLOIDY) -> list[float]:
 
 
 def dosage_by_ratio(
-    r: float, ploidy: int = DEFAULT_PLOIDY, cuts: list[float] | None = None
+    r: float,
+    ploidy: int = DEFAULT_PLOIDY,
+    cuts: list[float] | None = None,
+    offset: int = 0,
 ) -> int:
-    """Dosage (0..P) for fam-fraction ``r`` given descending boundary ``cuts``.
+    """Dosage for fam-fraction ``r`` given descending boundary ``cuts``.
 
-    ``dosage = number of cuts that r meets or exceeds``. With the default cuts a
-    well near the FAM axis (r->1) gets the highest dosage (all allele-1 copies)
-    and a well near the allele-2 axis (r->0) gets dosage 0.
+    ``dosage = offset + number of cuts that r meets or exceeds``. With the default
+    cuts and offset 0 a well near the FAM axis (r->1) gets the highest dosage and
+    a well near the allele-2 axis (r->0) gets dosage 0.
+
+    ``offset`` places an observed window of classes within the full 0..P ladder:
+    for a hexaploid marker that only resolves 3 classes, ``cuts`` has 2 entries
+    (3 zones) and ``offset`` says whether those zones are dosages 0,1,2 (offset 0)
+    or 4,5,6 (offset 4), etc. — information fluorescence alone often can't fix.
     """
     if cuts is None:
         cuts = default_ratio_cuts(ploidy)
-    return sum(1 for c in cuts if r >= c)
+    return offset + sum(1 for c in cuts if r >= c)
 
 
 def label_by_ratio(
-    r: float, ploidy: int = DEFAULT_PLOIDY, cuts: list[float] | None = None
+    r: float,
+    ploidy: int = DEFAULT_PLOIDY,
+    cuts: list[float] | None = None,
+    offset: int = 0,
 ) -> str:
-    return genotype_label(dosage_by_ratio(r, ploidy, cuts), ploidy)
+    return genotype_label(dosage_by_ratio(r, ploidy, cuts, offset), ploidy)
