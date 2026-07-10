@@ -84,8 +84,13 @@ def build_result_snapshot(
         allele_frequency = None
         hwe = None
 
+    # Diploid stays schema_version 1 (byte-compatible with existing ASG). Polyploid
+    # bumps to 2: dosage-keyed genotype_counts + ploidy/offset, with allele_freq /
+    # HWE null. Both are accepted by the ASG receiver.
+    offset = cluster.offset if cluster else 0
+    schema_version = 1 if ploidy == 2 else 2
     return {
-        "schema_version": 1,
+        "schema_version": schema_version,
         "ploidy": ploidy,
         "launch": {
             "id": launch.launch_id,
@@ -105,6 +110,8 @@ def build_result_snapshot(
             "genotype_counts": genotype_counts,
             "allele_frequency": allele_frequency,
             "hwe": hwe,
+            "ploidy": ploidy,
+            "offset": offset,
             "total_wells": len(unified.wells),
             "cluster_algorithm": cluster.algorithm if cluster else None,
             "cluster_cycle": cluster.cycle if cluster else None,

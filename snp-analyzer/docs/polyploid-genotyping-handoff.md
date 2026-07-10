@@ -249,7 +249,7 @@ KASP genotyping의 표준 feature는 두 정규화 신호 x,y에서 유도한 **
 - **Phase 1 — 통합 mixture 엔진 ✅ 완료 (2026-07-10)**: 아래 §13 참조. `cluster_auto`를 ploidy-aware GMM(arcsine-sqrt, K∈1..P+1 BIC, σ공유 tied, `p.free`)+근접병합+DP dosage 라벨로 교체. 164 tests green(diploid 회귀 7 + 합성 다배체 6). **Phase 2로 이관**: 제안 경계컷 emit·`cluster_threshold` P-컷 일반화(드래그 UI 계약과 함께). **Phase 3로 이관**: qc/export ratio-폴백 수렴(`count_genotypes` ploidy 관통과 함께).
 - **Phase 2 — 드래그 UX + 프론트 ✅ 완료 (2026-07-10)**: §15 참조. 2a(ploidy 셀렉터 + dosage 어휘/색 일반화) + 2b(드래그 방사 경계선 추가/삭제/토글) + 백엔드(`cluster_threshold` P-컷, `genotype_boundaries` emit). tsc+vite build 통과. 드래그 핵심 로직 Plotly 하니스로 검증(좌표 변환 Plotly와 정확 일치, grab/이동/클램프 정상). 잔여: dblclick 추가삭제·persist 왕복·전체앱 E2E(로그인 차단). ASG context default는 Phase 4.
 - **Phase 3 — 통계/리포트 ✅ 완료 (2026-07-10)**: §16 참조. `count_genotypes(_, ploidy)`를 statistics/export/asg에 관통(다배체 excluded 버그 해소), qc/export ratio-폴백을 `genotype_vocab.label_by_ratio`로 수렴 + export 절대컷→상대컷(비평 P2 버그) 수정, freq/HWE는 diploid 가드. 170 tests. **잔여**: polysomic freq/HWE(미지원, 다배체는 null), PDF 리포트(`reporting/charts.py`/`pdf_builder.py`) 어휘 일반화 미착수.
-- **Phase 4 — 교차서비스 계약**: `schema_version:2`(+`ploidy`, dosage counts), ASG(`asg-saas_v2`) 수신부 동반 수정, `effective_type`↔`genotype_call` 필드 정합화, e2e 검증.
+- **Phase 4 — 교차서비스 계약 ✅ 완료 (2026-07-10)**: §18. 발신부 다배체만 `schema_version:2`(+ploidy/offset/dosage counts; diploid는 v1 유지), ASG 수신부 v1/v2 허용 + presentation 일반화 + `effective_type`↔`genotype_call` 정합화 + 템플릿 2개. Q-Prism 6 + ASG 49 tests green(사전 실패 2 제외).
 
 ## 11. 남은 미결정 (Phase 0 착수 전 확정 권장)
 - **dosage 클래스 표기 규약**: `AAAA…BBBB` vs `nulliplex/simplex/duplex/…` vs `dosage 0..P`. (i18n·정렬·색 매핑 일관성) — vocab 레지스트리 설계 직전 고정 필요.
@@ -385,3 +385,21 @@ Claude·Fable·Codex 3개 모델로 하드코딩 비율 상수를 교차 비평.
 **테스트**: `test_cluster_auto_polyploid.py`에 window 앵커/불확실, label offset, threshold offset 추가. 174 tests green. tsc+vite build 통과. **미검증**: offset 컨트롤/창 드래그의 실앱 E2E(로그인 차단, §15와 동일).
 
 **잔여 caveat**: 오프셋 자동추정은 여전히 `d/P` 근접 기반(비평 P0) — 앵커 없으면 uncertain 플래그로 정직 노출하고 사용자 선언에 의존. per-assay 보정/부모 dosage prior 도입 시 자동해소(향후).
+
+---
+
+## 18. Phase 4 구현 결과 — 교차서비스 계약 (2026-07-10)
+
+두 리포 동반 수정. **diploid는 완전 무변(schema_version 1), 다배체만 v2**로 blast radius 최소화.
+
+**발신부 (`Q-Prism .../app/asg_result.py`)**: `schema_version = 1 if ploidy==2 else 2`. summary에 `ploidy`, `offset` 추가. genotype_counts는 Phase 3에서 이미 dosage-keyed(다배체)/AA-AB-BB(diploid). allele_freq/HWE는 diploid만(다배체 null). wells는 기존대로 `effective_type` 포함.
+
+**수신부 (`asg-saas_v2/snp_analysis/`, 브랜치 feat/polyploid-specificity)**:
+- `services.py:save_analysis_result`: `schema_version in (1,2)` 허용, 실제 버전 저장(`int(schema_version)`).
+- `presentation.py:serialize_analysis_run`: genotype_counts를 정수화 전체 dict로(+AA/AB/BB 기본값 back-compat), **`genotype_distribution`**(라벨·카운트 순서 리스트, ploidy 무관) + `ploidy` + `schema_version` 노출.
+- `presentation.py:_serialize_well`: `effective_type`를 genotype_call 소스로 추가 → **공유뷰 well 유전형이 이전엔 항상 빈값이던 버그 수정**(genotype_call/call만 읽었음).
+- 템플릿 `run_history_compact.html`·`shared_result.html`: 하드코딩 AA/AB/BB → `genotype_distribution` 순회 + 다배체 시 `Nx` 배지. diploid 렌더 문자열 동일("AA 2" 등) → 기존 테스트 통과.
+
+**검증**: Q-Prism `test_asg_result_save` 6 green(diploid v1 불변). ASG `test_context` 49 green + **사전 실패 2**(`test_history_detail`/`test_order_detail` — 원본 코드에서도 동일 실패, sqlite 테스트환경 이슈, 제 변경 무관 — stash로 확인). presentation 단위 확인: diploid AA/AB/BB+dist, hexaploid dosage dist+ploidy6, well genotype_call=effective_type.
+
+**주의**: ASG는 별도 리포/브랜치(feat/polyploid-specificity, 무관한 amplicon-outlier WIP 포함). 내 변경 4파일만 커밋(사용자 WIP docs/csv 제외). DB 마이그레이션 없음(ploidy는 summary_json에 실림). ASG 프론트/뷰의 다배체 실렌더 e2e는 미검증(로그인 차단, §15).
