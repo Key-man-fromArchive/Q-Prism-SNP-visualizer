@@ -58,6 +58,7 @@ def _cluster_point_dicts(
 
     confidences: dict[str, float] = {}
     warnings: list[str] = []
+    anchor_state: dict = {}
     if algorithm == ClusteringAlgorithm.AUTO:
         config = threshold_config or ThresholdConfig()
         assignments, confidences = cluster_auto(
@@ -66,6 +67,7 @@ def _cluster_point_dicts(
             control_wells=control_wells,
             ploidy=ploidy,
             warnings=warnings,
+            anchor_state=anchor_state,
         )
     elif algorithm == ClusteringAlgorithm.THRESHOLD:
         config = threshold_config or ThresholdConfig()
@@ -73,7 +75,13 @@ def _cluster_point_dicts(
     else:
         assignments = cluster_kmeans(point_dicts, n_clusters)
 
-    window = genotype_window(point_dicts, assignments, ploidy)
+    # C1: when allele-control anchors successfully resolved the dosage offset
+    # in cluster_auto, that offset is DETERMINED (not a guess) -- tell
+    # genotype_window to report it as such instead of re-deriving its own
+    # (potentially different) offset guess from the sample ratios alone.
+    window = genotype_window(
+        point_dicts, assignments, ploidy, anchor_resolved=anchor_state.get("resolved", False)
+    )
     return assignments, confidences, window, (warnings or None)
 
 
@@ -168,11 +176,19 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
     ]
 
     # User-marked controls anchor the analysis: they are honored as-is and
-    # excluded from the clustering input.
+    # excluded from the clustering input. Allele-1/Allele-2 controls (C1) are
+    # homozygous reference wells that additionally anchor the dosage ladder's
+    # extremes (see cluster_auto) -- they are excluded from the fit exactly
+    # like NTC/Positive Control, but also feed the offset resolution.
     control_wells = {
         well: wtype
         for well, wtype in welltype_store.get(sid, {}).items()
-        if wtype in (WellType.NTC.value, WellType.POSITIVE_CONTROL.value)
+        if wtype in (
+            WellType.NTC.value,
+            WellType.POSITIVE_CONTROL.value,
+            WellType.ALLELE1_CONTROL.value,
+            WellType.ALLELE2_CONTROL.value,
+        )
     }
 
     if req.regions:
