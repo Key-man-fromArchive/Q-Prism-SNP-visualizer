@@ -1,6 +1,12 @@
 from __future__ import annotations
 
 from app.models import ThresholdConfig, WellType
+from app.processing.genotype_vocab import (
+    DEFAULT_PLOIDY,
+    genotype_label,
+    label_by_ratio,
+    validate_ploidy,
+)
 
 # All thresholds below are scale-invariant (a fraction of the plate's own signal,
 # a dimensionless ratio, or a ratio of distances) — never an absolute magnitude,
@@ -9,24 +15,37 @@ from app.models import ThresholdConfig, WellType
 # NTC = total signal below this fraction of the plate's median total signal.
 _NTC_SIGNAL_FRAC = 0.2
 
-# Minimum ratio of inter-cluster spacing to within-cluster spread required to
-# accept a multi-cluster (polymorphic) solution; below this the plate is treated
-# as a single genotype to avoid splitting noise into fake genotypes.
-_SEP_FACTOR = 2.0
+# Two fitted clusters closer than this fraction of the ideal dosage spacing
+# (1/ploidy) are treated as one dosage class that BIC over-split on noise.
+_DOSAGE_MERGE_FRAC = 0.5
 
-# A well is Undetermined when its distance (in fam-fraction) to the nearest
-# genotype centre is more than this fraction of its distance to the 2nd-nearest
-# — i.e. it sits in the ambiguous gap between two genotypes. The per-call
-# confidence is the margin (1 - nearest/second); the no-call cutoff is therefore
-# confidence < (1 - _AMBIG_RATIO).
-_AMBIG_RATIO = 0.8
+# Adjacent dosage classes closer than this many pooled within-class SDs are flagged
+# as poorly resolved (reliability warning, esp. high ploidy).
+_MIN_SEP_SD = 3.0
+
+# No-call rules, evaluated against the fitted mixture (so they scale with the
+# data's own spread and ploidy, not a fixed ratio gap):
+#   - a well whose best posterior probability is below this is "between classes"
+_CALL_MIN_POSTERIOR = 0.9
+#   - a well more than this many pooled SDs from EVERY class mean is an outlier
+_OUTLIER_SD = 4.0
 
 
 def cluster_threshold(
-    points: list[dict], config: ThresholdConfig | None = None
+    points: list[dict],
+    config: ThresholdConfig | None = None,
+    ploidy: int = DEFAULT_PLOIDY,
 ) -> dict[str, str]:
+    """Threshold labeling by absolute fam-fraction cuts.
+
+    When ``config.boundaries`` is set (the P draggable radial-line positions),
+    each well is labeled by dosage via those cuts for the given ``ploidy``.
+    Otherwise the legacy diploid two-cutoff behavior is preserved exactly.
+    """
     if config is None:
         config = ThresholdConfig()
+    validate_ploidy(ploidy)
+    cuts = config.boundaries
 
     assignments: dict[str, str] = {}
     for p in points:
@@ -35,7 +54,9 @@ def cluster_threshold(
             assignments[p["well"]] = WellType.NTC.value
             continue
         ratio = p["norm_fam"] / total
-        if ratio > config.allele2_ratio_min:
+        if cuts:
+            assignments[p["well"]] = label_by_ratio(ratio, ploidy, cuts, config.offset)
+        elif ratio > config.allele2_ratio_min:
             assignments[p["well"]] = WellType.ALLELE1_HOMO.value
         elif ratio < config.allele1_ratio_max:
             assignments[p["well"]] = WellType.ALLELE2_HOMO.value
@@ -48,25 +69,34 @@ def cluster_auto(
     points: list[dict],
     ntc_threshold: float = 0.1,
     control_wells: dict[str, str] | None = None,
+    ploidy: int = DEFAULT_PLOIDY,
 ) -> tuple[dict[str, str], dict[str, float]]:
-    """Data-driven genotype clustering, fully scale-invariant.
+    """Model-based, ploidy-aware genotype clustering, fully scale-invariant.
+
+    Generalizes to any ploidy P (2=diploid .. 8): a locus resolves into up to
+    ``P + 1`` allele-dosage classes along the fam-fraction axis. The genotyping
+    model follows fitPoly/fitTetra: the per-well ratio ``r = fam/(fam+allele2)``
+    is arcsine-sqrt transformed (variance stabilization), then a 1-D Gaussian
+    mixture with a shared (tied) variance and free mixing proportions is fitted;
+    the number of present dosage classes is chosen by BIC (this replaces the old
+    diploid-only silhouette + separation gate). Fitted clusters are mapped to
+    dosages by a monotonic best-fit against the ideal ratios ``d/P``, so a skewed
+    homozygote (e.g. r~0.30 from dye imbalance) is still ranked correctly.
 
     Returns ``(assignments, confidences)`` where confidence is a 0..1 margin
     score: how far the well sits from the genotype decision boundary
     (1 - nearest/second-nearest distance in fam-fraction space). A well is
     Undetermined (no-call) when that margin drops below ``1 - _AMBIG_RATIO``.
 
-
     Genotype is the fam-fraction (angle), not the signal magnitude, and the ROX
     scale varies between kits — so this never hard-filters on an absolute value.
 
     1. NTC: total signal below a fraction of the plate's median total.
-    2. KMeans the rest in (fam, allele2) space, k=2/3 by silhouette. A
-       separation gate collapses to a single genotype (monomorphic) when the
-       clusters are not clearly separated relative to their own scatter.
-    3. Label each cluster by the ABSOLUTE fam-fraction of its centroid
-       (dimensionless 0.65/0.35 cutoffs); the middle cluster is the heterozygote
-       when both homozygotes are present (handles hets skewed off 0.5).
+    2. Fit an arcsine-sqrt-ratio Gaussian mixture (tied variance), K present
+       dosage classes chosen by BIC over 1..P+1. K=1 => monomorphic plate.
+    3. Map each cluster to an allele dosage by a monotonic best-fit of the
+       cluster ratios to the ideal ``d/P`` positions (rank-preserving, so skew
+       cannot reorder dosages), then label via the genotype vocabulary.
     4. Confidence in ratio space: assign each well to the nearest genotype
        ratio-centre; wells in the gap between two genotypes — or in singleton
        clusters — are Undetermined. Low-signal wells are NOT penalised for
@@ -76,8 +106,9 @@ def cluster_auto(
     absolute cutoff (NTC is now purely relative).
     """
     import numpy as np
-    from sklearn.cluster import KMeans
-    from sklearn.metrics import silhouette_score
+    from sklearn.mixture import GaussianMixture
+
+    validate_ploidy(ploidy)
 
     if not points:
         return {}, {}
@@ -123,131 +154,283 @@ def cluster_auto(
     # Too few signal wells to cluster reliably — call by absolute ratio.
     if len(sig_idx) < 4:
         for i in sig_idx:
-            assignments[wells[i]] = _label_by_ratio(ratio[i])
+            assignments[wells[i]] = label_by_ratio(ratio[i], ploidy)
             confidences[wells[i]] = 1.0
         return assignments, confidences
 
-    coords = np.column_stack([fam[sig_idx], allele2[sig_idx]])
-    n_unique = len(np.unique(coords, axis=0))
+    # 2. Fit a 1-D Gaussian mixture on the arcsine-sqrt-transformed ratio
+    #    (variance stabilization, fitPoly/fitTetra). Tied covariance = one shared
+    #    variance across dosage classes; free weights = no segregation assumption
+    #    (p.free). The number of PRESENT dosage classes K is chosen by BIC over
+    #    1..P+1 — K=1 is a monomorphic plate, so BIC replaces the old silhouette +
+    #    separation gate and will not split measurement noise into fake genotypes.
+    rt = np.arcsin(np.sqrt(np.clip(ratio[sig_idx], 0.0, 1.0)))
+    X = rt.reshape(-1, 1)
+    n_unique = len(np.unique(np.round(rt, 9)))
+    k_max = min(ploidy + 1, n_unique)
 
-    # 2. Pick k = 2 or 3 by silhouette (need more unique points than clusters
-    #    so silhouette is defined, and reject solutions with an empty cluster).
-    best_labels = None
-    best_score = None
-    for k in (2, 3):
-        if n_unique < k:
-            continue
-        labels = KMeans(n_clusters=k, n_init=10, random_state=42).fit_predict(coords)
-        if len(set(labels)) < k:
-            continue
-        score = silhouette_score(coords, labels)
-        if best_score is None or score > best_score:
-            best_score, best_labels = score, labels
-
-    members: dict[int, list[int]] = {}
-    if best_labels is not None:
-        for local_i, global_i in enumerate(sig_idx):
-            members.setdefault(int(best_labels[local_i]), []).append(global_i)
-
-    # Centroids + within-cluster spread (used only for the separation gate,
-    # a ratio of two distances in the same space — scale-invariant).
-    centroids: dict[int, tuple[float, float]] = {}
-    spreads: list[float] = []
-    for lab, idxs in members.items():
-        cx = float(np.mean(fam[idxs]))
-        cy = float(np.mean(allele2[idxs]))
-        centroids[lab] = (cx, cy)
-        d = np.hypot(fam[idxs] - cx, allele2[idxs] - cy)
-        spreads.append(float(np.median(d)))
-
-    cvals = list(centroids.values())
-    if len(cvals) >= 2:
-        min_inter = min(
-            float(np.hypot(cvals[i][0] - cvals[j][0], cvals[i][1] - cvals[j][1]))
-            for i in range(len(cvals))
-            for j in range(i + 1, len(cvals))
+    best_gmm = None
+    best_bic = None
+    for k in range(1, k_max + 1):
+        gmm = GaussianMixture(
+            n_components=k,
+            covariance_type="tied",
+            random_state=42,
+            n_init=5,
+            reg_covar=1e-6,
         )
-    else:
-        min_inter = 0.0
-    pooled_spread = float(np.median(spreads)) if spreads else 0.0
+        gmm.fit(X)
+        bic = gmm.bic(X)
+        if best_bic is None or bic < best_bic:
+            best_bic, best_gmm = bic, gmm
 
-    # Separation gate: if the "clusters" are not clearly separated relative to
-    # their own scatter, the plate is effectively a single genotype (monomorphic)
-    # — KMeans would otherwise split measurement noise into fake genotypes. Fall
-    # back to labeling each well by its absolute allele ratio.
-    if best_labels is None or len(cvals) < 2 or min_inter < _SEP_FACTOR * pooled_spread:
-        for i in sig_idx:
-            assignments[wells[i]] = _label_by_ratio(ratio[i])
-            confidences[wells[i]] = 1.0
-        return assignments, confidences
+    comp = best_gmm.predict(X)
+    members: dict[int, list[int]] = {}
+    for local_i, global_i in enumerate(sig_idx):
+        members.setdefault(int(comp[local_i]), []).append(global_i)
 
-    # 3. Label clusters by the ABSOLUTE fam-fraction of their centroid ratio
-    #    (dimensionless, so ROX scale is irrelevant; homozygotes sit near the
-    #    axes so 0.65/0.35 cutoffs are safe). In a genuine 3-cluster solution the
-    #    middle cluster is the heterozygote — even when dye skew pushes its ratio
-    #    toward a homozygote — but only claim it when both homozygotes are present.
+    # 3. Map each present cluster to an allele dosage. Sort clusters by their
+    #    median ratio and pick the monotonically increasing dosage assignment
+    #    (subset of 0..P) that best matches the ideal d/P positions. Rank order is
+    #    preserved, so a skewed homozygote (r far from 0 or 1) can never be
+    #    reordered past a neighbouring cluster — only snapped to its dosage.
     cluster_ratio = {
         lab: float(np.median([ratio[i] for i in idxs])) for lab, idxs in members.items()
     }
     order = sorted(members, key=lambda lab: cluster_ratio[lab])
-    label_map = {lab: _label_by_ratio(cluster_ratio[lab]) for lab in members}
-    spans_both = (
-        label_map[order[-1]] == WellType.ALLELE1_HOMO.value
-        and label_map[order[0]] == WellType.ALLELE2_HOMO.value
-    )
-    if spans_both:
-        for mid in order[1:-1]:
-            label_map[mid] = WellType.HETEROZYGOUS.value
 
-    # 4. Confidence in RATIO (angle) space. Genotype is the fam-fraction, not the
-    #    signal magnitude, so a genuine low-signal het must NOT be penalised for
-    #    being closer to the origin. Build one ratio-centre per genotype, assign
-    #    each signal well to the nearest centre, and mark wells that sit in the
-    #    gap between two genotypes (nearest/second-nearest ratio distance above
-    #    _AMBIG_RATIO) as Undetermined. Singleton clusters are Undetermined.
+    # Merge adjacent clusters that sit far closer than the ideal dosage spacing
+    # (1/P): they are one dosage that BIC over-split on noise, not two dosages.
+    # Without this the dosage DP below (which forces distinct dosages) would
+    # promote a noise-split into a spurious neighbouring dosage class.
+    if len(order) > 1:
+        min_sep = _DOSAGE_MERGE_FRAC / ploidy
+        groups: list[list[int]] = [[order[0]]]
+        for lab in order[1:]:
+            if cluster_ratio[lab] - cluster_ratio[groups[-1][-1]] < min_sep:
+                groups[-1].append(lab)
+            else:
+                groups.append([lab])
+        if len(groups) < len(order):
+            merged: dict[int, list[int]] = {}
+            for gi, group in enumerate(groups):
+                idxs: list[int] = []
+                for lab in group:
+                    idxs.extend(members[lab])
+                merged[gi] = idxs
+            members = merged
+            cluster_ratio = {
+                lab: float(np.median([ratio[i] for i in idxs]))
+                for lab, idxs in members.items()
+            }
+            order = sorted(members, key=lambda lab: cluster_ratio[lab])
+
+    dosages = _assign_dosages([cluster_ratio[lab] for lab in order], ploidy)
+    label_map = {lab: genotype_label(d, ploidy) for lab, d in zip(order, dosages)}
+
+    # 4. Call + confidence from the fitted mixture, evaluated in the SAME
+    #    arcsine-sqrt space the clusters were found in (not a raw-ratio margin).
+    #    Reconstruct one Gaussian per FINAL dosage cluster (mean + shared pooled
+    #    SD, weight = cluster size); each well is assigned to its maximum-posterior
+    #    class and the confidence IS that posterior. A well is Undetermined when
+    #    the model is unsure: the best posterior is weak (it sits between two
+    #    classes) OR it is an outlier many SDs from every class. Both criteria
+    #    scale with the fitted spread and ploidy. Genotype is still the ratio, not
+    #    the magnitude — a genuine low-signal het stays on its cluster's angle.
+    rt_by_global = {global_i: float(rt[j]) for j, global_i in enumerate(sig_idx)}
     tiny_labels = {lab for lab, idxs in members.items() if len(idxs) < 2}
-    genotype_ratio: dict[str, list[float]] = {}
+
+    means: dict[int, float] = {}
+    within: list[float] = []
     for lab, idxs in members.items():
         if lab in tiny_labels:
             continue
-        genotype_ratio.setdefault(label_map[lab], []).extend(float(ratio[i]) for i in idxs)
-    centres = {g: float(np.median(v)) for g, v in genotype_ratio.items()}
-    centre_items = list(centres.items())
+        vals = np.array([rt_by_global[i] for i in idxs], dtype=float)
+        means[lab] = float(vals.mean())
+        within.append(float(vals.var()))
+    pooled_var = float(np.mean(within)) if within else 1e-4
+    sigma = float(np.sqrt(max(pooled_var, 1e-4)))
+    live = [lab for lab in members if lab not in tiny_labels]
 
     for lab, idxs in members.items():
         for i in idxs:
             w = wells[i]
-            if lab in tiny_labels or not centre_items:
+            if lab in tiny_labels or not live:
                 assignments[w] = WellType.UNDETERMINED.value
                 confidences[w] = 0.0
                 continue
-            ranked = sorted(centre_items, key=lambda gc: abs(ratio[i] - gc[1]))
-            nearest_d = abs(ratio[i] - ranked[0][1])
-            second_d = abs(ratio[i] - ranked[1][1]) if len(ranked) >= 2 else None
-            if second_d is None:
-                # Only one genotype present — a confident single-cluster call.
-                assignments[w] = ranked[0][0]
-                confidences[w] = 1.0
-                continue
-            frac = nearest_d / second_d if second_d > 0 else 0.0
-            confidences[w] = max(0.0, min(1.0, 1.0 - frac))
-            if frac > _AMBIG_RATIO:
+            rt_i = rt_by_global[i]
+            # Posterior over the live clusters (log weight = log cluster size).
+            log_scores = {
+                g: np.log(len(members[g])) - 0.5 * ((rt_i - means[g]) / sigma) ** 2
+                for g in live
+            }
+            m = max(log_scores.values())
+            exps = {g: np.exp(s - m) for g, s in log_scores.items()}
+            z = sum(exps.values())
+            post = {g: v / z for g, v in exps.items()}
+            best = max(post, key=post.get)
+            best_post = float(post[best])
+            nearest_sd = min(abs(rt_i - means[g]) / sigma for g in live)
+            if nearest_sd > _OUTLIER_SD:
                 assignments[w] = WellType.UNDETERMINED.value
+                confidences[w] = 0.0
+            elif best_post < _CALL_MIN_POSTERIOR:
+                assignments[w] = WellType.UNDETERMINED.value
+                confidences[w] = best_post
             else:
-                assignments[w] = ranked[0][0]
+                assignments[w] = label_map[best]
+                confidences[w] = best_post
 
     return assignments, confidences
 
 
-def _label_by_ratio(r: float) -> str:
-    """Fallback single-well genotype call by absolute fam-fraction, used when
-    clustering is not reliable (monomorphic plate or very few wells).
-    Homozygotes sit near the axes, so wide cutoffs keep skewed hets as Het."""
-    if r >= 0.65:
-        return WellType.ALLELE1_HOMO.value
-    if r <= 0.35:
-        return WellType.ALLELE2_HOMO.value
-    return WellType.HETEROZYGOUS.value
+def genotype_window(
+    points: list[dict], assignments: dict[str, str], ploidy: int = DEFAULT_PLOIDY
+) -> dict:
+    """Describe the OBSERVED dosage window for the draggable-line UI.
+
+    A polyploid marker often resolves only a contiguous SUBSET of the 0..P dosage
+    ladder, and its absolute position (offset) is marker-dependent and frequently
+    not identifiable from fluorescence alone (e.g. sweetpotato 6x often shows 3
+    classes that could be dosages 0,1,2 or 4,5,6). This returns:
+      - ``boundaries``: the K-1 internal fam-fraction cuts (descending) between the
+        observed classes — the seed positions for the radial lines,
+      - ``offset``: the proposed dosage of the lowest observed class,
+      - ``offset_uncertain``: True when no observed class sits near an axis
+        extreme (r~0 = dosage 0, r~1 = dosage P), so the offset is a guess the
+        user should confirm/shift.
+    Cuts between two present classes use their empirical midpoint; gaps fall back
+    to the equal-spacing ideal ``(d+0.5)/P``."""
+    from app.processing.genotype_vocab import default_ratio_cuts, dosage_of_label
+
+    validate_ploidy(ploidy)
+    ratio_by_dosage: dict[int, list[float]] = {}
+    for p in points:
+        d = dosage_of_label(assignments.get(p["well"], ""), ploidy)
+        if d is None:
+            continue
+        total = p["norm_fam"] + p["norm_allele2"]
+        if total > 0:
+            ratio_by_dosage.setdefault(d, []).append(p["norm_fam"] / total)
+
+    if not ratio_by_dosage:
+        # No genotype calls yet — offer the full ladder, offset 0, flagged uncertain.
+        return {"boundaries": default_ratio_cuts(ploidy), "offset": 0, "offset_uncertain": True}
+
+    import statistics as _stats
+
+    centre = {d: _stats.median(rs) for d, rs in ratio_by_dosage.items()}
+    present = sorted(centre)
+    top = present[-1]
+
+    # Offset + uncertainty from the same window estimator the auto labeller uses,
+    # so the drag-tool seed stays consistent with the auto calls.
+    offset, _step, uncertain = estimate_window([centre[d] for d in present], ploidy)
+
+    # Internal cuts across the observed window [offset, top], high-r first
+    # (empirical midpoint where both flanking classes are present, else ideal).
+    cuts: list[float] = []
+    for d in range(top - 1, offset - 1, -1):  # boundary between dosage d and d+1
+        if d in centre and (d + 1) in centre:
+            cuts.append((centre[d] + centre[d + 1]) / 2.0)
+        else:
+            cuts.append((d + 0.5) / ploidy)
+
+    # Reliability: at high ploidy adjacent dosage classes are only ~1/P apart, so
+    # they may overlap. Flag when any two adjacent PRESENT classes sit closer than
+    # _MIN_SEP_SD pooled within-class SDs (in the arcsine-sqrt fit space) — the
+    # honest "these dosages aren't cleanly resolvable" signal for the UI.
+    low_separation = _window_low_separation(ratio_by_dosage, present)
+
+    return {
+        "boundaries": cuts,
+        "offset": offset,
+        "offset_uncertain": uncertain,
+        "low_separation": low_separation,
+    }
+
+
+def _window_low_separation(ratio_by_dosage: dict[int, list[float]], present: list[int]) -> bool:
+    import math
+
+    def _t(x: float) -> float:
+        return math.asin(math.sqrt(min(max(x, 0.0), 1.0)))
+
+    if len(present) < 2:
+        return False
+    variances, means = [], {}
+    for d in present:
+        vals = [_t(r) for r in ratio_by_dosage[d]]
+        means[d] = sum(vals) / len(vals)
+        if len(vals) >= 2:
+            m = means[d]
+            variances.append(sum((v - m) ** 2 for v in vals) / (len(vals) - 1))
+    pooled_sd = math.sqrt(sum(variances) / len(variances)) if variances else 0.0
+    if pooled_sd <= 0:
+        return False
+    for i in range(len(present) - 1):
+        gap = means[present[i + 1]] - means[present[i]]
+        if gap < _MIN_SEP_SD * pooled_sd:
+            return True
+    return False
+
+
+def estimate_window(sorted_ratios: list[float], ploidy: int) -> tuple[int, int, bool]:
+    """Estimate the observed dosage window from cluster ratios (sorted ascending).
+
+    Returns ``(offset, step, uncertain)`` where the K clusters map to dosages
+    ``offset, offset+step, ..., offset+(K-1)*step``:
+      - ``step`` (dosage units) comes from the median inter-cluster SPACING
+        (``round(gap * P)``, >=1): 1 = a contiguous window, 2 = every other dosage.
+      - ``offset`` is the arithmetic-progression start that best fits the ratios
+        to the ideals ``d/P`` (least squares) — a fit, not just the lowest dosage.
+      - ``uncertain`` is True when NO cluster hugs an axis extreme (r~0 = dosage 0,
+        r~1 = dosage P), so the absolute position of the window is a guess the
+        fluorescence cannot anchor (the sweetpotato "0,1,2 vs 4,5,6" ambiguity).
+
+    This preserves rank order and replaces the old d/P-snapping DP; it handles
+    non-contiguous windows via ``step`` and gives a defensible offset + honesty
+    flag rather than silently committing to a possibly-wrong absolute dosage."""
+    k = len(sorted_ratios)
+    if k == 0:
+        return 0, 1, True
+    edge = 0.5 / ploidy
+    low_anchor = sorted_ratios[0] < edge
+    high_anchor = sorted_ratios[-1] > 1.0 - edge
+
+    if k == 1:
+        offset = max(0, min(ploidy, round(sorted_ratios[0] * ploidy)))
+        return offset, 1, not (low_anchor or high_anchor)
+
+    gaps = sorted(sorted_ratios[i + 1] - sorted_ratios[i] for i in range(k - 1))
+    med_gap = gaps[len(gaps) // 2]
+    step = max(1, round(med_gap * ploidy))
+    step = min(step, max(1, ploidy // (k - 1)))  # keep the window inside 0..P
+
+    # Fit the offset in the arcsine-sqrt space the mixture is fitted in (variance-
+    # stabilized), so the least-squares match is consistent with where clusters
+    # were found rather than in raw ratio.
+    import math
+
+    def _t(x: float) -> float:
+        return math.asin(math.sqrt(min(max(x, 0.0), 1.0)))
+
+    obs = [_t(r) for r in sorted_ratios]
+    max_offset = ploidy - (k - 1) * step
+    best_off, best_cost = 0, float("inf")
+    for off in range(0, max_offset + 1):
+        cost = sum((obs[i] - _t((off + i * step) / ploidy)) ** 2 for i in range(k))
+        if cost < best_cost:
+            best_cost, best_off = cost, off
+    return best_off, step, not (low_anchor or high_anchor)
+
+
+def _assign_dosages(sorted_ratios: list[float], ploidy: int) -> list[int]:
+    """Strictly-increasing allele dosage per cluster ratio (sorted ascending),
+    from the estimated observed window (see estimate_window)."""
+    offset, step, _ = estimate_window(sorted_ratios, ploidy)
+    return [offset + i * step for i in range(len(sorted_ratios))]
 
 
 def cluster_kmeans(points: list[dict], n_clusters: int = 4) -> dict[str, str]:
@@ -293,12 +476,8 @@ def _label_clusters(centers) -> dict[int, str]:
     for i, total, ratio in center_info:
         if i in labels:
             continue
-        if ratio > 0.6:
-            labels[i] = WellType.ALLELE1_HOMO.value
-        elif ratio < 0.4:
-            labels[i] = WellType.ALLELE2_HOMO.value
-        else:
-            labels[i] = WellType.HETEROZYGOUS.value
+        # Diploid label via the central vocabulary (was an inline 0.6/0.4 cut).
+        labels[i] = label_by_ratio(ratio, 2, [0.6, 0.4])
 
     for i in range(n):
         if i not in labels:

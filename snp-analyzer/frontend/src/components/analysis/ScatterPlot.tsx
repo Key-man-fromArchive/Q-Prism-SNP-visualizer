@@ -4,9 +4,10 @@ import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
-import { getScatter } from "@/lib/api";
+import { getScatter, runClustering } from "@/lib/api";
 import { channelLabels, normalizationLabel, normalizedLabel } from "@/lib/channel-labels";
-import { WELL_TYPE_INFO, UNASSIGNED_TYPE } from "@/lib/constants";
+import { WELL_TYPE_INFO } from "@/lib/constants";
+import { genotypeClasses, wellInfo, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { useWellFilter } from "@/hooks/use-well-filter";
 import { useI18n } from "@/hooks/use-i18n";
@@ -31,11 +32,40 @@ export function ScatterPlot() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const { useRox, fixAxis, xMin, xMax, yMin, yMax, showAutoCluster, showManualTypes } =
     useSettingsStore();
+  const ploidy = useSettingsStore((s) => s.ploidy);
+  const ntcThreshold = useSettingsStore((s) => s.ntcThreshold);
+  const showBoundaryLines = useSettingsStore((s) => s.showBoundaryLines);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const { selectWell, selectWells, clearSelection, selectedWell } = useSelectionStore();
   const { scatterPoints, allele2Dye, channelLabels: roleLabels, clusterAssignments, wellTypeAssignments } = useDataStore();
   const setScatterData = useDataStore((s) => s.setScatterData);
+  const boundaries = useDataStore((s) => s.boundaries);
+  const setBoundaries = useDataStore((s) => s.setBoundaries);
+  const offset = useDataStore((s) => s.offset);
+  const setOffset = useDataStore((s) => s.setOffset);
   const { isWellVisible } = useWellFilter();
+
+  // Draggable radial genotype-boundary lines (manual mode). Rendered only when
+  // manual types are active AND the boundary toggle is on. The number of lines
+  // equals the ploidy (P lines -> P+1 dosage wedges); adding/deleting a line
+  // changes the ploidy in lockstep so selector, lines and classes stay in sync.
+  const linesActive = showManualTypes && showBoundaryLines;
+  const [editBoundaries, setEditBoundaries] = useState<number[] | null>(null);
+  const editRef = useRef<number[] | null>(null);
+  const dragIndexRef = useRef<number | null>(null);
+
+  // Sync the working copy from the stored boundaries whenever the tool opens or
+  // a fresh analysis arrives (fall back to equal-spacing seeds).
+  useEffect(() => {
+    if (!linesActive) {
+      setEditBoundaries(null);
+      editRef.current = null;
+      return;
+    }
+    const seed = boundaries && boundaries.length ? [...boundaries] : defaultRatioCuts(ploidy);
+    setEditBoundaries(seed);
+    editRef.current = seed;
+  }, [linesActive, boundaries, ploidy]);
 
   // Re-fetch trigger (incremented when well types change)
   const [refetchTrigger, setRefetchTrigger] = useState(0);
@@ -73,12 +103,28 @@ export function ScatterPlot() {
       (p) => p.manual_type !== "Omit" && isWellVisible(p.well)
     );
 
+    // In boundary mode the wedges between the radial lines define the genotype
+    // live: relabel each well by its fam-fraction against the current cuts +
+    // window offset (controls/NTC and manual overrides still win). ploidy is the
+    // fixed organism ploidy; the offset says which absolute dosages these zones
+    // are (a 6x marker may show 3 zones = dosages 0,1,2 or 4,5,6).
+    const bnd = linesActive ? editBoundaries : null;
+    const boundaryType = (point: ScatterPoint): string => {
+      if (showManualTypes && point.manual_type) return point.manual_type;
+      const auto = point.auto_cluster;
+      if (auto === "NTC" || auto === "Positive Control") return auto;
+      const total = point.norm_fam + point.norm_allele2;
+      if (total <= 0) return "Unassigned";
+      return labelByRatio(point.norm_fam / total, ploidy, bnd!, offset);
+    };
+
     // Group points by effective type
     const typeGroups = new Map<string, ScatterPoint[]>();
     for (const point of visiblePoints) {
-      const type =
-        effectiveType(point.auto_cluster, point.manual_type, showAutoCluster, showManualTypes) ||
-        "Unassigned";
+      const type = bnd
+        ? boundaryType(point)
+        : effectiveType(point.auto_cluster, point.manual_type, showAutoCluster, showManualTypes) ||
+          "Unassigned";
       if (!typeGroups.has(type)) typeGroups.set(type, []);
       typeGroups.get(type)!.push(point);
     }
@@ -102,14 +148,19 @@ export function ScatterPlot() {
       Unassigned: t.wellTypeUnassigned,
     };
 
-    // Build traces in a deterministic order
-    const typeOrder = [...Object.keys(WELL_TYPE_INFO), "Unassigned"];
+    // Build traces in a deterministic order: dosage genotype classes (for the
+    // current ploidy, highest dosage first), then control/non-genotype types,
+    // then unassigned. WELL_TYPE_INFO keeps only the fixed control types here;
+    // the diploid genotype trio comes from genotypeClasses so ploidy drives it.
+    const diploidGeno = new Set(["Allele 1 Homo", "Allele 2 Homo", "Heterozygous"]);
+    const genoKeys = genotypeClasses(ploidy).map((c) => c.key);
+    const controlKeys = Object.keys(WELL_TYPE_INFO).filter((k) => !diploidGeno.has(k));
+    const typeOrder = [...genoKeys, ...controlKeys, "Unassigned"];
     for (const typeKey of typeOrder) {
       const points = typeGroups.get(typeKey);
       if (!points || points.length === 0) continue;
 
-      const info =
-        WELL_TYPE_INFO[typeKey as keyof typeof WELL_TYPE_INFO] || UNASSIGNED_TYPE;
+      const info = wellInfo(typeKey, ploidy);
 
       traces.push({
         x: points.map((p) => p.norm_fam),
@@ -150,6 +201,27 @@ export function ScatterPlot() {
 
     const axisTitleFont = { size: 14, color: colors.fontColor };
 
+    // Radial boundary lines: ray from the origin along (r, 1-r); a fixed
+    // fam-fraction r is a fixed angle. Extend each ray to the data extent so it
+    // spans the plot without distorting autorange.
+    let ext = 1;
+    for (const p of visiblePoints) ext = Math.max(ext, p.norm_fam, p.norm_allele2);
+    ext *= 1.05;
+    const shapes = bnd
+      ? bnd.map((r) => {
+          const tlen = ext / Math.max(r, 1 - r, 1e-6);
+          return {
+            type: "line",
+            x0: 0,
+            y0: 0,
+            x1: tlen * r,
+            y1: tlen * (1 - r),
+            line: { color: colors.fontColor, width: 2, dash: "dot" },
+            layer: "above",
+          };
+        })
+      : [];
+
     const layout: any = {
       xaxis: {
         title: { text: xLabel, font: axisTitleFont, standoff: 10 },
@@ -167,7 +239,9 @@ export function ScatterPlot() {
       plot_bgcolor: colors.plot_bgcolor,
       font: { color: colors.fontColor },
       hovermode: "closest",
-      dragmode: "select",
+      // Disable box-select while editing boundary lines so drags move the rays.
+      dragmode: linesActive ? false : "select",
+      shapes,
       margin: { t: 10, r: 10, b: 60, l: 70 },
       legend: { orientation: "h", y: -0.2 },
     };
@@ -221,6 +295,10 @@ export function ScatterPlot() {
     showManualTypes,
     clusterAssignments,
     wellTypeAssignments,
+    ploidy,
+    linesActive,
+    editBoundaries,
+    offset,
     isWellVisible,
     selectWell,
     selectWells,
@@ -270,6 +348,143 @@ export function ScatterPlot() {
     window.addEventListener("dark-mode-changed", handler);
     return () => window.removeEventListener("dark-mode-changed", handler);
   }, []);
+
+  // Drag / add / delete the radial boundary lines (manual mode). A drag moves
+  // the nearest ray; a double-click on a ray deletes it (ploidy-1), elsewhere
+  // adds one (ploidy+1). Committing persists a threshold clustering with the new
+  // cuts so the calls flow to every view.
+  useEffect(() => {
+    const gd: any = plotRef.current;
+    if (!gd || !linesActive) return;
+
+    const clientToRatio = (clientX: number, clientY: number): number | null => {
+      const fl = gd._fullLayout;
+      const xa = fl?.xaxis;
+      const ya = fl?.yaxis;
+      if (!xa || !ya || !xa._length || !ya._length) return null;
+      const bb = gd.getBoundingClientRect();
+      const px = clientX - bb.left - xa._offset;
+      const py = clientY - bb.top - ya._offset;
+      if (px < 0 || py < 0 || px > xa._length || py > ya._length) return null;
+      const dx = xa.range[0] + (px / xa._length) * (xa.range[1] - xa.range[0]);
+      const dy = ya.range[1] - (py / ya._length) * (ya.range[1] - ya.range[0]);
+      const total = dx + dy;
+      if (total <= 0) return null;
+      return Math.max(0, Math.min(1, dx / total));
+    };
+
+    const persist = async (cuts: number[], off: number) => {
+      setBoundaries(cuts);
+      setOffset(off);
+      if (!sessionId) return;
+      try {
+        await runClustering(sessionId, {
+          algorithm: "threshold",
+          cycle: currentCycle ?? 0,
+          threshold_config: {
+            ntc_threshold: ntcThreshold,
+            allele1_ratio_max: 0.4,
+            allele2_ratio_min: 0.6,
+            boundaries: cuts,
+            offset: off,
+          },
+          n_clusters: 4,
+          ploidy, // fixed organism ploidy, NOT the line count
+        });
+        window.dispatchEvent(new CustomEvent("welltypes-changed"));
+      } catch (err) {
+        console.error("Failed to persist boundaries:", err);
+      }
+    };
+
+    const NEAR = 0.04; // ratio tolerance for grabbing / deleting a ray
+
+    const onDown = (e: MouseEvent) => {
+      const cuts = editRef.current;
+      if (!cuts) return;
+      const r = clientToRatio(e.clientX, e.clientY);
+      if (r == null) return;
+      let best = -1;
+      let bd = Infinity;
+      cuts.forEach((c, i) => {
+        const d = Math.abs(c - r);
+        if (d < bd) {
+          bd = d;
+          best = i;
+        }
+      });
+      if (best >= 0 && bd < NEAR) {
+        dragIndexRef.current = best;
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    const onMove = (e: MouseEvent) => {
+      const idx = dragIndexRef.current;
+      if (idx == null || !editRef.current) return;
+      const cuts = [...editRef.current];
+      const r = clientToRatio(e.clientX, e.clientY);
+      if (r == null) return;
+      const hi = idx > 0 ? cuts[idx - 1] - 0.002 : 0.999;
+      const lo = idx < cuts.length - 1 ? cuts[idx + 1] + 0.002 : 0.001;
+      cuts[idx] = Math.max(lo, Math.min(hi, r));
+      editRef.current = cuts;
+      setEditBoundaries(cuts);
+    };
+
+    const onUp = () => {
+      if (dragIndexRef.current == null) return;
+      dragIndexRef.current = null;
+      if (editRef.current) persist(editRef.current, useDataStore.getState().offset);
+    };
+
+    // Double-click a ray to delete a class boundary (K-1), empty space to add one
+    // (K+1). The line count is the number of OBSERVED classes minus one; ploidy
+    // (the full ladder) is fixed. Adding shifts the offset down if the window
+    // would otherwise run past the top dosage.
+    const onDblClick = (e: MouseEvent) => {
+      const r = clientToRatio(e.clientX, e.clientY);
+      if (r == null) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const cuts = editRef.current ? [...editRef.current] : [];
+      const curOffset = useDataStore.getState().offset;
+      let near = -1;
+      let bd = Infinity;
+      cuts.forEach((c, i) => {
+        const d = Math.abs(c - r);
+        if (d < bd) {
+          bd = d;
+          near = i;
+        }
+      });
+      let newOffset = curOffset;
+      if (near >= 0 && bd < NEAR && cuts.length > 1) {
+        cuts.splice(near, 1); // delete a class boundary (>=2 classes remain)
+      } else if (cuts.length < ploidy) {
+        cuts.push(r); // add a class boundary
+        cuts.sort((a, b) => b - a);
+        newOffset = Math.min(curOffset, ploidy - cuts.length); // keep window in range
+      } else {
+        return;
+      }
+      editRef.current = cuts;
+      setEditBoundaries(cuts);
+      persist(cuts, newOffset);
+    };
+
+    gd.addEventListener("mousedown", onDown, true);
+    gd.addEventListener("dblclick", onDblClick, true);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      gd.removeEventListener("mousedown", onDown, true);
+      gd.removeEventListener("dblclick", onDblClick, true);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [linesActive, sessionId, currentCycle, ntcThreshold, ploidy, setBoundaries, setOffset]);
 
   // Cleanup
   useEffect(() => {

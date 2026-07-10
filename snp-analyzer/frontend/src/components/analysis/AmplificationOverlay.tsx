@@ -6,17 +6,8 @@ import { useDataStore } from "@/stores/data-store";
 import { getAllAmplification } from "@/lib/api";
 import { channelLabels } from "@/lib/channel-labels";
 import { plotlyColors } from "@/lib/plotly-theme";
+import { wellInfo } from "@/lib/genotype";
 import { useI18n } from "@/hooks/use-i18n";
-
-const GENOTYPE_COLORS: Record<string, string> = {
-  "Allele 1 Homo": "#2563eb",
-  "Allele 2 Homo": "#dc2626",
-  Heterozygous: "#16a34a",
-  NTC: "#9ca3af",
-  Undetermined: "#f59e0b",
-  Unknown: "#6b7280",
-  "Positive Control": "#8b5cf6",
-};
 
 export function AmplificationOverlay() {
   const { t } = useI18n();
@@ -27,6 +18,7 @@ export function AmplificationOverlay() {
 
   const sessionId = useSessionStore((s) => s.sessionId);
   const useRox = useSettingsStore((s) => s.useRox);
+  const ploidy = useSettingsStore((s) => s.ploidy);
   const allele2Dye = useDataStore((s) => s.allele2Dye);
   const roleLabels = useDataStore((s) => s.channelLabels);
 
@@ -61,7 +53,7 @@ export function AmplificationOverlay() {
         for (const curve of curves) {
           // Use effective_type if available (it may be on the response)
           const gt = (curve as any).effective_type || "Unknown";
-          const color = GENOTYPE_COLORS[gt] || "#6b7280";
+          const color = wellInfo(gt, ploidy).color;
           const showLegend = !legendAdded.has(gt);
           if (showLegend) legendAdded.add(gt);
 

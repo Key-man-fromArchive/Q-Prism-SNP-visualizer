@@ -41,8 +41,9 @@ def build_result_snapshot(
     cluster_assignments = cluster.assignments if cluster else {}
     confidences = (cluster.confidences or {}) if cluster else {}
     manual_assignments = welltype_store.get(session_id, {})
+    ploidy = getattr(unified, "ploidy", 2)
     effective_types = get_effective_types(cluster_assignments, manual_assignments, unified.wells)
-    genotype_counts = count_genotypes(effective_types)
+    genotype_counts = count_genotypes(effective_types, ploidy)
     sample_names = _merged_sample_names(session_id)
     selected_points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
     ct_results = calculate_all_ct(unified, use_rox) if len(unified.cycles) >= 3 else {}
@@ -68,8 +69,29 @@ def build_result_snapshot(
             }
         )
 
+    # Allele frequency + HWE are biallelic-diploid only. For higher ploidy the
+    # cross-service contract (dosage counts under schema_version 2) is Phase 4;
+    # here we keep schema 1 valid for diploid and avoid the AA/AB/BB KeyError for
+    # polyploid by emitting nulls.
+    if ploidy == 2:
+        allele_frequency = allele_frequencies(
+            genotype_counts["AA"], genotype_counts["AB"], genotype_counts["BB"]
+        )
+        hwe = hwe_test(
+            genotype_counts["AA"], genotype_counts["AB"], genotype_counts["BB"]
+        )
+    else:
+        allele_frequency = None
+        hwe = None
+
+    # Diploid stays schema_version 1 (byte-compatible with existing ASG). Polyploid
+    # bumps to 2: dosage-keyed genotype_counts + ploidy/offset, with allele_freq /
+    # HWE null. Both are accepted by the ASG receiver.
+    offset = cluster.offset if cluster else 0
+    schema_version = 1 if ploidy == 2 else 2
     return {
-        "schema_version": 1,
+        "schema_version": schema_version,
+        "ploidy": ploidy,
         "launch": {
             "id": launch.launch_id,
             "save_token": launch.save_token,
@@ -86,16 +108,10 @@ def build_result_snapshot(
         "selected_cycle": cycle,
         "summary": {
             "genotype_counts": genotype_counts,
-            "allele_frequency": allele_frequencies(
-                genotype_counts["AA"],
-                genotype_counts["AB"],
-                genotype_counts["BB"],
-            ),
-            "hwe": hwe_test(
-                genotype_counts["AA"],
-                genotype_counts["AB"],
-                genotype_counts["BB"],
-            ),
+            "allele_frequency": allele_frequency,
+            "hwe": hwe,
+            "ploidy": ploidy,
+            "offset": offset,
             "total_wells": len(unified.wells),
             "cluster_algorithm": cluster.algorithm if cluster else None,
             "cluster_cycle": cluster.cycle if cluster else None,

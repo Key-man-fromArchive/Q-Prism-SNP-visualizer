@@ -8,6 +8,7 @@ import { useSelectionStore } from '@/stores/selection-store';
 import { useDataStore } from '@/stores/data-store';
 import { getPlate } from '@/lib/api';
 import { WELL_TYPE_INFO } from '@/lib/constants';
+import { wellInfo, dosageOfLabel } from '@/lib/genotype';
 import { useWellFilter } from '@/hooks/use-well-filter';
 import { useI18n } from '@/hooks/use-i18n';
 
@@ -27,6 +28,7 @@ export function PlateView() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const { showManualTypes, showAutoCluster } = useSettingsStore();
   const useRox = useSettingsStore((s) => s.useRox);
+  const ploidy = useSettingsStore((s) => s.ploidy);
   const { selectedWell, selectedWells, selectWell, selectWells, currentCycle } = useSelectionStore();
   const { plateWells, setPlateData } = useDataStore();
 
@@ -85,9 +87,14 @@ export function PlateView() {
       effectiveType = wellData.auto_cluster;
     }
 
-    // Use type color if available
-    if (effectiveType !== null && WELL_TYPE_INFO[effectiveType as keyof typeof WELL_TYPE_INFO]) {
-      return WELL_TYPE_INFO[effectiveType as keyof typeof WELL_TYPE_INFO].color;
+    // Use type color if available (dosage genotype for the current ploidy, or a
+    // fixed control/non-genotype type).
+    if (
+      effectiveType !== null &&
+      (dosageOfLabel(effectiveType, ploidy) !== null ||
+        effectiveType in WELL_TYPE_INFO)
+    ) {
+      return wellInfo(effectiveType, ploidy).color;
     }
 
     // Fall back to ratio gradient

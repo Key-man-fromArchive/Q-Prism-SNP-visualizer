@@ -11,6 +11,7 @@ from app.models import (
     WellType,
 )
 from app.processing.clustering import cluster_auto, cluster_kmeans, cluster_threshold
+from app.processing.genotype_vocab import validate_ploidy
 from app.processing.normalize import normalize_for_cycle
 from app.routers.upload import sessions
 from app.auth import CurrentUser, check_session_access
@@ -18,6 +19,10 @@ from app.auth import CurrentUser, check_session_access
 
 class BulkWellTypeReplace(_BaseModel):
     assignments: dict[str, str]
+
+
+class PloidyUpdate(_BaseModel):
+    ploidy: int
 
 
 class WellGroupCreate(_BaseModel):
@@ -43,6 +48,17 @@ def _get_session(sid: str):
 async def run_clustering(sid: str, req: ClusteringRequest, current_user: CurrentUser):
     check_session_access(sid, current_user)
     unified = _get_session(sid)
+
+    # Ploidy travels with the request; persist it on the session so downstream
+    # views/stats/export/ASG can read it. Default (None) keeps the stored value.
+    # NOTE: the genotyping algorithm does not yet consume ploidy (Phase 1); this
+    # is plumbing only and does not change diploid behavior.
+    if req.ploidy is not None:
+        validate_ploidy(req.ploidy)
+        if req.ploidy != getattr(unified, "ploidy", 2):
+            unified.ploidy = req.ploidy
+            from app.db import set_session_ploidy
+            set_session_ploidy(sid, req.ploidy)
 
     cycle = req.cycle if req.cycle > 0 else max(unified.cycles)
     if cycle not in unified.cycles:
@@ -70,23 +86,35 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
         if wtype in (WellType.NTC.value, WellType.POSITIVE_CONTROL.value)
     }
 
+    ploidy = getattr(unified, "ploidy", 2)
     confidences: dict[str, float] = {}
     if req.algorithm == ClusteringAlgorithm.AUTO:
         config = req.threshold_config or ThresholdConfig()
         assignments, confidences = cluster_auto(
-            point_dicts, ntc_threshold=config.ntc_threshold, control_wells=control_wells
+            point_dicts,
+            ntc_threshold=config.ntc_threshold,
+            control_wells=control_wells,
+            ploidy=ploidy,
         )
     elif req.algorithm == ClusteringAlgorithm.THRESHOLD:
         config = req.threshold_config or ThresholdConfig()
-        assignments = cluster_threshold(point_dicts, config)
+        assignments = cluster_threshold(point_dicts, config, ploidy=ploidy)
     else:
         assignments = cluster_kmeans(point_dicts, req.n_clusters)
 
+    from app.processing.clustering import genotype_window
+
+    window = genotype_window(point_dicts, assignments, ploidy)
     result = ClusteringResult(
         algorithm=req.algorithm.value,
         cycle=cycle,
         assignments=assignments,
         confidences=confidences or None,
+        ploidy=ploidy,
+        boundaries=window["boundaries"],
+        offset=window["offset"],
+        offset_uncertain=window["offset_uncertain"],
+        low_separation=window["low_separation"],
     )
     cluster_store[sid] = result
 
@@ -94,6 +122,29 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
     save_clustering(sid, result)
 
     return result
+
+
+@router.get("/api/data/{sid}/ploidy")
+async def get_ploidy(sid: str, current_user: CurrentUser):
+    """Return the session's ploidy (allele copies per locus; 2 = diploid)."""
+    check_session_access(sid, current_user)
+    unified = _get_session(sid)
+    return {"ploidy": getattr(unified, "ploidy", 2)}
+
+
+@router.post("/api/data/{sid}/ploidy")
+async def set_ploidy(sid: str, body: PloidyUpdate, current_user: CurrentUser):
+    """Set the session's ploidy (does not re-run clustering)."""
+    check_session_access(sid, current_user)
+    unified = _get_session(sid)
+    try:
+        validate_ploidy(body.ploidy)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    unified.ploidy = body.ploidy
+    from app.db import set_session_ploidy
+    set_session_ploidy(sid, body.ploidy)
+    return {"ploidy": body.ploidy}
 
 
 @router.get("/api/data/{sid}/cluster")

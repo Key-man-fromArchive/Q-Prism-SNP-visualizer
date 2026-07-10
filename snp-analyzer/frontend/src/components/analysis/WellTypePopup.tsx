@@ -3,6 +3,8 @@
 
 import { useRef, useEffect } from 'react';
 import { WELL_TYPE_INFO } from '@/lib/constants';
+import { genotypeClasses } from '@/lib/genotype';
+import { useSettingsStore } from '@/stores/settings-store';
 import { useI18n } from '@/hooks/use-i18n';
 
 type WellTypePopupProps = {
@@ -15,6 +17,7 @@ type WellTypePopupProps = {
 export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePopupProps) {
   const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
+  const ploidy = useSettingsStore((s) => s.ploidy);
 
   const wellTypeLabels: Record<string, string> = {
     NTC: t.wellTypeNTC,
@@ -80,18 +83,25 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
         {t.assignType(wells.length)}
       </div>
 
-      {Object.entries(WELL_TYPE_INFO)
-        .filter(([type]) => type !== 'Empty' && type !== 'Omit')
-        .map(([type, info]) => (
-          <button
-            key={type}
-            className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-bg cursor-pointer border-none bg-transparent flex items-center gap-2"
-            style={{ borderLeft: `3px solid ${info.color}` }}
-            onClick={() => onAssign(type)}
-          >
-            {wellTypeLabels[type] || info.label}
-          </button>
-        ))}
+      {[
+        // Dosage genotype classes for the current ploidy (highest dosage first)
+        ...genotypeClasses(ploidy).map((c) => ({ type: c.key, label: c.label, color: c.color })),
+        // Fixed control / non-genotype types
+        ...['NTC', 'Unknown', 'Positive Control', 'Undetermined'].map((type) => ({
+          type,
+          label: wellTypeLabels[type] ?? type,
+          color: (WELL_TYPE_INFO as Record<string, { color: string }>)[type].color,
+        })),
+      ].map(({ type, label, color }) => (
+        <button
+          key={type}
+          className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-bg cursor-pointer border-none bg-transparent flex items-center gap-2"
+          style={{ borderLeft: `3px solid ${color}` }}
+          onClick={() => onAssign(type)}
+        >
+          {wellTypeLabels[type] || label}
+        </button>
+      ))}
 
       <div className="border-t border-border my-1" />
 

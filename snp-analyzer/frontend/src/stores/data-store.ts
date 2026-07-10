@@ -8,6 +8,10 @@ interface DataState {
   channelLabels: ChannelLabels | null;
   clusterAssignments: Record<string, string>;
   wellTypeAssignments: Record<string, string>;
+  boundaries: number[] | null; // K-1 internal radial-line positions (descending fam-fraction)
+  offset: number;              // dosage of the lowest observed class (window position in 0..ploidy)
+  offsetUncertain: boolean;    // true when auto could not anchor the offset
+  lowSeparation: boolean;      // true when adjacent dosage classes overlap (poorly resolved)
   // Actions
   setScatterData: (
     points: ScatterPoint[],
@@ -17,6 +21,10 @@ interface DataState {
   setPlateData: (wells: PlateWell[]) => void;
   setClusterAssignments: (assignments: Record<string, string>) => void;
   setWellTypeAssignments: (assignments: Record<string, string>) => void;
+  setBoundaries: (boundaries: number[] | null) => void;
+  setOffset: (offset: number) => void;
+  setOffsetUncertain: (v: boolean) => void;
+  setLowSeparation: (v: boolean) => void;
   clearData: () => void;
 }
 
@@ -27,6 +35,10 @@ export const useDataStore = create<DataState>((set) => ({
   channelLabels: null,
   clusterAssignments: {},
   wellTypeAssignments: {},
+  boundaries: null,
+  offset: 0,
+  offsetUncertain: false,
+  lowSeparation: false,
 
   setScatterData: (points, allele2Dye, channelLabels) =>
     set({ scatterPoints: points, allele2Dye, channelLabels: channelLabels ?? null }),
@@ -35,6 +47,10 @@ export const useDataStore = create<DataState>((set) => ({
     set({ clusterAssignments: assignments }),
   setWellTypeAssignments: (assignments) =>
     set({ wellTypeAssignments: assignments }),
+  setBoundaries: (boundaries) => set({ boundaries }),
+  setOffset: (offset) => set({ offset }),
+  setOffsetUncertain: (v) => set({ offsetUncertain: v }),
+  setLowSeparation: (v) => set({ lowSeparation: v }),
   clearData: () =>
     set({
       scatterPoints: [],
@@ -43,5 +59,9 @@ export const useDataStore = create<DataState>((set) => ({
       channelLabels: null,
       clusterAssignments: {},
       wellTypeAssignments: {},
+      boundaries: null,
+      offset: 0,
+      offsetUncertain: false,
+      lowSeparation: false,
     }),
 }));

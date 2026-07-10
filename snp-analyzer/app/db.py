@@ -81,6 +81,7 @@ def save_session(session_id: str, unified, filename: str = "", user_id: str | No
         metadata["normalization_dye"] = unified.normalization_dye
     if unified.role_channels:
         metadata["role_channels"] = unified.role_channels
+    metadata["ploidy"] = getattr(unified, "ploidy", 2)
 
     conn.execute(
         """INSERT OR REPLACE INTO sessions
@@ -98,6 +99,23 @@ def save_session(session_id: str, unified, filename: str = "", user_id: str | No
     conn.executemany(
         "INSERT OR REPLACE INTO well_cycle_data (session_id, well, cycle, fam, allele2, rox) VALUES (?, ?, ?, ?, ?, ?)",
         rows,
+    )
+    conn.commit()
+
+
+def set_session_ploidy(session_id: str, ploidy: int) -> None:
+    """Merge the session's ploidy into its stored metadata_json (no data rewrite)."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT metadata_json FROM sessions WHERE session_id = ?", (session_id,)
+    ).fetchone()
+    if row is None:
+        return
+    metadata = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
+    metadata["ploidy"] = int(ploidy)
+    conn.execute(
+        "UPDATE sessions SET metadata_json = ? WHERE session_id = ?",
+        (json.dumps(metadata), session_id),
     )
     conn.commit()
 
@@ -267,6 +285,7 @@ def load_all_sessions():
             normalization_channel=metadata.get("normalization_channel"),
             normalization_dye=metadata.get("normalization_dye"),
             role_channels=metadata.get("role_channels"),
+            ploidy=int(metadata.get("ploidy", 2)),
         )
 
         # Load clustering results

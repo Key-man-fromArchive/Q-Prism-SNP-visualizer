@@ -22,11 +22,18 @@ async def get_statistics(sid: str, current_user: CurrentUser):
     cluster_assignments = ca.assignments if ca else {}
     manual_assignments = welltype_store.get(sid, {})
 
+    ploidy = getattr(unified, "ploidy", 2)
     effective = get_effective_types(cluster_assignments, manual_assignments, unified.wells)
-    counts = count_genotypes(effective)
+    counts = count_genotypes(effective, ploidy)
 
-    freq = allele_frequencies(counts["AA"], counts["AB"], counts["BB"])
-    hwe = hwe_test(counts["AA"], counts["AB"], counts["BB"])
+    # Allele frequency + Hardy-Weinberg are biallelic-diploid statistics; polysomic
+    # population genetics is a later phase, so only compute them for diploid.
+    if ploidy == 2:
+        freq = allele_frequencies(counts["AA"], counts["AB"], counts["BB"])
+        hwe = hwe_test(counts["AA"], counts["AB"], counts["BB"])
+    else:
+        freq = allele_frequencies(0, 0, 0)
+        hwe = hwe_test(0, 0, 0)
 
     # Genotype distribution for display
     distribution = {}

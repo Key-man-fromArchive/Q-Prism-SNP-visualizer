@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useSessionStore } from '@/stores/session-store';
+import { useSettingsStore } from '@/stores/settings-store';
 import { getStatistics } from '@/lib/api';
+import { genotypeClasses } from '@/lib/genotype';
 import { useI18n } from '@/hooks/use-i18n';
 import type { StatisticsResponse } from '@/types/api';
 
 export function StatisticsTab() {
   const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
+  const ploidy = useSettingsStore((s) => s.ploidy);
   const [stats, setStats] = useState<StatisticsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,13 +69,11 @@ export function StatisticsTab() {
   }
 
   const genotypeOrder = [
-    'Allele 1 Homo',
-    'Allele 2 Homo',
-    'Heterozygous',
+    ...genotypeClasses(ploidy).map((c) => c.key),
     'NTC',
     'Undetermined',
     'Unknown',
-    'Positive Control'
+    'Positive Control',
   ];
 
   const genotypeEntries = genotypeOrder
@@ -82,8 +83,10 @@ export function StatisticsTab() {
     }))
     .filter(entry => entry.count > 0);
 
-  const hasAlleleFreq = stats.allele_frequency.total_genotyped > 0;
-  const hasHWE = stats.hwe.chi2 !== null && stats.hwe.chi2 !== undefined;
+  // Allele frequency + HWE are biallelic-diploid statistics; polysomic stats
+  // are a later phase, so only surface them for diploid.
+  const hasAlleleFreq = ploidy === 2 && stats.allele_frequency.total_genotyped > 0;
+  const hasHWE = ploidy === 2 && stats.hwe.chi2 !== null && stats.hwe.chi2 !== undefined;
 
   return (
     <div className="p-6">

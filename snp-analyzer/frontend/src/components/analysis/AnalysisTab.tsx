@@ -9,6 +9,7 @@ import {
   getWellGroups,
   getWellTypes,
   getCluster,
+  getPloidy,
   runClustering as apiRunClustering,
   suggestCycle,
   type CycleSuggestion,
@@ -38,7 +39,20 @@ export function AnalysisTab() {
   // Clustering / analysis
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const setClusterAssignments = useDataStore((s) => s.setClusterAssignments);
+  const setBoundaries = useDataStore((s) => s.setBoundaries);
+  const setOffset = useDataStore((s) => s.setOffset);
+  const setOffsetUncertain = useDataStore((s) => s.setOffsetUncertain);
+  const setLowSeparation = useDataStore((s) => s.setLowSeparation);
+  const boundaries = useDataStore((s) => s.boundaries);
+  const offset = useDataStore((s) => s.offset);
+  const offsetUncertain = useDataStore((s) => s.offsetUncertain);
+  const lowSeparation = useDataStore((s) => s.lowSeparation);
   const { ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters } = useSettingsStore();
+  const ploidy = useSettingsStore((s) => s.ploidy);
+  const setPloidy = useSettingsStore((s) => s.setPloidy);
+  const showManualTypes = useSettingsStore((s) => s.showManualTypes);
+  const showBoundaryLines = useSettingsStore((s) => s.showBoundaryLines);
+  const setShowBoundaryLines = useSettingsStore((s) => s.setShowBoundaryLines);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<CycleSuggestion | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
@@ -175,8 +189,13 @@ export function AnalysisTab() {
           allele2_ratio_min: allele2RatioMin,
         },
         n_clusters: nClusters,
+        ploidy: useSettingsStore.getState().ploidy,
       });
       setClusterAssignments(result.assignments);
+      setBoundaries(result.boundaries ?? null);
+      setOffset(result.offset ?? 0);
+      setOffsetUncertain(result.offset_uncertain ?? false);
+      setLowSeparation(result.low_separation ?? false);
       setAnalysis(suggestion);
       // Force scatter/plate to re-fetch so points pick up auto_cluster calls.
       window.dispatchEvent(new CustomEvent("welltypes-changed"));
@@ -197,6 +216,38 @@ export function AnalysisTab() {
     t,
   ]);
 
+  // Shift the observed-dosage window offset (which absolute dosages the observed
+  // classes are). Re-labels via a threshold clustering with the current cuts +
+  // new offset; ploidy is the fixed organism ploidy, never the line count.
+  const shiftOffset = useCallback(
+    async (delta: number) => {
+      const st = useDataStore.getState();
+      const bnd = st.boundaries;
+      const newOffset = st.offset + delta;
+      setOffset(newOffset);
+      if (!sessionId || !bnd) return;
+      try {
+        await apiRunClustering(sessionId, {
+          algorithm: "threshold",
+          cycle: currentCycle ?? 0,
+          threshold_config: {
+            ntc_threshold: ntcThreshold,
+            allele1_ratio_max: 0.4,
+            allele2_ratio_min: 0.6,
+            boundaries: bnd,
+            offset: newOffset,
+          },
+          n_clusters: nClusters,
+          ploidy: useSettingsStore.getState().ploidy,
+        });
+        window.dispatchEvent(new CustomEvent("welltypes-changed"));
+      } catch (err) {
+        console.error("Offset shift failed:", err);
+      }
+    },
+    [sessionId, currentCycle, ntcThreshold, nClusters, setOffset]
+  );
+
   // Run the analysis automatically the first time a session's data is ready, so
   // the allele-discrimination plot opens already grouped instead of a raw mess.
   // Skip if the session was already analysed (don't clobber an existing result).
@@ -205,10 +256,23 @@ export function AnalysisTab() {
     if (autoRanSession.current === sessionId) return;
     autoRanSession.current = sessionId;
     (async () => {
+      // Sync the ploidy selector to the session's stored ploidy so a polyploid
+      // session opens at its own ploidy instead of the default 2.
+      try {
+        const { ploidy: sessionPloidy } = await getPloidy(sessionId);
+        if (sessionPloidy) setPloidy(sessionPloidy);
+      } catch {
+        /* ignore — keep the current selector value */
+      }
       try {
         const existing = await getCluster(sessionId);
         if (existing?.assignments && Object.keys(existing.assignments).length > 0) {
           setClusterAssignments(existing.assignments);
+          setBoundaries(existing.boundaries ?? null);
+          setOffset(existing.offset ?? 0);
+          setOffsetUncertain(existing.offset_uncertain ?? false);
+          setLowSeparation(existing.low_separation ?? false);
+          if (existing.ploidy) setPloidy(existing.ploidy);
           return;
         }
       } catch {
@@ -216,7 +280,7 @@ export function AnalysisTab() {
       }
       handleAnalyze();
     })();
-  }, [sessionId, currentCycle, handleAnalyze, setClusterAssignments]);
+  }, [sessionId, currentCycle, handleAnalyze, setClusterAssignments, setPloidy]);
 
   // Check if any wells are typed as Empty
   const hasEmptyWells = useMemo(
@@ -268,6 +332,77 @@ export function AnalysisTab() {
           </span>
         )}
         {analyzeError && <span className="text-xs text-danger">{analyzeError}</span>}
+        <label className="flex items-center gap-1.5 text-xs text-text-muted" title={t.ploidyHint}>
+          {t.ploidyLabel}
+          <select
+            value={ploidy}
+            onChange={(e) => {
+              setPloidy(Number(e.target.value));
+              // Re-cluster with the new ploidy (handleAnalyze reads it fresh).
+              handleAnalyze();
+            }}
+            disabled={analyzing || !sessionId}
+            className="rounded-md border px-1.5 py-1 text-sm bg-surface cursor-pointer"
+            style={{ borderColor: "var(--border)" }}
+          >
+            {[2, 3, 4, 5, 6, 7, 8].map((p) => (
+              <option key={p} value={p}>
+                {p === 2 ? t.ploidyDiploid : `${p}x`}
+              </option>
+            ))}
+          </select>
+        </label>
+        {ploidy > 2 && lowSeparation && (
+          <span
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-amber-600"
+            style={{ background: "rgba(217,119,6,0.12)" }}
+            title={t.lowSeparationHint}
+          >
+            ⚠ {t.lowSeparation}
+          </span>
+        )}
+        {/* Draggable genotype-boundary lines — only meaningful in manual mode */}
+        <button
+          onClick={() => setShowBoundaryLines(!showBoundaryLines)}
+          disabled={!showManualTypes || !sessionId}
+          title={showManualTypes ? t.boundaryLinesHint : t.boundaryLinesManualOnly}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer disabled:opacity-50 ${
+            showBoundaryLines && showManualTypes
+              ? "bg-primary text-white"
+              : "border text-text"
+          }`}
+          style={showBoundaryLines && showManualTypes ? undefined : { borderColor: "var(--border)" }}
+        >
+          📏 {t.boundaryLines}
+        </button>
+        {/* Observed-window offset: which absolute dosages the observed classes are */}
+        {showManualTypes && showBoundaryLines && boundaries && (
+          <span className="flex items-center gap-1 text-xs text-text-muted" title={t.offsetHint}>
+            {t.offsetLabel}
+            <button
+              onClick={() => shiftOffset(-1)}
+              disabled={offset <= 0}
+              className="px-1.5 py-0.5 rounded border cursor-pointer disabled:opacity-40"
+              style={{ borderColor: "var(--border)" }}
+            >
+              ◀
+            </button>
+            <span className="tabular-nums font-medium text-text">{offset}</span>
+            <button
+              onClick={() => shiftOffset(1)}
+              disabled={offset >= ploidy - boundaries.length}
+              className="px-1.5 py-0.5 rounded border cursor-pointer disabled:opacity-40"
+              style={{ borderColor: "var(--border)" }}
+            >
+              ▶
+            </button>
+            {offsetUncertain && (
+              <span className="text-amber-500" title={t.offsetUncertainHint}>
+                ⚠
+              </span>
+            )}
+          </span>
+        )}
         <button
           onClick={handleAnalyze}
           disabled={analyzing || !sessionId}

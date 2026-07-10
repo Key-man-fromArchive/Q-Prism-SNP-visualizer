@@ -18,6 +18,7 @@ export function WellDetailPanel() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const useRox = useSettingsStore((s) => s.useRox);
+  const ploidy = useSettingsStore((s) => s.ploidy);
   const { selectedWell, currentCycle } = useSelectionStore();
   const scatterPoints = useDataStore((s) => s.scatterPoints);
   const allele2Dye = useDataStore((s) => s.allele2Dye);
@@ -161,8 +162,17 @@ export function WellDetailPanel() {
   const total = normFam + normAllele2;
   const ratio = total > 0 ? (normFam / total * 100).toFixed(1) : "N/A";
 
+  // Prefer the actual (ploidy-aware) genotype call; the manual/auto assignment
+  // already encodes dosage for any ploidy. Only fall back to a raw ratio split
+  // when there is no call, and only for diploid (the 0.6/0.4 cut is biallelic).
+  const effectiveCall = manualType ?? autoCluster ?? null;
   let genotype = t.genotypeUndetermined;
-  if (total > 0) {
+  if (effectiveCall) {
+    if (effectiveCall === "Allele 1 Homo") genotype = t.genotypeAllele1;
+    else if (effectiveCall === "Allele 2 Homo") genotype = t.genotypeAllele2(allele2Dye ?? "Allele2");
+    else if (effectiveCall === "Heterozygous") genotype = t.genotypeHeterozygous;
+    else genotype = effectiveCall; // polyploid dosage label or control type
+  } else if (ploidy === 2 && total > 0) {
     const r = normFam / total;
     if (r > 0.6) genotype = t.genotypeAllele1;
     else if (r < 0.4) genotype = t.genotypeAllele2(allele2Dye ?? "Allele2");

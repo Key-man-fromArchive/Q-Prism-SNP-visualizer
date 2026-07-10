@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.models import UnifiedData
+from app.processing.genotype_vocab import label_by_ratio
 from app.processing.normalize import normalize_for_cycle
 from app.routers.upload import sessions
 from app.routers.clustering import cluster_store, welltype_store
@@ -54,13 +55,14 @@ def _determine_genotype(
     cluster_assignments: dict[str, str],
     manual_assignments: dict[str, str],
     undetermined_min: float = 0.0,
+    ploidy: int = 2,
 ) -> str:
     """Determine effective genotype for a well.
 
     Priority: manual_type > auto_cluster > ratio-based fallback. The fallback is
-    only reached when a well has neither a manual nor an auto call.
-    ``undetermined_min`` is a scale-relative low-signal cutoff supplied by the
-    caller (never an absolute constant).
+    ploidy-aware (dosage by fam-fraction via the central vocabulary) and only
+    reached when a well has neither a manual nor an auto call. ``undetermined_min``
+    is a scale-relative low-signal cutoff supplied by the caller.
     """
     if well in manual_assignments:
         return manual_assignments[well]
@@ -71,14 +73,7 @@ def _determine_genotype(
     total = norm_fam + norm_allele2
     if total <= undetermined_min:
         return "Undetermined"
-
-    ratio = norm_fam / total
-    if ratio > 0.6:
-        return "Allele 1 Homo"
-    elif ratio < 0.4:
-        return "Allele 2 Homo"
-    else:
-        return "Heterozygous"
+    return label_by_ratio(norm_fam / total, ploidy)
 
 
 def _compute_cluster_separation(sid: str, points: list) -> float | None:
@@ -177,10 +172,11 @@ async def qc_metrics(
     # --- Call rate ---
     n_total = len(points)
     n_called = 0
+    ploidy = getattr(unified, "ploidy", 2)
     for p in points:
         genotype = _determine_genotype(
             p.well, p.norm_fam, p.norm_allele2,
-            cluster_assignments, manual_assignments, undetermined_min,
+            cluster_assignments, manual_assignments, undetermined_min, ploidy,
         )
         if genotype not in ("Undetermined", "NTC"):
             n_called += 1

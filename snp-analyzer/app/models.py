@@ -43,6 +43,7 @@ class UnifiedData(BaseModel):
     normalization_channel: str | None = None
     normalization_dye: str | None = None
     role_channels: dict[str, str] | None = None
+    ploidy: int = 2                  # allele copies per locus (2=diploid .. 8)
 
 
 class UploadResponse(BaseModel):
@@ -132,6 +133,13 @@ class ThresholdConfig(BaseModel):
     ntc_threshold: float = 0.1
     allele1_ratio_max: float = 0.4
     allele2_ratio_min: float = 0.6
+    # Polyploid: K-1 descending fam-fraction cuts between the observed dosage
+    # classes (from the draggable radial lines). When set, these override the two
+    # diploid cutoffs above and label by dosage for the session's ploidy.
+    boundaries: list[float] | None = None
+    # Dosage of the lowest observed class — places the K observed zones within the
+    # full 0..ploidy ladder (see genotype_window / the offset control).
+    offset: int = 0
 
 
 class ClusteringRequest(BaseModel):
@@ -139,6 +147,7 @@ class ClusteringRequest(BaseModel):
     cycle: int = 0
     threshold_config: ThresholdConfig | None = None
     n_clusters: int = 4
+    ploidy: int | None = None        # None => use the session's stored ploidy (default 2)
 
 
 class ClusteringResult(BaseModel):
@@ -146,6 +155,15 @@ class ClusteringResult(BaseModel):
     cycle: int
     assignments: dict[str, str]
     confidences: dict[str, float] | None = None  # well -> 0..1 call confidence
+    ploidy: int = 2
+    # Observed dosage window for the draggable-line UI: K-1 internal fam-fraction
+    # cuts (descending), the dosage of the lowest observed class, and whether that
+    # offset is a low-confidence guess (no class near an axis extreme).
+    boundaries: list[float] | None = None
+    offset: int = 0
+    offset_uncertain: bool = False
+    # True when adjacent dosage classes overlap (poorly resolved — high ploidy).
+    low_separation: bool = False
 
 
 class ManualWellTypeUpdate(BaseModel):
