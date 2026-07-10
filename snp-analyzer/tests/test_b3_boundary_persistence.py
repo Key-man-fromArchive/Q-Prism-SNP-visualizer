@@ -310,3 +310,119 @@ def test_run_regions_threshold_ploidy6_no_boundaries_does_not_keyerror():
     reg = result.regions[0]
     assert reg.offset_uncertain in (True, False)
     assert reg.low_separation in (True, False)
+
+
+# ---------------------------------------------------------------------------
+# B3-region-auto: a marker region with NO boundary override is genotyped by
+# the model-based AUTO path REGARDLESS of the plate-level req.algorithm. The
+# default request algorithm is THRESHOLD, which for a ploidy>2 marker would
+# otherwise emit only diploid Allele-Homo/Het labels -- the contract bug the
+# orchestrator caught on the real qSwet5.3 (ploidy 6) file.
+# ---------------------------------------------------------------------------
+
+
+_DIPLOID_LABELS = {"Allele 1 Homo", "Allele 2 Homo", "Heterozygous"}
+
+
+def _hex_three_class_points():
+    """3 well-separated dosage clusters at ratios ~0.20 / 0.50 / 0.80."""
+    ratios = {
+        "LO1": 0.185, "LO2": 0.20, "LO3": 0.215, "LO4": 0.20,
+        "MID1": 0.485, "MID2": 0.50, "MID3": 0.515, "MID4": 0.50,
+        "HI1": 0.785, "HI2": 0.80, "HI3": 0.815, "HI4": 0.80,
+    }
+    return _points(ratios)
+
+
+def _distinct_calls(assignments):
+    from app.models import WellType
+
+    controls = {
+        WellType.NTC.value,
+        WellType.POSITIVE_CONTROL.value,
+        WellType.UNDETERMINED.value,
+    }
+    return {v for v in assignments.values() if v not in controls}
+
+
+def test_region_no_boundaries_uses_auto_even_when_request_is_threshold():
+    """ploidy-6 region, NO boundaries, default request algorithm=THRESHOLD =>
+    polyploid AUTO labels (>=3 dosage classes), NEVER diploid threshold labels."""
+    import types
+
+    from app.models import ClusteringAlgorithm, ClusteringRequest, MarkerRegion
+    from app.routers.clustering import _run_regions
+
+    points = _hex_three_class_points()
+    wells = [p["well"] for p in points]
+    regions = [MarkerRegion(id="m1", name="qSwet5.3", wells=wells, ploidy=6)]
+    # THRESHOLD is the ClusteringRequest default; be explicit to pin the contract.
+    req = ClusteringRequest(algorithm=ClusteringAlgorithm.THRESHOLD, cycle=1, regions=regions)
+    unified = types.SimpleNamespace(ploidy=2)
+
+    result = _run_regions(req, unified, cycle=1, point_dicts=points, control_wells={})
+
+    reg = result.regions[0]
+    calls = _distinct_calls(reg.assignments)
+    # Model-based AUTO resolves the 3 real clusters into distinct polyploid
+    # dosage classes...
+    assert len(calls) >= 3, reg.assignments
+    # ...and NOT the diploid threshold vocabulary.
+    assert not (calls & _DIPLOID_LABELS), reg.assignments
+
+
+def test_region_with_boundaries_still_uses_override_under_threshold_request():
+    """The AUTO-for-regions rule must NOT clobber a manual boundary override:
+    a region carrying boundaries is still labeled by those cuts + offset."""
+    import types
+
+    from app.models import (
+        ClusteringAlgorithm,
+        ClusteringRequest,
+        MarkerRegion,
+        ThresholdConfig,
+    )
+    from app.routers.clustering import _run_regions
+
+    ratios = {"W0": 0.05, "W1": 0.2, "W2": 0.5, "W3": 0.75, "W4": 0.95}
+    points = _points(ratios)
+    cuts = [0.9, 0.6, 0.3, 0.1]
+    regions = [
+        MarkerRegion(
+            id="m1", name="markerA", wells=list(ratios), ploidy=4,
+            threshold_config=ThresholdConfig(ntc_threshold=0.0, boundaries=cuts, offset=0),
+        )
+    ]
+    req = ClusteringRequest(algorithm=ClusteringAlgorithm.THRESHOLD, cycle=1, regions=regions)
+    unified = types.SimpleNamespace(ploidy=2)
+
+    result = _run_regions(req, unified, cycle=1, point_dicts=points, control_wells={})
+
+    reg = result.regions[0]
+    assert reg.boundaries == cuts
+    assert reg.offset == 0
+    assert reg.assignments == {
+        "W0": "BBBB", "W1": "ABBB", "W2": "AABB", "W3": "AAAB", "W4": "AAAA",
+    }
+
+
+def test_single_marker_threshold_path_unchanged_by_region_rule():
+    """The single-marker (non-region) path must STILL honor req.algorithm:
+    a diploid THRESHOLD request produces diploid threshold labels as before."""
+    from app.models import ClusteringAlgorithm, ThresholdConfig
+    from app.processing.clustering import cluster_threshold
+    from app.routers.clustering import _cluster_point_dicts
+
+    ratios = {"W0": 0.1, "W1": 0.5, "W2": 0.9}
+    points = _points(ratios)
+    config = ThresholdConfig()  # no boundaries -> real diploid two-cutoff path
+
+    assignments, confidences, window, warnings = _cluster_point_dicts(
+        points, {}, ClusteringAlgorithm.THRESHOLD, config, 4, ploidy=2,
+    )
+    # Byte-identical to calling cluster_threshold directly (the single-marker
+    # path is untouched by the region AUTO rule).
+    assert assignments == cluster_threshold(points, config, ploidy=2)
+    assert assignments == {
+        "W0": "Allele 2 Homo", "W1": "Heterozygous", "W2": "Allele 1 Homo",
+    }
