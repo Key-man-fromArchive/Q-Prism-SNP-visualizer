@@ -38,6 +38,10 @@ def _marker_stats(region, manual_assignments: dict[str, str]) -> dict:
         "genotype_distribution": distribution,
         "genotype_counts": counts,
         "total_wells": len(region.wells),
+        # Phase 1 diagnostics carried through from RegionResult (e.g. "low_n",
+        # "relative_ntc") so a status-badge UI can read them without
+        # re-clustering. None (not []) when the marker's run was clean.
+        "warnings": region.warnings,
     }
 
 
@@ -84,6 +88,10 @@ async def get_statistics(sid: str, current_user: CurrentUser):
     # region.ploidy / region.assignments. Single-marker (regions is None)
     # sessions never get this key, so their JSON is unchanged.
     if ca is not None and ca.regions:
+        # The plate-level pooled fields above are NOT authoritative once
+        # multiple independently-genotyped markers share this plate -- tell
+        # the client so it can prefer the per-marker breakdown for display.
+        result["authoritative"] = "markers"
         result["markers"] = [_marker_stats(r, manual_assignments) for r in ca.regions]
 
     return result
