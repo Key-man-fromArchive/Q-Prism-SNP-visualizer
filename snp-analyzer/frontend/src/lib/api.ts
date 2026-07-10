@@ -273,6 +273,18 @@ export async function getPloidy(sid: string): Promise<{ ploidy: number }> {
   return apiFetch<{ ploidy: number }>(`/api/data/${sid}/ploidy`);
 }
 
+export async function listExamples(): Promise<{ examples: { ploidy: number; label: string }[] }> {
+  return apiFetch<{ examples: { ploidy: number; label: string }[] }>('/api/examples');
+}
+
+export async function loadExample(ploidy: number): Promise<UploadResponse> {
+  return apiFetch<UploadResponse>('/api/examples', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ploidy }),
+  });
+}
+
 export type CycleSuggestion = {
   suggested_cycle: number | null;
   suggested_low: number | null;

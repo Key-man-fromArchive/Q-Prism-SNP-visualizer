@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { useSessionStore } from "@/stores/session-store";
-import { previewImportFile, uploadFile as apiUpload } from "@/lib/api";
+import { previewImportFile, uploadFile as apiUpload, loadExample as apiLoadExample } from "@/lib/api";
 import { runtimeAssetPath } from "@/lib/runtime-paths";
 import JSZip from "jszip";
 import { useI18n } from "@/hooks/use-i18n";
@@ -336,6 +336,25 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
 
   const [showGuide, setShowGuide] = useState(true);
 
+  // Load a synthetic example dataset (2x–8x) — a quick way to see genotyping at
+  // each ploidy without a real file. Opens it like a successful upload.
+  const handleLoadExample = useCallback(
+    async (ploidy: number) => {
+      setUploadState("uploading");
+      setStatusMessage(t.exampleLoading(ploidy));
+      try {
+        const info = await apiLoadExample(ploidy);
+        setUploadState("success");
+        setStatusMessage(t.parsed(info.instrument, info.num_wells, info.num_cycles));
+        setTimeout(() => setSession(info.session_id, info), 300);
+      } catch (err) {
+        setUploadState("error");
+        setStatusMessage(err instanceof Error ? err.message : "Failed to load example");
+      }
+    },
+    [setSession, setUploadState, t],
+  );
+
   return (
     <div id="upload-zone" className="max-w-[700px] mx-auto mt-4">
       <div
@@ -382,6 +401,29 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           >
             {t.browseFolder}
           </button>
+          {/* Load a synthetic example dataset at a chosen ploidy (2x–8x) */}
+          <select
+            id="example-select"
+            defaultValue=""
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              const p = Number(e.target.value);
+              e.currentTarget.selectedIndex = 0; // reset to placeholder
+              if (p) handleLoadExample(p);
+            }}
+            title={t.exampleHint}
+            className="px-3 py-2 bg-surface text-text border rounded-lg text-sm cursor-pointer"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <option value="" disabled>
+              {t.exampleLoad}
+            </option>
+            {[2, 3, 4, 5, 6, 7, 8].map((p) => (
+              <option key={p} value={p}>
+                {p === 2 ? t.ploidyDiploid : `${p}x`}
+              </option>
+            ))}
+          </select>
         </div>
         <input
           ref={fileInputRef}
