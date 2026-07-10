@@ -90,6 +90,46 @@ def cluster_threshold(
     return assignments
 
 
+def boundary_confidences(
+    points: list[dict],
+    config: ThresholdConfig,
+    ploidy: int = DEFAULT_PLOIDY,
+) -> dict[str, float]:
+    """Distance-to-cut confidence for a manual-boundary override (B3).
+
+    A manual override has no fitted mixture to score against -- the cuts ARE
+    the user's own decision, not a model fit -- so this is a simple, honest
+    proxy instead of a posterior: each well's confidence is how far its
+    fam-fraction ratio sits from the NEAREST edge of its own dosage zone (a
+    cut, or the 0/1 axis for an extreme zone), normalized by that zone's own
+    half-width. 1.0 at a zone's center, ->0.0 right at a boundary (where the
+    call is most likely to flip). NTC wells (below ``config.ntc_threshold``)
+    are omitted -- there is no ratio-based confidence to report for a
+    no-signal call.
+    """
+    import bisect
+
+    if not config.boundaries:
+        return {}
+    edges = [0.0] + sorted(config.boundaries) + [1.0]
+    confidences: dict[str, float] = {}
+    for p in points:
+        total = p["norm_fam"] + p["norm_allele2"]
+        if total < config.ntc_threshold:
+            continue
+        ratio = p["norm_fam"] / total if total > 0 else 0.5
+        ratio = min(max(ratio, 0.0), 1.0)
+        zone_idx = min(max(bisect.bisect_right(edges, ratio) - 1, 0), len(edges) - 2)
+        lo, hi = edges[zone_idx], edges[zone_idx + 1]
+        span = hi - lo
+        if span <= 0:
+            confidences[p["well"]] = 1.0
+            continue
+        dist_to_edge = min(ratio - lo, hi - ratio)
+        confidences[p["well"]] = round(max(0.0, min(1.0, dist_to_edge / (span / 2.0))), 4)
+    return confidences
+
+
 def cluster_auto(
     points: list[dict],
     ntc_threshold: float = 0.1,
@@ -477,7 +517,18 @@ def genotype_window(
 
     if not ratio_by_dosage:
         # No genotype calls yet — offer the full ladder, offset 0, flagged uncertain.
-        return {"boundaries": default_ratio_cuts(ploidy), "offset": 0, "offset_uncertain": True}
+        # ALWAYS return all four keys (threshold-KeyError fix): this branch is also
+        # hit when the labels present simply don't map to ANY dosage for this
+        # ploidy (e.g. cluster_threshold's diploid-only labels on a ploidy>2
+        # marker, when no boundaries were configured) -- not just "truly no calls
+        # yet" -- so callers that unconditionally read every key (_run_regions)
+        # must never KeyError here.
+        return {
+            "boundaries": default_ratio_cuts(ploidy),
+            "offset": 0,
+            "offset_uncertain": True,
+            "low_separation": False,
+        }
 
     import statistics as _stats
 

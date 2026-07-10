@@ -14,7 +14,12 @@ from app.models import (
     ThresholdConfig,
     WellType,
 )
-from app.processing.clustering import cluster_auto, cluster_kmeans, cluster_threshold
+from app.processing.clustering import (
+    boundary_confidences,
+    cluster_auto,
+    cluster_kmeans,
+    cluster_threshold,
+)
 from app.processing.genotype_vocab import validate_ploidy
 from app.processing.normalize import normalize_for_cycle
 from app.routers.upload import sessions
@@ -81,8 +86,30 @@ def _cluster_point_dicts(
     confidences: dict[str, float] = {}
     warnings: list[str] = []
     anchor_state: dict = {}
+    config = threshold_config or ThresholdConfig()
+
+    # B3: a persisted manual boundary override (the user dragged a radial
+    # line) is AUTHORITATIVE for this marker -- label by those cuts directly
+    # (threshold-style) and echo back EXACTLY the boundaries/offset supplied,
+    # instead of running cluster_auto + genotype_window and letting a fresh
+    # fit silently recompute (and thus lose) the user's own decision on every
+    # re-cluster / tab-switch. Checked ahead of the per-algorithm branch below
+    # so it applies regardless of the request's nominal ``algorithm`` (AUTO or
+    # THRESHOLD both default here) -- the cuts ARE the decision, not a hint.
+    # Confidence has no fitted mixture to score against here, so it is a
+    # simple distance-to-cut proxy (see ``boundary_confidences``).
+    if config.boundaries:
+        assignments = cluster_threshold(point_dicts, config, ploidy=ploidy)
+        confidences = boundary_confidences(point_dicts, config, ploidy=ploidy)
+        window = {
+            "boundaries": list(config.boundaries),
+            "offset": config.offset,
+            "offset_uncertain": False,
+            "low_separation": False,
+        }
+        return assignments, confidences, window, None
+
     if algorithm == ClusteringAlgorithm.AUTO:
-        config = threshold_config or ThresholdConfig()
         assignments, confidences = cluster_auto(
             point_dicts,
             ntc_threshold=config.ntc_threshold,
@@ -92,7 +119,6 @@ def _cluster_point_dicts(
             anchor_state=anchor_state,
         )
     elif algorithm == ClusteringAlgorithm.THRESHOLD:
-        config = threshold_config or ThresholdConfig()
         assignments = cluster_threshold(point_dicts, config, ploidy=ploidy)
     else:
         assignments = cluster_kmeans(point_dicts, n_clusters)
