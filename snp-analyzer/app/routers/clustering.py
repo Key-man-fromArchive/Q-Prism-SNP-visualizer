@@ -14,7 +14,12 @@ from app.models import (
     ThresholdConfig,
     WellType,
 )
-from app.processing.clustering import cluster_auto, cluster_kmeans, cluster_threshold
+from app.processing.clustering import (
+    boundary_confidences,
+    cluster_auto,
+    cluster_kmeans,
+    cluster_threshold,
+)
 from app.processing.genotype_vocab import validate_ploidy
 from app.processing.normalize import normalize_for_cycle
 from app.routers.upload import sessions
@@ -81,8 +86,30 @@ def _cluster_point_dicts(
     confidences: dict[str, float] = {}
     warnings: list[str] = []
     anchor_state: dict = {}
+    config = threshold_config or ThresholdConfig()
+
+    # B3: a persisted manual boundary override (the user dragged a radial
+    # line) is AUTHORITATIVE for this marker -- label by those cuts directly
+    # (threshold-style) and echo back EXACTLY the boundaries/offset supplied,
+    # instead of running cluster_auto + genotype_window and letting a fresh
+    # fit silently recompute (and thus lose) the user's own decision on every
+    # re-cluster / tab-switch. Checked ahead of the per-algorithm branch below
+    # so it applies regardless of the request's nominal ``algorithm`` (AUTO or
+    # THRESHOLD both default here) -- the cuts ARE the decision, not a hint.
+    # Confidence has no fitted mixture to score against here, so it is a
+    # simple distance-to-cut proxy (see ``boundary_confidences``).
+    if config.boundaries:
+        assignments = cluster_threshold(point_dicts, config, ploidy=ploidy)
+        confidences = boundary_confidences(point_dicts, config, ploidy=ploidy)
+        window = {
+            "boundaries": list(config.boundaries),
+            "offset": config.offset,
+            "offset_uncertain": False,
+            "low_separation": False,
+        }
+        return assignments, confidences, window, None
+
     if algorithm == ClusteringAlgorithm.AUTO:
-        config = threshold_config or ThresholdConfig()
         assignments, confidences = cluster_auto(
             point_dicts,
             ntc_threshold=config.ntc_threshold,
@@ -92,7 +119,6 @@ def _cluster_point_dicts(
             anchor_state=anchor_state,
         )
     elif algorithm == ClusteringAlgorithm.THRESHOLD:
-        config = threshold_config or ThresholdConfig()
         assignments = cluster_threshold(point_dicts, config, ploidy=ploidy)
     else:
         assignments = cluster_kmeans(point_dicts, n_clusters)
@@ -195,11 +221,24 @@ def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringR
         reg_wellset = set(reg.wells)
         sub_points = [pd_by_well[w] for w in reg.wells if w in pd_by_well]
         sub_controls = {w: t for w, t in control_wells.items() if w in reg_wellset}
+        # Region semantics: a marker is ALWAYS genotyped by the model-based AUTO
+        # path unless it carries a manual boundary override (handled inside
+        # _cluster_point_dicts via threshold_config.boundaries). The plate-level
+        # req.algorithm (THRESHOLD/KMEANS) must NOT force a region into diploid
+        # threshold labeling -- e.g. a ploidy-6 marker under THRESHOLD would emit
+        # only the diploid Allele-Homo/Het labels, mislabeling every well. Only
+        # the single-marker (non-region) path honors req.algorithm.
+        reg_config = reg.threshold_config or req.threshold_config
+        reg_algorithm = (
+            req.algorithm
+            if (reg_config and reg_config.boundaries)
+            else ClusteringAlgorithm.AUTO
+        )
         assignments, confidences, window, warnings = _cluster_point_dicts(
             sub_points,
             sub_controls,
-            req.algorithm,
-            reg.threshold_config or req.threshold_config,
+            reg_algorithm,
+            reg_config,
             req.n_clusters,
             reg.ploidy,
         )
