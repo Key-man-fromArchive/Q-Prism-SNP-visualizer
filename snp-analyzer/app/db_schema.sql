@@ -83,6 +83,23 @@ CREATE TABLE IF NOT EXISTS well_groups (
     FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 );
 
+-- Marker (assay) definitions: first-class resource, source of truth for a
+-- session's marker set. Owns wells/ploidy/color/threshold_config/name only --
+-- well_type and sample_id stay in manual_welltypes / sample_name_overrides
+-- (keyed per-well) and are NOT duplicated here.
+CREATE TABLE IF NOT EXISTS marker_regions (
+    session_id TEXT NOT NULL,
+    marker_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    wells_json TEXT NOT NULL,
+    ploidy INTEGER NOT NULL DEFAULT 2,
+    color TEXT,
+    threshold_json TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (session_id, marker_id),
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+
 -- Projects table (replaces projects.json)
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
