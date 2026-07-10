@@ -14,7 +14,12 @@ from app.models import (
     ThresholdConfig,
     WellType,
 )
-from app.processing.clustering import cluster_auto, cluster_kmeans, cluster_threshold
+from app.processing.clustering import (
+    boundary_confidences,
+    cluster_auto,
+    cluster_kmeans,
+    cluster_threshold,
+)
 from app.processing.genotype_vocab import validate_ploidy
 from app.processing.normalize import normalize_for_cycle
 from app.routers.upload import sessions
@@ -36,6 +41,20 @@ class WellGroupCreate(_BaseModel):
 
 class MarkerSetCreate(_BaseModel):
     markers: list[MarkerRegion]
+
+
+class MarkerUpdate(_BaseModel):
+    """Partial update for one marker (PUT /markers/{marker_id}).
+
+    Only the fields the client actually sends are applied (``model_dump
+    (exclude_unset=True)`` in the handler) -- an omitted field keeps the
+    marker's existing value, while an explicit ``null`` (e.g. clearing
+    ``color``) is honored."""
+    name: str | None = None
+    wells: list[str] | None = None
+    ploidy: int | None = None
+    color: str | None = None
+    threshold_config: ThresholdConfig | None = None
 
 
 router = APIRouter()
@@ -67,8 +86,30 @@ def _cluster_point_dicts(
     confidences: dict[str, float] = {}
     warnings: list[str] = []
     anchor_state: dict = {}
+    config = threshold_config or ThresholdConfig()
+
+    # B3: a persisted manual boundary override (the user dragged a radial
+    # line) is AUTHORITATIVE for this marker -- label by those cuts directly
+    # (threshold-style) and echo back EXACTLY the boundaries/offset supplied,
+    # instead of running cluster_auto + genotype_window and letting a fresh
+    # fit silently recompute (and thus lose) the user's own decision on every
+    # re-cluster / tab-switch. Checked ahead of the per-algorithm branch below
+    # so it applies regardless of the request's nominal ``algorithm`` (AUTO or
+    # THRESHOLD both default here) -- the cuts ARE the decision, not a hint.
+    # Confidence has no fitted mixture to score against here, so it is a
+    # simple distance-to-cut proxy (see ``boundary_confidences``).
+    if config.boundaries:
+        assignments = cluster_threshold(point_dicts, config, ploidy=ploidy)
+        confidences = boundary_confidences(point_dicts, config, ploidy=ploidy)
+        window = {
+            "boundaries": list(config.boundaries),
+            "offset": config.offset,
+            "offset_uncertain": False,
+            "low_separation": False,
+        }
+        return assignments, confidences, window, None
+
     if algorithm == ClusteringAlgorithm.AUTO:
-        config = threshold_config or ThresholdConfig()
         assignments, confidences = cluster_auto(
             point_dicts,
             ntc_threshold=config.ntc_threshold,
@@ -78,7 +119,6 @@ def _cluster_point_dicts(
             anchor_state=anchor_state,
         )
     elif algorithm == ClusteringAlgorithm.THRESHOLD:
-        config = threshold_config or ThresholdConfig()
         assignments = cluster_threshold(point_dicts, config, ploidy=ploidy)
     else:
         assignments = cluster_kmeans(point_dicts, n_clusters)
@@ -93,13 +133,79 @@ def _cluster_point_dicts(
     return assignments, confidences, window, (warnings or None)
 
 
-def _region_input_hash(wells: list[str], ploidy: int, cycle: int) -> str:
-    """Stable hash of (sorted wells, ploidy, cycle) -- A5 groundwork.
+def _validate_marker_set(markers: list[MarkerRegion], unified) -> None:
+    """Validate a full marker (assay) set against the session's own wells.
+
+    Shared by POST (whole-set replace) and PUT (one marker merged against the
+    rest of the existing set) so both paths reject the same structural
+    problems with the same 400 + field-naming ``detail`` message, instead of
+    a duplicate marker_id ever reaching the DB as an IntegrityError."""
+    valid_wells = set(unified.wells)
+    seen_ids: set[str] = set()
+    seen_names: set[str] = set()
+    seen_wells: set[str] = set()
+    for marker in markers:
+        try:
+            validate_ploidy(marker.ploidy)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+
+        if not marker.name or not marker.name.strip():
+            raise HTTPException(400, f"Marker name must not be empty (id={marker.id!r})")
+
+        if not marker.wells:
+            raise HTTPException(400, f"Marker {marker.id!r} must have at least one well")
+
+        if marker.id in seen_ids:
+            raise HTTPException(400, f"Duplicate marker id: {marker.id!r}")
+        seen_ids.add(marker.id)
+
+        if marker.name in seen_names:
+            raise HTTPException(400, f"Duplicate marker name: {marker.name!r}")
+        seen_names.add(marker.name)
+
+        for well in marker.wells:
+            if well not in valid_wells:
+                raise HTTPException(400, f"Well {well} is not part of this session's plate")
+            if well in seen_wells:
+                raise HTTPException(400, f"Well {well} is assigned to more than one marker")
+            seen_wells.add(well)
+
+
+def _invalidate_clustering(sid: str) -> None:
+    """Clear a session's clustering result (memory + DB).
+
+    A marker set edit changes what "the plate's markers" means, so any
+    clustering computed against the old set is stale. DB is cleared first
+    (mirrors the DB-before-memory rule used for marker writes) so a crash
+    between the two calls cannot leave a persisted result the in-memory
+    store no longer agrees existed."""
+    from app.db import delete_clustering
+    delete_clustering(sid)
+    cluster_store.pop(sid, None)
+
+
+def _region_input_hash(
+    wells: list[str],
+    ploidy: int,
+    cycle: int,
+    threshold_config: ThresholdConfig | None = None,
+    algorithm: ClusteringAlgorithm | str | None = None,
+) -> str:
+    """Stable hash of (sorted wells, ploidy, cycle, threshold_config,
+    algorithm) -- A5 groundwork.
 
     Lets a future dirty-flag UI detect when a marker's definition (wells/
-    ploidy) or the analyzed cycle has changed since this result was computed,
-    without needing to diff full state."""
-    key = f"{sorted(wells)}|{ploidy}|{cycle}"
+    ploidy), a manual boundary/offset edit, the effective clustering
+    algorithm, or the analyzed cycle has changed since this result was
+    computed, without needing to diff full state. ``threshold_config`` is
+    serialized deterministically (``model_dump_json``) so a boundaries/
+    offset-only edit changes the hash exactly like a wells/ploidy change."""
+    cfg_key = (
+        threshold_config.model_dump_json() if threshold_config is not None else "null"
+    )
+    algo_key = algorithm.value if isinstance(algorithm, ClusteringAlgorithm) else algorithm
+    key = f"{sorted(wells)}|{ploidy}|{cycle}|{cfg_key}|{algo_key}"
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
@@ -129,11 +235,24 @@ def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringR
         reg_wellset = set(reg.wells)
         sub_points = [pd_by_well[w] for w in reg.wells if w in pd_by_well]
         sub_controls = {w: t for w, t in control_wells.items() if w in reg_wellset}
+        # Region semantics: a marker is ALWAYS genotyped by the model-based AUTO
+        # path unless it carries a manual boundary override (handled inside
+        # _cluster_point_dicts via threshold_config.boundaries). The plate-level
+        # req.algorithm (THRESHOLD/KMEANS) must NOT force a region into diploid
+        # threshold labeling -- e.g. a ploidy-6 marker under THRESHOLD would emit
+        # only the diploid Allele-Homo/Het labels, mislabeling every well. Only
+        # the single-marker (non-region) path honors req.algorithm.
+        reg_config = reg.threshold_config or req.threshold_config
+        reg_algorithm = (
+            req.algorithm
+            if (reg_config and reg_config.boundaries)
+            else ClusteringAlgorithm.AUTO
+        )
         assignments, confidences, window, warnings = _cluster_point_dicts(
             sub_points,
             sub_controls,
-            req.algorithm,
-            reg.threshold_config or req.threshold_config,
+            reg_algorithm,
+            reg_config,
             req.n_clusters,
             reg.ploidy,
         )
@@ -151,7 +270,9 @@ def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringR
                 low_separation=window["low_separation"],
                 genotype_counts=count_genotypes(assignments, reg.ploidy),
                 warnings=warnings,
-                input_hash=_region_input_hash(reg.wells, reg.ploidy, cycle),
+                input_hash=_region_input_hash(
+                    reg.wells, reg.ploidy, cycle, reg_config, reg_algorithm
+                ),
             )
         )
         merged_assignments.update(assignments)
@@ -210,10 +331,19 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
         )
     }
 
+    stored_markers = marker_store.get(sid)
     if req.regions:
         # Multi-marker: per-region ploidy governs; do NOT persist req.ploidy onto
         # the session (that is single-marker state).
         result = _run_regions(req, unified, cycle, point_dicts, control_wells)
+    elif stored_markers:
+        # B1: the persisted marker (assay) set is authoritative when the caller
+        # did not pass explicit regions -- a plain "cluster this session" call
+        # must genotype each saved marker independently, not the whole plate as
+        # one blob. Reuse _run_regions unchanged by injecting the stored markers
+        # as this request's regions.
+        effective_req = req.model_copy(update={"regions": list(stored_markers)})
+        result = _run_regions(effective_req, unified, cycle, point_dicts, control_wells)
     else:
         # Single-marker (whole plate) — unchanged behavior. Ploidy travels with
         # the request; persist it on the session so downstream views/stats/
@@ -252,7 +382,11 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
     from app.db import save_clustering
     save_clustering(sid, result)
 
-    return result
+    # Omit None fields (e.g. regions/warnings on the legacy single-marker
+    # path) so a clean response doesn't grow keys that were never part of
+    # its contract -- a multi-marker result's (non-None) regions still
+    # serialize normally.
+    return result.model_dump(exclude_none=True)
 
 
 @router.get("/api/data/{sid}/ploidy")
@@ -284,7 +418,7 @@ async def get_clustering(sid: str, current_user: CurrentUser):
     _get_session(sid)
     if sid not in cluster_store:
         return {"algorithm": None, "cycle": 0, "assignments": {}}
-    return cluster_store[sid]
+    return cluster_store[sid].model_dump(exclude_none=True)
 
 
 @router.post("/api/data/{sid}/welltypes")
@@ -430,21 +564,60 @@ async def create_markers(sid: str, body: MarkerSetCreate, current_user: CurrentU
     """Create or replace the session's whole marker set.
 
     One well may belong to at most one marker (mirrors the one-well-one-marker
-    rule already enforced for clustering regions in ``_run_regions``)."""
+    rule already enforced for clustering regions in ``_run_regions``). Every
+    marker is also validated (ploidy, non-empty name/wells, no duplicate id/
+    name, wells within the plate) before anything is written, so a bad marker
+    can never reach the DB as an IntegrityError."""
     check_session_access(sid, current_user)
-    _get_session(sid)
+    unified = _get_session(sid)
 
-    seen: set[str] = set()
-    for marker in body.markers:
-        for well in marker.wells:
-            if well in seen:
-                raise HTTPException(400, f"Well {well} is assigned to more than one marker")
-            seen.add(well)
+    _validate_marker_set(body.markers, unified)
 
-    marker_store[sid] = list(body.markers)
-
+    # DB-before-memory: write the durable copy first so a DB failure cannot
+    # leave the in-memory store ahead of what is actually persisted.
     from app.db import save_marker_regions
     save_marker_regions(sid, [m.model_dump() for m in body.markers])
+
+    marker_store[sid] = list(body.markers)
+    # B1: editing the marker set invalidates any clustering computed against
+    # the OLD set -- otherwise a later GET /cluster would silently serve
+    # stale results for markers that no longer exist.
+    _invalidate_clustering(sid)
+
+    return {"markers": marker_store[sid]}
+
+
+@router.put("/api/data/{sid}/markers/{marker_id}")
+async def update_marker(sid: str, marker_id: str, body: MarkerUpdate, current_user: CurrentUser):
+    """Update one marker's fields (name/wells/ploidy/color/threshold_config).
+
+    Only fields explicitly present in the request body are changed; anything
+    omitted keeps the marker's current value. The merged marker is validated
+    against the REST of the session's marker set (same rules as POST)."""
+    check_session_access(sid, current_user)
+    unified = _get_session(sid)
+
+    markers = marker_store.get(sid, [])
+    idx = next((i for i, m in enumerate(markers) if m.id == marker_id), None)
+    if idx is None:
+        raise HTTPException(404, f"Marker {marker_id!r} not found")
+
+    updates = body.model_dump(exclude_unset=True)
+    merged = {**markers[idx].model_dump(), **updates}
+    updated_marker = MarkerRegion(**merged)
+
+    others = [m for i, m in enumerate(markers) if i != idx]
+    _validate_marker_set(others + [updated_marker], unified)
+
+    new_markers = list(markers)
+    new_markers[idx] = updated_marker
+
+    # DB-before-memory (dbfix): persist first, then update memory.
+    from app.db import save_marker_regions
+    save_marker_regions(sid, [m.model_dump() for m in new_markers])
+
+    marker_store[sid] = new_markers
+    _invalidate_clustering(sid)
 
     return {"markers": marker_store[sid]}
 
@@ -455,8 +628,12 @@ async def delete_markers(sid: str, current_user: CurrentUser):
     check_session_access(sid, current_user)
     _get_session(sid)
 
-    marker_store.pop(sid, None)
+    # DB-before-memory: delete the durable copy first.
     from app.db import delete_marker_regions
     delete_marker_regions(sid)
+
+    marker_store.pop(sid, None)
+    # B1: clearing the marker set invalidates any clustering computed against it.
+    _invalidate_clustering(sid)
 
     return {"status": "ok"}
