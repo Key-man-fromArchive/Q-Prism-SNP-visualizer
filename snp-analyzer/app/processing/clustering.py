@@ -19,6 +19,12 @@ _NTC_SIGNAL_FRAC = 0.2
 # (1/ploidy) are treated as one dosage class that BIC over-split on noise.
 _DOSAGE_MERGE_FRAC = 0.5
 
+# Adjacent clusters separated by fewer than this many pooled SDs (computed
+# LOCALLY from just that pair's own points, in the arcsine-sqrt fit space) are
+# not a statistically meaningful split -- merge them regardless of the
+# fixed-fraction rule above (C2 fix, see cluster_auto / _local_sd_ratio).
+_MERGE_SEP_SD = 5.5
+
 # Adjacent dosage classes closer than this many pooled within-class SDs are flagged
 # as poorly resolved (reliability warning, esp. high ploidy).
 _MIN_SEP_SD = 3.0
@@ -199,18 +205,60 @@ def cluster_auto(
     }
     order = sorted(members, key=lambda lab: cluster_ratio[lab])
 
+    # Reverse-lookup: arcsine-sqrt (fit-space) value for each GLOBAL well index.
+    # Built once here so it can be used both by the merge test right below and by
+    # the confidence scoring further down (section 4).
+    rt_by_global = {global_i: float(rt[j]) for j, global_i in enumerate(sig_idx)}
+
+    def _local_sd_ratio(lab_a: int, lab_b: int) -> float:
+        """Two-sample separation of clusters A/B, in pooled-SD units, computed
+        ONLY from A's and B's own member points (never the other, unrelated
+        clusters) -- a per-pair Welch/pooled-variance style effect size."""
+        a = np.array([rt_by_global[i] for i in members[lab_a]], dtype=float)
+        b = np.array([rt_by_global[i] for i in members[lab_b]], dtype=float)
+        df = len(a) + len(b) - 2
+        if df < 1:
+            return float("inf")  # too few samples to judge -- defer to the fixed rule
+        var_a = float(a.var(ddof=1)) if len(a) > 1 else 0.0
+        var_b = float(b.var(ddof=1)) if len(b) > 1 else 0.0
+        pooled_var = ((len(a) - 1) * var_a + (len(b) - 1) * var_b) / df
+        pooled_sd = float(np.sqrt(max(pooled_var, 1e-8)))
+        gap = abs(float(a.mean()) - float(b.mean()))
+        return gap / pooled_sd
+
     # Merge adjacent clusters that sit far closer than the ideal dosage spacing
     # (1/P): they are one dosage that BIC over-split on noise, not two dosages.
     # Without this the dosage DP below (which forces distinct dosages) would
     # promote a noise-split into a spurious neighbouring dosage class.
     if len(order) > 1:
         min_sep = _DOSAGE_MERGE_FRAC / ploidy
+
+        # C2 fix: a fixed fraction of 1/ploidy is, by construction, always SMALLER
+        # than one whole dosage step -- so at high ploidy (small 1/P) a genuinely
+        # single, tight distribution can have real replicate noise whose spread
+        # approaches or even exceeds that fixed fraction, letting BIC carve it
+        # into adjacent "dosage classes" that are noise, not biology (this is
+        # exactly what happened to qTotal11.1: ratios ~0.67-0.81 vs a merge
+        # threshold of 0.083 at ploidy=6). A threshold tied to the *ideal*
+        # spacing can never adapt to the *data's own* measurement noise.
+        # So, in addition to the fixed-fraction rule, ALSO merge adjacent
+        # clusters when their separation is not statistically meaningful in
+        # pooled-SD units -- computed LOCALLY from just that pair's own member
+        # points (``_local_sd_ratio`` above), not a global/tied estimate shared
+        # across every BIC component. A global tied estimate gets diluted by
+        # unrelated, far-away clusters and is easily thrown off by a genuinely
+        # wide multi-dosage spread; a per-pair pooled SD is not, so it stays
+        # reliable across both a narrow monomorphic marker split by noise and a
+        # wide, genuinely multi-dosage one (see tests/test_cluster_auto_c2_narrow_marker.py).
         groups: list[list[int]] = [[order[0]]]
         for lab in order[1:]:
-            if cluster_ratio[lab] - cluster_ratio[groups[-1][-1]] < min_sep:
+            prev = groups[-1][-1]
+            raw_gap = cluster_ratio[lab] - cluster_ratio[prev]
+            if raw_gap < min_sep or _local_sd_ratio(prev, lab) < _MERGE_SEP_SD:
                 groups[-1].append(lab)
             else:
                 groups.append([lab])
+
         if len(groups) < len(order):
             merged: dict[int, list[int]] = {}
             for gi, group in enumerate(groups):
@@ -237,7 +285,7 @@ def cluster_auto(
     #    classes) OR it is an outlier many SDs from every class. Both criteria
     #    scale with the fitted spread and ploidy. Genotype is still the ratio, not
     #    the magnitude — a genuine low-signal het stays on its cluster's angle.
-    rt_by_global = {global_i: float(rt[j]) for j, global_i in enumerate(sig_idx)}
+    #    (``rt_by_global`` was already built above, ahead of the merge step.)
     tiny_labels = {lab for lab, idxs in members.items() if len(idxs) < 2}
 
     means: dict[int, float] = {}
