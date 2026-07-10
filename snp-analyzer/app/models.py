@@ -115,6 +115,14 @@ class WellType(str, Enum):
     NTC = "NTC"
     UNKNOWN = "Unknown"
     POSITIVE_CONTROL = "Positive Control"
+    # Allele-control INPUT roles (C1): user-marked homozygous reference wells
+    # that anchor the extremes of the dosage ladder (allele-1 control = highest
+    # fam-fraction = dosage P; allele-2 control = lowest = dosage 0). Distinct
+    # from the RESULT labels ALLELE1_HOMO/ALLELE2_HOMO below, which are what a
+    # SAMPLE well is genotyped as -- these are what the operator marks a
+    # reference well as, before clustering runs.
+    ALLELE1_CONTROL = "Allele 1 Control"
+    ALLELE2_CONTROL = "Allele 2 Control"
     ALLELE1_HOMO = "Allele 1 Homo"
     ALLELE2_HOMO = "Allele 2 Homo"
     HETEROZYGOUS = "Heterozygous"
