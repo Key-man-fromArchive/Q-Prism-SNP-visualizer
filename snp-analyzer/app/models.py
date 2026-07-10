@@ -167,6 +167,10 @@ class RegionResult(BaseModel):
     offset_uncertain: bool = False
     low_separation: bool = False
     genotype_counts: dict[str, int] | None = None
+    # Phase 1 diagnostics: non-fatal quality flags for this marker's calls (e.g.
+    # "low_n", "relative_ntc"). None (not empty list) when there is nothing to
+    # flag, so a clean marker's JSON is unchanged.
+    warnings: list[str] | None = None
 
 
 class ClusteringRequest(BaseModel):
@@ -198,6 +202,10 @@ class ClusteringResult(BaseModel):
     # Multi-marker: per-marker results. None for a single-marker (whole-plate)
     # run; ``assignments`` above is then the flat merge across all regions.
     regions: list[RegionResult] | None = None
+    # Phase 1 diagnostics: non-fatal quality flags (e.g. "low_n", "relative_ntc")
+    # for the single-marker (whole-plate) path. None when clean, so an
+    # unaffected/legacy run's JSON is byte-for-byte unchanged.
+    warnings: list[str] | None = None
 
 
 class ManualWellTypeUpdate(BaseModel):

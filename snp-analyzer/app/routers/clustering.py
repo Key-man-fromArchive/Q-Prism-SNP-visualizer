@@ -50,11 +50,14 @@ def _cluster_point_dicts(
 ):
     """Cluster one set of points (whole plate OR one marker's well subset).
 
-    Returns ``(assignments, confidences, window)``. Shared by the single-marker
-    path and each marker region, so a region is genotyped exactly like a plate."""
+    Returns ``(assignments, confidences, window, warnings)``. Shared by the
+    single-marker path and each marker region, so a region is genotyped
+    exactly like a plate. ``warnings`` is ``None`` (not an empty list) when
+    there is nothing to flag, so a clean run's output is unchanged."""
     from app.processing.clustering import genotype_window
 
     confidences: dict[str, float] = {}
+    warnings: list[str] = []
     if algorithm == ClusteringAlgorithm.AUTO:
         config = threshold_config or ThresholdConfig()
         assignments, confidences = cluster_auto(
@@ -62,6 +65,7 @@ def _cluster_point_dicts(
             ntc_threshold=config.ntc_threshold,
             control_wells=control_wells,
             ploidy=ploidy,
+            warnings=warnings,
         )
     elif algorithm == ClusteringAlgorithm.THRESHOLD:
         config = threshold_config or ThresholdConfig()
@@ -70,7 +74,7 @@ def _cluster_point_dicts(
         assignments = cluster_kmeans(point_dicts, n_clusters)
 
     window = genotype_window(point_dicts, assignments, ploidy)
-    return assignments, confidences, window
+    return assignments, confidences, window, (warnings or None)
 
 
 def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringResult:
@@ -99,7 +103,7 @@ def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringR
         reg_wellset = set(reg.wells)
         sub_points = [pd_by_well[w] for w in reg.wells if w in pd_by_well]
         sub_controls = {w: t for w, t in control_wells.items() if w in reg_wellset}
-        assignments, confidences, window = _cluster_point_dicts(
+        assignments, confidences, window, warnings = _cluster_point_dicts(
             sub_points,
             sub_controls,
             req.algorithm,
@@ -120,6 +124,7 @@ def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringR
                 offset_uncertain=window["offset_uncertain"],
                 low_separation=window["low_separation"],
                 genotype_counts=count_genotypes(assignments, reg.ploidy),
+                warnings=warnings,
             )
         )
         merged_assignments.update(assignments)
@@ -186,7 +191,7 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
                 set_session_ploidy(sid, req.ploidy)
 
         ploidy = getattr(unified, "ploidy", 2)
-        assignments, confidences, window = _cluster_point_dicts(
+        assignments, confidences, window, warnings = _cluster_point_dicts(
             point_dicts,
             control_wells,
             req.algorithm,
@@ -204,6 +209,7 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
             offset=window["offset"],
             offset_uncertain=window["offset_uncertain"],
             low_separation=window["low_separation"],
+            warnings=warnings,
         )
 
     cluster_store[sid] = result

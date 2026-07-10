@@ -36,6 +36,25 @@ _CALL_MIN_POSTERIOR = 0.9
 #   - a well more than this many pooled SDs from EVERY class mean is an outlier
 _OUTLIER_SD = 4.0
 
+# Phase 1 diagnostics (C3): with <4 signal wells there is no mixture fit at
+# all -- just a raw ratio-vs-ideal-dosage call, with no statistical evidence of
+# cluster separation. That is, at best, "just barely a confident call": the
+# SAME bar (_CALL_MIN_POSTERIOR) a normal-sized marker must clear to avoid an
+# Undetermined no-call. Reusing that constant (rather than inventing a new
+# magic number) means the fallback can never report MORE certainty than a
+# properly-fitted call, only exactly the minimum that still counts as one.
+_SMALL_REGION_CONFIDENCE = _CALL_MIN_POSTERIOR
+
+# Phase 1 diagnostics (C4): the relative-NTC detector (_NTC_SIGNAL_FRAC below)
+# is a signal-level cutoff, not a test of whether that low-signal group is
+# actually separated from the real samples by a wide margin. This is the
+# minimum gap -- median plate signal vs. the auto-flagged NTC wells' own
+# signal -- that counts as a genuine "no-template" gap (one order of
+# magnitude). Below this, the wells are still labeled NTC (never invent a new
+# label -- see module docstring in tests/test_c4_relative_ntc.py) but flagged
+# with the "relative_ntc" warning and a confidence < 1.0.
+_NTC_CLEAR_GAP = 10.0
+
 
 def cluster_threshold(
     points: list[dict],
@@ -76,6 +95,7 @@ def cluster_auto(
     ntc_threshold: float = 0.1,
     control_wells: dict[str, str] | None = None,
     ploidy: int = DEFAULT_PLOIDY,
+    warnings: list[str] | None = None,
 ) -> tuple[dict[str, str], dict[str, float]]:
     """Model-based, ploidy-aware genotype clustering, fully scale-invariant.
 
@@ -110,6 +130,12 @@ def cluster_auto(
 
     ``ntc_threshold`` is accepted for API compatibility but no longer used as an
     absolute cutoff (NTC is now purely relative).
+
+    ``warnings``, if given a list, is appended to IN PLACE with non-fatal
+    diagnostic codes ("low_n", "relative_ntc" -- see the constants above); the
+    return contract is always the ``(assignments, confidences)`` 2-tuple
+    regardless of whether ``warnings`` is passed, so existing callers are
+    unaffected.
     """
     import numpy as np
     from sklearn.mixture import GaussianMixture
@@ -150,18 +176,40 @@ def cluster_auto(
     positive = total[total > 0]
     median_total = float(np.median(positive)) if positive.size else 0.0
     ntc_mask = total < _NTC_SIGNAL_FRAC * median_total
+
+    # C4 (conservative, warning-only): the mask above is a pure signal-level
+    # cutoff -- it says nothing about whether the flagged wells are actually a
+    # genuine no-template gap, or just the low end of a narrow, low-dynamic-
+    # range marker. Compare the flagged wells' OWN signal to the plate median
+    # they were cut from: a real NTC is orders of magnitude below the samples;
+    # anything closer is ambiguous, so it keeps the "NTC" label (never invent a
+    # new one) but is flagged and denied a blind maximum-confidence call.
+    ntc_confidence = 1.0
+    if bool(np.any(ntc_mask)):
+        ntc_max_total = float(np.max(total[ntc_mask]))
+        gap_ratio = (median_total / ntc_max_total) if ntc_max_total > 0 else float("inf")
+        if gap_ratio < _NTC_CLEAR_GAP:
+            if warnings is not None:
+                warnings.append("relative_ntc")
+            ntc_confidence = max(0.0, min(0.99, gap_ratio / _NTC_CLEAR_GAP))
+
     for w, is_ntc in zip(wells, ntc_mask):
         if is_ntc:
             assignments[w] = WellType.NTC.value
-            confidences[w] = 1.0
+            confidences[w] = ntc_confidence
 
     sig_idx = [i for i in range(len(wells)) if not ntc_mask[i]]
 
     # Too few signal wells to cluster reliably — call by absolute ratio.
     if len(sig_idx) < 4:
+        # C3: no mixture was fit, so there is no statistical evidence backing
+        # a maximum-confidence call -- cap it (see _SMALL_REGION_CONFIDENCE)
+        # and flag the marker so a human can review a 1-3 well genotype call.
+        if sig_idx and warnings is not None:
+            warnings.append("low_n")
         for i in sig_idx:
             assignments[wells[i]] = label_by_ratio(ratio[i], ploidy)
-            confidences[wells[i]] = 1.0
+            confidences[wells[i]] = _SMALL_REGION_CONFIDENCE
         return assignments, confidences
 
     # 2. Fit a 1-D Gaussian mixture on the arcsine-sqrt-transformed ratio
