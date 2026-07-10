@@ -157,7 +157,10 @@ def test_cluster_no_stored_markers_and_no_request_regions_is_single_marker(data_
     resp = data_client.client.post("/api/data/s1/cluster", json={"cycle": 1})
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["regions"] is None
+    # P25c: single-marker responses omit None fields entirely (see
+    # tests/test_p25c_fixes.py), so a clean single-marker result carries no
+    # "regions" key at all rather than an explicit null.
+    assert "regions" not in body
 
 
 def test_editing_markers_via_post_invalidates_stale_clustering(data_client):

@@ -29,6 +29,14 @@ _MERGE_SEP_SD = 5.5
 # as poorly resolved (reliability warning, esp. high ploidy).
 _MIN_SEP_SD = 3.0
 
+# _resolve_anchor_dosages: after clamping a cluster's anchor-scaled raw dosage
+# into [0, ploidy] and nudging to enforce strict monotonicity, the final
+# dosage must still be within this many dosage-steps of the cluster's own
+# (clamped) raw value. A collision-driven nudge that moves a cluster further
+# than this is not a legitimate snap -- it is inventing a dosage the data
+# does not support -- and must be treated as anchor_conflict instead.
+_ANCHOR_NUDGE_TOLERANCE = 0.5
+
 # No-call rules, evaluated against the fitted mixture (so they scale with the
 # data's own spread and ploidy, not a fixed ratio gap):
 #   - a well whose best posterior probability is below this is "between classes"
@@ -730,6 +738,7 @@ def _resolve_anchor_dosages(
         _conflict()
         return None
 
+    clamped_raw = [min(float(ploidy), max(0.0, x)) for x in raw]
     dosages = [min(ploidy, max(0, int(round(x)))) for x in raw]
 
     # Preserve strict rank order: adjacent clusters that round to the same (or
@@ -741,6 +750,19 @@ def _resolve_anchor_dosages(
     if any(d < 0 or d > ploidy for d in dosages):
         _conflict()
         return None
+
+    # A clamp+nudge that moves a cluster's final dosage more than
+    # ``_ANCHOR_NUDGE_TOLERANCE`` dosage-steps away from its own (clamped) raw
+    # scaled value is not a legitimate snap -- it FABRICATES a dosage the raw
+    # data does not support (e.g. two clusters that both clamp to the same
+    # bound, then get nudged into distinct invented dosages). Treat that as an
+    # anchor_conflict and let the caller fall back to the non-anchored
+    # ``_assign_dosages`` instead of silently inventing labels.
+    for d, cr in zip(dosages, clamped_raw):
+        if abs(d - cr) > _ANCHOR_NUDGE_TOLERANCE:
+            _conflict()
+            return None
+
     return dosages
 
 
