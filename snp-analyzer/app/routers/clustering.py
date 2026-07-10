@@ -185,13 +185,27 @@ def _invalidate_clustering(sid: str) -> None:
     cluster_store.pop(sid, None)
 
 
-def _region_input_hash(wells: list[str], ploidy: int, cycle: int) -> str:
-    """Stable hash of (sorted wells, ploidy, cycle) -- A5 groundwork.
+def _region_input_hash(
+    wells: list[str],
+    ploidy: int,
+    cycle: int,
+    threshold_config: ThresholdConfig | None = None,
+    algorithm: ClusteringAlgorithm | str | None = None,
+) -> str:
+    """Stable hash of (sorted wells, ploidy, cycle, threshold_config,
+    algorithm) -- A5 groundwork.
 
     Lets a future dirty-flag UI detect when a marker's definition (wells/
-    ploidy) or the analyzed cycle has changed since this result was computed,
-    without needing to diff full state."""
-    key = f"{sorted(wells)}|{ploidy}|{cycle}"
+    ploidy), a manual boundary/offset edit, the effective clustering
+    algorithm, or the analyzed cycle has changed since this result was
+    computed, without needing to diff full state. ``threshold_config`` is
+    serialized deterministically (``model_dump_json``) so a boundaries/
+    offset-only edit changes the hash exactly like a wells/ploidy change."""
+    cfg_key = (
+        threshold_config.model_dump_json() if threshold_config is not None else "null"
+    )
+    algo_key = algorithm.value if isinstance(algorithm, ClusteringAlgorithm) else algorithm
+    key = f"{sorted(wells)}|{ploidy}|{cycle}|{cfg_key}|{algo_key}"
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
@@ -256,7 +270,9 @@ def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringR
                 low_separation=window["low_separation"],
                 genotype_counts=count_genotypes(assignments, reg.ploidy),
                 warnings=warnings,
-                input_hash=_region_input_hash(reg.wells, reg.ploidy, cycle),
+                input_hash=_region_input_hash(
+                    reg.wells, reg.ploidy, cycle, reg_config, reg_algorithm
+                ),
             )
         )
         merged_assignments.update(assignments)
@@ -366,7 +382,11 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
     from app.db import save_clustering
     save_clustering(sid, result)
 
-    return result
+    # Omit None fields (e.g. regions/warnings on the legacy single-marker
+    # path) so a clean response doesn't grow keys that were never part of
+    # its contract -- a multi-marker result's (non-None) regions still
+    # serialize normally.
+    return result.model_dump(exclude_none=True)
 
 
 @router.get("/api/data/{sid}/ploidy")
@@ -398,7 +418,7 @@ async def get_clustering(sid: str, current_user: CurrentUser):
     _get_session(sid)
     if sid not in cluster_store:
         return {"algorithm": None, "cycle": 0, "assignments": {}}
-    return cluster_store[sid]
+    return cluster_store[sid].model_dump(exclude_none=True)
 
 
 @router.post("/api/data/{sid}/welltypes")
