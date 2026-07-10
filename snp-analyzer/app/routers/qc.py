@@ -54,6 +54,10 @@ class MarkerQc(BaseModel):
     n_called: int
     call_rate: float
     cluster_separation: float | None
+    # Phase 1 diagnostics carried through from RegionResult (e.g. "low_n",
+    # "relative_ntc") so a status-badge UI can read them without re-clustering.
+    # None (not []) when the marker's run was clean.
+    warnings: list[str] | None = None
 
 
 def _get_session(sid: str) -> UnifiedData:
@@ -198,6 +202,7 @@ def _marker_qc(
         n_called=n_called,
         call_rate=round(call_rate, 4),
         cluster_separation=separation,
+        warnings=region.warnings,
     )
 
 
@@ -294,6 +299,10 @@ async def qc_metrics(
     # never get this key, so their JSON is unchanged.
     ca = cluster_store.get(sid)
     if ca is not None and ca.regions:
+        # The plate-level cluster_separation above is NOT authoritative once
+        # multiple independently-genotyped markers share this plate -- tell
+        # the client so it can prefer the per-marker breakdown for display.
+        result["authoritative"] = "markers"
         result["markers"] = [
             _marker_qc(r, points, manual_assignments, undetermined_min).model_dump()
             for r in ca.regions

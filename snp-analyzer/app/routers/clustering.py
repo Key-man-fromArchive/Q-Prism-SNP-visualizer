@@ -38,6 +38,20 @@ class MarkerSetCreate(_BaseModel):
     markers: list[MarkerRegion]
 
 
+class MarkerUpdate(_BaseModel):
+    """Partial update for one marker (PUT /markers/{marker_id}).
+
+    Only the fields the client actually sends are applied (``model_dump
+    (exclude_unset=True)`` in the handler) -- an omitted field keeps the
+    marker's existing value, while an explicit ``null`` (e.g. clearing
+    ``color``) is honored."""
+    name: str | None = None
+    wells: list[str] | None = None
+    ploidy: int | None = None
+    color: str | None = None
+    threshold_config: ThresholdConfig | None = None
+
+
 router = APIRouter()
 
 # In-memory stores
@@ -91,6 +105,58 @@ def _cluster_point_dicts(
         point_dicts, assignments, ploidy, anchor_resolved=anchor_state.get("resolved", False)
     )
     return assignments, confidences, window, (warnings or None)
+
+
+def _validate_marker_set(markers: list[MarkerRegion], unified) -> None:
+    """Validate a full marker (assay) set against the session's own wells.
+
+    Shared by POST (whole-set replace) and PUT (one marker merged against the
+    rest of the existing set) so both paths reject the same structural
+    problems with the same 400 + field-naming ``detail`` message, instead of
+    a duplicate marker_id ever reaching the DB as an IntegrityError."""
+    valid_wells = set(unified.wells)
+    seen_ids: set[str] = set()
+    seen_names: set[str] = set()
+    seen_wells: set[str] = set()
+    for marker in markers:
+        try:
+            validate_ploidy(marker.ploidy)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+
+        if not marker.name or not marker.name.strip():
+            raise HTTPException(400, f"Marker name must not be empty (id={marker.id!r})")
+
+        if not marker.wells:
+            raise HTTPException(400, f"Marker {marker.id!r} must have at least one well")
+
+        if marker.id in seen_ids:
+            raise HTTPException(400, f"Duplicate marker id: {marker.id!r}")
+        seen_ids.add(marker.id)
+
+        if marker.name in seen_names:
+            raise HTTPException(400, f"Duplicate marker name: {marker.name!r}")
+        seen_names.add(marker.name)
+
+        for well in marker.wells:
+            if well not in valid_wells:
+                raise HTTPException(400, f"Well {well} is not part of this session's plate")
+            if well in seen_wells:
+                raise HTTPException(400, f"Well {well} is assigned to more than one marker")
+            seen_wells.add(well)
+
+
+def _invalidate_clustering(sid: str) -> None:
+    """Clear a session's clustering result (memory + DB).
+
+    A marker set edit changes what "the plate's markers" means, so any
+    clustering computed against the old set is stale. DB is cleared first
+    (mirrors the DB-before-memory rule used for marker writes) so a crash
+    between the two calls cannot leave a persisted result the in-memory
+    store no longer agrees existed."""
+    from app.db import delete_clustering
+    delete_clustering(sid)
+    cluster_store.pop(sid, None)
 
 
 def _region_input_hash(wells: list[str], ploidy: int, cycle: int) -> str:
@@ -210,10 +276,19 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
         )
     }
 
+    stored_markers = marker_store.get(sid)
     if req.regions:
         # Multi-marker: per-region ploidy governs; do NOT persist req.ploidy onto
         # the session (that is single-marker state).
         result = _run_regions(req, unified, cycle, point_dicts, control_wells)
+    elif stored_markers:
+        # B1: the persisted marker (assay) set is authoritative when the caller
+        # did not pass explicit regions -- a plain "cluster this session" call
+        # must genotype each saved marker independently, not the whole plate as
+        # one blob. Reuse _run_regions unchanged by injecting the stored markers
+        # as this request's regions.
+        effective_req = req.model_copy(update={"regions": list(stored_markers)})
+        result = _run_regions(effective_req, unified, cycle, point_dicts, control_wells)
     else:
         # Single-marker (whole plate) — unchanged behavior. Ploidy travels with
         # the request; persist it on the session so downstream views/stats/
@@ -430,21 +505,60 @@ async def create_markers(sid: str, body: MarkerSetCreate, current_user: CurrentU
     """Create or replace the session's whole marker set.
 
     One well may belong to at most one marker (mirrors the one-well-one-marker
-    rule already enforced for clustering regions in ``_run_regions``)."""
+    rule already enforced for clustering regions in ``_run_regions``). Every
+    marker is also validated (ploidy, non-empty name/wells, no duplicate id/
+    name, wells within the plate) before anything is written, so a bad marker
+    can never reach the DB as an IntegrityError."""
     check_session_access(sid, current_user)
-    _get_session(sid)
+    unified = _get_session(sid)
 
-    seen: set[str] = set()
-    for marker in body.markers:
-        for well in marker.wells:
-            if well in seen:
-                raise HTTPException(400, f"Well {well} is assigned to more than one marker")
-            seen.add(well)
+    _validate_marker_set(body.markers, unified)
 
-    marker_store[sid] = list(body.markers)
-
+    # DB-before-memory: write the durable copy first so a DB failure cannot
+    # leave the in-memory store ahead of what is actually persisted.
     from app.db import save_marker_regions
     save_marker_regions(sid, [m.model_dump() for m in body.markers])
+
+    marker_store[sid] = list(body.markers)
+    # B1: editing the marker set invalidates any clustering computed against
+    # the OLD set -- otherwise a later GET /cluster would silently serve
+    # stale results for markers that no longer exist.
+    _invalidate_clustering(sid)
+
+    return {"markers": marker_store[sid]}
+
+
+@router.put("/api/data/{sid}/markers/{marker_id}")
+async def update_marker(sid: str, marker_id: str, body: MarkerUpdate, current_user: CurrentUser):
+    """Update one marker's fields (name/wells/ploidy/color/threshold_config).
+
+    Only fields explicitly present in the request body are changed; anything
+    omitted keeps the marker's current value. The merged marker is validated
+    against the REST of the session's marker set (same rules as POST)."""
+    check_session_access(sid, current_user)
+    unified = _get_session(sid)
+
+    markers = marker_store.get(sid, [])
+    idx = next((i for i, m in enumerate(markers) if m.id == marker_id), None)
+    if idx is None:
+        raise HTTPException(404, f"Marker {marker_id!r} not found")
+
+    updates = body.model_dump(exclude_unset=True)
+    merged = {**markers[idx].model_dump(), **updates}
+    updated_marker = MarkerRegion(**merged)
+
+    others = [m for i, m in enumerate(markers) if i != idx]
+    _validate_marker_set(others + [updated_marker], unified)
+
+    new_markers = list(markers)
+    new_markers[idx] = updated_marker
+
+    # DB-before-memory (dbfix): persist first, then update memory.
+    from app.db import save_marker_regions
+    save_marker_regions(sid, [m.model_dump() for m in new_markers])
+
+    marker_store[sid] = new_markers
+    _invalidate_clustering(sid)
 
     return {"markers": marker_store[sid]}
 
@@ -455,8 +569,12 @@ async def delete_markers(sid: str, current_user: CurrentUser):
     check_session_access(sid, current_user)
     _get_session(sid)
 
-    marker_store.pop(sid, None)
+    # DB-before-memory: delete the durable copy first.
     from app.db import delete_marker_regions
     delete_marker_regions(sid)
+
+    marker_store.pop(sid, None)
+    # B1: clearing the marker set invalidates any clustering computed against it.
+    _invalidate_clustering(sid)
 
     return {"status": "ok"}

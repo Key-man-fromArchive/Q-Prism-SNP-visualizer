@@ -174,6 +174,18 @@ def save_clustering(session_id: str, result):
     conn.commit()
 
 
+def delete_clustering(session_id: str) -> None:
+    """Delete a session's persisted clustering result.
+
+    Used to invalidate a stale clustering run (e.g. after the marker set
+    that produced it has been edited) so a later GET /cluster does not
+    serve results computed against a marker set that no longer exists.
+    """
+    conn = get_db()
+    conn.execute("DELETE FROM clustering_results WHERE session_id = ?", (session_id,))
+    conn.commit()
+
+
 def save_welltype(session_id: str, well: str, welltype: str):
     """Write a single manual welltype override."""
     conn = get_db()
