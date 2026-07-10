@@ -61,6 +61,30 @@ def _run_migrations(conn: sqlite3.Connection):
             conn.execute("ALTER TABLE clustering_results ADD COLUMN result_json TEXT")
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (3)")
 
+    if current < 4:
+        # Migration 4: marker (assay) definitions become a first-class,
+        # persisted resource instead of living only in in-memory well-group
+        # selections. This migration adds the table only -- it does NOT
+        # back-fill anything. Existing well_groups remain plain selection
+        # primitives; every session's marker set starts empty and must be
+        # created explicitly via the /markers endpoints. We deliberately do
+        # NOT auto-promote well_groups -> markers here.
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS marker_regions (
+                session_id TEXT NOT NULL,
+                marker_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                wells_json TEXT NOT NULL,
+                ploidy INTEGER NOT NULL DEFAULT 2,
+                color TEXT,
+                threshold_json TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                PRIMARY KEY (session_id, marker_id),
+                FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+            )"""
+        )
+        conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (4)")
+
     conn.commit()
 
 
@@ -230,6 +254,60 @@ def delete_well_groups(session_id: str):
     conn.commit()
 
 
+def save_marker_regions(session_id: str, regions: list[dict]):
+    """Replace-all: write the session's full marker (assay) definition set.
+
+    Marker definitions own wells/ploidy/color/threshold_config/name only --
+    well_type and sample_id stay in manual_welltypes / sample_name_overrides
+    and are never duplicated here."""
+    conn = get_db()
+    conn.execute("DELETE FROM marker_regions WHERE session_id = ?", (session_id,))
+    for reg in regions:
+        conn.execute(
+            "INSERT INTO marker_regions "
+            "(session_id, marker_id, name, wells_json, ploidy, color, threshold_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                session_id,
+                reg["id"],
+                reg["name"],
+                json.dumps(reg["wells"]),
+                reg.get("ploidy", 2),
+                reg.get("color"),
+                json.dumps(reg["threshold_config"]) if reg.get("threshold_config") else None,
+            ),
+        )
+    conn.commit()
+
+
+def load_marker_regions(session_id: str) -> list[dict]:
+    """Load the session's marker (assay) definitions from DB."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT marker_id, name, wells_json, ploidy, color, threshold_json "
+        "FROM marker_regions WHERE session_id = ? ORDER BY rowid",
+        (session_id,),
+    ).fetchall()
+    return [
+        {
+            "id": r["marker_id"],
+            "name": r["name"],
+            "wells": json.loads(r["wells_json"]),
+            "ploidy": r["ploidy"],
+            "color": r["color"],
+            "threshold_config": json.loads(r["threshold_json"]) if r["threshold_json"] else None,
+        }
+        for r in rows
+    ]
+
+
+def delete_marker_regions(session_id: str):
+    """Delete all marker definitions for a session."""
+    conn = get_db()
+    conn.execute("DELETE FROM marker_regions WHERE session_id = ?", (session_id,))
+    conn.commit()
+
+
 def cleanup_sessions_older_than(days: int = SESSION_RETENTION_DAYS) -> int:
     """Delete persisted sessions older than the configured retention window.
 
@@ -335,6 +413,10 @@ def load_all_sessions():
         if po:
             protocol_override = [ProtocolStep(**s) for s in json.loads(po["protocol_json"])]
 
+        # Load marker (assay) definitions -- first-class resource, alongside
+        # welltypes/groups, so a reload restores a session's marker set.
+        markers = load_marker_regions(sid)
+
         sessions_data.append({
             "session_id": sid,
             "unified": unified,
@@ -342,6 +424,7 @@ def load_all_sessions():
             "welltypes": welltypes,
             "sample_overrides": sample_overrides,
             "protocol_override": protocol_override,
+            "markers": markers,
         })
 
     return sessions_data

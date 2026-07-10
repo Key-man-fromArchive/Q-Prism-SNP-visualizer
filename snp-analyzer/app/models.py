@@ -160,6 +160,8 @@ class MarkerRegion(BaseModel):
     wells: list[str]
     ploidy: int = 2
     threshold_config: ThresholdConfig | None = None
+    # UI-only tag (e.g. plate-view highlight color); not used by clustering.
+    color: str | None = None
 
 
 class RegionResult(BaseModel):
@@ -179,6 +181,10 @@ class RegionResult(BaseModel):
     # "low_n", "relative_ntc"). None (not empty list) when there is nothing to
     # flag, so a clean marker's JSON is unchanged.
     warnings: list[str] | None = None
+    # A5 groundwork: stable hash of (sorted wells, ploidy, cycle) at the time
+    # this result was computed. Lets a future dirty-flag UI detect when the
+    # marker definition has since changed without needing to diff full state.
+    input_hash: str | None = None
 
 
 class ClusteringRequest(BaseModel):

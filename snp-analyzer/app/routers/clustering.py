@@ -1,3 +1,5 @@
+import hashlib
+
 from fastapi import APIRouter, HTTPException
 
 from pydantic import BaseModel as _BaseModel
@@ -7,6 +9,7 @@ from app.models import (
     ClusteringRequest,
     ClusteringResult,
     ManualWellTypeUpdate,
+    MarkerRegion,
     RegionResult,
     ThresholdConfig,
     WellType,
@@ -31,12 +34,17 @@ class WellGroupCreate(_BaseModel):
     wells: list[str]
 
 
+class MarkerSetCreate(_BaseModel):
+    markers: list[MarkerRegion]
+
+
 router = APIRouter()
 
 # In-memory stores
 cluster_store: dict[str, ClusteringResult] = {}
 welltype_store: dict[str, dict[str, str]] = {}
 group_store: dict[str, dict[str, list[str]]] = {}  # sid -> {group_name: [wells]}
+marker_store: dict[str, list[MarkerRegion]] = {}  # sid -> [MarkerRegion, ...]
 
 
 def _get_session(sid: str):
@@ -83,6 +91,16 @@ def _cluster_point_dicts(
         point_dicts, assignments, ploidy, anchor_resolved=anchor_state.get("resolved", False)
     )
     return assignments, confidences, window, (warnings or None)
+
+
+def _region_input_hash(wells: list[str], ploidy: int, cycle: int) -> str:
+    """Stable hash of (sorted wells, ploidy, cycle) -- A5 groundwork.
+
+    Lets a future dirty-flag UI detect when a marker's definition (wells/
+    ploidy) or the analyzed cycle has changed since this result was computed,
+    without needing to diff full state."""
+    key = f"{sorted(wells)}|{ploidy}|{cycle}"
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
 def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringResult:
@@ -133,6 +151,7 @@ def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringR
                 low_separation=window["low_separation"],
                 genotype_counts=count_genotypes(assignments, reg.ploidy),
                 warnings=warnings,
+                input_hash=_region_input_hash(reg.wells, reg.ploidy, cycle),
             )
         )
         merged_assignments.update(assignments)
@@ -383,5 +402,61 @@ async def delete_all_well_groups(sid: str, current_user: CurrentUser):
     group_store.pop(sid, None)
     from app.db import delete_well_groups
     delete_well_groups(sid)
+
+    return {"status": "ok"}
+
+
+# ============================================================================
+# Marker (assay) definitions — first-class, persisted resource.
+#
+# A marker OWNS wells/ploidy/color/threshold_config/name. It does NOT store
+# well_type or sample_id -- those already live in manual_welltypes /
+# sample_name_overrides (per-well, keyed by well) and are never duplicated
+# here. Source of truth is the marker_regions table (app/db.py), not
+# sessions.metadata_json (which set_session_ploidy rewrites wholesale).
+# ============================================================================
+
+
+@router.get("/api/data/{sid}/markers")
+async def get_markers(sid: str, current_user: CurrentUser):
+    """Return the session's marker (assay) definitions."""
+    check_session_access(sid, current_user)
+    _get_session(sid)
+    return {"markers": marker_store.get(sid, [])}
+
+
+@router.post("/api/data/{sid}/markers")
+async def create_markers(sid: str, body: MarkerSetCreate, current_user: CurrentUser):
+    """Create or replace the session's whole marker set.
+
+    One well may belong to at most one marker (mirrors the one-well-one-marker
+    rule already enforced for clustering regions in ``_run_regions``)."""
+    check_session_access(sid, current_user)
+    _get_session(sid)
+
+    seen: set[str] = set()
+    for marker in body.markers:
+        for well in marker.wells:
+            if well in seen:
+                raise HTTPException(400, f"Well {well} is assigned to more than one marker")
+            seen.add(well)
+
+    marker_store[sid] = list(body.markers)
+
+    from app.db import save_marker_regions
+    save_marker_regions(sid, [m.model_dump() for m in body.markers])
+
+    return {"markers": marker_store[sid]}
+
+
+@router.delete("/api/data/{sid}/markers")
+async def delete_markers(sid: str, current_user: CurrentUser):
+    """Clear the session's marker (assay) definitions."""
+    check_session_access(sid, current_user)
+    _get_session(sid)
+
+    marker_store.pop(sid, None)
+    from app.db import delete_marker_regions
+    delete_marker_regions(sid)
 
     return {"status": "ok"}

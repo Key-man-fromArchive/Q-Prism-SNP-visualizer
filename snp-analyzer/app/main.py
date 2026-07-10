@@ -108,6 +108,11 @@ async def lifespan(app: FastAPI):
             sample.sample_name_store[entry["session_id"]] = entry["sample_overrides"]
         if entry["protocol_override"]:
             data.protocol_store[entry["session_id"]] = entry["protocol_override"]
+        if entry["markers"]:
+            from app.models import MarkerRegion
+            clustering.marker_store[entry["session_id"]] = [
+                MarkerRegion(**m) for m in entry["markers"]
+            ]
 
     # Restore manual well groups from DB
     from app.db import load_well_groups
