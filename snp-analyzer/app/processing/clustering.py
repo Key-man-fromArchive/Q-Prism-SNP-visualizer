@@ -140,13 +140,16 @@ def cluster_auto(
 
     ``control_wells`` may also mark ALLELE1_CONTROL / ALLELE2_CONTROL wells
     (C1): homozygous reference wells excluded from the fit exactly like NTC /
-    Positive Control, but ALSO used to anchor the dosage ladder's extremes --
-    the fitted sample cluster nearest an allele-1 control is fixed to dosage
-    ``ploidy``, nearest an allele-2 control to dosage 0 -- making the offset
-    DETERMINED rather than a guess (see ``_resolve_anchor_dosages``). If an
-    anchor sits implausibly far (> ``_OUTLIER_SD`` pooled SDs) from every
-    fitted cluster, it is NOT used to override the offset; instead
-    ``"anchor_conflict"`` is appended to ``warnings``.
+    Positive Control, but ALSO used to define the ratio->dosage SCALE that
+    anchors the dosage ladder (allele-1 = dosage ``ploidy``, allele-2 = dosage
+    0). The fitted sample clusters then map to their nearest dosage ON that
+    scale -- they are NOT forced to equal an anchor's dosage, so an absent
+    extreme class (e.g. no dosage-``ploidy`` sample) is not mislabelled -- and
+    the offset becomes DETERMINED rather than a guess (see
+    ``_resolve_anchor_dosages``). ``"anchor_conflict"`` is appended to
+    ``warnings`` only when the anchors are INCONSISTENT (inverted scale, or a
+    cluster forced outside the ladder), never merely because an anchor sits
+    far from every cluster.
 
     ``anchor_state``, if given a dict, is updated IN PLACE with
     ``{"resolved": bool}`` -- True when at least one allele-control anchor was
@@ -365,7 +368,7 @@ def cluster_auto(
     dosages = None
     if anchor1_ratios or anchor2_ratios:
         dosages = _resolve_anchor_dosages(
-            order, members, rt_by_global, cluster_ratio, ploidy,
+            order, cluster_ratio, ploidy,
             anchor1_ratios, anchor2_ratios, warnings,
         )
     if dosages is not None:
@@ -600,119 +603,92 @@ def _assign_dosages(sorted_ratios: list[float], ploidy: int) -> list[int]:
 
 def _resolve_anchor_dosages(
     order: list[int],
-    members: dict[int, list[int]],
-    rt_by_global: dict[int, float],
     cluster_ratio: dict[int, float],
     ploidy: int,
     anchor1_ratios: list[float],
     anchor2_ratios: list[float],
     warnings: list[str] | None,
 ) -> list[int] | None:
-    """C1: fix the dosage offset from homozygous allele-control anchors.
+    """C1: use homozygous allele-control anchors to fix the ratio->dosage SCALE.
+
+    The anchors define WHERE dosage 0 and dosage ``ploidy`` sit on the
+    fam-fraction axis; the fitted sample clusters then map to their NEAREST
+    dosage ON THAT SCALE -- they are NOT forced to equal an anchor's dosage.
+    This matters because in polyploids an extreme dosage class is often ABSENT
+    (a real hexaploid marker may top out at dosage 5, no dosage-6 sample), so
+    snapping the top cluster onto the anchor's dosage 6 would mislabel a
+    dosage-5 class. Mapping on the anchor-defined scale instead yields the same
+    labels the no-anchor path would, but with the offset now DETERMINED.
 
     ``order`` is the final (post-merge) list of fitted sample cluster labels,
-    ascending by fam-fraction. An allele-1 control anchors dosage ``ploidy``
-    (highest ratio); an allele-2 control anchors dosage 0 (lowest ratio). Each
-    anchor is mapped to its NEAREST fitted cluster (in the same arcsine-sqrt
-    fit space, in units of the fitted sample population's own pooled SD) and
-    that cluster is fixed to the anchor's dosage. If an anchor is implausibly
-    far (> ``_OUTLIER_SD`` pooled SDs) from every cluster, it is a conflict --
-    ``"anchor_conflict"`` is appended to ``warnings`` and that anchor is NOT
-    used (never silently override).
+    ascending by fam-fraction. ``anchor1_ratios`` (allele-1 = homozygous, high
+    ratio -> dosage ``ploidy``) and ``anchor2_ratios`` (allele-2 = homozygous,
+    low ratio -> dosage 0) are the control wells' fam-fractions.
 
-    Returns a dosage list parallel to ``order`` (strictly increasing, so
-    rank/label assignment stays consistent with the rest of the module), or
-    ``None`` when no anchor could be used -- the caller then falls back to the
-    existing (non-anchored) ``_assign_dosages``.
+    Scale:
+      * both anchors (median ratios r1 > r2): a well at ratio ``r`` maps to
+        ``round((r - r2) / (r1 - r2) * ploidy)``;
+      * allele-1 only: fix r1 at dosage ``ploidy`` and step by the ideal
+        ``1/ploidy`` per dosage -> ``round((r - r1) * ploidy) + ploidy``;
+      * allele-2 only: fix r2 at dosage 0 -> ``round((r - r2) * ploidy)``.
+    Dosages are clamped to ``[0, ploidy]`` and forced strictly increasing so
+    rank order is preserved (consistent with the rest of the module).
+
+    ``"anchor_conflict"`` is appended to ``warnings`` ONLY when the anchors are
+    INCONSISTENT -- an inverted/degenerate scale (allele-1 ratio <= allele-2
+    ratio) or a resulting cluster dosage falling outside ``[0, ploidy]`` by
+    more than one whole dosage step (before clamping). An anchor merely sitting
+    far from every cluster is the normal "extreme dosage absent" case and
+    resolves cleanly (NOT a conflict).
+
+    Returns a dosage list parallel to ``order``, or ``None`` when no anchor
+    could be used -- the caller then falls back to the existing (non-anchored)
+    ``_assign_dosages``.
     """
-    import math
-
     import numpy as np
 
-    def _t(x: float) -> float:
-        return math.asin(math.sqrt(min(max(x, 0.0), 1.0)))
+    def _conflict() -> None:
+        if warnings is not None and "anchor_conflict" not in warnings:
+            warnings.append("anchor_conflict")
 
-    cluster_means: dict[int, float] = {
-        lab: float(np.mean([rt_by_global[i] for i in idxs])) for lab, idxs in members.items()
-    }
+    r1 = float(np.median(anchor1_ratios)) if anchor1_ratios else None
+    r2 = float(np.median(anchor2_ratios)) if anchor2_ratios else None
+    ratios = [cluster_ratio[lab] for lab in order]  # ascending
 
-    # An allele-control anchor is a DIFFERENT population from the samples --
-    # by design it may sit well beyond the fitted sample clusters (that's the
-    # whole point: it extends the ladder past what the observed samples show,
-    # e.g. a skewed extreme homozygote not otherwise present in this batch).
-    # So "far" cannot be judged against tight within-cluster replicate noise
-    # (section 4's ``sigma``) -- every legitimate anchor would fail that. It
-    # is instead judged against the spread of the FITTED SAMPLE POPULATION AS
-    # A WHOLE (every signal well's own fit-space value, pooled): this scales
-    # with how widely this marker's own dosage classes already range, so a
-    # modestly-further anchor is plausible while one many multiples of the
-    # observed spread away is not.
-    all_rt = np.array(list(rt_by_global.values()), dtype=float)
-    sigma = float(all_rt.std(ddof=1)) if all_rt.size > 1 else 0.0
-    if sigma <= 0:
-        sigma = 1e-6
-
-    def _nearest(anchor_rt: float) -> tuple[int, float]:
-        # cluster_means is always non-empty here (members comes from a fitted
-        # GMM with >=1 component over the >=4 signal wells required to reach
-        # this point in cluster_auto).
-        best_lab: int = next(iter(cluster_means))
-        best_d = float("inf")
-        for lab, m in cluster_means.items():
-            d = abs(anchor_rt - m)
-            if d < best_d:
-                best_lab, best_d = lab, d
-        return best_lab, (best_d / sigma if sigma > 0 else float("inf"))
-
-    forced: dict[int, int] = {}  # cluster label -> forced dosage
-
-    if anchor1_ratios:
-        lab, sd = _nearest(float(np.median([_t(r) for r in anchor1_ratios])))
-        if sd > _OUTLIER_SD:
-            if warnings is not None and "anchor_conflict" not in warnings:
-                warnings.append("anchor_conflict")
-        else:
-            forced[lab] = ploidy
-
-    if anchor2_ratios:
-        lab, sd = _nearest(float(np.median([_t(r) for r in anchor2_ratios])))
-        if sd > _OUTLIER_SD:
-            if warnings is not None and "anchor_conflict" not in warnings:
-                warnings.append("anchor_conflict")
-        else:
-            # Same cluster nearest to both anchors -- degenerate/contradictory,
-            # do not force it to both 0 and ploidy.
-            if lab in forced and forced[lab] != 0:
-                pass
-            else:
-                forced[lab] = 0
-
-    if not forced:
-        return None
-
-    rank = {lab: i for i, lab in enumerate(order)}
-    forced_ranks = sorted({(rank[lab], d) for lab, d in forced.items()})
-
-    if len(forced_ranks) == 1:
-        r0, d0 = forced_ranks[0]
-        # Single anchor: the offset is fixed by the anchor, the spacing
-        # between the (unanchored) clusters still comes from the normal
-        # gap-based step estimate.
-        _off, step, _ = estimate_window([cluster_ratio[lab] for lab in order], ploidy)
-        offset = d0 - r0 * step
+    if r1 is not None and r2 is not None:
+        if r1 <= r2:
+            # Inverted / degenerate scale: allele-1 (should be high) is not
+            # above allele-2 (should be low). The anchors contradict each
+            # other, so do NOT let them set any scale.
+            _conflict()
+            return None
+        scale = r1 - r2
+        raw = [(r - r2) / scale * ploidy for r in ratios]
+    elif r1 is not None:
+        raw = [(r - r1) * ploidy + ploidy for r in ratios]
+    elif r2 is not None:
+        raw = [(r - r2) * ploidy for r in ratios]
     else:
-        (r0, d0), (r1, d1) = forced_ranks[0], forced_ranks[-1]
-        if r1 == r0:
-            return None
-        step = round((d1 - d0) / (r1 - r0))
-        if step < 1:
-            return None
-        offset = d0 - r0 * step
-
-    dosages = [offset + i * step for i in range(len(order))]
-    if any(d < 0 or d > ploidy for d in dosages):
         return None
-    if len(set(dosages)) != len(dosages):
+
+    # Inconsistent with the data: a cluster lands more than one whole dosage
+    # step outside the ladder. (Within one step outside is tolerated and simply
+    # clamped -- e.g. a control slightly beyond the most-extreme observed
+    # sample cluster.)
+    if any(x < -1.0 or x > ploidy + 1.0 for x in raw):
+        _conflict()
+        return None
+
+    dosages = [min(ploidy, max(0, int(round(x)))) for x in raw]
+
+    # Preserve strict rank order: adjacent clusters that round to the same (or
+    # inverted) dosage are nudged apart. If that pushes past the ladder top the
+    # anchors can't consistently place this many distinct classes -> conflict.
+    for i in range(1, len(dosages)):
+        if dosages[i] <= dosages[i - 1]:
+            dosages[i] = dosages[i - 1] + 1
+    if any(d < 0 or d > ploidy for d in dosages):
+        _conflict()
         return None
     return dosages
 
