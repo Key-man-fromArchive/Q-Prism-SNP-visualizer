@@ -88,8 +88,18 @@ def parse_pcrd(file_path: str) -> UnifiedData:
     # Classify reads into data windows and assign sequential cycle numbers
     data_windows, cycle_data = _classify_reads_into_windows(plate_reads)
 
-    # Apply baseline subtraction: subtract first amplification cycle from all
-    _subtract_baseline(cycle_data, data_windows)
+    # Background removal. Two cases:
+    #   - Amplification run (>1 read): subtract the first amplification cycle as a
+    #     flat baseline (delta-Rn style).
+    #   - Single endpoint / allelic-discrimination read (1 read): there is no
+    #     earlier cycle to baseline against, so subtracting the read from itself
+    #     would zero the reporters. Instead subtract a per-channel background floor
+    #     (the plate-wide minimum of each reporter) so the endpoint FAM/HEX signal
+    #     is preserved for genotyping. ROX (passive) is never subtracted.
+    if len(cycle_data) <= 1:
+        _subtract_channel_background(cycle_data)
+    else:
+        _subtract_baseline(cycle_data, data_windows)
 
     # Build UnifiedData
     wells_set: set[str] = set()
@@ -557,6 +567,29 @@ def _subtract_baseline(
                 continue
             rfu["fam"] -= bl["fam"]
             rfu["allele2"] -= bl["allele2"]
+
+
+def _subtract_channel_background(cycle_data: list[dict]) -> None:
+    """Endpoint case: subtract a per-channel background FLOOR from the reporters.
+
+    A single plate read (endpoint / allelic-discrimination) has no earlier cycle
+    to baseline against, and raw PAr means carry a large optical background
+    (~2000-4000 RFU) that swamps the allele signal (every well's fam/allele2 ratio
+    collapses to ~0.5). The background floor is the plate-wide minimum of each
+    reporter channel — the well with the least of that dye approximates zero
+    signal for it. Subtracting it (clamped at 0) restores the discrimination
+    signal. ROX (passive reference) is left untouched for normalization.
+    """
+    if not cycle_data:
+        return
+    wells = cycle_data[0]["wells"]
+    if not wells:
+        return
+    fam_bg = min(r["fam"] for r in wells.values())
+    a2_bg = min(r["allele2"] for r in wells.values())
+    for rfu in wells.values():
+        rfu["fam"] = max(rfu["fam"] - fam_bg, 0.0)
+        rfu["allele2"] = max(rfu["allele2"] - a2_bg, 0.0)
 
 
 def _parse_well_groups(
