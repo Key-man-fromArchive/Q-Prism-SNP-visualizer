@@ -19,6 +19,10 @@ _NTC_SIGNAL_FRAC = 0.2
 # (1/ploidy) are treated as one dosage class that BIC over-split on noise.
 _DOSAGE_MERGE_FRAC = 0.5
 
+# Adjacent dosage classes closer than this many pooled within-class SDs are flagged
+# as poorly resolved (reliability warning, esp. high ploidy).
+_MIN_SEP_SD = 3.0
+
 # No-call rules, evaluated against the fitted mixture (so they scale with the
 # data's own spread and ploidy, not a fixed ratio gap):
 #   - a well whose best posterior probability is below this is "between classes"
@@ -333,7 +337,43 @@ def genotype_window(
         else:
             cuts.append((d + 0.5) / ploidy)
 
-    return {"boundaries": cuts, "offset": offset, "offset_uncertain": uncertain}
+    # Reliability: at high ploidy adjacent dosage classes are only ~1/P apart, so
+    # they may overlap. Flag when any two adjacent PRESENT classes sit closer than
+    # _MIN_SEP_SD pooled within-class SDs (in the arcsine-sqrt fit space) — the
+    # honest "these dosages aren't cleanly resolvable" signal for the UI.
+    low_separation = _window_low_separation(ratio_by_dosage, present)
+
+    return {
+        "boundaries": cuts,
+        "offset": offset,
+        "offset_uncertain": uncertain,
+        "low_separation": low_separation,
+    }
+
+
+def _window_low_separation(ratio_by_dosage: dict[int, list[float]], present: list[int]) -> bool:
+    import math
+
+    def _t(x: float) -> float:
+        return math.asin(math.sqrt(min(max(x, 0.0), 1.0)))
+
+    if len(present) < 2:
+        return False
+    variances, means = [], {}
+    for d in present:
+        vals = [_t(r) for r in ratio_by_dosage[d]]
+        means[d] = sum(vals) / len(vals)
+        if len(vals) >= 2:
+            m = means[d]
+            variances.append(sum((v - m) ** 2 for v in vals) / (len(vals) - 1))
+    pooled_sd = math.sqrt(sum(variances) / len(variances)) if variances else 0.0
+    if pooled_sd <= 0:
+        return False
+    for i in range(len(present) - 1):
+        gap = means[present[i + 1]] - means[present[i]]
+        if gap < _MIN_SEP_SD * pooled_sd:
+            return True
+    return False
 
 
 def estimate_window(sorted_ratios: list[float], ploidy: int) -> tuple[int, int, bool]:
@@ -368,12 +408,19 @@ def estimate_window(sorted_ratios: list[float], ploidy: int) -> tuple[int, int, 
     step = max(1, round(med_gap * ploidy))
     step = min(step, max(1, ploidy // (k - 1)))  # keep the window inside 0..P
 
+    # Fit the offset in the arcsine-sqrt space the mixture is fitted in (variance-
+    # stabilized), so the least-squares match is consistent with where clusters
+    # were found rather than in raw ratio.
+    import math
+
+    def _t(x: float) -> float:
+        return math.asin(math.sqrt(min(max(x, 0.0), 1.0)))
+
+    obs = [_t(r) for r in sorted_ratios]
     max_offset = ploidy - (k - 1) * step
     best_off, best_cost = 0, float("inf")
     for off in range(0, max_offset + 1):
-        cost = sum(
-            (sorted_ratios[i] - (off + i * step) / ploidy) ** 2 for i in range(k)
-        )
+        cost = sum((obs[i] - _t((off + i * step) / ploidy)) ** 2 for i in range(k))
         if cost < best_cost:
             best_cost, best_off = cost, off
     return best_off, step, not (low_anchor or high_anchor)
@@ -429,12 +476,8 @@ def _label_clusters(centers) -> dict[int, str]:
     for i, total, ratio in center_info:
         if i in labels:
             continue
-        if ratio > 0.6:
-            labels[i] = WellType.ALLELE1_HOMO.value
-        elif ratio < 0.4:
-            labels[i] = WellType.ALLELE2_HOMO.value
-        else:
-            labels[i] = WellType.HETEROZYGOUS.value
+        # Diploid label via the central vocabulary (was an inline 0.6/0.4 cut).
+        labels[i] = label_by_ratio(ratio, 2, [0.6, 0.4])
 
     for i in range(n):
         if i not in labels:

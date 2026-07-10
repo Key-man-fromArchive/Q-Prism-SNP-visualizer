@@ -374,6 +374,8 @@ const ko: Translations = {
   offsetLabel: 'Dosage 오프셋',
   offsetHint: '관측된 클래스가 어떤 절대 dosage인지(가장 낮은 클래스 = 이 dosage). 다배체 마커가 일부 클래스만 보일 때 조정하세요(예: 6배체가 3클래스를 0,1,2로 vs 4,5,6로).',
   offsetUncertainHint: '오프셋은 추정값입니다 — 관측 클래스 중 축 극단에 붙은 것이 없어 절대 dosage를 확인해 주세요.',
+  lowSeparation: '분리도 낮음',
+  lowSeparationHint: '인접 dosage 클래스가 겹칩니다(~3 SD보다 가까움). 이 배수성에서 dosage 판정이 신뢰도가 낮을 수 있으니 주의하거나 수동 검토하세요.',
   analyzeHint: '최적 사이클(NTC 상승 전)을 제안하고 유전자형을 자동 그룹핑합니다',
   analyzeFailed: '분석 실패',
   analyzeSuggestedCycle: (c: string) => `제안 사이클: ${c}`,

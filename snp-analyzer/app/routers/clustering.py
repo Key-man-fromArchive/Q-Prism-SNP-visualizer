@@ -114,6 +114,7 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
         boundaries=window["boundaries"],
         offset=window["offset"],
         offset_uncertain=window["offset_uncertain"],
+        low_separation=window["low_separation"],
     )
     cluster_store[sid] = result
 

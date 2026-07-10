@@ -192,6 +192,42 @@ def test_estimate_window_step_offset_and_uncertainty():
     assert (off, step) == (0, 2)
 
 
+def test_low_separation_flag():
+    from app.processing.clustering import _window_low_separation
+
+    # tight, well-separated tetraploid classes -> not flagged
+    tight = {0: [0.0, 0.01, 0.0], 2: [0.5, 0.51, 0.49], 4: [1.0, 0.99, 1.0]}
+    assert _window_low_separation(tight, [0, 2, 4]) is False
+
+    # adjacent hexaploid classes with wide spread that overlap -> flagged
+    wide = {
+        3: [0.5 + (i - 3) * 0.03 for i in range(7)],
+        4: [0.667 + (i - 3) * 0.03 for i in range(7)],
+    }
+    assert _window_low_separation(wide, [3, 4]) is True
+
+
+def test_alpha_bias_still_rank_resolves_tetraploid():
+    # Allele-amplification bias alpha shifts ratios off the equal-spaced d/P grid;
+    # the rank-preserving window estimator must still resolve 5 ordered dosages.
+    from collections import Counter
+    from app.processing.clustering import cluster_auto
+
+    alpha = 1.5
+    pts = []
+    for d in range(5):
+        x = d / 4  # true allele-1 fraction
+        r = (alpha * x) / (alpha * x + (1 - x))  # biased fam-fraction
+        for i in range(12):
+            rr = min(max(r + (i - 6) * 0.003, 0.01), 0.99)
+            pts.append({"well": f"d{d}_{i}", "norm_fam": rr, "norm_allele2": 1 - rr})
+    assign, _ = cluster_auto(pts, ploidy=4)
+    counts = Counter(assign.values())
+    # all five dosage classes resolved in rank order despite the bias
+    for label in ["AAAA", "AAAB", "AABB", "ABBB", "BBBB"]:
+        assert counts[label] == 12, f"{label}: {dict(counts)}"
+
+
 def test_hexaploid_labels_used():
     # Sanity: hexaploid (P=6) produces 7-class labels from the vocab.
     specs = [(6, 1.0), (3, 0.5), (0, 0.0)]

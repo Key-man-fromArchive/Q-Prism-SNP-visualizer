@@ -162,6 +162,8 @@ class ClusteringResult(BaseModel):
     boundaries: list[float] | None = None
     offset: int = 0
     offset_uncertain: bool = False
+    # True when adjacent dosage classes overlap (poorly resolved — high ploidy).
+    low_separation: bool = False
 
 
 class ManualWellTypeUpdate(BaseModel):

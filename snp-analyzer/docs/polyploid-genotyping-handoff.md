@@ -422,3 +422,18 @@ Claude·Fable·Codex 3개 모델로 하드코딩 비율 상수를 교차 비평.
 - 전 과정 **JS/Plotly/WebGL 에러 0**(favicon 404·로그인전 401만). 수동 `Plotly.newPlot(scattergl)` 정상 → 헤드리스 WebGL OK.
 
 **부수 관찰(비차단)**: (1) 초기 저신호 사이클에선 ScatterPlot이 fetch 전이라 잠깐 비어 보임 — endpoint 사이클로 이동 시 정상 렌더(합성데이터 타이밍, 코드 무관). (2) 세션 로드시 프론트 ploidy 셀렉터가 세션 저장 ploidy(4)로 자동 동기화되지 않고 기본 2를 보임 → 사용자가 셀렉터로 4x 선택해야 함. **개선 후보**: 세션 로드 시 `GET /ploidy`로 셀렉터 초기화. (3) ASG 프론트(shared_result/history) 다배체 실렌더 e2e는 별도(로컬 실행 안 함) — presentation 단위 확인으로 갈음.
+
+---
+
+## 20. 비평 항목 후속 처리 + 셀렉터 자동 동기화 (2026-07-10)
+
+**셀렉터 자동 동기화** (§19 UX 갭 해소): `lib/api.getPloidy` 추가, `AnalysisTab` 세션 로드 시 `GET /ploidy`(+기존 클러스터의 `ploidy`)로 ploidy 셀렉터 초기화 → 다배체 세션이 자기 ploidy로 열림.
+
+**3-AI 비평 항목 후속** (§14):
+- **항목 2 (mixture-derived 경계)**: 실질 완료 — `genotype_window`가 인접 클래스 경험적 중점으로 경계 산출(부재 dosage 갭만 이상값 폴백). d/P는 seed/폴백 한정.
+- **항목 3 (공간 일관성)**: `estimate_window`의 offset 최소제곱 fit을 **arcsine-sqrt 공간**에서 수행(GMM·confidence와 동일 공간). 177 tests green.
+- **항목 4 (폴백 수렴)**: 마지막 잔여 `_label_clusters`(cluster_kmeans)의 0.6/0.4 인라인 컷을 `genotype_vocab.label_by_ratio`로 수렴. 이제 diploid 컷 하드코딩 잔존 없음(핵심 경로).
+- **항목 5 (고배수성 신뢰-상한)**: `genotype_window`가 인접 present 클래스 간격 < `_MIN_SEP_SD=3` × pooled SD(arcsine)면 `low_separation=True`. `ClusteringResult.low_separation` → 프론트 분석바 **⚠ "분리도 낮음" 배지**(ploidy>2 시). "정확 dosage 미신뢰" 정직 노출.
+- **항목 6 (per-assay 보정)**: α-bias 합성 회귀테스트 추가(`test_alpha_bias_still_rank_resolves_tetraploid`, α=1.5) — rank-preserving estimate_window가 편향 하에서도 5클래스 순서 분해 확인. **per-assay 보정 자체(마커·기기·dye별 비선형 보정 저장/적용)는 별도 대형 기능으로 남김** — 현재는 rank 보존 + uncertain/low_separation 플래그로 정직 처리.
+
+**미완 잔여**(전부-다 관점): per-assay 보정 기능, polysomic freq/HWE, PDF 리포트 어휘, use-keyboard-shortcuts 키, ASG 프론트 다배체 실렌더 E2E, 혼합 배수성.

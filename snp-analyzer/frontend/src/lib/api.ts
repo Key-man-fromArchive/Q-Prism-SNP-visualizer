@@ -269,6 +269,10 @@ export async function getCluster(sid: string): Promise<ClusteringResult> {
   return apiFetch<ClusteringResult>(`/api/data/${sid}/cluster`);
 }
 
+export async function getPloidy(sid: string): Promise<{ ploidy: number }> {
+  return apiFetch<{ ploidy: number }>(`/api/data/${sid}/ploidy`);
+}
+
 export type CycleSuggestion = {
   suggested_cycle: number | null;
   suggested_low: number | null;

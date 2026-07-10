@@ -9,6 +9,7 @@ import {
   getWellGroups,
   getWellTypes,
   getCluster,
+  getPloidy,
   runClustering as apiRunClustering,
   suggestCycle,
   type CycleSuggestion,
@@ -41,9 +42,11 @@ export function AnalysisTab() {
   const setBoundaries = useDataStore((s) => s.setBoundaries);
   const setOffset = useDataStore((s) => s.setOffset);
   const setOffsetUncertain = useDataStore((s) => s.setOffsetUncertain);
+  const setLowSeparation = useDataStore((s) => s.setLowSeparation);
   const boundaries = useDataStore((s) => s.boundaries);
   const offset = useDataStore((s) => s.offset);
   const offsetUncertain = useDataStore((s) => s.offsetUncertain);
+  const lowSeparation = useDataStore((s) => s.lowSeparation);
   const { ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters } = useSettingsStore();
   const ploidy = useSettingsStore((s) => s.ploidy);
   const setPloidy = useSettingsStore((s) => s.setPloidy);
@@ -192,6 +195,7 @@ export function AnalysisTab() {
       setBoundaries(result.boundaries ?? null);
       setOffset(result.offset ?? 0);
       setOffsetUncertain(result.offset_uncertain ?? false);
+      setLowSeparation(result.low_separation ?? false);
       setAnalysis(suggestion);
       // Force scatter/plate to re-fetch so points pick up auto_cluster calls.
       window.dispatchEvent(new CustomEvent("welltypes-changed"));
@@ -252,6 +256,14 @@ export function AnalysisTab() {
     if (autoRanSession.current === sessionId) return;
     autoRanSession.current = sessionId;
     (async () => {
+      // Sync the ploidy selector to the session's stored ploidy so a polyploid
+      // session opens at its own ploidy instead of the default 2.
+      try {
+        const { ploidy: sessionPloidy } = await getPloidy(sessionId);
+        if (sessionPloidy) setPloidy(sessionPloidy);
+      } catch {
+        /* ignore — keep the current selector value */
+      }
       try {
         const existing = await getCluster(sessionId);
         if (existing?.assignments && Object.keys(existing.assignments).length > 0) {
@@ -259,6 +271,8 @@ export function AnalysisTab() {
           setBoundaries(existing.boundaries ?? null);
           setOffset(existing.offset ?? 0);
           setOffsetUncertain(existing.offset_uncertain ?? false);
+          setLowSeparation(existing.low_separation ?? false);
+          if (existing.ploidy) setPloidy(existing.ploidy);
           return;
         }
       } catch {
@@ -266,7 +280,7 @@ export function AnalysisTab() {
       }
       handleAnalyze();
     })();
-  }, [sessionId, currentCycle, handleAnalyze, setClusterAssignments]);
+  }, [sessionId, currentCycle, handleAnalyze, setClusterAssignments, setPloidy]);
 
   // Check if any wells are typed as Empty
   const hasEmptyWells = useMemo(
@@ -338,6 +352,15 @@ export function AnalysisTab() {
             ))}
           </select>
         </label>
+        {ploidy > 2 && lowSeparation && (
+          <span
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-amber-600"
+            style={{ background: "rgba(217,119,6,0.12)" }}
+            title={t.lowSeparationHint}
+          >
+            ⚠ {t.lowSeparation}
+          </span>
+        )}
         {/* Draggable genotype-boundary lines — only meaningful in manual mode */}
         <button
           onClick={() => setShowBoundaryLines(!showBoundaryLines)}

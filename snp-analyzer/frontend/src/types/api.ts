@@ -284,6 +284,7 @@ export type ClusteringResult = {
   boundaries?: number[] | null; // K-1 internal radial-line positions (descending fam-fraction)
   offset?: number;              // dosage of the lowest observed class
   offset_uncertain?: boolean;   // true when the offset is a low-confidence guess
+  low_separation?: boolean;     // true when adjacent dosage classes overlap (poorly resolved)
 };
 
 export type ManualWellTypeUpdate = {

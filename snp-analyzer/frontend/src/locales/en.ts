@@ -372,6 +372,8 @@ const en = {
   offsetLabel: 'Dosage offset',
   offsetHint: 'Which absolute dosages the observed classes are (the lowest class = this dosage). Shift when a polyploid marker resolves only some classes (e.g. a 6x marker showing 3 classes as 0,1,2 vs 4,5,6).',
   offsetUncertainHint: 'Offset is a guess — no observed class sits near an axis extreme, so please confirm which dosages these are.',
+  lowSeparation: 'Low separation',
+  lowSeparationHint: 'Adjacent dosage classes overlap (they sit closer than ~3 SDs). Dosage calls at this ploidy may be unreliable — treat with caution or review manually.',
   analyzeHint: 'Suggest the best cycle (before NTC rises) and auto-cluster genotypes',
   analyzeFailed: 'Analysis failed',
   analyzeSuggestedCycle: (c: string) => `Suggested cycle: ${c}`,
