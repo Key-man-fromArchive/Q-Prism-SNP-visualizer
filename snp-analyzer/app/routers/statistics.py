@@ -10,6 +10,37 @@ from app.auth import CurrentUser, check_session_access
 router = APIRouter()
 
 
+def _marker_stats(region, manual_assignments: dict[str, str]) -> dict:
+    """Per-marker allele frequency / HWE / genotype distribution, scoped to a
+    single region's own wells, assignments and ploidy (A2: a multi-marker
+    plate's flat top-level fields are NOT authoritative -- each marker must be
+    aggregated independently, using its own ploidy vocabulary)."""
+    effective = get_effective_types(region.assignments, manual_assignments, region.wells)
+    counts = count_genotypes(effective, region.ploidy)
+
+    if region.ploidy == 2:
+        freq = allele_frequencies(counts["AA"], counts["AB"], counts["BB"])
+        hwe = hwe_test(counts["AA"], counts["AB"], counts["BB"])
+    else:
+        freq = allele_frequencies(0, 0, 0)
+        hwe = hwe_test(0, 0, 0)
+
+    distribution: dict[str, int] = {}
+    for gt in effective.values():
+        distribution[gt] = distribution.get(gt, 0) + 1
+
+    return {
+        "id": region.id,
+        "name": region.name,
+        "ploidy": region.ploidy,
+        "allele_frequency": freq,
+        "hwe": hwe,
+        "genotype_distribution": distribution,
+        "genotype_counts": counts,
+        "total_wells": len(region.wells),
+    }
+
+
 @router.get("/api/data/{sid}/statistics")
 async def get_statistics(sid: str, current_user: CurrentUser):
     check_session_access(sid, current_user)
@@ -40,9 +71,19 @@ async def get_statistics(sid: str, current_user: CurrentUser):
     for well, gt in effective.items():
         distribution[gt] = distribution.get(gt, 0) + 1
 
-    return {
+    result = {
         "allele_frequency": freq,
         "hwe": hwe,
         "genotype_distribution": distribution,
         "total_wells": len(unified.wells),
     }
+
+    # A2: multi-marker plate -- the flat fields above pool every marker's
+    # assignments under one (legacy) plate-level ploidy and are NOT
+    # authoritative. Add a per-marker breakdown, each using its own
+    # region.ploidy / region.assignments. Single-marker (regions is None)
+    # sessions never get this key, so their JSON is unchanged.
+    if ca is not None and ca.regions:
+        result["markers"] = [_marker_stats(r, manual_assignments) for r in ca.regions]
+
+    return result

@@ -1,0 +1,782 @@
+<title>Q-Prism · 멀티-마커 플레이트 설정 & 분석</title>
+<style>
+  :root{
+    --bg:#eef1f5; --surface:#ffffff; --surface-2:#f6f8fa; --surface-3:#eff3f6;
+    --border:#d8dee6; --border-strong:#c2cbd5;
+    --ink:#15202b; --ink-2:#54636f; --ink-3:#8896a2;
+    --accent:#0e7c86; --accent-hover:#0a626a; --accent-soft:#d7edef; --accent-ink:#0a5058;
+    --warn:#b26a0f; --warn-bg:#fbf1dd; --warn-border:#eccf92;
+    --good:#1f8f52; --good-bg:#e3f4ea; --crit:#c94040;
+    --m1:#7350d4; --m1-soft:#ece6fb;
+    --m2:#c9791a; --m2-soft:#f8ecd8;
+    --grid-empty:#eef2f5; --well-off:#c3ccd6; --well-off-border:#aab6c2;
+    --shadow:0 1px 2px rgba(16,32,45,.06),0 4px 14px rgba(16,32,45,.05);
+    --font-sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+    --font-mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --r:9px; --r-sm:6px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0c1317;--surface:#131d24;--surface-2:#17232b;--surface-3:#1d2b34;--border:#28363f;--border-strong:#374854;
+      --ink:#e7eef3;--ink-2:#9fb1bd;--ink-3:#697c88;--accent:#28b6c2;--accent-hover:#4bcad4;--accent-soft:#0f3d42;--accent-ink:#7fdbe2;
+      --warn:#e0a94b;--warn-bg:#2e2413;--warn-border:#5a4a26;--good:#4cc07f;--good-bg:#122a1d;--crit:#e26a6a;
+      --m1:#a488f0;--m1-soft:#241d3d;--m2:#e0a24f;--m2-soft:#33270f;--grid-empty:#172129;--well-off:#34434e;--well-off-border:#445560;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.28);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#eef1f5;--surface:#ffffff;--surface-2:#f6f8fa;--surface-3:#eff3f6;--border:#d8dee6;--border-strong:#c2cbd5;
+    --ink:#15202b;--ink-2:#54636f;--ink-3:#8896a2;--accent:#0e7c86;--accent-hover:#0a626a;--accent-soft:#d7edef;--accent-ink:#0a5058;
+    --warn:#b26a0f;--warn-bg:#fbf1dd;--warn-border:#eccf92;--good:#1f8f52;--good-bg:#e3f4ea;--crit:#c94040;
+    --m1:#7350d4;--m1-soft:#ece6fb;--m2:#c9791a;--m2-soft:#f8ecd8;--grid-empty:#eef2f5;--well-off:#c3ccd6;--well-off-border:#aab6c2;
+    --shadow:0 1px 2px rgba(16,32,45,.06),0 4px 14px rgba(16,32,45,.05);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0c1317;--surface:#131d24;--surface-2:#17232b;--surface-3:#1d2b34;--border:#28363f;--border-strong:#374854;
+    --ink:#e7eef3;--ink-2:#9fb1bd;--ink-3:#697c88;--accent:#28b6c2;--accent-hover:#4bcad4;--accent-soft:#0f3d42;--accent-ink:#7fdbe2;
+    --warn:#e0a94b;--warn-bg:#2e2413;--warn-border:#5a4a26;--good:#4cc07f;--good-bg:#122a1d;--crit:#e26a6a;
+    --m1:#a488f0;--m1-soft:#241d3d;--m2:#e0a24f;--m2-soft:#33270f;--grid-empty:#172129;--well-off:#34434e;--well-off-border:#445560;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.28);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  button{font-family:inherit;cursor:pointer}
+  .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+  .tnum{font-variant-numeric:tabular-nums}
+
+  .app{max-width:1240px;margin:0 auto;padding:18px 20px 60px}
+  .topbar{display:flex;align-items:center;gap:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;box-shadow:var(--shadow)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em}
+  .prism{width:22px;height:22px;flex:none}
+  .file{display:flex;align-items:center;gap:8px;color:var(--ink-2);font-size:13px;min-width:0}
+  .file .mono{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px}
+  .file .chip{background:var(--surface-3);border:1px solid var(--border);border-radius:20px;padding:1px 9px;font-size:11px;color:var(--ink-2);white-space:nowrap}
+  .spacer{flex:1}
+  .seg{display:flex;background:var(--surface-3);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px}
+  .seg button{border:0;background:transparent;color:var(--ink-2);padding:6px 16px;border-radius:6px;font-weight:600;font-size:13px;display:flex;align-items:center;gap:7px}
+  .seg button .n{font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:0 6px;color:var(--ink-3)}
+  .seg button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+  .seg button[aria-selected="true"] .n{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+  .icobtn{border:1px solid var(--border);background:var(--surface);color:var(--ink-2);width:34px;height:34px;border-radius:8px;display:grid;place-items:center}
+  .icobtn:hover{color:var(--ink);border-color:var(--border-strong)}
+  .userchip{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface-3);border:1px solid var(--border);border-radius:20px;padding:3px 12px 3px 4px;white-space:nowrap}
+  .userchip .ava{width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700}
+  /* saved layouts (per-user) */
+  .lyrow{display:flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface-2);border-radius:var(--r-sm);padding:8px 9px;margin-bottom:7px}
+  .lyrow .info{flex:1;min-width:0}
+  .lyrow .nm{font-size:12.5px;font-weight:650;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lyrow .mt{font-size:11px;color:var(--ink-3);font-family:var(--font-mono);margin-top:1px}
+  .lyrow .load{border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;flex:none}
+  .lyrow .load:hover{background:var(--accent);color:#fff}
+  .lyrow .del{border:0;background:transparent;color:var(--ink-3);width:24px;height:24px;border-radius:5px;display:grid;place-items:center;flex:none}
+  .lyrow .del:hover{background:var(--surface-3);color:var(--crit)}
+  .ly-empty{font-size:12px;color:var(--ink-3);text-align:center;padding:10px 4px;line-height:1.5}
+  .saveform{display:flex;gap:6px;margin-bottom:8px}
+  .saveform input{flex:1;border:1px solid var(--accent);background:var(--surface-2);color:var(--ink);border-radius:var(--r-sm);padding:7px 9px;font-size:12.5px;font-family:inherit}
+  .saveform input:focus{outline:2px solid var(--accent-soft)}
+  .saveform button{border:0;background:var(--accent);color:#fff;border-radius:var(--r-sm);padding:0 12px;font-weight:700;font-size:12.5px}
+  .divlbl{display:flex;align-items:center;gap:8px;margin:12px 0 8px;font-size:10px;font-weight:800;letter-spacing:.05em;color:var(--ink-3)}
+  .divlbl::after{content:"";flex:1;height:1px;background:var(--border)}
+
+  .banner{display:flex;align-items:center;gap:12px;margin-top:12px;padding:10px 14px;border-radius:var(--r);background:var(--warn-bg);border:1px solid var(--warn-border);color:var(--ink);font-size:13px}
+  .banner.hidden{display:none}
+  .banner .dot{width:8px;height:8px;border-radius:50%;background:var(--warn);flex:none}
+  .banner b{font-weight:700}
+  .banner .grow{flex:1}
+  .lnk{background:transparent;border:0;color:var(--accent);font-weight:700;font-size:13px;padding:4px 6px;border-radius:6px}
+  .lnk:hover{background:var(--accent-soft)}
+  .banner .close{border:0;background:transparent;color:var(--ink-3);font-size:16px;line-height:1;padding:2px 6px;border-radius:6px}
+
+  .work{display:grid;grid-template-columns:240px minmax(0,1fr) 280px;gap:14px;margin-top:14px;align-items:start}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
+  .panel-h{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
+  .panel-h h2{margin:0;font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--ink-3)}
+  .panel-b{padding:12px 14px}
+
+  .mcard{display:block;width:100%;text-align:left;border:1px solid var(--border);background:var(--surface-2);border-radius:var(--r-sm);padding:10px 11px;margin-bottom:9px;position:relative;transition:border-color .12s,background .12s}
+  .mcard:hover{border-color:var(--border-strong)}
+  .mcard[aria-current="true"]{border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 2px var(--accent-soft) inset}
+  .mcard .top{display:flex;align-items:center;gap:8px}
+  .mcard .sw{width:11px;height:11px;border-radius:3px;flex:none}
+  .mcard .nm{font-weight:700;font-size:13px;color:var(--ink);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mcard .pl{font-size:10.5px;font-weight:800;color:var(--accent-ink);background:var(--accent-soft);border-radius:5px;padding:1px 6px}
+  .mcard .meta{display:flex;align-items:center;gap:10px;margin-top:7px;font-size:11.5px;color:var(--ink-2)}
+  .mcard .meta .st{display:inline-flex;align-items:center;gap:4px}
+  .stipple{width:7px;height:7px;border-radius:50%}
+  .mini{display:flex;gap:2px;margin-top:8px;height:5px;border-radius:3px;overflow:hidden;background:var(--surface-3)}
+  .mini span{display:block;height:100%}
+  .addm{width:100%;border:1px dashed var(--border-strong);background:transparent;color:var(--ink-2);border-radius:var(--r-sm);padding:9px;font-weight:600;font-size:12.5px}
+  .addm:hover{color:var(--accent);border-color:var(--accent)}
+  .mcard .edit{position:absolute;top:8px;right:8px;border:0;background:transparent;color:var(--ink-3);width:22px;height:22px;border-radius:5px;display:none;place-items:center}
+  .mcard:hover .edit{display:grid}
+  .mcard .edit:hover{background:var(--surface-3);color:var(--ink)}
+  .mcard .sw{cursor:pointer}
+  .mform{border:1px solid var(--accent);background:var(--surface);border-radius:var(--r-sm);padding:11px;margin-bottom:9px;box-shadow:0 0 0 2px var(--accent-soft) inset}
+  .mform .fl{font-size:10.5px;font-weight:800;color:var(--ink-3);margin:0 0 5px}
+  .mform input.nm{width:100%;border:1px solid var(--border);background:var(--surface-2);color:var(--ink);border-radius:var(--r-sm);padding:7px 9px;font-size:13px;font-weight:600;font-family:inherit}
+  .mform input.nm:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+  .swatches{display:flex;flex-wrap:wrap;gap:6px;margin:5px 0 2px}
+  .swatches button{width:22px;height:22px;border-radius:6px;border:2px solid transparent;padding:0;cursor:pointer;position:relative}
+  .swatches button[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 2px var(--surface) inset}
+  .mform .sel{margin-top:4px}
+  .mform .frow{display:flex;gap:6px;margin-top:10px}
+  .mform .frow button{flex:1;border-radius:var(--r-sm);padding:8px;font-weight:700;font-size:12.5px;border:1px solid var(--border)}
+  .mform .frow .ok{border:0;background:var(--accent);color:#fff}
+  .mform .frow .ok:hover{background:var(--accent-hover)}
+  .mform .frow .no{background:var(--surface-2);color:var(--ink-2)}
+  .field-mini{margin-top:9px}
+  .side-sec{margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+  .side-sec .lbl{font-size:10.5px;font-weight:800;letter-spacing:.05em;color:var(--ink-3);margin-bottom:9px}
+  .btnrow{display:flex;flex-direction:column;gap:7px}
+  .lbtn{display:flex;align-items:center;gap:9px;border:1px solid var(--border);background:var(--surface-2);color:var(--ink);border-radius:var(--r-sm);padding:8px 10px;font-size:12.5px;font-weight:550;text-align:left}
+  .lbtn:hover{border-color:var(--border-strong);background:var(--surface-3)}
+  .lbtn svg{color:var(--ink-3);flex:none}
+  .lbtn small{color:var(--ink-3);font-weight:500}
+
+  .canvas-h{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-height:56px;padding:9px 14px;border-bottom:1px solid var(--border)}
+  .hint{font-size:12.5px;color:var(--ink-3)}
+  .selinfo{display:flex;align-items:center;gap:12px;flex-wrap:wrap;width:100%}
+  .selinfo .cnt{font-size:13px;font-weight:700;color:var(--ink)}
+  .selinfo .cnt b{color:var(--accent)}
+  .mkpick{display:flex;gap:4px;background:var(--surface-3);border:1px solid var(--border);border-radius:8px;padding:3px}
+  .mkpick button{border:0;background:transparent;color:var(--ink-2);border-radius:6px;padding:6px 12px;font-size:12.5px;font-weight:650;display:inline-flex;align-items:center;gap:6px}
+  .mkpick button .sw{width:9px;height:9px;border-radius:2px}
+  .mkpick button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+  .apply{border:0;background:var(--accent);color:#fff;border-radius:8px;padding:8px 16px;font-weight:700;font-size:13px}
+  .apply:hover{background:var(--accent-hover)}
+  .apply:disabled{opacity:.45;cursor:not-allowed}
+  .clr{border:1px solid var(--border);background:var(--surface);color:var(--ink-2);border-radius:8px;padding:8px 12px;font-weight:600;font-size:12.5px}
+  .clr:hover{color:var(--ink);border-color:var(--border-strong)}
+
+  .canvas-b{padding:18px 16px}
+  .plate{display:inline-grid;grid-template-columns:22px repeat(12,1fr);gap:5px;width:100%;user-select:none}
+  .ch,.rh{display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--ink-3);font-family:var(--font-mono)}
+  .ch{cursor:pointer;border-radius:5px;padding:2px 0}.rh{cursor:pointer;border-radius:5px}
+  .ch:hover,.rh:hover{color:var(--accent);background:var(--accent-soft)}
+  .well{aspect-ratio:1;border-radius:50%;border:1.5px solid var(--well-off-border);background:var(--well-off);position:relative;cursor:pointer;transition:transform .08s,box-shadow .1s}
+  .well:hover{transform:scale(1.09)}
+  .well .lab{position:absolute;inset:0;display:grid;place-items:center;font-size:9px;font-weight:600;color:var(--ink-3);font-family:var(--font-mono)}
+  .well.assigned .lab{color:#fff}
+  .well.sel{outline:2.5px solid var(--accent);outline-offset:1px;box-shadow:0 0 0 3px var(--accent-soft)}
+  .well.ntc::before{content:"";position:absolute;inset:4px;border:1.5px dashed rgba(255,255,255,.85);border-radius:50%}
+  .well.ntc:not(.assigned)::before{border-color:var(--ink-3)}
+  .well .typ{position:absolute;right:-2px;bottom:-2px;min-width:13px;height:13px;padding:0 2px;border-radius:7px;background:var(--ink);color:var(--surface);font-size:8px;font-weight:800;font-family:var(--font-mono);display:grid;place-items:center;box-shadow:0 0 0 1.5px var(--surface)}
+  .plate-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:16px;font-size:12px;color:var(--ink-2)}
+  .plate-legend .it{display:inline-flex;align-items:center;gap:7px}
+  .plate-legend .sw{width:12px;height:12px;border-radius:4px;border:1px solid rgba(0,0,0,.08)}
+  .plate-legend .sw.empty{background:var(--well-off);border:1.5px solid var(--well-off-border)}
+  .plate-legend .sw.ntc{position:relative;background:var(--ink-3)}
+  .plate-legend .sw.ntc::before{content:"";position:absolute;inset:2px;border:1.4px dashed #fff;border-radius:2px}
+
+  .insp .row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;font-size:13px;border-bottom:1px solid var(--border)}
+  .insp .row:last-child{border-bottom:0}
+  .field{margin:12px 0}
+  .field label{display:block;font-size:11px;font-weight:800;letter-spacing:.03em;color:var(--ink-3);margin-bottom:6px}
+  .field label small{text-transform:none;color:var(--ink-3);font-weight:400}
+  select,.inp{width:100%;border:1px solid var(--border);background:var(--surface-2);color:var(--ink);border-radius:var(--r-sm);padding:8px 10px;font-size:13px;font-family:inherit}
+  select:focus,.inp:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+  .segfield{display:flex;gap:4px;background:var(--surface-3);border:1px solid var(--border);border-radius:8px;padding:3px;flex-wrap:wrap}
+  .segfield button{flex:1;min-width:52px;border:0;background:transparent;color:var(--ink-2);border-radius:6px;padding:6px 4px;font-size:12px;font-weight:600}
+  .segfield button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+  .primary{width:100%;margin-top:6px;border:0;background:var(--accent);color:#fff;border-radius:var(--r-sm);padding:10px;font-weight:700;font-size:13px}
+  .primary:hover{background:var(--accent-hover)}
+  .ghostbtn{width:100%;border:1px solid var(--border);background:var(--surface-2);color:var(--ink-2);border-radius:var(--r-sm);padding:8px;font-weight:600;font-size:12.5px;margin-top:8px}
+  .ghostbtn:hover{color:var(--ink);border-color:var(--border-strong)}
+  .empty-note{color:var(--ink-3);font-size:12.5px;text-align:center;padding:22px 8px;line-height:1.6}
+  .ploidy-hint{margin-top:6px;font-size:11.5px;color:var(--ink-2);display:flex;align-items:center;gap:6px}
+
+  .an-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 14px;border-bottom:1px solid var(--border)}
+  .pill{display:inline-flex;align-items:center;gap:7px;background:var(--surface-3);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12.5px;color:var(--ink-2)}
+  .pill b{color:var(--ink)}
+  .pill .sw{width:10px;height:10px;border-radius:3px}
+  .an-body{padding:14px 16px}
+  .scatterwrap{position:relative;border:1px solid var(--border);border-radius:var(--r);background:var(--surface-2);overflow:hidden}
+  canvas{display:block;width:100%;height:auto}
+  .axis-x{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:11px;color:var(--ink-3)}
+  .axis-y{position:absolute;top:50%;left:6px;transform:translateY(-50%) rotate(180deg);writing-mode:vertical-rl;font-size:11px;color:var(--ink-3)}
+  .dosage-legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:12px;font-size:12px;color:var(--ink-2)}
+  .dosage-legend .it{display:inline-flex;align-items:center;gap:6px}
+  .dosage-legend .sw{width:11px;height:11px;border-radius:50%}
+  .counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,1fr));gap:8px;margin-top:4px}
+  .cnt-c{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:9px 10px}
+  .cnt-c .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .cnt-c .k{font-size:10.5px;color:var(--ink-3);font-family:var(--font-mono);margin-top:1px}
+  .ntc-note{display:flex;align-items:flex-start;gap:8px;margin-top:14px;padding:9px 12px;background:var(--accent-soft);border-radius:var(--r-sm);font-size:12.5px;color:var(--accent-ink);line-height:1.5}
+  .ntc-note svg{flex:none;margin-top:2px}
+  .restable{width:100%;border-collapse:collapse;font-size:12.5px}
+  .restable th{text-align:left;font-size:10px;letter-spacing:.04em;color:var(--ink-3);font-weight:800;padding:6px 8px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface)}
+  .restable td{padding:6px 8px;border-bottom:1px solid var(--border);font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+  .restable tr:hover td{background:var(--surface-2)}
+  .scroll{max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:var(--r)}
+  .call{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-sans);font-weight:600}
+  .call .sw{width:9px;height:9px;border-radius:50%}
+  .conf{color:var(--ink-3)}
+  .foot{margin-top:22px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);font-size:12px;color:var(--ink-3);display:flex;gap:8px;align-items:center;flex-wrap:wrap;line-height:1.6}
+  .foot b{color:var(--ink-2);font-weight:700}
+  [hidden]{display:none!important}
+  @media (max-width:980px){.work{grid-template-columns:1fr}.insp-panel{order:3}.file .mono{max-width:150px}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      <svg class="prism" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 2 L22 20 H2 Z" stroke="var(--accent)" stroke-width="1.6" stroke-linejoin="round"/>
+        <path d="M12 2 L12 20" stroke="var(--accent)" stroke-width="1.1" opacity=".5"/>
+        <path d="M2 20 L18 8" stroke="var(--m1)" stroke-width="1.1" opacity=".7"/>
+        <path d="M6 20 L20 11" stroke="var(--m2)" stroke-width="1.1" opacity=".7"/>
+      </svg>
+      Q-Prism
+    </div>
+    <div class="file">
+      <span class="mono">qtotal11.1, qswet5.3_repeat2.pcrd</span>
+      <span class="chip">96웰 · CFX Opus</span>
+      <span class="chip">엔드포인트 read</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="seg" role="tablist" aria-label="작업 화면">
+      <button role="tab" id="tab-plate" aria-selected="true" onclick="showTab('plate')">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 5.8h13M5.8 1.5v13" stroke="currentColor" stroke-width="1.1" opacity=".6"/></svg>
+        플레이트 설정
+      </button>
+      <button role="tab" id="tab-analysis" aria-selected="false" onclick="showTab('analysis')">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="5" cy="10" r="1.6" stroke="currentColor" stroke-width="1.2"/><circle cx="10" cy="5.5" r="1.6" stroke="currentColor" stroke-width="1.2"/><circle cx="11.5" cy="11" r="1.4" stroke="currentColor" stroke-width="1.2"/></svg>
+        분석 <span class="n" id="markerCountBadge">2</span>
+      </button>
+    </div>
+    <span class="userchip" title="레이아웃은 이 사용자 계정에 저장됩니다"><span class="ava">김</span>김태화 연구원</span>
+    <button class="icobtn" id="themeBtn" title="테마 전환" aria-label="라이트/다크 테마 전환" onclick="toggleTheme()">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 9.2A5 5 0 0 1 6.8 3 5 5 0 1 0 13 9.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+
+  <div class="banner" id="unassignedBanner">
+    <span class="dot"></span>
+    <span class="grow"><b id="unassignedCount">웰 4개</b> 미지정 — 분석에서 제외됩니다. 빈 웰·실패 웰은 미지정으로 둬도 됩니다.</span>
+    <button class="lnk" onclick="assignRemaining()">남은 웰을 선택한 마커에 배정</button>
+    <button class="close" aria-label="닫기" onclick="document.getElementById('unassignedBanner').classList.add('hidden')">×</button>
+  </div>
+
+  <!-- ============ 플레이트 설정 탭 ============ -->
+  <div class="work" id="view-plate">
+    <div class="panel">
+      <div class="panel-h"><h2>플레이트의 마커(assay)</h2></div>
+      <div class="panel-b">
+        <div id="markerList"></div>
+        <button class="addm" onclick="addMarker()">+ 마커 추가</button>
+        <div class="side-sec" id="layoutSec"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="canvas-h" id="canvasHead">
+        <span class="hint" id="plateHint">웰을 클릭해 선택(다시 클릭 = 해제) · 열/행 헤더 클릭 = 전체 토글 · Shift-클릭 = 범위</span>
+      </div>
+      <div class="canvas-b">
+        <div class="plate" id="plate" aria-label="96웰 플레이트"></div>
+        <div class="plate-legend">
+          <span class="it"><span class="sw" style="background:var(--m1)"></span> qSwet5.3 · 6배체</span>
+          <span class="it"><span class="sw" style="background:var(--m2)"></span> qTotal11.1 · 6배체</span>
+          <span class="it"><span class="sw ntc"></span> NTC (파일 기준)</span>
+          <span class="it"><span class="sw" style="background:var(--ink);color:var(--surface);font-size:8px;font-weight:800;display:grid;place-items:center">1</span> Allele 대조 (1/2/H)</span>
+          <span class="it"><span class="sw empty"></span> 미지정 / 빈 웰</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel insp-panel">
+      <div class="panel-h"><h2 id="inspTitle">선택</h2></div>
+      <div class="panel-b insp" id="inspBody">
+        <div class="empty-note">플레이트에서 웰을 선택한 뒤<br>마커·웰 유형·샘플 ID를 지정하고<br><b>배정</b>하세요.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 분석 탭 ============ -->
+  <div class="work" id="view-analysis" hidden>
+    <div class="panel">
+      <div class="panel-h"><h2>마커별 결과</h2></div>
+      <div class="panel-b">
+        <div id="analysisList"></div>
+        <div class="side-sec">
+          <div class="lbl">보기</div>
+          <button class="lbtn" onclick="toast('전체 마커 겹쳐보기 (색상 구분, 통합 판정은 하지 않음)')">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="6" cy="6" r="3.2" stroke="currentColor" stroke-width="1.2"/><circle cx="10" cy="10" r="3.2" stroke="currentColor" stroke-width="1.2"/></svg>
+            <span>전체 마커 겹쳐보기</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="an-toolbar">
+        <span class="pill"><span class="sw" id="anSw"></span> <b id="anName">qSwet5.3</b></span>
+        <span class="pill">배수성 <b id="anPloidy">6배체</b></span>
+        <span class="pill" id="anExpect">최대 7개 dosage 클래스 예상</span>
+        <span class="spacer"></span>
+        <span class="pill" id="anWells">웰 44개</span>
+      </div>
+      <div class="an-body">
+        <div class="scatterwrap">
+          <canvas id="scatter" width="760" height="470"></canvas>
+          <div class="axis-x">Allele 2 — HEX (정규화)</div>
+          <div class="axis-y">Allele 1 — FAM (정규화)</div>
+        </div>
+        <div class="dosage-legend" id="dosageLegend"></div>
+        <div class="ntc-note">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 7.2v3.6M8 5.2v.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span id="ntcNoteTxt">배경차감·NTC 기준선은 이 마커 자체의 NTC 웰에서 계산됩니다 — 플레이트 전역으로 공유하지 않습니다.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h"><h2>지노타입 판정</h2></div>
+      <div class="panel-b">
+        <div class="counts" id="counts"></div>
+        <div class="scroll" style="margin-top:14px">
+          <table class="restable">
+            <thead><tr><th>웰</th><th>비율</th><th>판정</th><th>신뢰도</th></tr></thead>
+            <tbody id="resBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <b>목업</b> · 멀티-마커 UX 결정안 반영 (2-surface 워크스페이스, 웰 선택→마커→배정 흐름, 마커별 NTC·배경차감, 경고+제외).
+    데이터는 <span class="mono">qtotal11.1, qswet5.3_repeat2.pcrd</span> 실측 반영 — qSwet5.3 넓은 분포 0.15–0.88, qTotal11.1 좁은 분포 ~0.74.
+  </div>
+</div>
+
+<script>
+const ROWS=['A','B','C','D','E','F','G','H'], COLS=[1,2,3,4,5,6,7,8,9,10,11,12];
+const DOSAGE=[
+  {d:0,label:'BBBBBB',color:'#c26a12'},{d:1,label:'ABBBBB',color:'#d68a2e'},
+  {d:2,label:'AABBBB',color:'#c9a24e'},{d:3,label:'AAABBB',color:'#7f8a90'},
+  {d:4,label:'AAAABB',color:'#5f95bf'},{d:5,label:'AAAAAB',color:'#3f7fb8'},
+  {d:6,label:'AAAAAA',color:'#1f66ad'}
+];
+const NTC_COLOR='#9aa7b1';
+// 사용자가 직접 고르는 마커 색상 팔레트 (고정 hex, 라이트/다크 공통)
+const PALETTE=['#7c5cd6','#d98a1e','#2f9e5a','#d5504e','#3f86c4','#12a3ad','#b7519f','#7a8794'];
+// 시작 상태: 마커 0개 · 모든 웰 미지정(회색)
+const markers=[];
+const assign={}, wtype={};
+let seq=0;
+function wid(r,c){return ROWS[r]+COLS[c]}
+for(let r=0;r<8;r++)for(let c=0;c<12;c++)wtype[wid(r,c)]='sample';
+// NTC는 파일이 알려주는 정보 → 유지 (회색 웰 위 점선 링)
+['A6','B6','C6','D6','E6','F6'].forEach(w=>wtype[w]='ntc');
+['A12','B12','C12','D12','E12','F12'].forEach(w=>wtype[w]='ntc');
+let pickMarker=null, viewMarker=null;
+let selected=new Set(), lastSel=null;
+let editingMarker=null; // null | 'new' | markerId
+let formName='', formColor=PALETTE[0], formPloidy=2;
+
+function getVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function markerById(id){return markers.find(m=>m.id===id)}
+function wellsOf(id){return Object.keys(assign).filter(w=>assign[w]===id)}
+function ntcOf(id){return wellsOf(id).filter(w=>wtype[w]==='ntc')}
+function sampleOf(id){return wellsOf(id).filter(w=>wtype[w]==='sample')}
+function ctrlOf(id){return wellsOf(id).filter(w=>['a1','a2','het'].includes(wtype[w]))}
+const TYPE_LABEL={sample:'샘플',ntc:'NTC',a1:'Allele 1 대조',a2:'Allele 2 대조',het:'이형접합 대조'};
+const TYPE_BADGE={ntc:'N',a1:'1',a2:'2',het:'H'};
+function unassigned(){const a=[];for(const r of ROWS)for(const c of COLS){const id=r+c;if(!assign[id])a.push(id)}return a}
+function clearCache(){Object.keys(ptCache).forEach(k=>delete ptCache[k])}
+
+function prng(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}}
+function genRatio(marker,i,rnd){
+  if(marker==='m1'){const centers=[0.20,0.50,0.80];return clamp(centers[i%3]+(rnd()-0.5)*0.10,0.05,0.95)}
+  return clamp(0.74+(rnd()-0.5)*0.09,0.55,0.9);
+}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function nearestDosage(r,p){let best=0,bd=9;for(let d=0;d<=p;d++){const t=d/p;if(Math.abs(r-t)<bd){bd=Math.abs(r-t);best=d}}return best}
+const ptCache={};
+function pointsFor(id){
+  if(ptCache[id])return ptCache[id];
+  const m=markerById(id),rnd=prng(id==='m1'?7:(id==='m2'?23:id.length*13+5));const pts=[];let si=0;
+  wellsOf(id).forEach(w=>{
+    const t=wtype[w];
+    if(t==='ntc'){pts.push({well:w,ratio:0.5,fam:60+rnd()*90,hex:60+rnd()*90,d:-1,ntc:true,ctrl:null});return}
+    let r,ctrl=null;
+    if(t==='a1'){r=clamp(0.95+(rnd()-0.5)*0.05,0.85,0.99);ctrl='a1'}
+    else if(t==='a2'){r=clamp(0.05+(rnd()-0.5)*0.05,0.01,0.15);ctrl='a2'}
+    else if(t==='het'){r=clamp(0.5+(rnd()-0.5)*0.06,0.4,0.6);ctrl='het'}
+    else{r=genRatio(id,si++,rnd)}
+    const mag=1500+rnd()*1400;
+    pts.push({well:w,ratio:r,fam:r*mag,hex:(1-r)*mag,d:nearestDosage(r,m.ploidy),ntc:false,ctrl});
+  });
+  ptCache[id]=pts;return pts;
+}
+
+/* ---- 플레이트 렌더 ---- */
+function renderPlate(){
+  const el=document.getElementById('plate');el.innerHTML='';
+  el.appendChild(document.createElement('div'));
+  COLS.forEach((c,ci)=>{const h=document.createElement('div');h.className='ch';h.textContent=c;h.title=c+'열 선택 토글';h.onclick=()=>toggleCol(ci);el.appendChild(h)});
+  for(let r=0;r<8;r++){
+    const rh=document.createElement('div');rh.className='rh';rh.textContent=ROWS[r];rh.title=ROWS[r]+'행 선택 토글';rh.onclick=()=>toggleRow(r);el.appendChild(rh);
+    for(let c=0;c<12;c++){
+      const id=wid(r,c);const w=document.createElement('div');w.className='well';w.dataset.id=id;w.tabIndex=0;
+      const mk=assign[id]?markerById(assign[id]):null;
+      if(mk){w.classList.add('assigned');w.style.background=mk.color;w.style.borderColor=mk.color}
+      if(wtype[id]==='ntc')w.classList.add('ntc');
+      if(selected.has(id))w.classList.add('sel');
+      const lab=document.createElement('span');lab.className='lab';lab.textContent=id;w.appendChild(lab);
+      if(TYPE_BADGE[wtype[id]]){const tb=document.createElement('span');tb.className='typ';tb.textContent=TYPE_BADGE[wtype[id]];w.appendChild(tb)}
+      w.onclick=(e)=>wellClick(id,e);
+      w.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();wellClick(id,e)}};
+      el.appendChild(w);
+    }
+  }
+  refreshBanner();
+}
+function wellClick(id,e){
+  if(e.shiftKey&&lastSel){selectRange(lastSel,id)}
+  else{ selected.has(id)?selected.delete(id):selected.add(id) }   // 토글: 색 켜짐/꺼짐
+  lastSel=id;renderPlate();renderSelBar();renderInspector();
+}
+function selectRange(a,b){
+  const ra=ROWS.indexOf(a[0]),ca=COLS.indexOf(+a.slice(1)),rb=ROWS.indexOf(b[0]),cb=COLS.indexOf(+b.slice(1));
+  for(let r=Math.min(ra,rb);r<=Math.max(ra,rb);r++)for(let c=Math.min(ca,cb);c<=Math.max(ca,cb);c++)selected.add(wid(r,c));
+}
+function toggleCol(c){const ids=[];for(let r=0;r<8;r++)ids.push(wid(r,c));const allsel=ids.every(i=>selected.has(i));
+  ids.forEach(i=>allsel?selected.delete(i):selected.add(i));lastSel=ids[ids.length-1];renderPlate();renderSelBar();renderInspector()}
+function toggleRow(r){const ids=[];for(let c=0;c<12;c++)ids.push(wid(r,c));const allsel=ids.every(i=>selected.has(i));
+  ids.forEach(i=>allsel?selected.delete(i):selected.add(i));lastSel=ids[ids.length-1];renderPlate();renderSelBar();renderInspector()}
+function clearSel(){selected.clear();lastSel=null;renderPlate();renderSelBar();renderInspector()}
+
+/* ---- 선택 바 (웰 선택 → 마커 → 배정) ---- */
+function renderSelBar(){
+  const head=document.getElementById('canvasHead');
+  if(selected.size===0){head.innerHTML='<span class="hint" id="plateHint">웰을 클릭해 선택(다시 클릭 = 해제) · 열/행 헤더 클릭 = 전체 토글 · Shift-클릭 = 범위</span>';return}
+  if(markers.length===0){
+    head.innerHTML=`<div class="selinfo">
+      <span class="cnt">웰 <b>${selected.size}개</b> 선택됨</span>
+      <span class="hint">배정할 마커가 없습니다.</span>
+      <button class="apply" onclick="openMarkerForm('new')">+ 새 마커 만들기</button>
+      <span class="spacer"></span>
+      <button class="clr" onclick="clearSel()">선택 해제</button></div>`;return;
+  }
+  head.innerHTML=`<div class="selinfo">
+    <span class="cnt">웰 <b>${selected.size}개</b> 선택됨</span>
+    <div class="mkpick" id="mkpick">
+      ${markers.map(m=>`<button aria-pressed="${pickMarker===m.id}" onclick="setPick('${m.id}')"><span class="sw" style="background:${m.color}"></span>${m.name}</button>`).join('')}
+    </div>
+    <button class="apply" onclick="applyAssign()">→ 배정</button>
+    <span class="spacer"></span>
+    <button class="clr" onclick="clearSel()">선택 해제</button>
+  </div>`;
+}
+function setPick(id){pickMarker=id;renderSelBar();renderInspector();renderMarkers()}
+function applyAssign(){
+  if(!pickMarker)return;
+  const n=selected.size;selected.forEach(w=>assign[w]=pickMarker);
+  clearCache();selected.clear();lastSel=null;
+  renderPlate();renderMarkers();renderSelBar();renderInspector();
+  toast(`웰 ${n}개를 ${markerById(pickMarker).name}에 배정했습니다`);
+}
+
+/* ---- 인스펙터 (상세 편집) ---- */
+function renderInspector(){
+  const t=document.getElementById('inspTitle'),b=document.getElementById('inspBody');
+  if(selected.size===0){t.textContent='선택';b.innerHTML='<div class="empty-note">플레이트에서 웰을 선택한 뒤<br>마커·웰 유형·샘플 ID를 지정하고<br><b>배정</b>하세요.</div>';return}
+  const arr=[...selected];t.textContent=selected.size===1?arr[0]+' 웰':'웰 '+selected.size+'개 선택';
+  const cur=selected.size===1?assign[arr[0]]:null;
+  const typ=selected.size===1?wtype[arr[0]]:null;
+  if(markers.length===0){
+    b.innerHTML=`<div class="empty-note">아직 마커가 없습니다.<br>먼저 <b>마커를 추가</b>한 뒤<br>선택한 웰에 배정하세요.</div>
+      <button class="primary" onclick="openMarkerForm('new')">+ 새 마커 만들기</button>`;return;
+  }
+  if(!pickMarker)pickMarker=markers[0].id;
+  const m=markerById(pickMarker);
+  const pts=pointsFor(pickMarker).filter(p=>!p.ntc);
+  const classes=[...new Set(pts.map(p=>p.d))].length;
+  b.innerHTML=`
+    <div class="field">
+      <label>마커 (assay)</label>
+      <select onchange="setPick(this.value)">
+        ${markers.map(mm=>`<option value="${mm.id}" ${pickMarker===mm.id?'selected':''}>${mm.name} · ${mm.ploidy}배체</option>`).join('')}
+      </select>
+      <div class="ploidy-hint"><span style="width:8px;height:8px;border-radius:50%;background:${classes>m.ploidy+1?'var(--crit)':'var(--good)'};display:inline-block"></span>
+        ${m.ploidy}배체 → 최대 ${m.ploidy+1}개 dosage 클래스${classes?' · 현재 관측 '+classes+'개':''}</div>
+    </div>
+    <div class="field">
+      <label>웰 유형 ${cur?'<small>(현재 배정: '+markerById(cur).name+')</small>':''}</label>
+      <div class="segfield">
+        ${[['sample','샘플'],['ntc','NTC'],['a1','Allele 1'],['a2','Allele 2'],['het','이형접합']].map(([v,l])=>
+          `<button aria-pressed="${typ===v}" onclick="setType('${v}')">${l}</button>`).join('')}
+      </div>
+    </div>
+    <div class="field">
+      <label>샘플 ID <small>(선택)</small></label>
+      <input class="inp" placeholder="${selected.size>1?selected.size+'개 웰에 일괄 적용':'예: IVT-0421'}">
+    </div>
+    <button class="primary" onclick="applyAssign()">${markerById(pickMarker).name}에 배정 (웰 ${selected.size}개)</button>
+    <button class="ghostbtn" onclick="unassignSel()">배정 해제 (미지정으로)</button>`;
+}
+function setType(v){selected.forEach(w=>wtype[w]=v);clearCache();renderPlate();renderMarkers();renderInspector()}
+function unassignSel(){selected.forEach(w=>delete assign[w]);clearCache();selected.clear();renderPlate();renderMarkers();renderSelBar();renderInspector();toast('선택한 웰을 미지정으로 되돌렸습니다')}
+
+/* ---- 마커 사이드바 ---- */
+function markerFormHTML(){
+  const editing=editingMarker&&editingMarker!=='new';
+  return `<div class="mform">
+    <p class="fl">${editing?'마커 편집':'새 마커'}</p>
+    <input class="nm" id="mfName" placeholder="마커 이름 (예: qSwet5.3)" value="${formName.replace(/"/g,'&quot;')}"
+      oninput="formName=this.value" onkeydown="if(event.key==='Enter')saveMarker()">
+    <p class="fl" style="margin-top:11px">색상</p>
+    <div class="swatches">
+      ${PALETTE.map(c=>`<button style="background:${c}" aria-pressed="${formColor===c}" aria-label="색상" onclick="formColor='${c}';renderMarkers()"></button>`).join('')}
+    </div>
+    <div class="field-mini">
+      <p class="fl">배수성 (ploidy)</p>
+      <select onchange="formPloidy=+this.value">
+        ${[2,3,4,5,6,7,8].map(p=>`<option value="${p}" ${formPloidy===p?'selected':''}>${p}배체</option>`).join('')}
+      </select>
+    </div>
+    <div class="frow">
+      <button class="ok" onclick="saveMarker()">${editing?'저장':'추가'}</button>
+      <button class="no" onclick="closeMarkerForm()">취소</button>
+    </div>
+  </div>`;
+}
+function renderMarkers(){
+  const el=document.getElementById('markerList');el.innerHTML='';
+  markers.forEach(m=>{
+    const ns=ntcOf(m.id).length;
+    const pts=pointsFor(m.id).filter(p=>!p.ntc);
+    const dist=DOSAGE.map(dc=>pts.filter(p=>p.d===dc.d).length);
+    if(editingMarker===m.id){el.insertAdjacentHTML('beforeend',markerFormHTML());return}
+    const card=document.createElement('div');card.className='mcard';card.setAttribute('aria-current',pickMarker===m.id);
+    card.onclick=()=>setPick(m.id);
+    card.innerHTML=`
+      <button class="edit" title="이름·색상·배수성 편집" onclick="event.stopPropagation();openMarkerForm('${m.id}')">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11 2.5 13.5 5 5.5 13H3v-2.5L11 2.5Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></button>
+      <div class="top"><span class="sw" style="background:${m.color}" title="색상 변경" onclick="event.stopPropagation();openMarkerForm('${m.id}')"></span>
+        <span class="nm">${m.name}</span><span class="pl">${m.ploidy}배체</span></div>
+      <div class="meta">
+        <span class="st"><span class="stipple" style="background:var(--good)"></span>샘플 ${sampleOf(m.id).length}</span>
+        ${ctrlOf(m.id).length?`<span class="st">대조 ${ctrlOf(m.id).length}</span>`:''}
+        <span class="st">NTC ${ns}</span></div>
+      <div class="mini">${DOSAGE.map((dc,i)=>dist[i]?`<span style="background:${dc.color};flex:${dist[i]}"></span>`:'').join('')}</div>`;
+    el.appendChild(card);
+  });
+  if(editingMarker==='new')el.insertAdjacentHTML('beforeend',markerFormHTML());
+  const badge=document.getElementById('markerCountBadge');if(badge)badge.textContent=markers.length;
+}
+function openMarkerForm(mode){
+  editingMarker=mode;
+  if(mode==='new'){formName='';formColor=nextColor();formPloidy=(markers[markers.length-1]?.ploidy)||2}
+  else{const m=markerById(mode);formName=m.name;formColor=m.color;formPloidy=m.ploidy}
+  renderMarkers();
+  setTimeout(()=>{const el=document.getElementById('mfName');if(el)el.focus()},0);
+}
+function closeMarkerForm(){editingMarker=null;renderMarkers()}
+function nextColor(){const used=markers.map(m=>m.color);return PALETTE.find(c=>!used.includes(c))||PALETTE[markers.length%PALETTE.length]}
+function saveMarker(){
+  const name=formName.trim()||('마커 '+(markers.length+1));
+  if(editingMarker==='new'){
+    const id='m'+(++seq);markers.push({id,name,color:formColor,ploidy:formPloidy});
+    pickMarker=id;clearCache();editingMarker=null;
+    renderMarkers();renderSelBar();renderInspector();
+    toast(selected.size?`마커 "${name}" 추가됨 — → 배정을 눌러 선택 웰에 적용하세요`:`마커 "${name}"을(를) 추가했습니다`);
+  } else {
+    const m=markerById(editingMarker);m.name=name;m.color=formColor;m.ploidy=formPloidy;
+    clearCache();editingMarker=null;
+    renderMarkers();renderSelBar();renderInspector();
+    if(currentTab==='analysis'){renderAnalysisList();drawAnalysis()}
+    toast(`마커 "${name}"을(를) 수정했습니다`);
+  }
+}
+function addMarker(){openMarkerForm('new')}
+function assignRemaining(){if(!pickMarker){toast('먼저 마커를 선택/추가하세요');return}
+  const u=unassigned();u.forEach(w=>assign[w]=pickMarker);clearCache();
+  renderPlate();renderMarkers();toast('남은 웰 '+u.length+'개를 '+markerById(pickMarker).name+'에 배정했습니다')}
+/* 이전 실행 레이아웃 = 데모 빠른 채우기 (열 기반 2마커, 6배체 + 대조/NTC) */
+function applyPreviousLayout(){
+  restore(seedSweetPotato());
+  toast('이전 실행 레이아웃 적용 — qSwet5.3(1–6열), qTotal11.1(7–12열)');
+}
+
+/* ---- 내 레이아웃 (사용자 계정별 저장/불러오기) ---- */
+let layoutSeq=1, showSaveForm=false;
+function snapshot(){return {markers:JSON.parse(JSON.stringify(markers)),assign:{...assign},wtype:{...wtype},seq}}
+function restore(s){
+  markers.length=0;s.markers.forEach(m=>markers.push({...m}));
+  Object.keys(assign).forEach(k=>delete assign[k]);Object.assign(assign,JSON.parse(JSON.stringify(s.assign)));
+  Object.keys(wtype).forEach(k=>delete wtype[k]);Object.assign(wtype,JSON.parse(JSON.stringify(s.wtype)));
+  seq=s.seq;pickMarker=markers[0]?.id||null;viewMarker=markers[0]?.id||null;clearCache();
+  renderPlate();renderMarkers();renderSelBar();renderInspector();renderLayouts();
+  if(currentTab==='analysis'){renderAnalysisList();drawAnalysis()}
+}
+function seedSweetPotato(){
+  const s={markers:[{id:'m1',name:'qSwet5.3',color:PALETTE[0],ploidy:6},{id:'m2',name:'qTotal11.1',color:PALETTE[1],ploidy:6}],assign:{},wtype:{},seq:2};
+  for(let r=0;r<8;r++)for(let c=0;c<12;c++){const id=wid(r,c);s.wtype[id]='sample';if(r>=6&&c>=10)continue;s.assign[id]=c<6?'m1':'m2'}
+  ['A6','B6','C6','D6','E6','F6','A12','B12','C12','D12','E12','F12'].forEach(w=>s.wtype[w]='ntc');
+  // 각 마커의 allele 대조 (클러스터 앵커)
+  s.wtype['A5']='a1';s.wtype['B5']='a2';s.wtype['C5']='het';
+  s.wtype['A11']='a1';s.wtype['B11']='a2';s.wtype['C11']='het';
+  return s;
+}
+// 사용자 계정에 이미 저장돼 있던 레이아웃 (per-user library)
+const savedLayouts=[{id:'L1',name:'고구마 6배체 · qSwet5.3 / qTotal11.1',meta:'마커 2개 · 92웰 · 열분할',snap:seedSweetPotato()}];
+function layoutMeta(){const nW=Object.keys(assign).length;return `마커 ${markers.length}개 · ${nW}웰`}
+function renderLayouts(){
+  const el=document.getElementById('layoutSec');if(!el)return;
+  el.innerHTML=`
+    <div class="lbl" style="display:flex;align-items:center;gap:7px">내 레이아웃 <span class="userchip" style="padding:1px 9px 1px 3px;font-size:11px"><span class="ava" style="width:17px;height:17px;font-size:10px">김</span>김태화</span></div>
+    ${savedLayouts.length?savedLayouts.map(l=>`
+      <div class="lyrow">
+        <div class="info"><div class="nm">${l.name}</div><div class="mt">${l.meta}</div></div>
+        <button class="load" onclick="loadLayout('${l.id}')">불러오기</button>
+        <button class="del" title="삭제" onclick="delLayout('${l.id}')"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4V2.8h3V4M4 4.5l.6 8.2a1 1 0 0 0 1 .9h4.8a1 1 0 0 0 1-.9L12 4.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></button>
+      </div>`).join(''):'<div class="ly-empty">저장된 레이아웃이 없습니다.<br>현재 배치를 저장해 다음 실행에서 재사용하세요.</div>'}
+    ${showSaveForm?`<div class="saveform">
+        <input id="lyName" placeholder="레이아웃 이름 (예: 고구마 6배체 2마커)" onkeydown="if(event.key==='Enter')saveLayout()">
+        <button onclick="saveLayout()">저장</button>
+      </div>`:`<button class="addm" onclick="showSaveForm=true;renderLayouts();setTimeout(()=>document.getElementById('lyName')?.focus(),0)" ${markers.length?'':'disabled style="opacity:.45;cursor:not-allowed"'}>+ 현재 배치 저장</button>`}
+    <div class="divlbl">파일 교환 · 이전 실행</div>
+    <div class="btnrow">
+      <button class="lbtn" onclick="applyPreviousLayout()">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 5.5 8 2l6 3.5v5L8 14l-6-3.5v-5Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+        <span>이전 실행 레이아웃 적용 <small>· 동일 96웰 감지</small></span></button>
+      <button class="lbtn" onclick="toast('레이아웃 CSV 불러오기 (웰, 마커, 배수성, 유형) — QuantStudio 호환')">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0 3-3m-3 3-3-3M2.5 12.5h11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>CSV 불러오기</span></button>
+      <button class="lbtn" onclick="toast('plate-layout.csv 저장 완료 (JSON은 배수성·경계선까지 포함)')" ${markers.length?'':'disabled style="opacity:.45"'}>
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 10V2m0 0L5 5m3-3 3 3M2.5 12.5h11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>CSV / JSON 저장</span></button>
+    </div>`;
+}
+function loadLayout(id){const l=savedLayouts.find(x=>x.id===id);if(!l)return;restore(l.snap);toast(`"${l.name}" 레이아웃을 불러왔습니다`)}
+function delLayout(id){const i=savedLayouts.findIndex(x=>x.id===id);if(i<0)return;const nm=savedLayouts[i].name;savedLayouts.splice(i,1);renderLayouts();toast(`"${nm}" 삭제됨`)}
+function saveLayout(){
+  const inp=document.getElementById('lyName');const name=(inp?.value||'').trim();
+  if(!name){inp?.focus();return}
+  savedLayouts.push({id:'L'+(++layoutSeq),name,meta:layoutMeta(),snap:snapshot()});
+  showSaveForm=false;renderLayouts();toast(`"${name}"을(를) 내 계정에 저장했습니다`);
+}
+
+/* ---- 배너 ---- */
+function refreshBanner(){
+  const n=unassigned().length,b=document.getElementById('unassignedBanner');
+  if(currentTab!=='plate'||n===0){b.classList.add('hidden');return}
+  b.classList.remove('hidden');document.getElementById('unassignedCount').textContent='웰 '+n+'개';
+}
+
+/* ---- 분석 ---- */
+function renderAnalysisList(){
+  const el=document.getElementById('analysisList');el.innerHTML='';
+  markers.forEach(m=>{
+    const pts=pointsFor(m.id).filter(p=>!p.ntc);
+    const dist=DOSAGE.map(dc=>pts.filter(p=>p.d===dc.d).length);
+    const classes=dist.filter(x=>x>0).length;
+    const status=classes>m.ploidy+1?{c:'var(--crit)',t:'배수성 확인'}:ntcOf(m.id).length===0?{c:'var(--warn)',t:'NTC 없음'}:{c:'var(--good)',t:'정상'};
+    const card=document.createElement('button');card.className='mcard';card.setAttribute('aria-current',viewMarker===m.id);
+    card.onclick=()=>{viewMarker=m.id;renderAnalysisList();drawAnalysis()};
+    card.innerHTML=`
+      <div class="top"><span class="sw" style="background:${m.color}"></span>
+        <span class="nm">${m.name}</span><span class="pl">${m.ploidy}배체</span></div>
+      <div class="meta"><span class="st">판정 ${pts.length}</span>
+        <span class="st"><span class="stipple" style="background:${status.c}"></span>${status.t}</span></div>
+      <div class="mini">${DOSAGE.map((dc,i)=>dist[i]?`<span style="background:${dc.color};flex:${dist[i]}"></span>`:'').join('')}</div>`;
+    el.appendChild(card);
+  });
+}
+let ANALYSIS_BODY_HTML=null;
+function drawAnalysis(){
+  const anBody=document.querySelector('#view-analysis .an-body');
+  const anTools=document.querySelector('#view-analysis .an-toolbar');
+  if(ANALYSIS_BODY_HTML===null)ANALYSIS_BODY_HTML=anBody.innerHTML;
+  if(markers.length===0){viewMarker=null}
+  else if(!viewMarker||!markerById(viewMarker))viewMarker=markers[0].id;
+  if(!viewMarker){
+    anTools.style.visibility='hidden';
+    anBody.innerHTML='<div class="empty-note" style="padding:60px 20px">아직 마커가 없습니다.<br><b>플레이트 설정</b> 탭에서 마커를 추가하고 웰을 배정하면<br>여기에 마커별 산점도·판정 결과가 표시됩니다.</div>';
+    const ct=document.getElementById('counts');if(ct)ct.innerHTML='';
+    const rb=document.getElementById('resBody');if(rb)rb.innerHTML='';
+    return;
+  }
+  anTools.style.visibility='visible';
+  if(!document.getElementById('scatter'))anBody.innerHTML=ANALYSIS_BODY_HTML; // restore scatter DOM
+  const m=markerById(viewMarker),pts=pointsFor(viewMarker);
+  document.getElementById('anSw').style.background=m.color;
+  document.getElementById('anName').textContent=m.name;
+  document.getElementById('anPloidy').textContent=m.ploidy+'배체';
+  document.getElementById('anExpect').textContent='최대 '+(m.ploidy+1)+'개 dosage 클래스 예상';
+  document.getElementById('anWells').textContent='웰 '+pts.length+'개';
+  document.getElementById('ntcNoteTxt').textContent='배경차감·NTC 기준선은 이 마커 자체의 NTC 웰 '+ntcOf(m.id).length+'개에서 계산됩니다 — 플레이트 전역으로 공유하지 않습니다.';
+  const present=[...new Set(pts.filter(p=>!p.ntc).map(p=>p.d))].sort((a,b)=>a-b);
+  const nCtrl=pts.filter(p=>p.ctrl).length;
+  document.getElementById('dosageLegend').innerHTML=present.map(d=>{const dc=DOSAGE[d];
+    return `<span class="it"><span class="sw" style="background:${dc.color}"></span>${dc.label} <span class="conf">(${d}/${m.ploidy})</span></span>`}).join('')
+    +(nCtrl?`<span class="it"><span style="width:9px;height:9px;background:var(--ink-2);transform:rotate(45deg);display:inline-block"></span>대조(앵커)</span>`:'')
+    +`<span class="it"><span class="sw" style="background:${NTC_COLOR}"></span>NTC</span>`;
+  const counts=present.map(d=>({label:DOSAGE[d].label,n:pts.filter(p=>p.d===d&&!p.ntc&&!p.ctrl).length,c:DOSAGE[d].color}));
+  if(nCtrl)counts.push({label:'대조',n:nCtrl,c:getVar('--ink-2')});
+  counts.push({label:'NTC',n:pts.filter(p=>p.ntc).length,c:NTC_COLOR});
+  document.getElementById('counts').innerHTML=counts.map(c=>`<div class="cnt-c"><div class="v" style="color:${c.c}">${c.n}</div><div class="k">${c.label}</div></div>`).join('');
+  document.getElementById('resBody').innerHTML=pts.slice().sort((a,b)=>a.well.localeCompare(b.well,undefined,{numeric:true})).map(p=>{
+    const dc=p.ntc?{label:'NTC',color:NTC_COLOR}:DOSAGE[p.d];
+    const lbl=p.ctrl?`<span title="대조 웰">◆</span> ${TYPE_LABEL[wtype[p.well]]}`:dc.label;
+    const conf=(p.ntc||p.ctrl)?'—':(0.88+(Math.abs(p.ratio-p.d/m.ploidy)<0.05?0.08:0)).toFixed(2);
+    return `<tr><td>${p.well}</td><td>${p.ratio.toFixed(3)}</td><td><span class="call"><span class="sw" style="background:${dc.color}"></span>${lbl}</span></td><td class="conf">${conf}</td></tr>`}).join('');
+  drawScatter(pts,m);
+}
+function drawScatter(pts,m){
+  const cv=document.getElementById('scatter'),ctx=cv.getContext('2d');
+  const W=cv.width,H=cv.height,pad=54;ctx.clearRect(0,0,W,H);
+  const ink3=getVar('--ink-3'),border=getVar('--border'),maxV=3200;
+  const X=v=>pad+(v/maxV)*(W-pad*1.4), Y=v=>H-pad-(v/maxV)*(H-pad*1.5);
+  ctx.strokeStyle=border;ctx.lineWidth=1;ctx.globalAlpha=.6;
+  for(let g=0;g<=4;g++){const gx=X(maxV*g/4);ctx.beginPath();ctx.moveTo(gx,Y(0));ctx.lineTo(gx,Y(maxV));ctx.stroke();
+    const gy=Y(maxV*g/4);ctx.beginPath();ctx.moveTo(X(0),gy);ctx.lineTo(X(maxV),gy);ctx.stroke()}
+  ctx.globalAlpha=1;
+  ctx.strokeStyle=ink3;ctx.setLineDash([4,4]);ctx.globalAlpha=.55;
+  for(let d=0;d<m.ploidy;d++){const r=(d+0.5)/m.ploidy,slope=r/(1-r);const ox=X(0),oy=Y(0);let tx,ty;
+    if(slope<=1){tx=X(maxV);ty=Y(maxV*slope)}else{ty=Y(maxV);tx=X(maxV/slope)}
+    ctx.beginPath();ctx.moveTo(ox,oy);ctx.lineTo(tx,ty);ctx.stroke()}
+  ctx.setLineDash([]);ctx.globalAlpha=1;
+  pts.forEach(p=>{const col=p.ntc?NTC_COLOR:DOSAGE[p.d].color;const cx=X(p.hex),cy=Y(p.fam);
+    if(p.ctrl){ // 대조 웰 = 다이아몬드 + 굵은 테두리 (앵커)
+      const s=6;ctx.beginPath();ctx.moveTo(cx,cy-s);ctx.lineTo(cx+s,cy);ctx.lineTo(cx,cy+s);ctx.lineTo(cx-s,cy);ctx.closePath();
+      ctx.fillStyle=col;ctx.fill();ctx.lineWidth=1.8;ctx.strokeStyle=getVar('--ink');ctx.stroke();return}
+    ctx.beginPath();ctx.arc(cx,cy,p.ntc?3.4:4.4,0,7);
+    ctx.fillStyle=col;ctx.globalAlpha=p.ntc?.7:.9;ctx.fill();
+    ctx.globalAlpha=1;ctx.lineWidth=1;ctx.strokeStyle='rgba(0,0,0,.18)';ctx.stroke()});
+  ctx.fillStyle=ink3;ctx.font='10px '+getVar('--font-mono');ctx.textAlign='center';
+  for(let g=0;g<=4;g++)ctx.fillText((maxV*g/4|0),X(maxV*g/4),Y(0)+16);
+  ctx.textAlign='right';for(let g=1;g<=4;g++)ctx.fillText((maxV*g/4|0),X(0)-8,Y(maxV*g/4)+3);
+}
+
+/* ---- 탭 / 테마 ---- */
+let currentTab='plate';
+function showTab(t){
+  currentTab=t;
+  document.getElementById('tab-plate').setAttribute('aria-selected',t==='plate');
+  document.getElementById('tab-analysis').setAttribute('aria-selected',t==='analysis');
+  document.getElementById('view-plate').hidden=t!=='plate';
+  document.getElementById('view-analysis').hidden=t!=='analysis';
+  if(t==='analysis'){renderAnalysisList();drawAnalysis()}
+  refreshBanner();
+}
+function toggleTheme(){
+  const cur=document.documentElement.getAttribute('data-theme');
+  const sysDark=matchMedia('(prefers-color-scheme:dark)').matches;
+  const next=cur?(cur==='dark'?'light':'dark'):(sysDark?'light':'dark');
+  document.documentElement.setAttribute('data-theme',next);
+  // 마커 색상은 사용자가 고른 고정값 → 테마와 무관하게 유지
+  renderPlate();renderMarkers();renderSelBar();if(currentTab==='analysis'){renderAnalysisList();drawAnalysis()}
+}
+let toastT;
+function toast(msg){let el=document.getElementById('toast');if(!el){el=document.createElement('div');el.id='toast';
+  el.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:var(--shadow);z-index:50;opacity:0;transition:opacity .18s';document.body.appendChild(el)}
+  el.textContent=msg;el.style.opacity='1';clearTimeout(toastT);toastT=setTimeout(()=>el.style.opacity='0',2200)}
+
+renderPlate();renderMarkers();renderSelBar();renderLayouts();
+</script>

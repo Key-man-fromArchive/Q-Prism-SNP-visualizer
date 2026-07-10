@@ -19,6 +19,12 @@ _NTC_SIGNAL_FRAC = 0.2
 # (1/ploidy) are treated as one dosage class that BIC over-split on noise.
 _DOSAGE_MERGE_FRAC = 0.5
 
+# Adjacent clusters separated by fewer than this many pooled SDs (computed
+# LOCALLY from just that pair's own points, in the arcsine-sqrt fit space) are
+# not a statistically meaningful split -- merge them regardless of the
+# fixed-fraction rule above (C2 fix, see cluster_auto / _local_sd_ratio).
+_MERGE_SEP_SD = 5.5
+
 # Adjacent dosage classes closer than this many pooled within-class SDs are flagged
 # as poorly resolved (reliability warning, esp. high ploidy).
 _MIN_SEP_SD = 3.0
@@ -29,6 +35,25 @@ _MIN_SEP_SD = 3.0
 _CALL_MIN_POSTERIOR = 0.9
 #   - a well more than this many pooled SDs from EVERY class mean is an outlier
 _OUTLIER_SD = 4.0
+
+# Phase 1 diagnostics (C3): with <4 signal wells there is no mixture fit at
+# all -- just a raw ratio-vs-ideal-dosage call, with no statistical evidence of
+# cluster separation. That is, at best, "just barely a confident call": the
+# SAME bar (_CALL_MIN_POSTERIOR) a normal-sized marker must clear to avoid an
+# Undetermined no-call. Reusing that constant (rather than inventing a new
+# magic number) means the fallback can never report MORE certainty than a
+# properly-fitted call, only exactly the minimum that still counts as one.
+_SMALL_REGION_CONFIDENCE = _CALL_MIN_POSTERIOR
+
+# Phase 1 diagnostics (C4): the relative-NTC detector (_NTC_SIGNAL_FRAC below)
+# is a signal-level cutoff, not a test of whether that low-signal group is
+# actually separated from the real samples by a wide margin. This is the
+# minimum gap -- median plate signal vs. the auto-flagged NTC wells' own
+# signal -- that counts as a genuine "no-template" gap (one order of
+# magnitude). Below this, the wells are still labeled NTC (never invent a new
+# label -- see module docstring in tests/test_c4_relative_ntc.py) but flagged
+# with the "relative_ntc" warning and a confidence < 1.0.
+_NTC_CLEAR_GAP = 10.0
 
 
 def cluster_threshold(
@@ -70,6 +95,8 @@ def cluster_auto(
     ntc_threshold: float = 0.1,
     control_wells: dict[str, str] | None = None,
     ploidy: int = DEFAULT_PLOIDY,
+    warnings: list[str] | None = None,
+    anchor_state: dict | None = None,
 ) -> tuple[dict[str, str], dict[str, float]]:
     """Model-based, ploidy-aware genotype clustering, fully scale-invariant.
 
@@ -104,6 +131,31 @@ def cluster_auto(
 
     ``ntc_threshold`` is accepted for API compatibility but no longer used as an
     absolute cutoff (NTC is now purely relative).
+
+    ``warnings``, if given a list, is appended to IN PLACE with non-fatal
+    diagnostic codes ("low_n", "relative_ntc", "anchor_conflict" -- see the
+    constants above); the return contract is always the ``(assignments,
+    confidences)`` 2-tuple regardless of whether ``warnings`` is passed, so
+    existing callers are unaffected.
+
+    ``control_wells`` may also mark ALLELE1_CONTROL / ALLELE2_CONTROL wells
+    (C1): homozygous reference wells excluded from the fit exactly like NTC /
+    Positive Control, but ALSO used to define the ratio->dosage SCALE that
+    anchors the dosage ladder (allele-1 = dosage ``ploidy``, allele-2 = dosage
+    0). The fitted sample clusters then map to their nearest dosage ON that
+    scale -- they are NOT forced to equal an anchor's dosage, so an absent
+    extreme class (e.g. no dosage-``ploidy`` sample) is not mislabelled -- and
+    the offset becomes DETERMINED rather than a guess (see
+    ``_resolve_anchor_dosages``). ``"anchor_conflict"`` is appended to
+    ``warnings`` only when the anchors are INCONSISTENT (inverted scale, or a
+    cluster forced outside the ladder), never merely because an anchor sits
+    far from every cluster.
+
+    ``anchor_state``, if given a dict, is updated IN PLACE with
+    ``{"resolved": bool}`` -- True when at least one allele-control anchor was
+    successfully used to fix the offset (so callers, e.g. ``genotype_window``,
+    know the offset is determined rather than an axis-hugging guess). Additive
+    and optional; existing callers that don't pass it are unaffected.
     """
     import numpy as np
     from sklearn.mixture import GaussianMixture
@@ -116,15 +168,35 @@ def cluster_auto(
     control_wells = control_wells or {}
     assignments: dict[str, str] = {}
     confidences: dict[str, float] = {}
+    if anchor_state is not None:
+        anchor_state.setdefault("resolved", False)
 
-    # Honor user-marked controls (NTC / Positive Control) and exclude them from
-    # the clustering input so a control can't distort the genotype clusters.
+    # Honor user-marked controls (NTC / Positive Control / allele controls) and
+    # exclude them from the clustering input so a control can't distort the
+    # genotype clusters. Allele-1/Allele-2 control wells (C1) additionally
+    # contribute their fam-fraction ratio as a dosage-ladder anchor point,
+    # collected here and resolved below (section 3) once the sample clusters
+    # are fitted.
     work = []
+    anchor1_ratios: list[float] = []  # allele-1 control (homozygous, ratio~1 -> dosage P)
+    anchor2_ratios: list[float] = []  # allele-2 control (homozygous, ratio~0 -> dosage 0)
     for p in points:
         ctype = control_wells.get(p["well"])
-        if ctype in (WellType.NTC.value, WellType.POSITIVE_CONTROL.value):
+        if ctype in (
+            WellType.NTC.value,
+            WellType.POSITIVE_CONTROL.value,
+            WellType.ALLELE1_CONTROL.value,
+            WellType.ALLELE2_CONTROL.value,
+        ):
             assignments[p["well"]] = ctype
             confidences[p["well"]] = 1.0
+            if ctype in (WellType.ALLELE1_CONTROL.value, WellType.ALLELE2_CONTROL.value):
+                c_total = p["norm_fam"] + p["norm_allele2"]
+                c_ratio = p["norm_fam"] / c_total if c_total > 0 else 0.5
+                if ctype == WellType.ALLELE1_CONTROL.value:
+                    anchor1_ratios.append(c_ratio)
+                else:
+                    anchor2_ratios.append(c_ratio)
         else:
             work.append(p)
     if not work:
@@ -144,18 +216,40 @@ def cluster_auto(
     positive = total[total > 0]
     median_total = float(np.median(positive)) if positive.size else 0.0
     ntc_mask = total < _NTC_SIGNAL_FRAC * median_total
+
+    # C4 (conservative, warning-only): the mask above is a pure signal-level
+    # cutoff -- it says nothing about whether the flagged wells are actually a
+    # genuine no-template gap, or just the low end of a narrow, low-dynamic-
+    # range marker. Compare the flagged wells' OWN signal to the plate median
+    # they were cut from: a real NTC is orders of magnitude below the samples;
+    # anything closer is ambiguous, so it keeps the "NTC" label (never invent a
+    # new one) but is flagged and denied a blind maximum-confidence call.
+    ntc_confidence = 1.0
+    if bool(np.any(ntc_mask)):
+        ntc_max_total = float(np.max(total[ntc_mask]))
+        gap_ratio = (median_total / ntc_max_total) if ntc_max_total > 0 else float("inf")
+        if gap_ratio < _NTC_CLEAR_GAP:
+            if warnings is not None:
+                warnings.append("relative_ntc")
+            ntc_confidence = max(0.0, min(0.99, gap_ratio / _NTC_CLEAR_GAP))
+
     for w, is_ntc in zip(wells, ntc_mask):
         if is_ntc:
             assignments[w] = WellType.NTC.value
-            confidences[w] = 1.0
+            confidences[w] = ntc_confidence
 
     sig_idx = [i for i in range(len(wells)) if not ntc_mask[i]]
 
     # Too few signal wells to cluster reliably — call by absolute ratio.
     if len(sig_idx) < 4:
+        # C3: no mixture was fit, so there is no statistical evidence backing
+        # a maximum-confidence call -- cap it (see _SMALL_REGION_CONFIDENCE)
+        # and flag the marker so a human can review a 1-3 well genotype call.
+        if sig_idx and warnings is not None:
+            warnings.append("low_n")
         for i in sig_idx:
             assignments[wells[i]] = label_by_ratio(ratio[i], ploidy)
-            confidences[wells[i]] = 1.0
+            confidences[wells[i]] = _SMALL_REGION_CONFIDENCE
         return assignments, confidences
 
     # 2. Fit a 1-D Gaussian mixture on the arcsine-sqrt-transformed ratio
@@ -199,18 +293,60 @@ def cluster_auto(
     }
     order = sorted(members, key=lambda lab: cluster_ratio[lab])
 
+    # Reverse-lookup: arcsine-sqrt (fit-space) value for each GLOBAL well index.
+    # Built once here so it can be used both by the merge test right below and by
+    # the confidence scoring further down (section 4).
+    rt_by_global = {global_i: float(rt[j]) for j, global_i in enumerate(sig_idx)}
+
+    def _local_sd_ratio(lab_a: int, lab_b: int) -> float:
+        """Two-sample separation of clusters A/B, in pooled-SD units, computed
+        ONLY from A's and B's own member points (never the other, unrelated
+        clusters) -- a per-pair Welch/pooled-variance style effect size."""
+        a = np.array([rt_by_global[i] for i in members[lab_a]], dtype=float)
+        b = np.array([rt_by_global[i] for i in members[lab_b]], dtype=float)
+        df = len(a) + len(b) - 2
+        if df < 1:
+            return float("inf")  # too few samples to judge -- defer to the fixed rule
+        var_a = float(a.var(ddof=1)) if len(a) > 1 else 0.0
+        var_b = float(b.var(ddof=1)) if len(b) > 1 else 0.0
+        pooled_var = ((len(a) - 1) * var_a + (len(b) - 1) * var_b) / df
+        pooled_sd = float(np.sqrt(max(pooled_var, 1e-8)))
+        gap = abs(float(a.mean()) - float(b.mean()))
+        return gap / pooled_sd
+
     # Merge adjacent clusters that sit far closer than the ideal dosage spacing
     # (1/P): they are one dosage that BIC over-split on noise, not two dosages.
     # Without this the dosage DP below (which forces distinct dosages) would
     # promote a noise-split into a spurious neighbouring dosage class.
     if len(order) > 1:
         min_sep = _DOSAGE_MERGE_FRAC / ploidy
+
+        # C2 fix: a fixed fraction of 1/ploidy is, by construction, always SMALLER
+        # than one whole dosage step -- so at high ploidy (small 1/P) a genuinely
+        # single, tight distribution can have real replicate noise whose spread
+        # approaches or even exceeds that fixed fraction, letting BIC carve it
+        # into adjacent "dosage classes" that are noise, not biology (this is
+        # exactly what happened to qTotal11.1: ratios ~0.67-0.81 vs a merge
+        # threshold of 0.083 at ploidy=6). A threshold tied to the *ideal*
+        # spacing can never adapt to the *data's own* measurement noise.
+        # So, in addition to the fixed-fraction rule, ALSO merge adjacent
+        # clusters when their separation is not statistically meaningful in
+        # pooled-SD units -- computed LOCALLY from just that pair's own member
+        # points (``_local_sd_ratio`` above), not a global/tied estimate shared
+        # across every BIC component. A global tied estimate gets diluted by
+        # unrelated, far-away clusters and is easily thrown off by a genuinely
+        # wide multi-dosage spread; a per-pair pooled SD is not, so it stays
+        # reliable across both a narrow monomorphic marker split by noise and a
+        # wide, genuinely multi-dosage one (see tests/test_cluster_auto_c2_narrow_marker.py).
         groups: list[list[int]] = [[order[0]]]
         for lab in order[1:]:
-            if cluster_ratio[lab] - cluster_ratio[groups[-1][-1]] < min_sep:
+            prev = groups[-1][-1]
+            raw_gap = cluster_ratio[lab] - cluster_ratio[prev]
+            if raw_gap < min_sep or _local_sd_ratio(prev, lab) < _MERGE_SEP_SD:
                 groups[-1].append(lab)
             else:
                 groups.append([lab])
+
         if len(groups) < len(order):
             merged: dict[int, list[int]] = {}
             for gi, group in enumerate(groups):
@@ -225,7 +361,21 @@ def cluster_auto(
             }
             order = sorted(members, key=lambda lab: cluster_ratio[lab])
 
-    dosages = _assign_dosages([cluster_ratio[lab] for lab in order], ploidy)
+    # 3b. C1: allele-control anchors, if present, FIX the dosage offset instead
+    # of leaving it a guess -- see _resolve_anchor_dosages. Falls back to the
+    # existing estimate_window-based assignment (byte-identical to today) when
+    # there are no anchors, or none could be used without conflict.
+    dosages = None
+    if anchor1_ratios or anchor2_ratios:
+        dosages = _resolve_anchor_dosages(
+            order, cluster_ratio, ploidy,
+            anchor1_ratios, anchor2_ratios, warnings,
+        )
+    if dosages is not None:
+        if anchor_state is not None:
+            anchor_state["resolved"] = True
+    else:
+        dosages = _assign_dosages([cluster_ratio[lab] for lab in order], ploidy)
     label_map = {lab: genotype_label(d, ploidy) for lab, d in zip(order, dosages)}
 
     # 4. Call + confidence from the fitted mixture, evaluated in the SAME
@@ -237,7 +387,7 @@ def cluster_auto(
     #    classes) OR it is an outlier many SDs from every class. Both criteria
     #    scale with the fitted spread and ploidy. Genotype is still the ratio, not
     #    the magnitude — a genuine low-signal het stays on its cluster's angle.
-    rt_by_global = {global_i: float(rt[j]) for j, global_i in enumerate(sig_idx)}
+    #    (``rt_by_global`` was already built above, ahead of the merge step.)
     tiny_labels = {lab for lab, idxs in members.items() if len(idxs) < 2}
 
     means: dict[int, float] = {}
@@ -286,7 +436,10 @@ def cluster_auto(
 
 
 def genotype_window(
-    points: list[dict], assignments: dict[str, str], ploidy: int = DEFAULT_PLOIDY
+    points: list[dict],
+    assignments: dict[str, str],
+    ploidy: int = DEFAULT_PLOIDY,
+    anchor_resolved: bool = False,
 ) -> dict:
     """Describe the OBSERVED dosage window for the draggable-line UI.
 
@@ -301,7 +454,15 @@ def genotype_window(
         extreme (r~0 = dosage 0, r~1 = dosage P), so the offset is a guess the
         user should confirm/shift.
     Cuts between two present classes use their empirical midpoint; gaps fall back
-    to the equal-spacing ideal ``(d+0.5)/P``."""
+    to the equal-spacing ideal ``(d+0.5)/P``.
+
+    ``anchor_resolved`` (C1): True when ``cluster_auto`` already fixed the
+    offset from a homozygous allele-control anchor (see
+    ``_resolve_anchor_dosages``) -- ``assignments`` was labeled using that
+    DETERMINED offset, so this skips its own (independent, ratio-only) offset
+    guess and reports the assignments' own lowest present dosage, uncertain
+    False. Defaults to False, so a caller that doesn't pass it (or has no
+    anchors) gets the exact prior behavior."""
     from app.processing.genotype_vocab import default_ratio_cuts, dosage_of_label
 
     validate_ploidy(ploidy)
@@ -324,9 +485,16 @@ def genotype_window(
     present = sorted(centre)
     top = present[-1]
 
-    # Offset + uncertainty from the same window estimator the auto labeller uses,
-    # so the drag-tool seed stays consistent with the auto calls.
-    offset, _step, uncertain = estimate_window([centre[d] for d in present], ploidy)
+    if anchor_resolved:
+        # The offset was already fixed (from a real allele-control anchor, not
+        # a ratio guess) -- the lowest dosage assignments were labeled with IS
+        # that offset, so just read it back rather than re-deriving a
+        # (possibly different) one from the raw ratios alone.
+        offset, uncertain = present[0], False
+    else:
+        # Offset + uncertainty from the same window estimator the auto labeller
+        # uses, so the drag-tool seed stays consistent with the auto calls.
+        offset, _step, uncertain = estimate_window([centre[d] for d in present], ploidy)
 
     # Internal cuts across the observed window [offset, top], high-r first
     # (empirical midpoint where both flanking classes are present, else ideal).
@@ -431,6 +599,98 @@ def _assign_dosages(sorted_ratios: list[float], ploidy: int) -> list[int]:
     from the estimated observed window (see estimate_window)."""
     offset, step, _ = estimate_window(sorted_ratios, ploidy)
     return [offset + i * step for i in range(len(sorted_ratios))]
+
+
+def _resolve_anchor_dosages(
+    order: list[int],
+    cluster_ratio: dict[int, float],
+    ploidy: int,
+    anchor1_ratios: list[float],
+    anchor2_ratios: list[float],
+    warnings: list[str] | None,
+) -> list[int] | None:
+    """C1: use homozygous allele-control anchors to fix the ratio->dosage SCALE.
+
+    The anchors define WHERE dosage 0 and dosage ``ploidy`` sit on the
+    fam-fraction axis; the fitted sample clusters then map to their NEAREST
+    dosage ON THAT SCALE -- they are NOT forced to equal an anchor's dosage.
+    This matters because in polyploids an extreme dosage class is often ABSENT
+    (a real hexaploid marker may top out at dosage 5, no dosage-6 sample), so
+    snapping the top cluster onto the anchor's dosage 6 would mislabel a
+    dosage-5 class. Mapping on the anchor-defined scale instead yields the same
+    labels the no-anchor path would, but with the offset now DETERMINED.
+
+    ``order`` is the final (post-merge) list of fitted sample cluster labels,
+    ascending by fam-fraction. ``anchor1_ratios`` (allele-1 = homozygous, high
+    ratio -> dosage ``ploidy``) and ``anchor2_ratios`` (allele-2 = homozygous,
+    low ratio -> dosage 0) are the control wells' fam-fractions.
+
+    Scale:
+      * both anchors (median ratios r1 > r2): a well at ratio ``r`` maps to
+        ``round((r - r2) / (r1 - r2) * ploidy)``;
+      * allele-1 only: fix r1 at dosage ``ploidy`` and step by the ideal
+        ``1/ploidy`` per dosage -> ``round((r - r1) * ploidy) + ploidy``;
+      * allele-2 only: fix r2 at dosage 0 -> ``round((r - r2) * ploidy)``.
+    Dosages are clamped to ``[0, ploidy]`` and forced strictly increasing so
+    rank order is preserved (consistent with the rest of the module).
+
+    ``"anchor_conflict"`` is appended to ``warnings`` ONLY when the anchors are
+    INCONSISTENT -- an inverted/degenerate scale (allele-1 ratio <= allele-2
+    ratio) or a resulting cluster dosage falling outside ``[0, ploidy]`` by
+    more than one whole dosage step (before clamping). An anchor merely sitting
+    far from every cluster is the normal "extreme dosage absent" case and
+    resolves cleanly (NOT a conflict).
+
+    Returns a dosage list parallel to ``order``, or ``None`` when no anchor
+    could be used -- the caller then falls back to the existing (non-anchored)
+    ``_assign_dosages``.
+    """
+    import numpy as np
+
+    def _conflict() -> None:
+        if warnings is not None and "anchor_conflict" not in warnings:
+            warnings.append("anchor_conflict")
+
+    r1 = float(np.median(anchor1_ratios)) if anchor1_ratios else None
+    r2 = float(np.median(anchor2_ratios)) if anchor2_ratios else None
+    ratios = [cluster_ratio[lab] for lab in order]  # ascending
+
+    if r1 is not None and r2 is not None:
+        if r1 <= r2:
+            # Inverted / degenerate scale: allele-1 (should be high) is not
+            # above allele-2 (should be low). The anchors contradict each
+            # other, so do NOT let them set any scale.
+            _conflict()
+            return None
+        scale = r1 - r2
+        raw = [(r - r2) / scale * ploidy for r in ratios]
+    elif r1 is not None:
+        raw = [(r - r1) * ploidy + ploidy for r in ratios]
+    elif r2 is not None:
+        raw = [(r - r2) * ploidy for r in ratios]
+    else:
+        return None
+
+    # Inconsistent with the data: a cluster lands more than one whole dosage
+    # step outside the ladder. (Within one step outside is tolerated and simply
+    # clamped -- e.g. a control slightly beyond the most-extreme observed
+    # sample cluster.)
+    if any(x < -1.0 or x > ploidy + 1.0 for x in raw):
+        _conflict()
+        return None
+
+    dosages = [min(ploidy, max(0, int(round(x)))) for x in raw]
+
+    # Preserve strict rank order: adjacent clusters that round to the same (or
+    # inverted) dosage are nudged apart. If that pushes past the ladder top the
+    # anchors can't consistently place this many distinct classes -> conflict.
+    for i in range(1, len(dosages)):
+        if dosages[i] <= dosages[i - 1]:
+            dosages[i] = dosages[i - 1] + 1
+    if any(d < 0 or d > ploidy for d in dosages):
+        _conflict()
+        return None
+    return dosages
 
 
 def cluster_kmeans(points: list[dict], n_clusters: int = 4) -> dict[str, str]:

@@ -50,6 +50,41 @@ def _run_migrations(conn: sqlite3.Connection):
             conn.execute("ALTER TABLE clustering_results ADD COLUMN confidences_json TEXT")
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (2)")
 
+    if current < 3:
+        # Migration 3: store the FULL ClusteringResult as JSON. The legacy
+        # columns only kept labels/method/cycle/confidences, silently dropping
+        # ploidy, boundaries, offset, offset_uncertain and low_separation — so a
+        # hexaploid result reverted to diploid defaults on reload. result_json
+        # also carries future per-marker `regions`.
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(clustering_results)").fetchall()]
+        if "result_json" not in cols:
+            conn.execute("ALTER TABLE clustering_results ADD COLUMN result_json TEXT")
+        conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (3)")
+
+    if current < 4:
+        # Migration 4: marker (assay) definitions become a first-class,
+        # persisted resource instead of living only in in-memory well-group
+        # selections. This migration adds the table only -- it does NOT
+        # back-fill anything. Existing well_groups remain plain selection
+        # primitives; every session's marker set starts empty and must be
+        # created explicitly via the /markers endpoints. We deliberately do
+        # NOT auto-promote well_groups -> markers here.
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS marker_regions (
+                session_id TEXT NOT NULL,
+                marker_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                wells_json TEXT NOT NULL,
+                ploidy INTEGER NOT NULL DEFAULT 2,
+                color TEXT,
+                threshold_json TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                PRIMARY KEY (session_id, marker_id),
+                FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+            )"""
+        )
+        conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (4)")
+
     conn.commit()
 
 
@@ -124,13 +159,16 @@ def save_clustering(session_id: str, result):
     """Write clustering result to DB."""
     conn = get_db()
     conn.execute(
-        "INSERT OR REPLACE INTO clustering_results (session_id, labels_json, method, cycle, confidences_json) VALUES (?, ?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO clustering_results "
+        "(session_id, labels_json, method, cycle, confidences_json, result_json) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
         (
             session_id,
             json.dumps(result.assignments),
             result.algorithm,
             result.cycle,
             json.dumps(result.confidences) if result.confidences else None,
+            result.model_dump_json(),
         ),
     )
     conn.commit()
@@ -216,6 +254,60 @@ def delete_well_groups(session_id: str):
     conn.commit()
 
 
+def save_marker_regions(session_id: str, regions: list[dict]):
+    """Replace-all: write the session's full marker (assay) definition set.
+
+    Marker definitions own wells/ploidy/color/threshold_config/name only --
+    well_type and sample_id stay in manual_welltypes / sample_name_overrides
+    and are never duplicated here."""
+    conn = get_db()
+    conn.execute("DELETE FROM marker_regions WHERE session_id = ?", (session_id,))
+    for reg in regions:
+        conn.execute(
+            "INSERT INTO marker_regions "
+            "(session_id, marker_id, name, wells_json, ploidy, color, threshold_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                session_id,
+                reg["id"],
+                reg["name"],
+                json.dumps(reg["wells"]),
+                reg.get("ploidy", 2),
+                reg.get("color"),
+                json.dumps(reg["threshold_config"]) if reg.get("threshold_config") else None,
+            ),
+        )
+    conn.commit()
+
+
+def load_marker_regions(session_id: str) -> list[dict]:
+    """Load the session's marker (assay) definitions from DB."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT marker_id, name, wells_json, ploidy, color, threshold_json "
+        "FROM marker_regions WHERE session_id = ? ORDER BY rowid",
+        (session_id,),
+    ).fetchall()
+    return [
+        {
+            "id": r["marker_id"],
+            "name": r["name"],
+            "wells": json.loads(r["wells_json"]),
+            "ploidy": r["ploidy"],
+            "color": r["color"],
+            "threshold_config": json.loads(r["threshold_json"]) if r["threshold_json"] else None,
+        }
+        for r in rows
+    ]
+
+
+def delete_marker_regions(session_id: str):
+    """Delete all marker definitions for a session."""
+    conn = get_db()
+    conn.execute("DELETE FROM marker_regions WHERE session_id = ?", (session_id,))
+    conn.commit()
+
+
 def cleanup_sessions_older_than(days: int = SESSION_RETENTION_DAYS) -> int:
     """Delete persisted sessions older than the configured retention window.
 
@@ -292,12 +384,20 @@ def load_all_sessions():
         clustering = None
         cr = conn.execute("SELECT * FROM clustering_results WHERE session_id = ?", (sid,)).fetchone()
         if cr:
-            conf_json = cr["confidences_json"] if "confidences_json" in cr.keys() else None
-            clustering = ClusteringResult(
-                algorithm=cr["method"], cycle=cr["cycle"],
-                assignments=json.loads(cr["labels_json"]),
-                confidences=json.loads(conf_json) if conf_json else None,
-            )
+            result_json = cr["result_json"] if "result_json" in cr.keys() else None
+            if result_json:
+                # Full result (ploidy/boundaries/offset/regions) preserved.
+                clustering = ClusteringResult.model_validate_json(result_json)
+            else:
+                # Legacy rows written before migration 3 — reconstruct what we
+                # have; polyploid fields fall back to defaults (unavoidable for
+                # pre-fix data).
+                conf_json = cr["confidences_json"] if "confidences_json" in cr.keys() else None
+                clustering = ClusteringResult(
+                    algorithm=cr["method"], cycle=cr["cycle"],
+                    assignments=json.loads(cr["labels_json"]),
+                    confidences=json.loads(conf_json) if conf_json else None,
+                )
 
         # Load manual welltypes
         wt_rows = conn.execute("SELECT well, welltype FROM manual_welltypes WHERE session_id = ?", (sid,)).fetchall()
@@ -313,6 +413,10 @@ def load_all_sessions():
         if po:
             protocol_override = [ProtocolStep(**s) for s in json.loads(po["protocol_json"])]
 
+        # Load marker (assay) definitions -- first-class resource, alongside
+        # welltypes/groups, so a reload restores a session's marker set.
+        markers = load_marker_regions(sid)
+
         sessions_data.append({
             "session_id": sid,
             "unified": unified,
@@ -320,6 +424,7 @@ def load_all_sessions():
             "welltypes": welltypes,
             "sample_overrides": sample_overrides,
             "protocol_override": protocol_override,
+            "markers": markers,
         })
 
     return sessions_data

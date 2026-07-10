@@ -87,20 +87,36 @@ async def export_csv(
 
     cluster_assignments: dict[str, str] = {}
     confidences: dict[str, float] = {}
+    regions = None
     if sid in cluster_store:
         cluster_assignments = cluster_store[sid].assignments
         confidences = cluster_store[sid].confidences or {}
+        regions = cluster_store[sid].regions
     manual_assignments = welltype_store.get(sid, {})
 
     sample_names = unified.sample_names or {}
+
+    # A2: multi-marker plate -- each well's genotype must use its OWN marker's
+    # ploidy vocabulary, not one plate-level ploidy. Single-marker (regions is
+    # None) sessions build empty maps and fall back to unified.ploidy exactly
+    # as before, so their CSV is byte-identical.
+    well_marker: dict[str, str] = {}
+    well_ploidy: dict[str, int] = {}
+    if regions:
+        for r in regions:
+            for w in r.wells:
+                well_marker[w] = r.name
+                well_ploidy[w] = r.ploidy
 
     # Build CSV in memory
     output = io.StringIO()
     writer = csv.writer(output)
 
-    # Header row
-    writer.writerow([
-        "Well",
+    # Header row (a "Marker" column is only added for a multi-marker plate)
+    header: list[str] = ["Well"]
+    if regions:
+        header.append("Marker")
+    header += [
         "Sample Name",
         "Genotype",
         "Confidence (%)",
@@ -109,19 +125,23 @@ async def export_csv(
         "FAM (raw)",
         f"{unified.allele2_dye} (raw)",
         "ROX (raw)",
-    ])
+    ]
+    writer.writerow(header)
 
     # Data rows (sorted by well for consistent output)
-    ploidy = getattr(unified, "ploidy", 2)
+    plate_ploidy = getattr(unified, "ploidy", 2)
     umin = _undetermined_min(points)
     for p in sorted(points, key=lambda pt: (pt.well[0], int(pt.well[1:]))):
+        ploidy = well_ploidy.get(p.well, plate_ploidy)
         genotype = _determine_genotype(
             p.well, p.norm_fam, p.norm_allele2,
             cluster_assignments, manual_assignments, ploidy, umin,
         )
         conf = confidences.get(p.well)
-        writer.writerow([
-            p.well,
+        row: list[object] = [p.well]
+        if regions:
+            row.append(well_marker.get(p.well, ""))
+        row += [
             sample_names.get(p.well, ""),
             genotype,
             round(conf * 100, 1) if conf is not None else "",
@@ -130,7 +150,8 @@ async def export_csv(
             round(p.raw_fam, 4),
             round(p.raw_allele2, 4),
             round(p.raw_rox, 4) if p.raw_rox is not None else "",
-        ])
+        ]
+        writer.writerow(row)
 
     csv_content = output.getvalue()
     output.close()
@@ -164,6 +185,7 @@ async def export_xlsx(sid: str, current_user: CurrentUser, use_rox: bool = Query
     points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
     cluster_assignments = cluster_store[sid].assignments if sid in cluster_store else {}
     confidences = (cluster_store[sid].confidences or {}) if sid in cluster_store else {}
+    regions = cluster_store[sid].regions if sid in cluster_store else None
     manual_assignments = welltype_store.get(sid, {})
     sample_names = unified.sample_names or {}
 
@@ -171,12 +193,32 @@ async def export_xlsx(sid: str, current_user: CurrentUser, use_rox: bool = Query
     effective_types = get_effective_types(cluster_assignments, manual_assignments, unified.wells)
     genotype_counts = count_genotypes(effective_types, ploidy)
 
+    # A2: multi-marker plate -- each well's genotype uses its OWN marker's
+    # ploidy vocabulary, and the pooled genotype_counts above (one binning
+    # across every marker) is NOT authoritative -- replace it with a
+    # per-marker-prefixed breakdown. Single-marker (regions is None) sessions
+    # build empty maps and keep the pooled genotype_counts exactly as before.
+    well_marker: dict[str, str] = {}
+    well_ploidy: dict[str, int] = {}
+    if regions:
+        for r in regions:
+            for w in r.wells:
+                well_marker[w] = r.name
+                well_ploidy[w] = r.ploidy
+        marker_counts: dict[str, int] = {}
+        for r in regions:
+            r_effective = get_effective_types(r.assignments, manual_assignments, r.wells)
+            for gt, n in count_genotypes(r_effective, r.ploidy).items():
+                marker_counts[f"{r.name}: {gt}"] = n
+        genotype_counts = marker_counts
+
     scatter_points: list[dict] = []
     table_rows: list[list] = []
     umin = _undetermined_min(points)
     for p in sorted(points, key=lambda pt: (pt.well[0], int(pt.well[1:]))):
+        well_gt_ploidy = well_ploidy.get(p.well, ploidy)
         gt = _determine_genotype(
-            p.well, p.norm_fam, p.norm_allele2, cluster_assignments, manual_assignments, ploidy, umin
+            p.well, p.norm_fam, p.norm_allele2, cluster_assignments, manual_assignments, well_gt_ploidy, umin
         )
         scatter_points.append({
             "well": p.well,
@@ -185,8 +227,10 @@ async def export_xlsx(sid: str, current_user: CurrentUser, use_rox: bool = Query
             "effective_type": gt,
         })
         conf = confidences.get(p.well)
-        table_rows.append([
-            p.well,
+        row: list[object] = [p.well]
+        if regions:
+            row.append(well_marker.get(p.well, ""))
+        row += [
             sample_names.get(p.well, ""),
             gt,
             round(conf * 100, 1) if conf is not None else "",
@@ -195,10 +239,14 @@ async def export_xlsx(sid: str, current_user: CurrentUser, use_rox: bool = Query
             round(p.raw_fam, 4),
             round(p.raw_allele2, 4),
             round(p.raw_rox, 4) if p.raw_rox is not None else "",
-        ])
+        ]
+        table_rows.append(row)
 
-    headers = [
-        "Well", "Sample Name", "Genotype", "Confidence (%)",
+    headers: list[str] = ["Well"]
+    if regions:
+        headers.append("Marker")
+    headers += [
+        "Sample Name", "Genotype", "Confidence (%)",
         "FAM (norm)", f"{unified.allele2_dye} (norm)",
         "FAM (raw)", f"{unified.allele2_dye} (raw)", "ROX (raw)",
     ]
@@ -214,11 +262,11 @@ async def export_xlsx(sid: str, current_user: CurrentUser, use_rox: bool = Query
     filename = ""
     try:
         from app.db import get_db
-        row = get_db().execute(
+        db_row = get_db().execute(
             "SELECT raw_filename FROM sessions WHERE session_id = ?", (sid,)
         ).fetchone()
-        if row:
-            filename = row["raw_filename"] or ""
+        if db_row:
+            filename = db_row["raw_filename"] or ""
     except Exception:
         pass
 

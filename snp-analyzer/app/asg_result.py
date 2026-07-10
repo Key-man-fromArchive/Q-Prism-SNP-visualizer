@@ -30,6 +30,20 @@ def build_result_snapshot(
         raise HTTPException(status_code=403, detail="ASG launch does not allow saving results")
 
     unified = sessions[session_id]
+    cluster = cluster_store.get(session_id)
+
+    # A2: cross-service contract guard. A multi-marker plate (regions set) has
+    # no single authoritative ploidy/genotype_counts -- emitting today's
+    # flat/plate-level snapshot would silently mis-aggregate it on the ASG
+    # side. Multi-marker ASG save is deferred to schema_version 3; refuse
+    # clearly instead of guessing. Single-marker (regions is None) sessions
+    # are completely unaffected by this check.
+    if cluster is not None and cluster.regions:
+        raise HTTPException(
+            status_code=409,
+            detail="multi-marker ASG save requires schema_version 3 (pending)",
+        )
+
     cycle = selected_cycle if selected_cycle and selected_cycle > 0 else _default_cycle(session_id)
     if cycle not in unified.cycles:
         raise HTTPException(
@@ -37,7 +51,6 @@ def build_result_snapshot(
             detail=f"Cycle {cycle} not available. Range: {unified.cycles[0]}-{unified.cycles[-1]}",
         )
 
-    cluster = cluster_store.get(session_id)
     cluster_assignments = cluster.assignments if cluster else {}
     confidences = (cluster.confidences or {}) if cluster else {}
     manual_assignments = welltype_store.get(session_id, {})

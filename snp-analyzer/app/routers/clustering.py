@@ -1,3 +1,5 @@
+import hashlib
+
 from fastapi import APIRouter, HTTPException
 
 from pydantic import BaseModel as _BaseModel
@@ -7,6 +9,8 @@ from app.models import (
     ClusteringRequest,
     ClusteringResult,
     ManualWellTypeUpdate,
+    MarkerRegion,
+    RegionResult,
     ThresholdConfig,
     WellType,
 )
@@ -30,12 +34,17 @@ class WellGroupCreate(_BaseModel):
     wells: list[str]
 
 
+class MarkerSetCreate(_BaseModel):
+    markers: list[MarkerRegion]
+
+
 router = APIRouter()
 
 # In-memory stores
 cluster_store: dict[str, ClusteringResult] = {}
 welltype_store: dict[str, dict[str, str]] = {}
 group_store: dict[str, dict[str, list[str]]] = {}  # sid -> {group_name: [wells]}
+marker_store: dict[str, list[MarkerRegion]] = {}  # sid -> [MarkerRegion, ...]
 
 
 def _get_session(sid: str):
@@ -44,21 +53,128 @@ def _get_session(sid: str):
     return sessions[sid]
 
 
+def _cluster_point_dicts(
+    point_dicts, control_wells, algorithm, threshold_config, n_clusters, ploidy
+):
+    """Cluster one set of points (whole plate OR one marker's well subset).
+
+    Returns ``(assignments, confidences, window, warnings)``. Shared by the
+    single-marker path and each marker region, so a region is genotyped
+    exactly like a plate. ``warnings`` is ``None`` (not an empty list) when
+    there is nothing to flag, so a clean run's output is unchanged."""
+    from app.processing.clustering import genotype_window
+
+    confidences: dict[str, float] = {}
+    warnings: list[str] = []
+    anchor_state: dict = {}
+    if algorithm == ClusteringAlgorithm.AUTO:
+        config = threshold_config or ThresholdConfig()
+        assignments, confidences = cluster_auto(
+            point_dicts,
+            ntc_threshold=config.ntc_threshold,
+            control_wells=control_wells,
+            ploidy=ploidy,
+            warnings=warnings,
+            anchor_state=anchor_state,
+        )
+    elif algorithm == ClusteringAlgorithm.THRESHOLD:
+        config = threshold_config or ThresholdConfig()
+        assignments = cluster_threshold(point_dicts, config, ploidy=ploidy)
+    else:
+        assignments = cluster_kmeans(point_dicts, n_clusters)
+
+    # C1: when allele-control anchors successfully resolved the dosage offset
+    # in cluster_auto, that offset is DETERMINED (not a guess) -- tell
+    # genotype_window to report it as such instead of re-deriving its own
+    # (potentially different) offset guess from the sample ratios alone.
+    window = genotype_window(
+        point_dicts, assignments, ploidy, anchor_resolved=anchor_state.get("resolved", False)
+    )
+    return assignments, confidences, window, (warnings or None)
+
+
+def _region_input_hash(wells: list[str], ploidy: int, cycle: int) -> str:
+    """Stable hash of (sorted wells, ploidy, cycle) -- A5 groundwork.
+
+    Lets a future dirty-flag UI detect when a marker's definition (wells/
+    ploidy) or the analyzed cycle has changed since this result was computed,
+    without needing to diff full state."""
+    key = f"{sorted(wells)}|{ploidy}|{cycle}"
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringResult:
+    """Genotype each marker region independently on its own well subset + ploidy.
+
+    Each region reuses the same clustering path as a whole plate. Results are
+    merged into a flat ``assignments`` map (for legacy plate-level consumers)
+    plus a per-region ``RegionResult`` list."""
+    from app.processing.genotype import count_genotypes
+
+    pd_by_well = {p["well"]: p for p in point_dicts}
+
+    # One well = one marker.
+    seen: set[str] = set()
+    for reg in req.regions:
+        validate_ploidy(reg.ploidy)
+        for w in reg.wells:
+            if w in seen:
+                raise HTTPException(400, f"Well {w} is assigned to more than one marker")
+            seen.add(w)
+
+    region_results: list[RegionResult] = []
+    merged_assignments: dict[str, str] = {}
+    merged_conf: dict[str, float] = {}
+    for reg in req.regions:
+        reg_wellset = set(reg.wells)
+        sub_points = [pd_by_well[w] for w in reg.wells if w in pd_by_well]
+        sub_controls = {w: t for w, t in control_wells.items() if w in reg_wellset}
+        assignments, confidences, window, warnings = _cluster_point_dicts(
+            sub_points,
+            sub_controls,
+            req.algorithm,
+            reg.threshold_config or req.threshold_config,
+            req.n_clusters,
+            reg.ploidy,
+        )
+        region_results.append(
+            RegionResult(
+                id=reg.id,
+                name=reg.name,
+                wells=reg.wells,
+                ploidy=reg.ploidy,
+                assignments=assignments,
+                confidences=confidences or None,
+                boundaries=window["boundaries"],
+                offset=window["offset"],
+                offset_uncertain=window["offset_uncertain"],
+                low_separation=window["low_separation"],
+                genotype_counts=count_genotypes(assignments, reg.ploidy),
+                warnings=warnings,
+                input_hash=_region_input_hash(reg.wells, reg.ploidy, cycle),
+            )
+        )
+        merged_assignments.update(assignments)
+        if confidences:
+            merged_conf.update(confidences)
+
+    # Top-level ploidy/boundaries are meaningless when markers differ, so they
+    # stay neutral; per-marker values live in ``regions``. unified.ploidy is NOT
+    # mutated (it is legacy single-marker state).
+    return ClusteringResult(
+        algorithm=req.algorithm.value,
+        cycle=cycle,
+        assignments=merged_assignments,
+        confidences=merged_conf or None,
+        ploidy=getattr(unified, "ploidy", 2),
+        regions=region_results,
+    )
+
+
 @router.post("/api/data/{sid}/cluster")
 async def run_clustering(sid: str, req: ClusteringRequest, current_user: CurrentUser):
     check_session_access(sid, current_user)
     unified = _get_session(sid)
-
-    # Ploidy travels with the request; persist it on the session so downstream
-    # views/stats/export/ASG can read it. Default (None) keeps the stored value.
-    # NOTE: the genotyping algorithm does not yet consume ploidy (Phase 1); this
-    # is plumbing only and does not change diploid behavior.
-    if req.ploidy is not None:
-        validate_ploidy(req.ploidy)
-        if req.ploidy != getattr(unified, "ploidy", 2):
-            unified.ploidy = req.ploidy
-            from app.db import set_session_ploidy
-            set_session_ploidy(sid, req.ploidy)
 
     cycle = req.cycle if req.cycle > 0 else max(unified.cycles)
     if cycle not in unified.cycles:
@@ -79,43 +195,58 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
     ]
 
     # User-marked controls anchor the analysis: they are honored as-is and
-    # excluded from the clustering input.
+    # excluded from the clustering input. Allele-1/Allele-2 controls (C1) are
+    # homozygous reference wells that additionally anchor the dosage ladder's
+    # extremes (see cluster_auto) -- they are excluded from the fit exactly
+    # like NTC/Positive Control, but also feed the offset resolution.
     control_wells = {
         well: wtype
         for well, wtype in welltype_store.get(sid, {}).items()
-        if wtype in (WellType.NTC.value, WellType.POSITIVE_CONTROL.value)
+        if wtype in (
+            WellType.NTC.value,
+            WellType.POSITIVE_CONTROL.value,
+            WellType.ALLELE1_CONTROL.value,
+            WellType.ALLELE2_CONTROL.value,
+        )
     }
 
-    ploidy = getattr(unified, "ploidy", 2)
-    confidences: dict[str, float] = {}
-    if req.algorithm == ClusteringAlgorithm.AUTO:
-        config = req.threshold_config or ThresholdConfig()
-        assignments, confidences = cluster_auto(
-            point_dicts,
-            ntc_threshold=config.ntc_threshold,
-            control_wells=control_wells,
-            ploidy=ploidy,
-        )
-    elif req.algorithm == ClusteringAlgorithm.THRESHOLD:
-        config = req.threshold_config or ThresholdConfig()
-        assignments = cluster_threshold(point_dicts, config, ploidy=ploidy)
+    if req.regions:
+        # Multi-marker: per-region ploidy governs; do NOT persist req.ploidy onto
+        # the session (that is single-marker state).
+        result = _run_regions(req, unified, cycle, point_dicts, control_wells)
     else:
-        assignments = cluster_kmeans(point_dicts, req.n_clusters)
+        # Single-marker (whole plate) — unchanged behavior. Ploidy travels with
+        # the request; persist it on the session so downstream views/stats/
+        # export/ASG can read it. Default (None) keeps the stored value.
+        if req.ploidy is not None:
+            validate_ploidy(req.ploidy)
+            if req.ploidy != getattr(unified, "ploidy", 2):
+                unified.ploidy = req.ploidy
+                from app.db import set_session_ploidy
+                set_session_ploidy(sid, req.ploidy)
 
-    from app.processing.clustering import genotype_window
+        ploidy = getattr(unified, "ploidy", 2)
+        assignments, confidences, window, warnings = _cluster_point_dicts(
+            point_dicts,
+            control_wells,
+            req.algorithm,
+            req.threshold_config,
+            req.n_clusters,
+            ploidy,
+        )
+        result = ClusteringResult(
+            algorithm=req.algorithm.value,
+            cycle=cycle,
+            assignments=assignments,
+            confidences=confidences or None,
+            ploidy=ploidy,
+            boundaries=window["boundaries"],
+            offset=window["offset"],
+            offset_uncertain=window["offset_uncertain"],
+            low_separation=window["low_separation"],
+            warnings=warnings,
+        )
 
-    window = genotype_window(point_dicts, assignments, ploidy)
-    result = ClusteringResult(
-        algorithm=req.algorithm.value,
-        cycle=cycle,
-        assignments=assignments,
-        confidences=confidences or None,
-        ploidy=ploidy,
-        boundaries=window["boundaries"],
-        offset=window["offset"],
-        offset_uncertain=window["offset_uncertain"],
-        low_separation=window["low_separation"],
-    )
     cluster_store[sid] = result
 
     from app.db import save_clustering
@@ -271,5 +402,61 @@ async def delete_all_well_groups(sid: str, current_user: CurrentUser):
     group_store.pop(sid, None)
     from app.db import delete_well_groups
     delete_well_groups(sid)
+
+    return {"status": "ok"}
+
+
+# ============================================================================
+# Marker (assay) definitions — first-class, persisted resource.
+#
+# A marker OWNS wells/ploidy/color/threshold_config/name. It does NOT store
+# well_type or sample_id -- those already live in manual_welltypes /
+# sample_name_overrides (per-well, keyed by well) and are never duplicated
+# here. Source of truth is the marker_regions table (app/db.py), not
+# sessions.metadata_json (which set_session_ploidy rewrites wholesale).
+# ============================================================================
+
+
+@router.get("/api/data/{sid}/markers")
+async def get_markers(sid: str, current_user: CurrentUser):
+    """Return the session's marker (assay) definitions."""
+    check_session_access(sid, current_user)
+    _get_session(sid)
+    return {"markers": marker_store.get(sid, [])}
+
+
+@router.post("/api/data/{sid}/markers")
+async def create_markers(sid: str, body: MarkerSetCreate, current_user: CurrentUser):
+    """Create or replace the session's whole marker set.
+
+    One well may belong to at most one marker (mirrors the one-well-one-marker
+    rule already enforced for clustering regions in ``_run_regions``)."""
+    check_session_access(sid, current_user)
+    _get_session(sid)
+
+    seen: set[str] = set()
+    for marker in body.markers:
+        for well in marker.wells:
+            if well in seen:
+                raise HTTPException(400, f"Well {well} is assigned to more than one marker")
+            seen.add(well)
+
+    marker_store[sid] = list(body.markers)
+
+    from app.db import save_marker_regions
+    save_marker_regions(sid, [m.model_dump() for m in body.markers])
+
+    return {"markers": marker_store[sid]}
+
+
+@router.delete("/api/data/{sid}/markers")
+async def delete_markers(sid: str, current_user: CurrentUser):
+    """Clear the session's marker (assay) definitions."""
+    check_session_access(sid, current_user)
+    _get_session(sid)
+
+    marker_store.pop(sid, None)
+    from app.db import delete_marker_regions
+    delete_marker_regions(sid)
 
     return {"status": "ok"}

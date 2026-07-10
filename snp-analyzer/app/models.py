@@ -115,6 +115,14 @@ class WellType(str, Enum):
     NTC = "NTC"
     UNKNOWN = "Unknown"
     POSITIVE_CONTROL = "Positive Control"
+    # Allele-control INPUT roles (C1): user-marked homozygous reference wells
+    # that anchor the extremes of the dosage ladder (allele-1 control = highest
+    # fam-fraction = dosage P; allele-2 control = lowest = dosage 0). Distinct
+    # from the RESULT labels ALLELE1_HOMO/ALLELE2_HOMO below, which are what a
+    # SAMPLE well is genotyped as -- these are what the operator marks a
+    # reference well as, before clustering runs.
+    ALLELE1_CONTROL = "Allele 1 Control"
+    ALLELE2_CONTROL = "Allele 2 Control"
     ALLELE1_HOMO = "Allele 1 Homo"
     ALLELE2_HOMO = "Allele 2 Homo"
     HETEROZYGOUS = "Heterozygous"
@@ -142,12 +150,53 @@ class ThresholdConfig(BaseModel):
     offset: int = 0
 
 
+class MarkerRegion(BaseModel):
+    """A marker (assay) = an arbitrary set of wells genotyped independently.
+
+    One plate may carry several markers, each with its own ploidy and (optionally)
+    its own threshold config. The wells need not be contiguous."""
+    id: str
+    name: str
+    wells: list[str]
+    ploidy: int = 2
+    threshold_config: ThresholdConfig | None = None
+    # UI-only tag (e.g. plate-view highlight color); not used by clustering.
+    color: str | None = None
+
+
+class RegionResult(BaseModel):
+    """Per-marker clustering output (mirrors ClusteringResult, scoped to a region)."""
+    id: str
+    name: str
+    wells: list[str]
+    ploidy: int
+    assignments: dict[str, str]
+    confidences: dict[str, float] | None = None
+    boundaries: list[float] | None = None
+    offset: int = 0
+    offset_uncertain: bool = False
+    low_separation: bool = False
+    genotype_counts: dict[str, int] | None = None
+    # Phase 1 diagnostics: non-fatal quality flags for this marker's calls (e.g.
+    # "low_n", "relative_ntc"). None (not empty list) when there is nothing to
+    # flag, so a clean marker's JSON is unchanged.
+    warnings: list[str] | None = None
+    # A5 groundwork: stable hash of (sorted wells, ploidy, cycle) at the time
+    # this result was computed. Lets a future dirty-flag UI detect when the
+    # marker definition has since changed without needing to diff full state.
+    input_hash: str | None = None
+
+
 class ClusteringRequest(BaseModel):
     algorithm: ClusteringAlgorithm = ClusteringAlgorithm.THRESHOLD
     cycle: int = 0
     threshold_config: ThresholdConfig | None = None
     n_clusters: int = 4
     ploidy: int | None = None        # None => use the session's stored ploidy (default 2)
+    # Multi-marker: when set, each region is genotyped independently on its own
+    # well subset and ploidy. When None, the whole plate is clustered as one
+    # marker (the historical single-marker path, unchanged).
+    regions: list[MarkerRegion] | None = None
 
 
 class ClusteringResult(BaseModel):
@@ -164,6 +213,13 @@ class ClusteringResult(BaseModel):
     offset_uncertain: bool = False
     # True when adjacent dosage classes overlap (poorly resolved — high ploidy).
     low_separation: bool = False
+    # Multi-marker: per-marker results. None for a single-marker (whole-plate)
+    # run; ``assignments`` above is then the flat merge across all regions.
+    regions: list[RegionResult] | None = None
+    # Phase 1 diagnostics: non-fatal quality flags (e.g. "low_n", "relative_ntc")
+    # for the single-marker (whole-plate) path. None when clean, so an
+    # unaffected/legacy run's JSON is byte-for-byte unchanged.
+    warnings: list[str] | None = None
 
 
 class ManualWellTypeUpdate(BaseModel):
