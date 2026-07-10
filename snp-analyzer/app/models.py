@@ -142,12 +142,43 @@ class ThresholdConfig(BaseModel):
     offset: int = 0
 
 
+class MarkerRegion(BaseModel):
+    """A marker (assay) = an arbitrary set of wells genotyped independently.
+
+    One plate may carry several markers, each with its own ploidy and (optionally)
+    its own threshold config. The wells need not be contiguous."""
+    id: str
+    name: str
+    wells: list[str]
+    ploidy: int = 2
+    threshold_config: ThresholdConfig | None = None
+
+
+class RegionResult(BaseModel):
+    """Per-marker clustering output (mirrors ClusteringResult, scoped to a region)."""
+    id: str
+    name: str
+    wells: list[str]
+    ploidy: int
+    assignments: dict[str, str]
+    confidences: dict[str, float] | None = None
+    boundaries: list[float] | None = None
+    offset: int = 0
+    offset_uncertain: bool = False
+    low_separation: bool = False
+    genotype_counts: dict[str, int] | None = None
+
+
 class ClusteringRequest(BaseModel):
     algorithm: ClusteringAlgorithm = ClusteringAlgorithm.THRESHOLD
     cycle: int = 0
     threshold_config: ThresholdConfig | None = None
     n_clusters: int = 4
     ploidy: int | None = None        # None => use the session's stored ploidy (default 2)
+    # Multi-marker: when set, each region is genotyped independently on its own
+    # well subset and ploidy. When None, the whole plate is clustered as one
+    # marker (the historical single-marker path, unchanged).
+    regions: list[MarkerRegion] | None = None
 
 
 class ClusteringResult(BaseModel):
@@ -164,6 +195,9 @@ class ClusteringResult(BaseModel):
     offset_uncertain: bool = False
     # True when adjacent dosage classes overlap (poorly resolved — high ploidy).
     low_separation: bool = False
+    # Multi-marker: per-marker results. None for a single-marker (whole-plate)
+    # run; ``assignments`` above is then the flat merge across all regions.
+    regions: list[RegionResult] | None = None
 
 
 class ManualWellTypeUpdate(BaseModel):
