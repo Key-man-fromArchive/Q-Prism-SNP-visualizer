@@ -172,6 +172,26 @@ def test_threshold_with_offset():
     assert out["lo"] == "AAAABB"  # dosage 4
 
 
+def test_estimate_window_step_offset_and_uncertainty():
+    from app.processing.clustering import estimate_window
+
+    # contiguous window anchored at the bottom (dosages 0,1,2 of a hexaploid)
+    off, step, unc = estimate_window([0.01, 0.167, 0.333], 6)
+    assert (off, step) == (0, 1) and unc is False   # a class hugs r~0
+
+    # contiguous window anchored at the top (dosages 4,5,6)
+    off, step, unc = estimate_window([0.667, 0.833, 0.99], 6)
+    assert (off, step) == (4, 1) and unc is False
+
+    # mid window (2,3,4): fit picks offset 2 but nothing anchors it -> uncertain
+    off, step, unc = estimate_window([0.40, 0.52, 0.64], 6)
+    assert (off, step) == (2, 1) and unc is True
+
+    # non-contiguous spacing (every other dosage 0,2,4) -> step 2
+    off, step, unc = estimate_window([0.0, 0.5, 1.0], 4)
+    assert (off, step) == (0, 2)
+
+
 def test_hexaploid_labels_used():
     # Sanity: hexaploid (P=6) produces 7-class labels from the vocab.
     specs = [(6, 1.0), (3, 0.5), (0, 0.0)]

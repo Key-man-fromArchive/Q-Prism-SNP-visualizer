@@ -384,7 +384,7 @@ Claude·Fable·Codex 3개 모델로 하드코딩 비율 상수를 교차 비평.
 
 **테스트**: `test_cluster_auto_polyploid.py`에 window 앵커/불확실, label offset, threshold offset 추가. 174 tests green. tsc+vite build 통과. **미검증**: offset 컨트롤/창 드래그의 실앱 E2E(로그인 차단, §15와 동일).
 
-**잔여 caveat**: 오프셋 자동추정은 여전히 `d/P` 근접 기반(비평 P0) — 앵커 없으면 uncertain 플래그로 정직 노출하고 사용자 선언에 의존. per-assay 보정/부모 dosage prior 도입 시 자동해소(향후).
+**오프셋 자동추정 (개선됨, 2026-07-10)**: `_assign_dosages`의 d/P-스냅 DP를 **`estimate_window(centres, ploidy)`** 로 교체 — (1) 간격 median으로 **step**(dosage 단위, `round(gap·P)`, ≥1) 추정 → 연속창(step1)/비연속({0,2,4} step2) 자동구분, (2) 산술수열 `offset+i·step`를 이상값 `d/P`에 **최소제곱 fit**로 offset 선택(단순 최저 dosage 아님), (3) **극단 앵커**(r≈0=dosage0/r≈1=dosageP) 있어야 offset 확정, 없으면 `uncertain=True`. cluster_auto·genotype_window가 동일 함수 사용해 일관. 여전히 앵커 없는 중간-몰림은 근본적으로 데이터로 못 풀어 uncertain+사용자 선언 의존(향후 per-assay 보정/부모 dosage prior로 자동해소).
 
 ---
 

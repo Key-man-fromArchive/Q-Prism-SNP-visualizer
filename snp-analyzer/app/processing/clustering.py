@@ -318,9 +318,14 @@ def genotype_window(
 
     centre = {d: _stats.median(rs) for d, rs in ratio_by_dosage.items()}
     present = sorted(centre)
-    offset, top = present[0], present[-1]
+    top = present[-1]
 
-    # K-1 internal cuts across the observed window [offset, top], high-r first.
+    # Offset + uncertainty from the same window estimator the auto labeller uses,
+    # so the drag-tool seed stays consistent with the auto calls.
+    offset, _step, uncertain = estimate_window([centre[d] for d in present], ploidy)
+
+    # Internal cuts across the observed window [offset, top], high-r first
+    # (empirical midpoint where both flanking classes are present, else ideal).
     cuts: list[float] = []
     for d in range(top - 1, offset - 1, -1):  # boundary between dosage d and d+1
         if d in centre and (d + 1) in centre:
@@ -328,45 +333,57 @@ def genotype_window(
         else:
             cuts.append((d + 0.5) / ploidy)
 
-    # The offset is anchored only if an observed class hugs an axis extreme.
-    lowest, highest = min(centre.values()), max(centre.values())
-    anchored = lowest < (0.5 / ploidy) or highest > (1.0 - 0.5 / ploidy)
-    return {"boundaries": cuts, "offset": offset, "offset_uncertain": not anchored}
+    return {"boundaries": cuts, "offset": offset, "offset_uncertain": uncertain}
+
+
+def estimate_window(sorted_ratios: list[float], ploidy: int) -> tuple[int, int, bool]:
+    """Estimate the observed dosage window from cluster ratios (sorted ascending).
+
+    Returns ``(offset, step, uncertain)`` where the K clusters map to dosages
+    ``offset, offset+step, ..., offset+(K-1)*step``:
+      - ``step`` (dosage units) comes from the median inter-cluster SPACING
+        (``round(gap * P)``, >=1): 1 = a contiguous window, 2 = every other dosage.
+      - ``offset`` is the arithmetic-progression start that best fits the ratios
+        to the ideals ``d/P`` (least squares) — a fit, not just the lowest dosage.
+      - ``uncertain`` is True when NO cluster hugs an axis extreme (r~0 = dosage 0,
+        r~1 = dosage P), so the absolute position of the window is a guess the
+        fluorescence cannot anchor (the sweetpotato "0,1,2 vs 4,5,6" ambiguity).
+
+    This preserves rank order and replaces the old d/P-snapping DP; it handles
+    non-contiguous windows via ``step`` and gives a defensible offset + honesty
+    flag rather than silently committing to a possibly-wrong absolute dosage."""
+    k = len(sorted_ratios)
+    if k == 0:
+        return 0, 1, True
+    edge = 0.5 / ploidy
+    low_anchor = sorted_ratios[0] < edge
+    high_anchor = sorted_ratios[-1] > 1.0 - edge
+
+    if k == 1:
+        offset = max(0, min(ploidy, round(sorted_ratios[0] * ploidy)))
+        return offset, 1, not (low_anchor or high_anchor)
+
+    gaps = sorted(sorted_ratios[i + 1] - sorted_ratios[i] for i in range(k - 1))
+    med_gap = gaps[len(gaps) // 2]
+    step = max(1, round(med_gap * ploidy))
+    step = min(step, max(1, ploidy // (k - 1)))  # keep the window inside 0..P
+
+    max_offset = ploidy - (k - 1) * step
+    best_off, best_cost = 0, float("inf")
+    for off in range(0, max_offset + 1):
+        cost = sum(
+            (sorted_ratios[i] - (off + i * step) / ploidy) ** 2 for i in range(k)
+        )
+        if cost < best_cost:
+            best_cost, best_off = cost, off
+    return best_off, step, not (low_anchor or high_anchor)
 
 
 def _assign_dosages(sorted_ratios: list[float], ploidy: int) -> list[int]:
-    """Assign a strictly increasing allele dosage to each cluster ratio.
-
-    Given cluster median ratios sorted ascending, choose the increasing dosage
-    sequence ``0 <= d0 < d1 < ... < d(k-1) <= P`` minimizing the total distance
-    to the ideal positions ``d/P``. Preserving rank order means a dye-skewed
-    homozygote is snapped to its dosage but never reordered past a neighbour; a
-    full ``k = P+1`` solution is forced to use every dosage. Small DP over
-    (cluster index, dosage)."""
-    k = len(sorted_ratios)
-    ideals = [d / ploidy for d in range(ploidy + 1)]
-    inf = float("inf")
-    # cost[i][d] = best total cost for clusters 0..i with cluster i taking dosage d
-    cost = [[inf] * (ploidy + 1) for _ in range(k)]
-    back = [[-1] * (ploidy + 1) for _ in range(k)]
-    for d in range(ploidy + 1):
-        cost[0][d] = abs(sorted_ratios[0] - ideals[d])
-    for i in range(1, k):
-        for d in range(ploidy + 1):
-            best_prev, best_pd = inf, -1
-            for pd in range(d):
-                if cost[i - 1][pd] < best_prev:
-                    best_prev, best_pd = cost[i - 1][pd], pd
-            if best_pd >= 0:
-                cost[i][d] = best_prev + abs(sorted_ratios[i] - ideals[d])
-                back[i][d] = best_pd
-    # best final dosage
-    last = min(range(ploidy + 1), key=lambda d: cost[k - 1][d])
-    dosages = [0] * k
-    dosages[k - 1] = last
-    for i in range(k - 1, 0, -1):
-        dosages[i - 1] = back[i][dosages[i]]
-    return dosages
+    """Strictly-increasing allele dosage per cluster ratio (sorted ascending),
+    from the estimated observed window (see estimate_window)."""
+    offset, step, _ = estimate_window(sorted_ratios, ploidy)
+    return [offset + i * step for i in range(len(sorted_ratios))]
 
 
 def cluster_kmeans(points: list[dict], n_clusters: int = 4) -> dict[str, str]:
