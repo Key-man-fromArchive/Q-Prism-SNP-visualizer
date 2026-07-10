@@ -403,3 +403,22 @@ Claude·Fable·Codex 3개 모델로 하드코딩 비율 상수를 교차 비평.
 **검증**: Q-Prism `test_asg_result_save` 6 green(diploid v1 불변). ASG `test_context` 49 green + **사전 실패 2**(`test_history_detail`/`test_order_detail` — 원본 코드에서도 동일 실패, sqlite 테스트환경 이슈, 제 변경 무관 — stash로 확인). presentation 단위 확인: diploid AA/AB/BB+dist, hexaploid dosage dist+ploidy6, well genotype_call=effective_type.
 
 **주의**: ASG는 별도 리포/브랜치(feat/polyploid-specificity, 무관한 amplicon-outlier WIP 포함). 내 변경 4파일만 커밋(사용자 WIP docs/csv 제외). DB 마이그레이션 없음(ploidy는 summary_json에 실림). ASG 프론트/뷰의 다배체 실렌더 e2e는 미검증(로그인 차단, §15).
+
+---
+
+## 19. 전체 앱 E2E 검증 (2026-07-10) — §15/§17/§18의 "미검증" 해소
+
+로그인 자격증명 부재로 막혔던 실앱 E2E를, **격리 인스턴스**로 구동해 검증 완료.
+
+**하니스**: `DB_PATH`=임시 sqlite로 `create_user_in_db`(e2e@test.com) + `save_session`(합성 tetraploid 70웰/5클래스/ploidy4) 시드 → uvicorn `app.main:app` :8009(SNP_AUTH_MODE=local) → Playwright. (스크립트: scratchpad/seed_e2e.py)
+
+**검증된 것 (실앱, 실 Plotly)**:
+- 로그인 → 세션 목록 → 세션 열기(인증+데이터 흐름 전체).
+- **ploidy 셀렉터(2x–8x)**; 4x 선택 → 재분석 → **tetraploid 5 dosage 클래스 완전 분해**(AAAA/AAAB/AABB/ABBB/BBBB 각 14; `/api/data/.../cluster` + 산점도 trace 이름으로 확인).
+- **dosage diverging 팔레트** 렌더(플레이트 뷰 파랑→초록→빨강, 산점도 trace 5색).
+- **📏 경계선 토글 → 방사선 4개 그려짐**(Plotly `layout.shapes` 4개), dragmode off.
+- **Dosage 오프셋 컨트롤** 렌더(full-window(0~4)라 shift 비활성 = 정상; shift/label 로직은 단위테스트로 커버).
+- **드래그 루프**: 방사선 잡아 이동 → `algorithm` auto→**threshold** 전환 + persist + 리페치(드래그→재클러스터→저장 전체 확인).
+- 전 과정 **JS/Plotly/WebGL 에러 0**(favicon 404·로그인전 401만). 수동 `Plotly.newPlot(scattergl)` 정상 → 헤드리스 WebGL OK.
+
+**부수 관찰(비차단)**: (1) 초기 저신호 사이클에선 ScatterPlot이 fetch 전이라 잠깐 비어 보임 — endpoint 사이클로 이동 시 정상 렌더(합성데이터 타이밍, 코드 무관). (2) 세션 로드시 프론트 ploidy 셀렉터가 세션 저장 ploidy(4)로 자동 동기화되지 않고 기본 2를 보임 → 사용자가 셀렉터로 4x 선택해야 함. **개선 후보**: 세션 로드 시 `GET /ploidy`로 셀렉터 초기화. (3) ASG 프론트(shared_result/history) 다배체 실렌더 e2e는 별도(로컬 실행 안 함) — presentation 단위 확인으로 갈음.
