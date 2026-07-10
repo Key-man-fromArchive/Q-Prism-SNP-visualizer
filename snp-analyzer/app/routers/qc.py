@@ -42,6 +42,20 @@ class QcResult(BaseModel):
     warnings: list[str] = []
 
 
+class MarkerQc(BaseModel):
+    """Per-marker QC (A2): a flat, plate-level cluster_separation mixes
+    unrelated markers' dosage classes into one grouping and is meaningless once
+    a plate holds multiple independently-genotyped markers -- each marker gets
+    its own metrics here, scoped to its own wells/assignments/ploidy."""
+    id: str
+    name: str
+    ploidy: int
+    n_total: int
+    n_called: int
+    call_rate: float
+    cluster_separation: float | None
+
+
 def _get_session(sid: str) -> UnifiedData:
     if sid not in sessions:
         raise HTTPException(404, "Session not found")
@@ -76,18 +90,13 @@ def _determine_genotype(
     return label_by_ratio(norm_fam / total, ploidy)
 
 
-def _compute_cluster_separation(sid: str, points: list) -> float | None:
-    """Compute cluster separation metric.
-
-    For each pair of cluster centroids, compute Euclidean distance.
-    Return min inter-cluster distance / max within-cluster spread.
-    Returns None if no clustering or fewer than 2 clusters.
+def _cluster_separation_for(assignments: dict[str, str], points: list) -> float | None:
+    """Cluster separation metric for an arbitrary well->label assignment map,
+    scoped to whichever ``points`` are passed in (the whole plate, or a single
+    marker's own wells). For each pair of cluster centroids, compute Euclidean
+    distance. Return min inter-cluster distance / max within-cluster spread.
+    Returns None if fewer than 2 clusters.
     """
-    if sid not in cluster_store:
-        return None
-
-    assignments = cluster_store[sid].assignments
-
     # Build per-cluster point lists
     clusters: dict[str, list[tuple[float, float]]] = {}
     for p in points:
@@ -135,7 +144,64 @@ def _compute_cluster_separation(sid: str, points: list) -> float | None:
     return round(separation, 6)
 
 
-@router.get("/api/data/{sid}/qc", response_model=QcResult)
+def _compute_cluster_separation(sid: str, points: list) -> float | None:
+    """Compute cluster separation metric.
+
+    Returns None if no clustering or fewer than 2 clusters.
+    """
+    if sid not in cluster_store:
+        return None
+    return _cluster_separation_for(cluster_store[sid].assignments, points)
+
+
+def _marker_qc(
+    region,
+    points: list,
+    manual_assignments: dict[str, str],
+    undetermined_min: float,
+) -> "MarkerQc":
+    """Per-marker QC (A2): call rate + cluster separation scoped to a single
+    region's own wells/assignments/ploidy, instead of the flat plate-level
+    pool (which would mix unrelated markers' dosage classes together)."""
+    region_wells = set(region.wells)
+    region_points = [p for p in points if p.well in region_wells]
+
+    n_total = len(region_points)
+    n_called = 0
+    effective_assignments: dict[str, str] = {}
+    for p in region_points:
+        manual = manual_assignments.get(p.well)
+        auto = region.assignments.get(p.well)
+        if manual is not None:
+            genotype = manual
+        elif auto is not None:
+            genotype = auto
+        else:
+            total = p.norm_fam + p.norm_allele2
+            genotype = (
+                "Undetermined"
+                if total <= undetermined_min
+                else label_by_ratio(p.norm_fam / total, region.ploidy)
+            )
+        effective_assignments[p.well] = genotype
+        if genotype not in ("Undetermined", "NTC"):
+            n_called += 1
+
+    call_rate = n_called / n_total if n_total > 0 else 0.0
+    separation = _cluster_separation_for(effective_assignments, region_points)
+
+    return MarkerQc(
+        id=region.id,
+        name=region.name,
+        ploidy=region.ploidy,
+        n_total=n_total,
+        n_called=n_called,
+        call_rate=round(call_rate, 4),
+        cluster_separation=separation,
+    )
+
+
+@router.get("/api/data/{sid}/qc")
 async def qc_metrics(
     sid: str,
     current_user: CurrentUser,
@@ -212,11 +278,25 @@ async def qc_metrics(
     # --- Cluster separation ---
     cluster_separation = _compute_cluster_separation(sid, points)
 
-    return QcResult(
+    result = QcResult(
         call_rate=round(call_rate, 4),
         n_called=n_called,
         n_total=n_total,
         ntc_check=ntc_check,
         cluster_separation=cluster_separation,
         warnings=warnings,
-    )
+    ).model_dump()
+
+    # A2: multi-marker plate -- the plate-level cluster_separation above pools
+    # every marker's wells into one grouping, which is meaningless once
+    # unrelated markers (different ploidy/dosage vocabularies) share the plate.
+    # Add a per-marker breakdown; single-marker (regions is None) sessions
+    # never get this key, so their JSON is unchanged.
+    ca = cluster_store.get(sid)
+    if ca is not None and ca.regions:
+        result["markers"] = [
+            _marker_qc(r, points, manual_assignments, undetermined_min).model_dump()
+            for r in ca.regions
+        ]
+
+    return result
