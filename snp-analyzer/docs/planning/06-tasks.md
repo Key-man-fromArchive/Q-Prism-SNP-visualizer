@@ -29,6 +29,47 @@
 
 ---
 
+---
+
+## 🔧 리뷰 반영 v2 (codex gpt-5.5 · opus · fable) — 구현 전 확정
+아래는 3-모델 계획 리뷰에서 확정된 **보정**. 착수 전 반드시 적용.
+
+### 누락 태스크 추가 (셋 다 지적)
+- **P1-R3 (C2) 좁은 마커 과분할 가드** — `_DOSAGE_MERGE_FRAC`(0.5→ploidy6 0.083) < 실 spread 0.10. RED: 실 qTotal11.1 ratio(0.69–0.79, ploidy6)로 `cluster_auto`→`k=1` 단언. GREEN: 병합 임계를 데이터 spread/BIC 페널티로 보정하거나 단일-클러스터 우선 규칙. **P1 필수(§4.5 최대 위험).**
+- **P2-R3-T3 (A5) stale 결과 무효식(불변식)** — marker_regions = 단일 진실원천. `RegionResult`는 **marker_id + 입력해시(wells+ploidy+cycle+threshold)로 키된 파생 캐시**. 웰/마커 편집 시 그 마커 결과만 dirty→재실행. RED: 마커 웰 편집 후 재실행 없이 조회 시 stale 감지. 프론트 §0 "영향 마커만 재실행"의 백엔드 근거.
+
+### 구조 수정
+- **marker_regions는 테이블(NOT metadata_json)** — `set_session_ploidy`가 metadata blob 통째 재작성 → 경합. `marker_regions(session_id, marker_id, name, wells_json, ploidy, color, threshold_json)` + `ON DELETE CASCADE`(well_groups 선례). 소유: **wells+ploidy+color+threshold만**. **well_type/sample_id는 기존 `manual_welltypes`/`sample_name_overrides` 유지**(이중 writer 금지).
+- **migration 4 back-fill = 비목표(명시)** — 기존 well_groups는 selection primitive로 유지, 마커는 0개로 시작. 그룹→마커 자동 승격 금지.
+- **P2-R5-T3 분리** — (P2) plate-level `unified.ploidy`/offset 회귀 가드만; 멀티마커 세션의 ASG 저장은 **409 "schema_version 3 pending"**. (P5) `context.markers[]`·schema_v3·단수 `target_id` 매핑 설계(asg-saas_v2 동반). P2에서 마커배열 emit 금지(v2 수신자 파손).
+- **L1 팀 스코프 descope** — `TokenData`에 team 없음. P3-R6은 **`scope="user"` + 명시적 공유/복사**로 시작. 팀 공유 원하면 `teams`/`team_members` 테이블을 **P3 선행 태스크**로 별도 추가.
+- **앵커 진단 반환 계약 선추가** — `RegionResult`에 `diagnostics`/`warnings`(anchor_conflict, low_n, ntc_overlap, background_fallback, low_separation 사유) 필드 추가 후 P1-R1/R2 경고 구현. 대조는 `WellType` enum 폭발 대신 **구조화 주석 `{role: allele_control, dosage: int}`**(표시 라벨은 별도).
+- **앵커는 cluster_auto+genotype_window 양쪽에** — offset이 `genotype_window`에서 재계산되므로 구조화 앵커를 `_cluster_point_dicts`→dosage 매핑 **및** window 추정 양쪽에 전달(P1-R1-T2를 2개로 분할).
+
+### 태스크 분할 (과대 → TDD 단위)
+- P4-S1-T2 → (a) 선택 프리미티브(토글/헤더/shift) / (b) 고급(드래그 사각형·키보드).
+- P3-R6-T4 → import+검증 / export 분리.
+- P2-R5-T2(export) → 공용 마커 export 모델 → 포맷별(CSV/XLSX/PDF) 테스트.
+- P1-R2-T3(No-Amp) → 기존 `OMIT` 재사용이면 모델+프론트 노출로 축소/병합.
+
+### CI 갭 (opus) — 검증 태스크 신설
+- **P1-R0-T1 합성 fixture** — 실 두 분포(qSwet 0.145–0.875 gradient / qTotal 0.69–0.79 narrow + 0.0/1.0 failures) 재현 fixture 커밋 → **C2/C3/C4를 CI서 검출**(실 .pcrd는 키 secret이라 CI 불가).
+- **통합테스트** — upload→마커2개(상이 ploidy)→cluster→DB reload→export→ASG snapshot: 모든 소비자가 per-marker이고 plate-level ploidy 미사용 단언.
+- **골든 스냅샷** — `regions is None` 단일마커 경로의 export/asg_result byte-identical 고정(P2가 이 파일 건드리기 전).
+
+### 프론트 누락 추가 (fable)
+- **P4-S0 (신설) 비차단 단일마커 기본 + 분할 배너 (Q1, 합의 1순위)** — 업로드→전체 단일마커 자동분석→Analysis 착지, "마커로 분할?" 유도 배너. **초반 데모 가능 수직 슬라이스로 활용**.
+- P4-S2-T2에 **대조 다이아몬드/앵커 렌더 + NTC 점 스타일 + 대조 행(◆) 테이블** 명시.
+- P4-S1-T4에 **샘플 ID 입력 UI**(백엔드 sample_name_overrides 연결) 추가.
+- 추가 태스크: 열분할 원클릭 템플릿, 업로드시 레이아웃 자동제안(패턴매칭+확인), "전체 마커 겹쳐보기" 오버레이, 테마-고정 마커색, assignRemaining 액션.
+- **P4-X 횡단(신설)**: i18n(한글 문자열 카탈로그), 로딩/에러/빈 상태, **레이아웃 로드시 미저장 작업 덮어쓰기 확인**(데이터 손실 방지), a11y(aria/focus/reduced-motion), 토스트.
+- **프론트 V 구체화** — "연결점 검증" 대신 Playwright E2E 또는 컴포넌트 테스트로 요청 shape·region payload 직렬화·경계선 영속을 실제 단언(별도 배포라 wire 파손이 최다 위험).
+
+### 순서 보정
+- P4-S2는 P1뿐 아니라 **P2-R3(마커 영속) 선행**. P2-R5·P3는 P2-R3 스키마 선행. **P2-R4(배경) 변경 후 P1 회귀 재실행**.
+
+---
+
 ## P0 — 완료 (기록용)
 - **P0-R0-T1** ✅ A1 저장버그: `db.save_clustering` result_json + migration 3 (`90b3067`). 라운드트립 테스트.
 - **P0-R0-T2** ✅ region 분기: `MarkerRegion`/`RegionResult`, `run_clustering` regions 분기, flat 병합, 겹침 400, unified.ploidy 불변 (`ce03bd3`). 실파일 §4 검증, 194 tests.
