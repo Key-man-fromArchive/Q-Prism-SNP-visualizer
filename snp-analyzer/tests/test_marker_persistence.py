@@ -194,7 +194,9 @@ def test_migration_4_adds_marker_regions_table_to_v3_db(tmp_path):
     ).fetchall()]
     assert "marker_regions" in tables
     version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-    assert version == 4
+    # init_db always chains to the latest migration (now 5, adding
+    # saved_layouts) -- this test only asserts migration 4 itself ran.
+    assert version >= 4
 
     # Migration 4 back-fills nothing: no markers exist for any session yet.
     assert db.load_marker_regions("any-session") == []

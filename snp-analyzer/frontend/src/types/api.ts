@@ -238,11 +238,20 @@ export const WellType = {
   NTC: 'NTC',
   UNKNOWN: 'Unknown',
   POSITIVE_CONTROL: 'Positive Control',
+  // Allele-control INPUT roles (P4 C1): user-marked homozygous reference wells
+  // that anchor the dosage ladder's extremes. Mirrors backend
+  // `app.models.WellType.ALLELE1_CONTROL` / `ALLELE2_CONTROL` — distinct from
+  // the RESULT labels ALLELE1_HOMO/ALLELE2_HOMO below.
+  ALLELE1_CONTROL: 'Allele 1 Control',
+  ALLELE2_CONTROL: 'Allele 2 Control',
   ALLELE1_HOMO: 'Allele 1 Homo',
   ALLELE2_HOMO: 'Allele 2 Homo',
   HETEROZYGOUS: 'Heterozygous',
   UNDETERMINED: 'Undetermined',
   EMPTY: 'Empty',
+  // Well has data but is excluded from plots/clustering (bad/spiked reading,
+  // or a failed/No-Amp well — P4 C6). Mirrors backend `WellType.OMIT`.
+  OMIT: 'Omit',
 } as const;
 
 export type WellType = typeof WellType[keyof typeof WellType];
@@ -285,11 +294,102 @@ export type ClusteringResult = {
   offset?: number;              // dosage of the lowest observed class
   offset_uncertain?: boolean;   // true when the offset is a low-confidence guess
   low_separation?: boolean;     // true when adjacent dosage classes overlap (poorly resolved)
+  // Multi-marker (P4): per-marker results. Absent for a single-marker (whole
+  // plate) run; `assignments` above is then the flat merge across regions.
+  regions?: RegionResult[] | null;
+  warnings?: string[] | null;
 };
 
 export type ManualWellTypeUpdate = {
   wells: string[];
   well_type: WellType;
+};
+
+// ============================================================================
+// Markers (multi-marker-per-plate, P4)
+// ============================================================================
+
+/**
+ * A marker (assay) = an arbitrary set of wells genotyped independently.
+ * Mirrors backend `app.models.MarkerRegion`.
+ */
+export type MarkerRegion = {
+  id: string;
+  name: string;
+  wells: string[];
+  ploidy: number;
+  threshold_config?: ThresholdConfig | null;
+  /** UI-only tag (plate-view highlight color); not used by clustering. */
+  color?: string | null;
+};
+
+export type MarkersResponse = {
+  markers: MarkerRegion[];
+};
+
+// ============================================================================
+// Layout library (per-user saved plate layouts, P4-S3)
+// ============================================================================
+
+/**
+ * A reusable PHYSICAL plate design snapshot: the marker (assay) set, plus
+ * optionally well-types / sample ids, captured from one session's current
+ * state. Mirrors backend `app.routers.layouts._build_snapshot`.
+ */
+export type LayoutSnapshot = {
+  schema_version: number;
+  plate: { rows: number; cols: number };
+  markers: MarkerRegion[];
+  well_types?: Record<string, string>;
+  sample_ids?: Record<string, string>;
+};
+
+/** Mirrors backend `app.db.get_layout` / `list_layouts` row shape. */
+export type SavedLayout = {
+  id: string;
+  owner_user_id: string;
+  name: string;
+  snapshot: LayoutSnapshot;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LayoutListResponse = {
+  layouts: SavedLayout[];
+};
+
+export type LayoutApplyRequest = {
+  sid: string;
+  apply_analysis_settings?: boolean;
+  force?: boolean;
+};
+
+export type LayoutApplyResult = {
+  sid: string;
+  markers: MarkerRegion[];
+  well_types_applied: Record<string, string>;
+};
+
+/** Shape of the 409 response body's `detail` (L2 — ploidy conflict). */
+export type LayoutApplyConflict = {
+  message: string;
+  conflicting_marker_ids: string[];
+};
+
+export type RegionResult = {
+  id: string;
+  name: string;
+  wells: string[];
+  ploidy: number;
+  assignments: Record<string, string>;
+  confidences?: Record<string, number> | null;
+  boundaries?: number[] | null;
+  offset: number;
+  offset_uncertain: boolean;
+  low_separation: boolean;
+  genotype_counts?: Record<string, number> | null;
+  warnings?: string[] | null;
+  input_hash?: string | null;
 };
 
 // ============================================================================

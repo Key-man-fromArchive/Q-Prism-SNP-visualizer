@@ -8,7 +8,7 @@ import { Header } from "@/components/layout/Header";
 import { UploadZone } from "@/components/upload/UploadZone";
 import { TabNavigation, type TabId } from "@/components/layout/TabNavigation";
 import { SettingsTab } from "@/components/settings/SettingsTab";
-import { AnalysisTab } from "@/components/analysis/AnalysisTab";
+import { AnalysisWorkspace } from "@/components/analysis/AnalysisWorkspace";
 import { ProtocolTab } from "@/components/protocol/ProtocolTab";
 import { QualityTab } from "@/components/quality/QualityTab";
 import { StatisticsTab } from "@/components/statistics/StatisticsTab";
@@ -203,10 +203,12 @@ export default function App() {
 
           {/* Keep Analysis mounted across tab switches so the analysed cycle,
               clustering and view state persist (and it isn't re-initialised to
-              the amplification default when you return). */}
+              the amplification default when you return). AnalysisWorkspace is
+              the P4 2-surface shell (Plate Setup / Analysis) wrapping the
+              existing AnalysisTab. */}
           {sessionId && (
             <div className={activeTab === "analysis" ? "" : "hidden"}>
-              <AnalysisTab />
+              <AnalysisWorkspace />
             </div>
           )}
           {sessionId && activeTab === "protocol" && <ProtocolTab />}
