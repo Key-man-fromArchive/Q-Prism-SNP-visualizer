@@ -54,16 +54,24 @@ export function AnalysisWorkspace() {
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
-    (async () => {
+    const load = async () => {
       try {
         const res = await getMarkers(sessionId);
         if (!cancelled) setMarkers(res.markers);
       } catch {
         if (!cancelled) setMarkers([]);
       }
-    })();
+    };
+    void load();
+    // A layout can also be applied to this session from the top-level
+    // Library tab's "레이아웃" sub-tab -- a component outside this workspace
+    // entirely, so switching back to the Analysis tab alone (without also
+    // toggling the plate/analysis surface, which the effect above already
+    // covers) wouldn't otherwise pick it up.
+    window.addEventListener("markers-changed", load);
     return () => {
       cancelled = true;
+      window.removeEventListener("markers-changed", load);
     };
   }, [sessionId, activeSurface]);
 

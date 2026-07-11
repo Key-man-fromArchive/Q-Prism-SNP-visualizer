@@ -120,6 +120,7 @@ const en = {
   tabProject: 'Project',
   tabUsers: 'Users',
   tabReferences: 'References',
+  tabLibrary: 'Library',
 
   // Analysis Tab
   group: 'Group:',
@@ -518,6 +519,13 @@ const en = {
     `Applying this layout would silently change the ploidy of marker(s): ${ids}. Continue anyway?`,
   wsLayoutForceApplyButton: 'Apply anyway',
   wsLayoutMissingWellsTitle: 'Some wells are missing on this plate',
+
+  // Library tab -- Layouts sub-tab (feat/library-hub: full browse/manage UI,
+  // moved here from the Plate Setup surface's layout panel)
+  libSubtabLayouts: 'Layouts',
+  libLoadOntoCurrentButton: 'Load onto current plate',
+  libNoSessionHint:
+    'Open a plate to load a layout onto it or save its current assignment. You can still browse, copy, and delete layouts here.',
 
   // Marker (assay) catalog -- durable, per-user assay registry
   tabMarkerCatalog: 'Marker Catalog',

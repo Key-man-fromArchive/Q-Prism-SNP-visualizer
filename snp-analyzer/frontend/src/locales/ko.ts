@@ -122,6 +122,7 @@ const ko: Translations = {
   tabProject: '프로젝트',
   tabUsers: '사용자',
   tabReferences: '참고문헌',
+  tabLibrary: '라이브러리',
 
   // Analysis Tab
   group: '그룹:',
@@ -520,6 +521,13 @@ const ko: Translations = {
     `이 레이아웃을 적용하면 다음 마커의 배수성이 예고 없이 바뀝니다: ${ids}. 그래도 계속하시겠습니까?`,
   wsLayoutForceApplyButton: '그래도 적용',
   wsLayoutMissingWellsTitle: '이 플레이트에 없는 웰이 포함되어 있습니다',
+
+  // 라이브러리 탭 -- 레이아웃 하위 탭 (feat/library-hub: 전체 조회/관리 UI,
+  // 플레이트 설정 화면의 레이아웃 패널에서 이곳으로 이동)
+  libSubtabLayouts: '레이아웃',
+  libLoadOntoCurrentButton: '현재 플레이트에 불러오기',
+  libNoSessionHint:
+    '레이아웃을 불러오거나 현재 배치를 저장하려면 먼저 플레이트를 열어야 합니다. 조회·복사·삭제는 지금도 가능합니다.',
 
   // 마커(어세이) 카탈로그 -- 재사용 가능한 사용자별 어세이 등록부
   tabMarkerCatalog: '마커 카탈로그',

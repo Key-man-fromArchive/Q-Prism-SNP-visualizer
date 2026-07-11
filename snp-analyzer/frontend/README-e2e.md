@@ -167,18 +167,33 @@ specs assert (default language is `ko`, see `src/stores/language-store.ts`).
 | `marker-observed-classes` | Observed dosage-class count, for expected-vs-observed comparison/warning |
 | `marker-ntc-note` | States that background/NTC is computed per-marker, not plate-global (Q4/Q5/C4/C7) |
 
-### Layout library (P4-S3)
+### Layout library (P4-S3, split by feat/library-hub — see below)
 | testid | Notes |
 |---|---|
-| `layout-save-open` | Opens the save-as-name form |
+| `layout-save-open` | Plate Setup contextual quick action — opens the save-as-name form |
 | `layout-save-name-input` | Layout name input |
 | `layout-save-confirm` | Commits the save |
-| `layout-row` (repeated) | One per saved layout; filter by `hasText: layoutName` |
-| `layout-load-button` (scoped inside a `layout-row`) | Restores that layout's well assignment |
-| `layout-delete-button` (scoped inside a `layout-row`) | Removes it from the library |
-| `apply-previous-layout-button` | "이전 실행 레이아웃 적용" |
+| `apply-previous-layout-button` | Plate Setup contextual quick action — "이전 실행 레이아웃 적용" |
 | `apply-previous-layout-confirm-dialog` | Mandatory confirmation (L3 — never blind-apply) |
 | `apply-previous-layout-confirm` / `apply-previous-layout-cancel` | Dialog actions |
+
+### Library tab (feat/library-hub — consolidated Marker Catalog + Layout library)
+Top-level, session-free `library` tab (`#tab-library`), replacing the old
+standalone `catalog` tab. Two sub-surfaces (mirrors the
+`workspace-tab-plate`/`workspace-tab-analysis` pattern):
+
+| testid | Notes |
+|---|---|
+| `library-subtab-catalog` / `library-subtab-layouts` | Sub-tab buttons |
+| `library-panel-catalog` | Wraps the unchanged `MarkerCatalogTab` (`marker-catalog-tab`, `catalog-*` testids) |
+| `library-panel-layouts` | The full layout browse/manage UI (moved out of Plate Setup) |
+| `layout-row` (repeated, inside `library-panel-layouts`) | One per saved layout; filter by `hasText: layoutName` |
+| `layout-load-button` (scoped inside a `layout-row`) | Only rendered when a session is open — loads that layout onto the CURRENT plate |
+| `layout-copy-button` (scoped inside a `layout-row`) | Duplicates the layout into the caller's own library |
+| `layout-delete-button` (scoped inside a `layout-row`) | Removes it from the library |
+| `layout-load-conflict-dialog` / `layout-load-conflict-cancel` / `layout-load-conflict-confirm` | L2 ploidy-conflict confirmation for a per-row load |
+| `library-layouts-no-session-hint` | Shown instead of the load/save actions when no plate is open (read-only browse/copy/delete) |
+| `library-layout-save-open` / `library-layout-save-name-input` / `library-layout-save-confirm` / `library-layout-save-cancel` | Optional "현재 배치 저장" convenience, only rendered when a session is open |
 
 ## `playwright test --list`
 

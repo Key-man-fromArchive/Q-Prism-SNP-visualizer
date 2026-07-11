@@ -13,7 +13,6 @@ import {
   setWellTypes as apiSetWellTypes,
   listLayouts,
   saveLayout,
-  deleteLayout,
   applyLayout,
   listMarkerCatalog,
   attachMarkerCatalog,
@@ -22,6 +21,7 @@ import {
 import type { MarkerRegion, SavedLayout, LayoutApplyConflict, MarkerCatalogEntry } from "@/types/api";
 import { WellType } from "@/types/api";
 import { MARKER_PALETTE } from "@/lib/constants";
+import { extractLayoutConflict, extractLayoutMissingWellsMessage } from "@/lib/layout-conflict";
 
 const ROW_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const PLOIDY_OPTIONS = [2, 3, 4, 5, 6, 7, 8];
@@ -80,13 +80,6 @@ export function PlateSetupTab() {
   const [layoutSaveName, setLayoutSaveName] = useState("");
   const [savingLayout, setSavingLayout] = useState(false);
   const [applyingLayoutId, setApplyingLayoutId] = useState<string | null>(null);
-  // L2: a direct row `불러오기` hit a 409 ploidy conflict -- require a
-  // second explicit confirmation before retrying with force=true.
-  const [rowConflict, setRowConflict] = useState<{
-    layoutId: string;
-    layoutName: string;
-    conflict: LayoutApplyConflict;
-  } | null>(null);
   // L3: "이전 실행 레이아웃 적용" must NEVER blind-apply -- this dialog is
   // shown before the first apply attempt, regardless of any conflict.
   const [showApplyPreviousConfirm, setShowApplyPreviousConfirm] = useState(false);
@@ -113,16 +106,24 @@ export function PlateSetupTab() {
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
-    (async () => {
+    const load = async () => {
       try {
         const res = await getMarkers(sessionId);
         if (!cancelled) setMarkers(res.markers);
       } catch {
         if (!cancelled) setMarkers([]);
       }
-    })();
+    };
+    void load();
+    // A layout can now also be applied to THIS session from the Library
+    // tab's "레이아웃" sub-tab (a component that isn't a child of this one,
+    // unlike the in-context "레이아웃 적용" quick action below) -- refetch
+    // when it announces a change so this surface's marker list/unassigned
+    // banner never goes stale.
+    window.addEventListener("markers-changed", load);
     return () => {
       cancelled = true;
+      window.removeEventListener("markers-changed", load);
     };
   }, [sessionId]);
 
@@ -160,6 +161,11 @@ export function PlateSetupTab() {
 
   useEffect(() => {
     void refreshLayouts();
+    // The Library tab's "레이아웃" sub-tab can also save a new snapshot of
+    // THIS session -- keep the cached list (used below to compute
+    // `previousLayout` for "레이아웃 적용") fresh when that happens.
+    window.addEventListener("layouts-changed", refreshLayouts);
+    return () => window.removeEventListener("layouts-changed", refreshLayouts);
   }, [refreshLayouts]);
 
   // Load the caller's marker-catalog library (feat/marker-catalog) -- also
@@ -399,20 +405,12 @@ export function PlateSetupTab() {
     }
   }
 
-  // ---- Layout library (P4-S3) ------------------------------------------
-
-  function extractConflict(err: ApiError): LayoutApplyConflict | null {
-    const detail = (err.payload as { detail?: unknown } | null)?.detail;
-    if (detail && typeof detail === "object" && "conflicting_marker_ids" in detail) {
-      return detail as LayoutApplyConflict;
-    }
-    return null;
-  }
-
-  function extractMissingWellsMessage(err: ApiError): string {
-    const detail = (err.payload as { detail?: unknown } | null)?.detail;
-    return typeof detail === "string" ? detail : err.message;
-  }
+  // ---- Layout library (P4-S3) -- CONTEXTUAL quick actions only ----------
+  // The full browse/manage UI (list every saved layout, rename/copy/delete)
+  // now lives in the top-level Library tab's "레이아웃" sub-tab
+  // (LayoutsLibraryPanel). This surface keeps only the two actions that
+  // operate on THIS session's plate: saving its current assignment as a new
+  // layout, and applying the most-recently-saved layout to it.
 
   /** Applies one saved layout to the current session and refreshes the
    * locally-held marker set (so both the plate grid here AND the Analysis
@@ -425,6 +423,11 @@ export function PlateSetupTab() {
     setSelectedWells([]);
     setPickMarkerId(null);
     window.dispatchEvent(new CustomEvent("welltypes-changed"));
+    // The Library tab's layouts sub-tab doesn't hold its own copy of this
+    // session's markers, but announcing this keeps behavior symmetric with
+    // the reverse direction (a Library-triggered apply notifying this
+    // surface -- see the "markers-changed" listener above).
+    window.dispatchEvent(new CustomEvent("markers-changed"));
   }
 
   function openLayoutSaveForm() {
@@ -448,66 +451,14 @@ export function PlateSetupTab() {
       setShowLayoutSaveForm(false);
       setLayoutSaveName("");
       await refreshLayouts();
+      // Keep the Library tab's layouts sub-tab (if/when it's open) in sync
+      // with a save that happened from this contextual quick action.
+      window.dispatchEvent(new CustomEvent("layouts-changed"));
     } catch (err) {
       setLayoutError(err instanceof Error ? err.message : String(err));
     } finally {
       setSavingLayout(false);
     }
-  }
-
-  async function handleDeleteLayout(id: string) {
-    setLayoutError(null);
-    try {
-      await deleteLayout(id);
-      setLayouts((prev) => prev.filter((l) => l.id !== id));
-    } catch (err) {
-      setLayoutError(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  /** `layout-load-button` (inside a named `layout-row`): an explicit,
-   * already-confirmed user action -- apply immediately. Only a 409 ploidy
-   * conflict (L2) interrupts this with a mandatory second confirmation;
-   * unlike "apply previous", a named-row load doesn't need an upfront
-   * blind-apply guard since choosing a specific row IS the confirmation. */
-  async function handleLoadLayout(layout: SavedLayout) {
-    setLayoutError(null);
-    setApplyingLayoutId(layout.id);
-    try {
-      await applyLayoutToSession(layout.id, false);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        const conflict = extractConflict(err);
-        if (conflict) {
-          setRowConflict({ layoutId: layout.id, layoutName: layout.name, conflict });
-          return;
-        }
-      }
-      if (err instanceof ApiError && err.status === 400) {
-        setLayoutError(extractMissingWellsMessage(err));
-        return;
-      }
-      setLayoutError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setApplyingLayoutId(null);
-    }
-  }
-
-  async function confirmRowConflictForce() {
-    if (!rowConflict) return;
-    setApplyingLayoutId(rowConflict.layoutId);
-    try {
-      await applyLayoutToSession(rowConflict.layoutId, true);
-      setRowConflict(null);
-    } catch (err) {
-      setLayoutError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setApplyingLayoutId(null);
-    }
-  }
-
-  function cancelRowConflict() {
-    setRowConflict(null);
   }
 
   // "이전 실행 레이아웃 적용" -- the most recently saved layout (backend
@@ -538,7 +489,7 @@ export function PlateSetupTab() {
       setShowApplyPreviousConfirm(false);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        const conflict = extractConflict(err);
+        const conflict = extractLayoutConflict(err);
         if (conflict) {
           setApplyPreviousConflict({ layoutId: previousLayout.id, conflict });
           return;
@@ -546,7 +497,7 @@ export function PlateSetupTab() {
       }
       setShowApplyPreviousConfirm(false);
       if (err instanceof ApiError && err.status === 400) {
-        setLayoutError(extractMissingWellsMessage(err));
+        setLayoutError(extractLayoutMissingWellsMessage(err));
       } else {
         setLayoutError(err instanceof Error ? err.message : String(err));
       }
@@ -759,87 +710,14 @@ export function PlateSetupTab() {
           </button>
         </div>
 
-        {/* Layout library (P4-S3) */}
+        {/* Layout quick actions (P4-S3 contextual) -- full browse/manage now
+            lives in the top-level Library tab's "레이아웃" sub-tab. */}
         <div className="panel">
           <h3 className="text-sm font-semibold mb-3 text-text">{t.wsLayoutLibraryTitle}</h3>
 
           {layoutError && (
             <div className="mb-2 px-2.5 py-2 rounded-md text-xs text-danger bg-danger/10">
               {layoutError}
-            </div>
-          )}
-
-          {layouts.length === 0 ? (
-            <p className="text-xs text-text-muted mb-2 whitespace-pre-line">{t.wsLayoutEmpty}</p>
-          ) : (
-            layouts.map((l) => (
-              <div
-                key={l.id}
-                data-testid="layout-row"
-                className="flex items-center gap-2 border border-border bg-bg rounded-md p-2 mb-2"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-xs text-text truncate">{l.name}</div>
-                  <div className="text-[10px] text-text-muted font-mono mt-0.5">
-                    {t.wsLayoutMeta(
-                      l.snapshot.markers.length,
-                      l.snapshot.markers.reduce((sum, m) => sum + m.wells.length, 0)
-                    )}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  data-testid="layout-load-button"
-                  disabled={applyingLayoutId === l.id}
-                  onClick={() => handleLoadLayout(l)}
-                  className="flex-none border border-primary text-primary rounded-md px-2.5 py-1 text-xs font-semibold hover:bg-primary hover:text-white disabled:opacity-40 cursor-pointer"
-                >
-                  {t.load}
-                </button>
-                <button
-                  type="button"
-                  data-testid="layout-delete-button"
-                  aria-label={t.delete}
-                  title={t.delete}
-                  onClick={() => handleDeleteLayout(l.id)}
-                  className="flex-none w-6 h-6 grid place-items-center rounded-md text-text-muted hover:text-danger hover:bg-bg cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-            ))
-          )}
-
-          {rowConflict && (
-            <div
-              data-testid="layout-load-conflict-dialog"
-              role="alertdialog"
-              aria-modal="true"
-              className="mb-2 px-2.5 py-2 rounded-md text-xs border"
-              style={{ background: "rgba(217,119,6,0.12)", borderColor: "rgba(217,119,6,0.35)" }}
-            >
-              <p className="font-semibold text-text mb-1">{t.wsLayoutPloidyConflictTitle}</p>
-              <p className="text-text-muted mb-2">
-                {t.wsLayoutPloidyConflictBody(rowConflict.conflict.conflicting_marker_ids.join(", "))}
-              </p>
-              <div className="flex gap-1.5 justify-end">
-                <button
-                  type="button"
-                  data-testid="layout-load-conflict-cancel"
-                  onClick={cancelRowConflict}
-                  className="px-2.5 py-1 rounded-md text-xs font-medium bg-bg text-text-muted cursor-pointer"
-                >
-                  {t.cancel}
-                </button>
-                <button
-                  type="button"
-                  data-testid="layout-load-conflict-confirm"
-                  onClick={confirmRowConflictForce}
-                  className="px-2.5 py-1 rounded-md text-xs font-semibold bg-danger text-white cursor-pointer"
-                >
-                  {t.wsLayoutForceApplyButton}
-                </button>
-              </div>
             </div>
           )}
 
