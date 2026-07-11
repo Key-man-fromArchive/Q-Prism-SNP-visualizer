@@ -15,6 +15,7 @@ import { StatisticsTab } from "@/components/statistics/StatisticsTab";
 import { CompareTab } from "@/components/compare/CompareTab";
 import { BatchTab } from "@/components/batch/BatchTab";
 import { UserManagement } from "@/components/admin/UserManagement";
+import { ReferencesTab } from "@/components/references/ReferencesTab";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useExports } from "@/hooks/use-exports";
@@ -187,8 +188,9 @@ export default function App() {
     return <LoginPage />;
   }
 
-  // Project tab is accessible without a session
-  const showProjectOnly = !sessionId && (activeTab === "project" || activeTab === "users");
+  // Project/References/Users tabs are accessible without a session
+  const showProjectOnly =
+    !sessionId && (activeTab === "project" || activeTab === "users" || activeTab === "references");
   const isAdmin = user?.role === "admin";
 
   return (
@@ -220,6 +222,7 @@ export default function App() {
             <BatchTab onLoadSession={() => setActiveTab("analysis")} />
           )}
           {activeTab === "users" && isAdmin && <UserManagement />}
+          {activeTab === "references" && <ReferencesTab />}
         </div>
       </main>
 

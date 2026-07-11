@@ -119,6 +119,7 @@ const en = {
   tabCompare: 'Compare Runs',
   tabProject: 'Project',
   tabUsers: 'Users',
+  tabReferences: 'References',
 
   // Analysis Tab
   group: 'Group:',
