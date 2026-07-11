@@ -15,7 +15,13 @@ import { loadExample } from "./helpers/load-example";
  *
  * Mockup: docs/mockups/multimarker-mockup.html (#layoutSec, .lyrow, .saveform)
  *
- * RED-first: none of the testids below exist yet.
+ * feat/library-hub: the full browse/manage UI (list every saved layout,
+ * copy/delete, load onto the current plate) moved from this Plate Setup
+ * surface into the top-level "라이브러리 / Library" tab's "레이아웃"
+ * sub-tab. Plate Setup keeps only the CONTEXTUAL quick actions that operate
+ * on THIS session's plate: "현재 배치 저장" (layout-save-open et al.) and
+ * "이전 실행 레이아웃 적용" (apply-previous-layout-button + its confirm
+ * dialog) -- both unchanged below.
  */
 test.describe("P4-S3: Layout save/load/delete", () => {
   test.beforeEach(async ({ page }) => {
@@ -36,18 +42,24 @@ test.describe("P4-S3: Layout save/load/delete", () => {
     await page.getByTestId("assign-button").click();
   });
 
-  test("save current layout under a name; it appears in my layout library", async ({
+  test("save current layout under a name; it appears in the Library tab's layout list", async ({
     page,
   }) => {
     await page.getByTestId("layout-save-open").click();
     await page.getByTestId("layout-save-name-input").fill("고구마 6배체 테스트");
     await page.getByTestId("layout-save-confirm").click();
 
+    // Browse/manage now lives in the top-level Library tab.
+    await page.locator("#tab-library").click();
+    await page.getByTestId("library-subtab-layouts").click();
+
     const row = page.getByTestId("layout-row").filter({ hasText: "고구마 6배체 테스트" });
     await expect(row).toBeVisible();
   });
 
-  test("loading a saved layout restores the marker assignment", async ({ page }) => {
+  test("loading a saved layout (from the Library tab) restores the marker assignment", async ({
+    page,
+  }) => {
     await page.getByTestId("layout-save-open").click();
     await page.getByTestId("layout-save-name-input").fill("레이아웃 A");
     await page.getByTestId("layout-save-confirm").click();
@@ -57,16 +69,31 @@ test.describe("P4-S3: Layout save/load/delete", () => {
     await page.getByTestId("well-inspector").getByTestId("unassign-button").click();
     await expect(page.getByTestId("well-A1")).toHaveAttribute("data-assigned", "false");
 
+    await page.locator("#tab-library").click();
+    await page.getByTestId("library-subtab-layouts").click();
+
     const row = page.getByTestId("layout-row").filter({ hasText: "레이아웃 A" });
+    await expect(row).toBeVisible();
     await row.getByTestId("layout-load-button").click();
 
+    // Back on the Plate Setup surface, the applied layout's assignment
+    // should be visible (PlateSetupTab stays mounted the whole time and
+    // refetches its marker set on the Library tab's "markers-changed"
+    // announcement, so no reload is needed).
+    await page.locator("#tab-analysis").click();
+    await page.getByTestId("workspace-tab-plate").click();
     await expect(page.getByTestId("well-A1")).toHaveAttribute("data-assigned", "true");
   });
 
-  test("deleting a saved layout removes it from the list", async ({ page }) => {
+  test("deleting a saved layout (from the Library tab) removes it from the list", async ({
+    page,
+  }) => {
     await page.getByTestId("layout-save-open").click();
     await page.getByTestId("layout-save-name-input").fill("삭제될 레이아웃");
     await page.getByTestId("layout-save-confirm").click();
+
+    await page.locator("#tab-library").click();
+    await page.getByTestId("library-subtab-layouts").click();
 
     const row = page.getByTestId("layout-row").filter({ hasText: "삭제될 레이아웃" });
     await expect(row).toBeVisible();
@@ -77,7 +104,7 @@ test.describe("P4-S3: Layout save/load/delete", () => {
     );
   });
 
-  test('"apply previous layout" requires explicit confirmation before overwriting', async ({
+  test('"apply previous layout" (Plate Setup quick action) requires explicit confirmation before overwriting', async ({
     page,
   }) => {
     await expect(page.getByTestId("apply-previous-layout-button")).toBeVisible();

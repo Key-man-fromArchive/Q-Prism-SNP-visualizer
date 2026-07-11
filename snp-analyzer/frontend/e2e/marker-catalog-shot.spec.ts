@@ -3,15 +3,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Screenshot-only spec (no product-code changes) — captures the new Marker
- * Catalog tab (`src/components/catalog/MarkerCatalogTab.tsx`,
- * `data-testid="marker-catalog-tab"`) so an orchestrator can visually verify
- * it without running the app.
+ * Screenshot-only spec (no product-code changes) — captures the Marker
+ * Catalog sub-tab (`src/components/catalog/MarkerCatalogTab.tsx`,
+ * `data-testid="marker-catalog-tab"`), now reached via the top-level
+ * "라이브러리 / Library" tab's `library-subtab-catalog` sub-tab
+ * (feat/library-hub: consolidated Marker Catalog + Layout library), so an
+ * orchestrator can visually verify it without running the app.
  *
- * The tab is `sessionFree` (see TabNavigation.tsx), so it's reachable right
- * after login with no example dataset load needed. Creates one catalog
- * assay with validation="validated" + amplification_verified=true (both
- * halves of the derived dosage_trust rule -- app.models.
+ * The Library tab is `sessionFree` (see TabNavigation.tsx), so it's
+ * reachable right after login with no example dataset load needed. Creates
+ * one catalog assay with validation="validated" + amplification_verified=true
+ * (both halves of the derived dosage_trust rule -- app.models.
  * MarkerCatalogEntry.dosage_trust) so the "validated" (green) badge is
  * visible in the shot alongside the form's live preview badge.
  */
@@ -25,19 +27,24 @@ test("08 — Marker Catalog tab: create a validated assay", async ({ page }) => 
   await page.goto("/");
 
   // With no active session, TabNavigation itself only mounts once activeTab
-  // is one of the session-free tabs (project/users/references/catalog) --
+  // is one of the session-free tabs (project/users/references/library) --
   // see App.tsx's `showProjectOnly` gate. UploadZone's "기존 세션 및 프로젝트
   // 관리 →" link (onGoToProject) flips activeTab to "project" first, which
-  // reveals the nav bar; the Marker Catalog tab is then just a click away
+  // reveals the nav bar; the Library tab is then just a click away
   // (sessionFree, so never disabled regardless of session state).
   const goToProjectsLink = page.locator("main button", { hasText: /프로젝트 관리|projects/i });
   await expect(goToProjectsLink).toBeVisible({ timeout: 15_000 });
   await goToProjectsLink.click();
 
-  const tabButton = page.locator("#tab-catalog");
+  const tabButton = page.locator("#tab-library");
   await expect(tabButton).toBeVisible({ timeout: 15_000 });
   await expect(tabButton).toBeEnabled({ timeout: 15_000 });
   await tabButton.click();
+
+  // The Library tab defaults to its "마커 카탈로그" sub-tab, but be explicit.
+  const catalogSubtab = page.getByTestId("library-subtab-catalog");
+  await expect(catalogSubtab).toBeVisible({ timeout: 15_000 });
+  await catalogSubtab.click();
 
   const panel = page.getByTestId("marker-catalog-tab");
   await expect(panel).toBeVisible({ timeout: 15_000 });

@@ -1,6 +1,6 @@
 import { useI18n } from '@/hooks/use-i18n';
 
-export type TabId = 'analysis' | 'protocol' | 'settings' | 'quality' | 'statistics' | 'compare' | 'project' | 'users' | 'references' | 'catalog';
+export type TabId = 'analysis' | 'protocol' | 'settings' | 'quality' | 'statistics' | 'compare' | 'project' | 'users' | 'references' | 'library';
 
 export type TabNavigationProps = {
   activeTab: TabId;
@@ -28,7 +28,7 @@ const tabs: Tab[] = [
   { id: 'quality', label: 'Quality', dataTab: 'quality' },
   { id: 'statistics', label: 'Statistics', dataTab: 'statistics' },
   { id: 'compare', label: 'Compare Runs', dataTab: 'compare' },
-  { id: 'catalog', label: 'Marker Catalog', dataTab: 'catalog', sessionFree: true },
+  { id: 'library', label: 'Library', dataTab: 'library', sessionFree: true },
   { id: 'project', label: 'Project', dataTab: 'project', sessionFree: true },
   { id: 'users', label: 'Users', dataTab: 'users', sessionFree: true, adminOnly: true },
   { id: 'references', label: 'References', dataTab: 'references', sessionFree: true },
@@ -46,7 +46,7 @@ export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdm
     project: t.tabProject,
     users: t.tabUsers,
     references: t.tabReferences,
-    catalog: t.tabMarkerCatalog,
+    library: t.tabLibrary,
   };
   return (
     <nav className="flex gap-0 border-b border-border px-6 bg-surface">
