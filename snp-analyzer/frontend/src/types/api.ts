@@ -321,11 +321,98 @@ export type MarkerRegion = {
   threshold_config?: ThresholdConfig | null;
   /** UI-only tag (plate-view highlight color); not used by clustering. */
   color?: string | null;
+  /**
+   * Optional link to a durable marker-catalog entry this session marker was
+   * attached to (see `POST /api/data/{sid}/markers/{marker_id}/attach-catalog`
+   * and `app/routers/marker_catalog.py`). `null`/absent for markers that were
+   * never linked to a catalog assay.
+   */
+  catalog_id?: string | null;
 };
 
 export type MarkersResponse = {
   markers: MarkerRegion[];
 };
+
+// ============================================================================
+// Marker (assay) CATALOG -- durable, per-user assay registry
+// Mirrors backend `app.models.MarkerCalibration` / `MarkerValidation` /
+// `MarkerCatalogEntry` (app/routers/marker_catalog.py).
+// ============================================================================
+
+export type MarkerCalibrationRatioPoint = {
+  ratio: number;
+  expected_dosage: number;
+};
+
+/** Evidence that an assay's dosage-ratio mapping has been empirically
+ * anchored (as opposed to assumed from equal-spacing defaults). */
+export type MarkerCalibration = {
+  controls_present: boolean;
+  amplification_verified: boolean;
+  defined_ratio_points: MarkerCalibrationRatioPoint[];
+  notes: string;
+  verified_at: string | null;
+};
+
+/** Evidence that an assay's genotype calls have been checked against an
+ * independent ground truth (e.g. an orthogonal genotyping method). */
+export type MarkerValidation = {
+  status: 'none' | 'provisional' | 'validated';
+  ground_truth_method: string | null;
+  n_compared: number;
+  concordance: number | null;
+  notes: string;
+};
+
+/** A durable, user-owned assay (marker) registry entry. */
+export type MarkerCatalogEntry = {
+  id: string;
+  owner_user_id: string;
+  name: string;
+  target_gene: string | null;
+  snp_id: string | null;
+  allele1_base: string | null;
+  allele2_base: string | null;
+  chemistry: string | null;
+  default_ploidy: number;
+  color: string | null;
+  expected_dosage_classes: number | null;
+  interpretation_notes: string;
+  asg_target_id: string | null;
+  calibration: MarkerCalibration;
+  validation: MarkerValidation;
+  created_at: string | null;
+  updated_at: string | null;
+  /** Derived, read-only: "validated" iff validation.status === "validated"
+   * AND calibration.amplification_verified; otherwise "putative". */
+  dosage_trust: 'putative' | 'validated';
+};
+
+export type MarkerCatalogListResponse = {
+  entries: MarkerCatalogEntry[];
+};
+
+/** Body for `POST /api/marker-catalog`. */
+export type MarkerCatalogCreateRequest = {
+  name: string;
+  target_gene?: string | null;
+  snp_id?: string | null;
+  allele1_base?: string | null;
+  allele2_base?: string | null;
+  chemistry?: string | null;
+  default_ploidy?: number;
+  color?: string | null;
+  expected_dosage_classes?: number | null;
+  interpretation_notes?: string;
+  asg_target_id?: string | null;
+  calibration?: MarkerCalibration;
+  validation?: MarkerValidation;
+};
+
+/** Body for `PUT /api/marker-catalog/{id}` -- partial, only sent fields are
+ * applied (mirrors backend `MarkerCatalogUpdate`). */
+export type MarkerCatalogUpdateRequest = Partial<MarkerCatalogCreateRequest>;
 
 // ============================================================================
 // Layout library (per-user saved plate layouts, P4-S3)

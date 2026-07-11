@@ -518,6 +518,65 @@ const en = {
     `Applying this layout would silently change the ploidy of marker(s): ${ids}. Continue anyway?`,
   wsLayoutForceApplyButton: 'Apply anyway',
   wsLayoutMissingWellsTitle: 'Some wells are missing on this plate',
+
+  // Marker (assay) catalog -- durable, per-user assay registry
+  tabMarkerCatalog: 'Marker Catalog',
+  mcatTitle: 'Marker Catalog',
+  mcatSubtitle:
+    'Register an assay once (target, chemistry, calibration/validation evidence) and reuse it across plates.',
+  mcatAddButton: '+ New assay',
+  mcatEmpty: 'No catalog assays yet. Register one to reuse it across future plates.',
+  mcatFormTitleNew: 'New catalog assay',
+  mcatFormTitleEdit: 'Edit catalog assay',
+  mcatNameLabel: 'Name',
+  mcatNamePlaceholder: 'Assay name (e.g. qSwet5.3)',
+  mcatTargetGeneLabel: 'Target gene',
+  mcatSnpIdLabel: 'SNP ID',
+  mcatAllele1Label: 'Allele 1 base',
+  mcatAllele2Label: 'Allele 2 base',
+  mcatChemistryLabel: 'Chemistry',
+  mcatChemistryPlaceholder: 'e.g. KASP, TaqMan',
+  mcatPloidyLabel: 'Default ploidy',
+  mcatColorLabel: 'Color',
+  mcatExpectedDosageClassesLabel: 'Expected dosage classes',
+  mcatInterpretationNotesLabel: 'Interpretation notes',
+  mcatAsgTargetIdLabel: 'ASG target ID',
+  mcatCalibrationTitle: 'Calibration evidence',
+  mcatControlsPresentLabel: 'Defined-ratio controls present',
+  mcatAmplificationVerifiedLabel: 'Relative amplification stability verified',
+  mcatCalibrationNotesLabel: 'Calibration notes',
+  mcatValidationTitle: 'Ground-truth validation',
+  mcatValidationStatusLabel: 'Validation status',
+  mcatValidationStatusNone: 'None',
+  mcatValidationStatusProvisional: 'Provisional',
+  mcatValidationStatusValidated: 'Validated',
+  mcatGroundTruthMethodLabel: 'Ground-truth method',
+  mcatGroundTruthMethodPlaceholder: 'e.g. sequencing, KASP panel',
+  mcatNComparedLabel: '# compared',
+  mcatConcordanceLabel: 'Concordance (0-1)',
+  mcatValidationNotesLabel: 'Validation notes',
+  mcatDosageTrustLabel: 'Dosage trust',
+  mcatDosageTrustPutative: 'Putative',
+  mcatDosageTrustValidated: 'Validated',
+  mcatCopyButton: 'Copy',
+  mcatEditButton: 'Edit',
+  mcatDeleteConfirm: (name: string) => `Delete catalog assay "${name}"? This cannot be undone.`,
+  mcatSaveError: (msg: string) => `Failed to save: ${msg}`,
+  mcatLoadError: (msg: string) => `Failed to load marker catalog: ${msg}`,
+  mcatNoOwnerBadge: 'Copied',
+
+  // Attach-to-catalog in the Plate Setup marker form
+  wsMarkerCatalogSelectLabel: 'Load from catalog (optional)',
+  wsMarkerCatalogSelectNone: '— New (not linked to catalog) —',
+  wsMarkerCatalogAttachError: (msg: string) => `Failed to link catalog assay: ${msg}`,
+
+  // Per-marker dosage-trust hedge (Analysis surface)
+  wsAnalysisDosageTrustPutative: 'Provisional dosage (unvalidated)',
+  wsAnalysisDosageTrustValidated: 'Validated dosage',
+  wsAnalysisDosageTrustPutativeHint:
+    'This assay has no catalog link, or its catalog entry has not been validated against an independent ground truth AND had its relative amplification verified. Absolute dosage calls remain provisional.',
+  wsAnalysisDosageTrustValidatedHint:
+    'This assay is linked to a catalog entry whose dosage calls were checked against ground truth and whose amplification/ratio mapping was verified.',
 };
 
 export type Translations = {

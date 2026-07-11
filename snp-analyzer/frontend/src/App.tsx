@@ -16,6 +16,7 @@ import { CompareTab } from "@/components/compare/CompareTab";
 import { BatchTab } from "@/components/batch/BatchTab";
 import { UserManagement } from "@/components/admin/UserManagement";
 import { ReferencesTab } from "@/components/references/ReferencesTab";
+import { MarkerCatalogTab } from "@/components/catalog/MarkerCatalogTab";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useExports } from "@/hooks/use-exports";
@@ -188,9 +189,13 @@ export default function App() {
     return <LoginPage />;
   }
 
-  // Project/References/Users tabs are accessible without a session
+  // Project/References/Users/Marker Catalog tabs are accessible without a session
   const showProjectOnly =
-    !sessionId && (activeTab === "project" || activeTab === "users" || activeTab === "references");
+    !sessionId &&
+    (activeTab === "project" ||
+      activeTab === "users" ||
+      activeTab === "references" ||
+      activeTab === "catalog");
   const isAdmin = user?.role === "admin";
 
   return (
@@ -223,6 +228,7 @@ export default function App() {
           )}
           {activeTab === "users" && isAdmin && <UserManagement />}
           {activeTab === "references" && <ReferencesTab />}
+          {activeTab === "catalog" && <MarkerCatalogTab />}
         </div>
       </main>
 

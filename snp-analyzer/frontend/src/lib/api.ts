@@ -33,6 +33,10 @@ import type {
   ImportParseRequest,
   ImportParseResponse,
   ImportPreviewResponse,
+  MarkerCatalogEntry,
+  MarkerCatalogListResponse,
+  MarkerCatalogCreateRequest,
+  MarkerCatalogUpdateRequest,
 } from '@/types/api';
 import type {
   ASGLaunchResponse,
@@ -375,6 +379,70 @@ export async function deleteMarkers(sid: string): Promise<{ status: string }> {
   return apiFetch<{ status: string }>(`/api/data/${sid}/markers`, {
     method: 'DELETE',
   });
+}
+
+// ============================================================================
+// Marker (assay) CATALOG -- durable, per-user assay registry
+// ============================================================================
+
+/** Lists the current user's catalog assays (newest first). */
+export async function listMarkerCatalog(): Promise<MarkerCatalogListResponse> {
+  return apiFetch<MarkerCatalogListResponse>('/api/marker-catalog');
+}
+
+export async function getMarkerCatalogEntry(id: string): Promise<MarkerCatalogEntry> {
+  return apiFetch<MarkerCatalogEntry>(`/api/marker-catalog/${encodeURIComponent(id)}`);
+}
+
+export async function createMarkerCatalogEntry(
+  body: MarkerCatalogCreateRequest
+): Promise<MarkerCatalogEntry> {
+  return apiFetch<MarkerCatalogEntry>('/api/marker-catalog', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateMarkerCatalogEntry(
+  id: string,
+  patch: MarkerCatalogUpdateRequest
+): Promise<MarkerCatalogEntry> {
+  return apiFetch<MarkerCatalogEntry>(`/api/marker-catalog/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteMarkerCatalogEntry(id: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/api/marker-catalog/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+/** Duplicates ANY existing catalog entry (by id) into the caller's OWN catalog. */
+export async function copyMarkerCatalogEntry(id: string): Promise<MarkerCatalogEntry> {
+  return apiFetch<MarkerCatalogEntry>(`/api/marker-catalog/${encodeURIComponent(id)}/copy`, {
+    method: 'POST',
+  });
+}
+
+/** Links session marker `markerId` to catalog assay `catalogId`; prefills the
+ * session marker's ploidy/color from the catalog entry when still default. */
+export async function attachMarkerCatalog(
+  sid: string,
+  markerId: string,
+  catalogId: string
+): Promise<MarkerRegion> {
+  return apiFetch<MarkerRegion>(
+    `/api/data/${sid}/markers/${encodeURIComponent(markerId)}/attach-catalog`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ catalog_id: catalogId }),
+    }
+  );
 }
 
 // ============================================================================

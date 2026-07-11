@@ -10,11 +10,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
-import { getScatter, runClustering } from "@/lib/api";
+import { getScatter, runClustering, listMarkerCatalog } from "@/lib/api";
 import { ClusteringAlgorithm } from "@/types/api";
-import type { ChannelLabels, MarkerRegion, RegionResult, ScatterPoint } from "@/types/api";
+import type { ChannelLabels, MarkerCatalogEntry, MarkerRegion, RegionResult, ScatterPoint } from "@/types/api";
 import { genotypeShortLabel, wellInfo } from "@/lib/genotype";
 import { MARKER_PALETTE } from "@/lib/constants";
+import { dosageTrustForMarker } from "@/lib/marker-catalog";
 import { MarkerScatterPlot } from "./MarkerScatterPlot";
 
 const SIDEBAR_THRESHOLD = 4; // >=4 markers -> sidebar; <=3 -> dropdown (Q8)
@@ -49,6 +50,11 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Per-marker dosage-trust hedge (feat/marker-catalog): fetched once
+  // per-USER (not per-session), same as the catalog picker in
+  // PlateSetupTab.tsx. A fetch failure never blocks analysis -- an unknown
+  // catalog state just falls back to the honest "putative" default.
+  const [catalogEntries, setCatalogEntries] = useState<MarkerCatalogEntry[]>([]);
 
   // Keep the selection valid if the marker set changes (e.g. a marker is
   // renamed/removed on the Plate Setup surface).
@@ -106,11 +112,33 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, markers.map((m) => m.id).join(","), markers.length]);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await listMarkerCatalog();
+        setCatalogEntries(res.entries);
+      } catch {
+        setCatalogEntries([]);
+      }
+    })();
+  }, []);
+
+  const catalogById = useMemo(() => {
+    const map = new Map<string, MarkerCatalogEntry>();
+    for (const e of catalogEntries) map.set(e.id, e);
+    return map;
+  }, [catalogEntries]);
+
   const selectedMarker = useMemo(
     () => markers.find((m) => m.id === selectedMarkerId) ?? null,
     [markers, selectedMarkerId]
   );
   const selectedRegion = selectedMarkerId ? regionsById[selectedMarkerId] : undefined;
+  // No catalog link (or an unresolvable one) => the honest "putative"
+  // default hedge, never breaking / never silently claiming validated.
+  const dosageTrust = selectedMarker
+    ? dosageTrustForMarker(selectedMarker.catalog_id, catalogById)
+    : "putative";
 
   const useSidebar = markers.length >= SIDEBAR_THRESHOLD;
 
@@ -228,6 +256,24 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                   className="rounded-full px-3 py-1 text-xs bg-bg border border-border text-text"
                 >
                   {t.wsAnalysisExpectedClasses(expectedClasses)}
+                </span>
+                <span
+                  data-testid="analysis-dosage-trust"
+                  data-trust={dosageTrust}
+                  title={
+                    dosageTrust === "validated"
+                      ? t.wsAnalysisDosageTrustValidatedHint
+                      : t.wsAnalysisDosageTrustPutativeHint
+                  }
+                  className={`rounded-full px-3 py-1 text-xs font-semibold border ${
+                    dosageTrust === "validated"
+                      ? "bg-green-100 border-green-400 text-green-800 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300"
+                      : "bg-amber-100 border-amber-400 text-amber-800 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300"
+                  }`}
+                >
+                  {dosageTrust === "validated"
+                    ? t.wsAnalysisDosageTrustValidated
+                    : t.wsAnalysisDosageTrustPutative}
                 </span>
                 <span
                   data-testid="marker-observed-classes"

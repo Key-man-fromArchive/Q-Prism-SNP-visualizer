@@ -520,6 +520,65 @@ const ko: Translations = {
     `이 레이아웃을 적용하면 다음 마커의 배수성이 예고 없이 바뀝니다: ${ids}. 그래도 계속하시겠습니까?`,
   wsLayoutForceApplyButton: '그래도 적용',
   wsLayoutMissingWellsTitle: '이 플레이트에 없는 웰이 포함되어 있습니다',
+
+  // 마커(어세이) 카탈로그 -- 재사용 가능한 사용자별 어세이 등록부
+  tabMarkerCatalog: '마커 카탈로그',
+  mcatTitle: '마커 카탈로그',
+  mcatSubtitle:
+    '어세이(타겟, 케미스트리, 보정/검증 근거)를 한 번 등록하고 여러 플레이트에서 재사용하세요.',
+  mcatAddButton: '+ 새 어세이',
+  mcatEmpty: '등록된 카탈로그 어세이가 없습니다. 어세이를 등록하면 이후 플레이트에서 재사용할 수 있습니다.',
+  mcatFormTitleNew: '새 카탈로그 어세이',
+  mcatFormTitleEdit: '카탈로그 어세이 편집',
+  mcatNameLabel: '이름',
+  mcatNamePlaceholder: '어세이 이름 (예: qSwet5.3)',
+  mcatTargetGeneLabel: '타겟 유전자',
+  mcatSnpIdLabel: 'SNP ID',
+  mcatAllele1Label: 'Allele 1 염기',
+  mcatAllele2Label: 'Allele 2 염기',
+  mcatChemistryLabel: '케미스트리',
+  mcatChemistryPlaceholder: '예: KASP, TaqMan',
+  mcatPloidyLabel: '기본 배수성',
+  mcatColorLabel: '색상',
+  mcatExpectedDosageClassesLabel: '예상 dosage 클래스 수',
+  mcatInterpretationNotesLabel: '해석 노트',
+  mcatAsgTargetIdLabel: 'ASG 타겟 ID',
+  mcatCalibrationTitle: '보정(calibration) 근거',
+  mcatControlsPresentLabel: '정의비율(defined-ratio) 대조군 보유',
+  mcatAmplificationVerifiedLabel: '상대증폭 안정성 검증됨',
+  mcatCalibrationNotesLabel: '보정 노트',
+  mcatValidationTitle: '독립 근거(ground-truth) 검증',
+  mcatValidationStatusLabel: '검증 상태',
+  mcatValidationStatusNone: '없음',
+  mcatValidationStatusProvisional: '잠정(provisional)',
+  mcatValidationStatusValidated: '검증됨(validated)',
+  mcatGroundTruthMethodLabel: '독립 검증 방법',
+  mcatGroundTruthMethodPlaceholder: '예: sequencing, KASP 패널',
+  mcatNComparedLabel: '비교 표본 수',
+  mcatConcordanceLabel: '일치율 (0-1)',
+  mcatValidationNotesLabel: '검증 노트',
+  mcatDosageTrustLabel: 'Dosage 신뢰도',
+  mcatDosageTrustPutative: '잠정(putative)',
+  mcatDosageTrustValidated: '검증됨(validated)',
+  mcatCopyButton: '복사',
+  mcatEditButton: '편집',
+  mcatDeleteConfirm: (name: string) => `카탈로그 어세이 "${name}"을(를) 삭제할까요? 되돌릴 수 없습니다.`,
+  mcatSaveError: (msg: string) => `저장 실패: ${msg}`,
+  mcatLoadError: (msg: string) => `마커 카탈로그를 불러오지 못했습니다: ${msg}`,
+  mcatNoOwnerBadge: '복사됨',
+
+  // 플레이트 설정 마커 폼 -- 카탈로그 연결
+  wsMarkerCatalogSelectLabel: '카탈로그에서 불러오기 (선택)',
+  wsMarkerCatalogSelectNone: '— 신규 (카탈로그 미연결) —',
+  wsMarkerCatalogAttachError: (msg: string) => `카탈로그 어세이 연결 실패: ${msg}`,
+
+  // 마커별 dosage 신뢰도 hedge (분석 화면)
+  wsAnalysisDosageTrustPutative: '잠정 dosage (미검증)',
+  wsAnalysisDosageTrustValidated: '검증된 dosage',
+  wsAnalysisDosageTrustPutativeHint:
+    '이 어세이는 카탈로그에 연결되어 있지 않거나, 연결된 카탈로그 항목이 독립 근거로 검증되지 않았거나 상대증폭 검증이 완료되지 않았습니다. 절대 dosage 판정은 잠정값입니다.',
+  wsAnalysisDosageTrustValidatedHint:
+    '이 어세이는 독립 근거로 검증되고 증폭/비율 매핑까지 확인된 카탈로그 항목에 연결되어 있습니다.',
 };
 
 export default ko;
