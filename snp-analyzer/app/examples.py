@@ -27,6 +27,7 @@ _MAG_SPREAD = 0.28   # +/- total-signal variation (radial)
 _AXIS_NOISE = 0.045  # independent per-channel noise (makes blobs round)
 
 _ROWS = "ABCDEFGH"
+_PLATE_SIZE = 96  # a real .pcrd plate always carries the full complement of wells
 
 
 def _hash01(i: int, salt: float) -> float:
@@ -44,6 +45,11 @@ def _well_ids(n: int) -> list[str]:
             if len(ids) >= n:
                 return ids
     return ids
+
+
+def _all_plate_wells() -> list[str]:
+    """Every well on a 96-well plate, in A1..H12 order."""
+    return [f"{r}{c}" for r in _ROWS for c in range(1, 13)]
 
 
 def _biased_ratio(dosage: int, ploidy: int) -> float:
@@ -88,7 +94,26 @@ def build_example(ploidy: int) -> UnifiedData:
         for cyc in _CYCLES:
             data.append(WellCycleData(well=well, cycle=cyc, fam=nf, allele2=na, rox=1.0))
 
-    all_wells = sorted(set(signal_wells + ntc_wells))
+    # A real .pcrd plate always carries the full well complement (96), and the
+    # frontend Plate Setup grid renders every A1..H12 cell — so any well a user
+    # might select (e.g. a whole column) must exist in this session's plate.
+    # The remaining, unused wells are filled as realistic empty/low-signal wells
+    # (an NTC-like round cloud near the origin) without altering the signal-well
+    # genotype distributions above.
+    used_wells = set(signal_wells) | set(ntc_wells)
+    empty_wells = [w for w in _all_plate_wells() if w not in used_wells]
+    for k, well in enumerate(empty_wells):
+        # NTC-like signal (a small round cloud near the origin), but labeled
+        # distinctly from the dedicated NTC wells above: these are simply the
+        # rest of the physical plate that this demo assay doesn't use, not a
+        # control a caller would want folded into a whole-plate NTC count.
+        sample_names[well] = "Empty"
+        nf = 0.02 + _hash01(2000 + k, 4.4) * 0.02
+        na = 0.02 + _hash01(2000 + k, 8.8) * 0.02
+        for cyc in _CYCLES:
+            data.append(WellCycleData(well=well, cycle=cyc, fam=nf, allele2=na, rox=1.0))
+
+    all_wells = sorted(set(signal_wells + ntc_wells + empty_wells))
     return UnifiedData(
         instrument=f"Example {ploidy}x",
         allele2_dye="HEX",
