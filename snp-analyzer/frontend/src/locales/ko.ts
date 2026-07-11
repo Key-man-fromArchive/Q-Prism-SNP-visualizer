@@ -121,6 +121,7 @@ const ko: Translations = {
   tabCompare: '비교',
   tabProject: '프로젝트',
   tabUsers: '사용자',
+  tabReferences: '참고문헌',
 
   // Analysis Tab
   group: '그룹:',
