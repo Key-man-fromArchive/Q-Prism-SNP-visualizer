@@ -104,6 +104,41 @@ def _run_migrations(conn: sqlite3.Connection):
         )
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (5)")
 
+    if current < 6:
+        # Migration 6: durable, user-scoped MARKER (assay) CATALOG -- a
+        # reusable assay registry that transcends a single plate/session
+        # (unlike marker_regions, which is per-session and ephemeral).
+        # marker_regions gains a nullable catalog_id so a session marker can
+        # OPTIONALLY link back to the catalog entry it was attached from
+        # (see POST /api/data/{sid}/markers/{marker_id}/attach-catalog). This
+        # migration adds the table/column only -- it does NOT back-fill any
+        # catalog entries from existing marker_regions rows.
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS marker_catalog (
+                id TEXT PRIMARY KEY,
+                owner_user_id TEXT NOT NULL REFERENCES users(id),
+                name TEXT NOT NULL,
+                target_gene TEXT,
+                snp_id TEXT,
+                allele1_base TEXT,
+                allele2_base TEXT,
+                chemistry TEXT,
+                default_ploidy INTEGER NOT NULL DEFAULT 2,
+                color TEXT,
+                expected_dosage_classes INTEGER,
+                interpretation_notes TEXT,
+                asg_target_id TEXT,
+                calibration_json TEXT,
+                validation_json TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )"""
+        )
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(marker_regions)").fetchall()]
+        if "catalog_id" not in cols:
+            conn.execute("ALTER TABLE marker_regions ADD COLUMN catalog_id TEXT")
+        conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (6)")
+
     conn.commit()
 
 
@@ -296,8 +331,8 @@ def save_marker_regions(session_id: str, regions: list[dict]):
     for reg in regions:
         conn.execute(
             "INSERT INTO marker_regions "
-            "(session_id, marker_id, name, wells_json, ploidy, color, threshold_json) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "(session_id, marker_id, name, wells_json, ploidy, color, threshold_json, catalog_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 session_id,
                 reg["id"],
@@ -306,6 +341,7 @@ def save_marker_regions(session_id: str, regions: list[dict]):
                 reg.get("ploidy", 2),
                 reg.get("color"),
                 json.dumps(reg["threshold_config"]) if reg.get("threshold_config") else None,
+                reg.get("catalog_id"),
             ),
         )
     conn.commit()
@@ -315,7 +351,7 @@ def load_marker_regions(session_id: str) -> list[dict]:
     """Load the session's marker (assay) definitions from DB."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT marker_id, name, wells_json, ploidy, color, threshold_json "
+        "SELECT marker_id, name, wells_json, ploidy, color, threshold_json, catalog_id "
         "FROM marker_regions WHERE session_id = ? ORDER BY rowid",
         (session_id,),
     ).fetchall()
@@ -327,6 +363,7 @@ def load_marker_regions(session_id: str) -> list[dict]:
             "ploidy": r["ploidy"],
             "color": r["color"],
             "threshold_config": json.loads(r["threshold_json"]) if r["threshold_json"] else None,
+            "catalog_id": r["catalog_id"] if "catalog_id" in r.keys() else None,
         }
         for r in rows
     ]
@@ -399,6 +436,119 @@ def delete_layout(layout_id: str) -> None:
     """Delete one saved layout by id (caller must check ownership first)."""
     conn = get_db()
     conn.execute("DELETE FROM saved_layouts WHERE id = ?", (layout_id,))
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Marker (assay) CATALOG -- durable, user-scoped, plate-independent assay
+# registry (see app/routers/marker_catalog.py). calibration/validation are
+# stored as JSON blobs (app.models.MarkerCalibration / MarkerValidation).
+# ---------------------------------------------------------------------------
+
+_MARKER_CATALOG_COLUMNS = (
+    "id", "owner_user_id", "name", "target_gene", "snp_id", "allele1_base",
+    "allele2_base", "chemistry", "default_ploidy", "color",
+    "expected_dosage_classes", "interpretation_notes", "asg_target_id",
+)
+
+
+def _marker_catalog_row_to_dict(row: sqlite3.Row) -> dict:
+    result = {col: row[col] for col in _MARKER_CATALOG_COLUMNS}
+    result["calibration"] = json.loads(row["calibration_json"]) if row["calibration_json"] else {}
+    result["validation"] = json.loads(row["validation_json"]) if row["validation_json"] else {}
+    result["created_at"] = row["created_at"]
+    result["updated_at"] = row["updated_at"]
+    return result
+
+
+def save_marker_catalog_entry(entry_id: str, owner_user_id: str, data: dict) -> None:
+    """Insert a new catalog entry. ``data`` is a plain dict matching
+    ``MarkerCatalogEntry``'s fields (``calibration``/``validation`` as
+    dicts, JSON-encoded here)."""
+    conn = get_db()
+    conn.execute(
+        """INSERT INTO marker_catalog
+           (id, owner_user_id, name, target_gene, snp_id, allele1_base, allele2_base,
+            chemistry, default_ploidy, color, expected_dosage_classes, interpretation_notes,
+            asg_target_id, calibration_json, validation_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            entry_id,
+            owner_user_id,
+            data["name"],
+            data.get("target_gene"),
+            data.get("snp_id"),
+            data.get("allele1_base"),
+            data.get("allele2_base"),
+            data.get("chemistry"),
+            data.get("default_ploidy", 2),
+            data.get("color"),
+            data.get("expected_dosage_classes"),
+            data.get("interpretation_notes", ""),
+            data.get("asg_target_id"),
+            json.dumps(data.get("calibration") or {}),
+            json.dumps(data.get("validation") or {}),
+        ),
+    )
+    conn.commit()
+
+
+def get_marker_catalog_entry(entry_id: str) -> dict | None:
+    """Load one catalog entry by id (owner-agnostic; callers must check
+    ownership themselves -- see app.routers.marker_catalog._get_owned_entry)."""
+    conn = get_db()
+    row = conn.execute("SELECT * FROM marker_catalog WHERE id = ?", (entry_id,)).fetchone()
+    if row is None:
+        return None
+    return _marker_catalog_row_to_dict(row)
+
+
+def list_marker_catalog_entries(owner_user_id: str) -> list[dict]:
+    """List all catalog entries owned by one user, newest first."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM marker_catalog WHERE owner_user_id = ? ORDER BY created_at DESC",
+        (owner_user_id,),
+    ).fetchall()
+    return [_marker_catalog_row_to_dict(r) for r in rows]
+
+
+def update_marker_catalog_entry(entry_id: str, data: dict) -> None:
+    """Overwrite a catalog entry's editable fields in place (caller must
+    check ownership first)."""
+    conn = get_db()
+    conn.execute(
+        """UPDATE marker_catalog SET
+               name = ?, target_gene = ?, snp_id = ?, allele1_base = ?,
+               allele2_base = ?, chemistry = ?, default_ploidy = ?, color = ?,
+               expected_dosage_classes = ?, interpretation_notes = ?,
+               asg_target_id = ?, calibration_json = ?, validation_json = ?,
+               updated_at = datetime('now')
+           WHERE id = ?""",
+        (
+            data["name"],
+            data.get("target_gene"),
+            data.get("snp_id"),
+            data.get("allele1_base"),
+            data.get("allele2_base"),
+            data.get("chemistry"),
+            data.get("default_ploidy", 2),
+            data.get("color"),
+            data.get("expected_dosage_classes"),
+            data.get("interpretation_notes", ""),
+            data.get("asg_target_id"),
+            json.dumps(data.get("calibration") or {}),
+            json.dumps(data.get("validation") or {}),
+            entry_id,
+        ),
+    )
+    conn.commit()
+
+
+def delete_marker_catalog_entry(entry_id: str) -> None:
+    """Delete one catalog entry by id (caller must check ownership first)."""
+    conn = get_db()
+    conn.execute("DELETE FROM marker_catalog WHERE id = ?", (entry_id,))
     conn.commit()
 
 

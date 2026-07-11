@@ -146,7 +146,9 @@ def test_migration_5_adds_saved_layouts_table_to_v4_db(tmp_path):
     ).fetchall()]
     assert "saved_layouts" in tables
     version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-    assert version == 5
+    # init_db always chains to the latest migration (now 6, adding
+    # marker_catalog) -- this test only asserts migration 5 itself ran.
+    assert version >= 5
 
     # Migration 5 back-fills nothing: no layouts exist for any user yet.
     assert db.list_layouts("any-user") == []

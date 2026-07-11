@@ -1,6 +1,7 @@
 from __future__ import annotations
 from enum import Enum
-from pydantic import BaseModel, Field
+from typing import Literal
+from pydantic import BaseModel, Field, computed_field
 
 
 class WellCycleData(BaseModel):
@@ -162,6 +163,85 @@ class MarkerRegion(BaseModel):
     threshold_config: ThresholdConfig | None = None
     # UI-only tag (e.g. plate-view highlight color); not used by clustering.
     color: str | None = None
+    # Optional link to a durable app.routers.marker_catalog entry this
+    # session marker was attached to (see POST .../attach-catalog). None for
+    # markers that were never linked to a catalog assay.
+    catalog_id: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Marker (assay) CATALOG -- a durable, plate-independent assay registry.
+# Distinct from MarkerRegion above: a MarkerRegion is an ephemeral per-session
+# well-group selection, while a MarkerCatalogEntry is registered ONCE (e.g.
+# "qSwet5.3") and reused across many plates/sessions via attach-catalog.
+# See app/routers/marker_catalog.py.
+# ---------------------------------------------------------------------------
+
+
+class MarkerCalibrationRatioPoint(BaseModel):
+    """One empirically-observed (fam-fraction ratio -> expected dosage) anchor
+    point used to calibrate an assay's dosage-ratio mapping."""
+    ratio: float
+    expected_dosage: int
+
+
+class MarkerCalibration(BaseModel):
+    """Evidence that an assay's dosage-ratio mapping has been empirically
+    anchored (as opposed to assumed from equal-spacing defaults)."""
+    controls_present: bool = False
+    amplification_verified: bool = False
+    defined_ratio_points: list[MarkerCalibrationRatioPoint] = Field(default_factory=list)
+    notes: str = ""
+    verified_at: str | None = None
+
+
+class MarkerValidation(BaseModel):
+    """Evidence that an assay's genotype calls have been checked against an
+    independent ground truth (e.g. a orthogonal genotyping method)."""
+    status: Literal["none", "provisional", "validated"] = "none"
+    ground_truth_method: str | None = None
+    n_compared: int = 0
+    concordance: float | None = None
+    notes: str = ""
+
+
+class MarkerCatalogEntry(BaseModel):
+    """A durable, user-owned assay (marker) registry entry.
+
+    Scope is the owning user only (``app.auth.TokenData`` has no team/org
+    concept) -- "sharing" is an explicit copy
+    (``POST /api/marker-catalog/{id}/copy``), mirroring ``saved_layouts``."""
+    id: str
+    owner_user_id: str
+    name: str
+    target_gene: str | None = None
+    snp_id: str | None = None
+    allele1_base: str | None = None
+    allele2_base: str | None = None
+    chemistry: str | None = None
+    default_ploidy: int = 2
+    color: str | None = None
+    expected_dosage_classes: int | None = None
+    interpretation_notes: str = ""
+    asg_target_id: str | None = None
+    calibration: MarkerCalibration = Field(default_factory=MarkerCalibration)
+    validation: MarkerValidation = Field(default_factory=MarkerValidation)
+    created_at: str | None = None
+    updated_at: str | None = None
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def dosage_trust(self) -> Literal["putative", "validated"]:
+        """Derived, read-only hedge for the UI: an assay's dosage calls are
+        only "validated" once BOTH (a) its calls were checked against ground
+        truth (``validation.status == "validated"``) AND (b) the underlying
+        amplification/ratio mapping itself was verified
+        (``calibration.amplification_verified``). Anything short of that is
+        "putative" -- a validated status alone does not guarantee the
+        dosage-ratio mapping it was validated against is still trustworthy."""
+        if self.validation.status == "validated" and self.calibration.amplification_verified:
+            return "validated"
+        return "putative"
 
 
 class RegionResult(BaseModel):
