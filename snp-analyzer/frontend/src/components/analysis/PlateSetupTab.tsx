@@ -11,8 +11,13 @@ import {
   saveMarkers,
   getWellTypes,
   setWellTypes as apiSetWellTypes,
+  listLayouts,
+  saveLayout,
+  deleteLayout,
+  applyLayout,
+  ApiError,
 } from "@/lib/api";
-import type { MarkerRegion } from "@/types/api";
+import type { MarkerRegion, SavedLayout, LayoutApplyConflict } from "@/types/api";
 import { WellType } from "@/types/api";
 import { MARKER_PALETTE } from "@/lib/constants";
 
@@ -61,6 +66,29 @@ export function PlateSetupTab() {
   const [formColor, setFormColor] = useState<string>(MARKER_PALETTE[0]);
   const [formPloidy, setFormPloidy] = useState<number>(2);
 
+  // Layout library (P4-S3) -- per-USER, not per-session, so this list is
+  // never cleared by the session-change reset below.
+  const [layouts, setLayouts] = useState<SavedLayout[]>([]);
+  const [layoutError, setLayoutError] = useState<string | null>(null);
+  const [showLayoutSaveForm, setShowLayoutSaveForm] = useState(false);
+  const [layoutSaveName, setLayoutSaveName] = useState("");
+  const [savingLayout, setSavingLayout] = useState(false);
+  const [applyingLayoutId, setApplyingLayoutId] = useState<string | null>(null);
+  // L2: a direct row `불러오기` hit a 409 ploidy conflict -- require a
+  // second explicit confirmation before retrying with force=true.
+  const [rowConflict, setRowConflict] = useState<{
+    layoutId: string;
+    layoutName: string;
+    conflict: LayoutApplyConflict;
+  } | null>(null);
+  // L3: "이전 실행 레이아웃 적용" must NEVER blind-apply -- this dialog is
+  // shown before the first apply attempt, regardless of any conflict.
+  const [showApplyPreviousConfirm, setShowApplyPreviousConfirm] = useState(false);
+  const [applyPreviousConflict, setApplyPreviousConflict] = useState<{
+    layoutId: string;
+    conflict: LayoutApplyConflict;
+  } | null>(null);
+
   // Reset transient UI state when the session changes -- computed during
   // render (React's documented "adjusting state when a prop changes"
   // pattern) rather than in an effect, so it never fires an extra
@@ -108,6 +136,25 @@ export function PlateSetupTab() {
     window.addEventListener("welltypes-changed", load);
     return () => window.removeEventListener("welltypes-changed", load);
   }, [sessionId, setWellTypeAssignments]);
+
+  // Load the caller's saved-layout library. Layouts are owned per-USER, not
+  // per-session, so this is fetched once on mount rather than re-keyed on
+  // sessionId.
+  const refreshLayouts = useMemo(
+    () => async () => {
+      try {
+        const res = await listLayouts();
+        setLayouts(res.layouts);
+      } catch (err) {
+        setLayoutError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    void refreshLayouts();
+  }, [refreshLayouts]);
 
   const wellToMarker = useMemo(() => {
     const map: Record<string, MarkerRegion> = {};
@@ -278,6 +325,176 @@ export function PlateSetupTab() {
     }
   }
 
+  // ---- Layout library (P4-S3) ------------------------------------------
+
+  function extractConflict(err: ApiError): LayoutApplyConflict | null {
+    const detail = (err.payload as { detail?: unknown } | null)?.detail;
+    if (detail && typeof detail === "object" && "conflicting_marker_ids" in detail) {
+      return detail as LayoutApplyConflict;
+    }
+    return null;
+  }
+
+  function extractMissingWellsMessage(err: ApiError): string {
+    const detail = (err.payload as { detail?: unknown } | null)?.detail;
+    return typeof detail === "string" ? detail : err.message;
+  }
+
+  /** Applies one saved layout to the current session and refreshes the
+   * locally-held marker set (so both the plate grid here AND the Analysis
+   * surface -- which re-clusters whenever its `markers` prop changes --
+   * reflect the applied layout without a page reload). */
+  async function applyLayoutToSession(layoutId: string, force: boolean) {
+    if (!sessionId) return;
+    const result = await applyLayout(layoutId, { sid: sessionId, force });
+    setMarkers(result.markers);
+    setSelectedWells([]);
+    setPickMarkerId(null);
+    window.dispatchEvent(new CustomEvent("welltypes-changed"));
+  }
+
+  function openLayoutSaveForm() {
+    setLayoutError(null);
+    setLayoutSaveName("");
+    setShowLayoutSaveForm(true);
+  }
+
+  function cancelLayoutSaveForm() {
+    setShowLayoutSaveForm(false);
+    setLayoutSaveName("");
+  }
+
+  async function confirmSaveLayout() {
+    const name = layoutSaveName.trim();
+    if (!name || !sessionId) return;
+    setSavingLayout(true);
+    setLayoutError(null);
+    try {
+      await saveLayout(name, sessionId);
+      setShowLayoutSaveForm(false);
+      setLayoutSaveName("");
+      await refreshLayouts();
+    } catch (err) {
+      setLayoutError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingLayout(false);
+    }
+  }
+
+  async function handleDeleteLayout(id: string) {
+    setLayoutError(null);
+    try {
+      await deleteLayout(id);
+      setLayouts((prev) => prev.filter((l) => l.id !== id));
+    } catch (err) {
+      setLayoutError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /** `layout-load-button` (inside a named `layout-row`): an explicit,
+   * already-confirmed user action -- apply immediately. Only a 409 ploidy
+   * conflict (L2) interrupts this with a mandatory second confirmation;
+   * unlike "apply previous", a named-row load doesn't need an upfront
+   * blind-apply guard since choosing a specific row IS the confirmation. */
+  async function handleLoadLayout(layout: SavedLayout) {
+    setLayoutError(null);
+    setApplyingLayoutId(layout.id);
+    try {
+      await applyLayoutToSession(layout.id, false);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        const conflict = extractConflict(err);
+        if (conflict) {
+          setRowConflict({ layoutId: layout.id, layoutName: layout.name, conflict });
+          return;
+        }
+      }
+      if (err instanceof ApiError && err.status === 400) {
+        setLayoutError(extractMissingWellsMessage(err));
+        return;
+      }
+      setLayoutError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setApplyingLayoutId(null);
+    }
+  }
+
+  async function confirmRowConflictForce() {
+    if (!rowConflict) return;
+    setApplyingLayoutId(rowConflict.layoutId);
+    try {
+      await applyLayoutToSession(rowConflict.layoutId, true);
+      setRowConflict(null);
+    } catch (err) {
+      setLayoutError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setApplyingLayoutId(null);
+    }
+  }
+
+  function cancelRowConflict() {
+    setRowConflict(null);
+  }
+
+  // "이전 실행 레이아웃 적용" -- the most recently saved layout (backend
+  // lists newest-first). L3: opens the confirm dialog BEFORE any apply
+  // attempt, unconditionally -- never a blind/silent apply.
+  const previousLayout = layouts[0] ?? null;
+
+  function openApplyPreviousConfirm() {
+    setLayoutError(null);
+    setApplyPreviousConflict(null);
+    setShowApplyPreviousConfirm(true);
+  }
+
+  function cancelApplyPreviousConfirm() {
+    setShowApplyPreviousConfirm(false);
+    setApplyPreviousConflict(null);
+  }
+
+  async function confirmApplyPrevious() {
+    if (!previousLayout) {
+      setShowApplyPreviousConfirm(false);
+      setLayoutError(t.wsLayoutNoPreviousError);
+      return;
+    }
+    setApplyingLayoutId(previousLayout.id);
+    try {
+      await applyLayoutToSession(previousLayout.id, false);
+      setShowApplyPreviousConfirm(false);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        const conflict = extractConflict(err);
+        if (conflict) {
+          setApplyPreviousConflict({ layoutId: previousLayout.id, conflict });
+          return;
+        }
+      }
+      setShowApplyPreviousConfirm(false);
+      if (err instanceof ApiError && err.status === 400) {
+        setLayoutError(extractMissingWellsMessage(err));
+      } else {
+        setLayoutError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      setApplyingLayoutId(null);
+    }
+  }
+
+  async function confirmApplyPreviousForce() {
+    if (!applyPreviousConflict) return;
+    setApplyingLayoutId(applyPreviousConflict.layoutId);
+    try {
+      await applyLayoutToSession(applyPreviousConflict.layoutId, true);
+      setShowApplyPreviousConfirm(false);
+      setApplyPreviousConflict(null);
+    } catch (err) {
+      setLayoutError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setApplyingLayoutId(null);
+    }
+  }
+
   const singleWell = selectedWells.length === 1 ? selectedWells[0] : null;
   const singleWellMarker = singleWell ? wellToMarker[singleWell] : undefined;
   // C5: a marker with ploidy>2 has no single heterozygote (mid-dosage classes
@@ -307,6 +524,7 @@ export function PlateSetupTab() {
       )}
 
       <div className="grid gap-4" style={{ gridTemplateColumns: "260px minmax(0,1fr) 280px" }}>
+        <div className="flex flex-col gap-4">
         {/* Marker list */}
         <div className="panel">
           <h3 className="text-sm font-semibold mb-3 text-text">{t.wsTabPlate}</h3>
@@ -434,6 +652,219 @@ export function PlateSetupTab() {
           >
             {t.wsAddMarkerButton}
           </button>
+        </div>
+
+        {/* Layout library (P4-S3) */}
+        <div className="panel">
+          <h3 className="text-sm font-semibold mb-3 text-text">{t.wsLayoutLibraryTitle}</h3>
+
+          {layoutError && (
+            <div className="mb-2 px-2.5 py-2 rounded-md text-xs text-danger bg-danger/10">
+              {layoutError}
+            </div>
+          )}
+
+          {layouts.length === 0 ? (
+            <p className="text-xs text-text-muted mb-2 whitespace-pre-line">{t.wsLayoutEmpty}</p>
+          ) : (
+            layouts.map((l) => (
+              <div
+                key={l.id}
+                data-testid="layout-row"
+                className="flex items-center gap-2 border border-border bg-bg rounded-md p-2 mb-2"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-xs text-text truncate">{l.name}</div>
+                  <div className="text-[10px] text-text-muted font-mono mt-0.5">
+                    {t.wsLayoutMeta(
+                      l.snapshot.markers.length,
+                      l.snapshot.markers.reduce((sum, m) => sum + m.wells.length, 0)
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  data-testid="layout-load-button"
+                  disabled={applyingLayoutId === l.id}
+                  onClick={() => handleLoadLayout(l)}
+                  className="flex-none border border-primary text-primary rounded-md px-2.5 py-1 text-xs font-semibold hover:bg-primary hover:text-white disabled:opacity-40 cursor-pointer"
+                >
+                  {t.load}
+                </button>
+                <button
+                  type="button"
+                  data-testid="layout-delete-button"
+                  aria-label={t.delete}
+                  title={t.delete}
+                  onClick={() => handleDeleteLayout(l.id)}
+                  className="flex-none w-6 h-6 grid place-items-center rounded-md text-text-muted hover:text-danger hover:bg-bg cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            ))
+          )}
+
+          {rowConflict && (
+            <div
+              data-testid="layout-load-conflict-dialog"
+              role="alertdialog"
+              aria-modal="true"
+              className="mb-2 px-2.5 py-2 rounded-md text-xs border"
+              style={{ background: "rgba(217,119,6,0.12)", borderColor: "rgba(217,119,6,0.35)" }}
+            >
+              <p className="font-semibold text-text mb-1">{t.wsLayoutPloidyConflictTitle}</p>
+              <p className="text-text-muted mb-2">
+                {t.wsLayoutPloidyConflictBody(rowConflict.conflict.conflicting_marker_ids.join(", "))}
+              </p>
+              <div className="flex gap-1.5 justify-end">
+                <button
+                  type="button"
+                  data-testid="layout-load-conflict-cancel"
+                  onClick={cancelRowConflict}
+                  className="px-2.5 py-1 rounded-md text-xs font-medium bg-bg text-text-muted cursor-pointer"
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  type="button"
+                  data-testid="layout-load-conflict-confirm"
+                  onClick={confirmRowConflictForce}
+                  className="px-2.5 py-1 rounded-md text-xs font-semibold bg-danger text-white cursor-pointer"
+                >
+                  {t.wsLayoutForceApplyButton}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showLayoutSaveForm ? (
+            <div className="flex gap-1.5 mb-2">
+              <input
+                data-testid="layout-save-name-input"
+                type="text"
+                value={layoutSaveName}
+                onChange={(e) => setLayoutSaveName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void confirmSaveLayout();
+                }}
+                placeholder={t.wsLayoutSaveNamePlaceholder}
+                className="flex-1 min-w-0 border border-primary rounded-md px-2 py-1.5 text-xs bg-surface text-text"
+              />
+              <button
+                type="button"
+                data-testid="layout-save-confirm"
+                disabled={savingLayout || !layoutSaveName.trim()}
+                onClick={confirmSaveLayout}
+                className="flex-none rounded-md px-3 py-1.5 text-xs font-semibold bg-primary text-white disabled:opacity-40 cursor-pointer"
+              >
+                {t.save}
+              </button>
+              <button
+                type="button"
+                data-testid="layout-save-cancel"
+                onClick={cancelLayoutSaveForm}
+                className="flex-none rounded-md px-2.5 py-1.5 text-xs font-medium text-text-muted cursor-pointer"
+              >
+                {t.cancel}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              data-testid="layout-save-open"
+              disabled={markers.length === 0}
+              onClick={openLayoutSaveForm}
+              title={markers.length === 0 ? t.wsNoMarkersHint : undefined}
+              className="w-full border border-dashed border-border rounded-md py-2 text-xs font-medium text-text-muted hover:text-primary hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer mb-2"
+            >
+              {t.wsLayoutSaveOpenButton}
+            </button>
+          )}
+
+          <button
+            type="button"
+            data-testid="apply-previous-layout-button"
+            onClick={openApplyPreviousConfirm}
+            className="w-full border border-border rounded-md py-2 text-xs font-semibold text-text hover:border-primary hover:text-primary cursor-pointer"
+          >
+            {t.wsApplyPreviousLayoutButton}
+          </button>
+
+          {showApplyPreviousConfirm && (
+            <div
+              data-testid="apply-previous-layout-confirm-dialog"
+              role="alertdialog"
+              aria-modal="true"
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              style={{ background: "rgba(0,0,0,0.45)" }}
+            >
+              <div className="bg-surface border border-border rounded-lg p-5 max-w-sm w-full">
+                {applyPreviousConflict ? (
+                  <>
+                    <p className="text-sm font-semibold text-text mb-2">
+                      {t.wsLayoutPloidyConflictTitle}
+                    </p>
+                    <p className="text-sm text-text-muted mb-4">
+                      {t.wsLayoutPloidyConflictBody(
+                        applyPreviousConflict.conflict.conflicting_marker_ids.join(", ")
+                      )}
+                    </p>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        type="button"
+                        data-testid="apply-previous-layout-cancel"
+                        onClick={cancelApplyPreviousConfirm}
+                        className="px-3 py-1.5 rounded-md text-sm font-medium bg-bg text-text-muted cursor-pointer"
+                      >
+                        {t.cancel}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="apply-previous-layout-confirm"
+                        disabled={applyingLayoutId !== null}
+                        onClick={confirmApplyPreviousForce}
+                        className="px-3 py-1.5 rounded-md text-sm font-semibold bg-danger text-white disabled:opacity-40 cursor-pointer"
+                      >
+                        {t.wsLayoutForceApplyButton}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-text mb-2">
+                      {t.wsApplyPreviousConfirmTitle}
+                    </p>
+                    <p className="text-sm text-text-muted mb-4">
+                      {previousLayout
+                        ? t.wsApplyPreviousConfirmBody(previousLayout.name)
+                        : t.wsLayoutNoPreviousError}
+                    </p>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        type="button"
+                        data-testid="apply-previous-layout-cancel"
+                        onClick={cancelApplyPreviousConfirm}
+                        className="px-3 py-1.5 rounded-md text-sm font-medium bg-bg text-text-muted cursor-pointer"
+                      >
+                        {t.cancel}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="apply-previous-layout-confirm"
+                        disabled={applyingLayoutId !== null}
+                        onClick={confirmApplyPrevious}
+                        className="px-3 py-1.5 rounded-md text-sm font-semibold bg-primary text-white disabled:opacity-40 cursor-pointer"
+                      >
+                        {t.apply}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
         </div>
 
         {/* Plate grid */}

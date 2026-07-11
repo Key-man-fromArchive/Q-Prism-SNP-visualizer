@@ -501,6 +501,24 @@ const ko: Translations = {
   wsAnalysisLoading: '분석 중...',
   wsAnalysisNoMarkersNote: '아직 마커가 없습니다. 플레이트 설정 탭에서 마커를 추가하고 웰을 배정하세요.',
   wsAnalysisRecluster: '다시 분석',
+
+  // 레이아웃 라이브러리 (P4-S3)
+  wsLayoutLibraryTitle: '내 레이아웃',
+  wsLayoutEmpty: '저장된 레이아웃이 없습니다.\n현재 배치를 저장해 다음 실행에서 재사용하세요.',
+  wsLayoutSaveOpenButton: '+ 현재 배치 저장',
+  wsLayoutSaveNamePlaceholder: '레이아웃 이름 (예: 고구마 6배체 2마커)',
+  wsLayoutMeta: (markers: number, wells: number) => `마커 ${markers}개 · 웰 ${wells}개`,
+  wsLayoutActionError: (msg: string) => `레이아웃 작업 실패: ${msg}`,
+  wsApplyPreviousLayoutButton: '이전 실행 레이아웃 적용',
+  wsApplyPreviousConfirmTitle: '이전 레이아웃을 적용할까요?',
+  wsApplyPreviousConfirmBody: (name: string) =>
+    `"${name}" 레이아웃을 적용하시겠습니까? 현재 플레이트의 마커 배정을 덮어씌웁니다.`,
+  wsLayoutNoPreviousError: '적용할 이전 레이아웃이 없습니다 — 먼저 현재 배치를 저장하세요.',
+  wsLayoutPloidyConflictTitle: '배수성(ploidy) 충돌',
+  wsLayoutPloidyConflictBody: (ids: string) =>
+    `이 레이아웃을 적용하면 다음 마커의 배수성이 예고 없이 바뀝니다: ${ids}. 그래도 계속하시겠습니까?`,
+  wsLayoutForceApplyButton: '그래도 적용',
+  wsLayoutMissingWellsTitle: '이 플레이트에 없는 웰이 포함되어 있습니다',
 };
 
 export default ko;

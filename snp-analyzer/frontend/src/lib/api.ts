@@ -14,6 +14,10 @@ import type {
   QcResponse,
   MarkerRegion,
   MarkersResponse,
+  LayoutListResponse,
+  SavedLayout,
+  LayoutApplyRequest,
+  LayoutApplyResult,
   SamplesResponse,
   SessionListItem,
   CompareScatterResponse,
@@ -371,6 +375,70 @@ export async function deleteMarkers(sid: string): Promise<{ status: string }> {
   return apiFetch<{ status: string }>(`/api/data/${sid}/markers`, {
     method: 'DELETE',
   });
+}
+
+// ============================================================================
+// Layout library (per-user saved plate layouts, P4-S3)
+// ============================================================================
+
+/** Lists the current user's saved layouts (newest first). */
+export async function listLayouts(): Promise<LayoutListResponse> {
+  return apiFetch<LayoutListResponse>('/api/layouts');
+}
+
+/** Snapshots session `sid`'s CURRENT marker set into a new named layout. */
+export async function saveLayout(name: string, sid: string): Promise<SavedLayout> {
+  return apiFetch<SavedLayout>('/api/layouts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, sid }),
+  });
+}
+
+export async function getLayout(id: string): Promise<SavedLayout> {
+  return apiFetch<SavedLayout>(`/api/layouts/${encodeURIComponent(id)}`);
+}
+
+export async function deleteLayout(id: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/api/layouts/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+/** Duplicates ANY existing layout (by id) into the caller's OWN library. */
+export async function copyLayout(id: string): Promise<SavedLayout> {
+  return apiFetch<SavedLayout>(`/api/layouts/${encodeURIComponent(id)}/copy`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Applies a saved layout to session `req.sid`, replacing its marker set.
+ *
+ * L2/L3 (docs/multi-marker-ux-decision.md §3): never blind-apply. A 409
+ * response means applying would silently change an existing marker's
+ * ploidy -- callers must surface `err.payload.detail` (a
+ * `LayoutApplyConflict`) and only retry with `force: true` after explicit
+ * user confirmation. A 400 means the layout references wells not on the
+ * target plate -- `err.payload.detail` is a human-readable message listing
+ * them. Both are thrown as `ApiError` (status + raw payload preserved,
+ * mirroring `previewImportFile`/`parseImportPreview`'s structured-error
+ * pattern) rather than returned, so a caller that doesn't explicitly handle
+ * them can't accidentally treat a conflict as success.
+ */
+export async function applyLayout(
+  id: string,
+  req: LayoutApplyRequest
+): Promise<LayoutApplyResult> {
+  return importFetch<LayoutApplyResult>(
+    `/api/layouts/${encodeURIComponent(id)}/apply`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    },
+    new Set() // no status is "structured success" -- 400/409 always throw ApiError
+  );
 }
 
 // ============================================================================

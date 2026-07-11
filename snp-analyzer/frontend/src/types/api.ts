@@ -327,6 +327,55 @@ export type MarkersResponse = {
   markers: MarkerRegion[];
 };
 
+// ============================================================================
+// Layout library (per-user saved plate layouts, P4-S3)
+// ============================================================================
+
+/**
+ * A reusable PHYSICAL plate design snapshot: the marker (assay) set, plus
+ * optionally well-types / sample ids, captured from one session's current
+ * state. Mirrors backend `app.routers.layouts._build_snapshot`.
+ */
+export type LayoutSnapshot = {
+  schema_version: number;
+  plate: { rows: number; cols: number };
+  markers: MarkerRegion[];
+  well_types?: Record<string, string>;
+  sample_ids?: Record<string, string>;
+};
+
+/** Mirrors backend `app.db.get_layout` / `list_layouts` row shape. */
+export type SavedLayout = {
+  id: string;
+  owner_user_id: string;
+  name: string;
+  snapshot: LayoutSnapshot;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LayoutListResponse = {
+  layouts: SavedLayout[];
+};
+
+export type LayoutApplyRequest = {
+  sid: string;
+  apply_analysis_settings?: boolean;
+  force?: boolean;
+};
+
+export type LayoutApplyResult = {
+  sid: string;
+  markers: MarkerRegion[];
+  well_types_applied: Record<string, string>;
+};
+
+/** Shape of the 409 response body's `detail` (L2 — ploidy conflict). */
+export type LayoutApplyConflict = {
+  message: string;
+  conflicting_marker_ids: string[];
+};
+
 export type RegionResult = {
   id: string;
   name: string;

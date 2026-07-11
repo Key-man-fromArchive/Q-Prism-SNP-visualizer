@@ -499,6 +499,24 @@ const en = {
   wsAnalysisLoading: 'Analyzing...',
   wsAnalysisNoMarkersNote: 'No markers yet. Add one and assign wells in the Plate Setup tab.',
   wsAnalysisRecluster: 'Re-analyze',
+
+  // Layout library (P4-S3)
+  wsLayoutLibraryTitle: 'My layouts',
+  wsLayoutEmpty: 'No saved layouts yet. Save the current layout to reuse it next time.',
+  wsLayoutSaveOpenButton: '+ Save current layout',
+  wsLayoutSaveNamePlaceholder: 'Layout name (e.g. Sweet potato 6x, 2 markers)',
+  wsLayoutMeta: (markers: number, wells: number) => `${markers} marker(s) · ${wells} well(s)`,
+  wsLayoutActionError: (msg: string) => `Layout action failed: ${msg}`,
+  wsApplyPreviousLayoutButton: 'Apply previous layout',
+  wsApplyPreviousConfirmTitle: 'Apply previous layout?',
+  wsApplyPreviousConfirmBody: (name: string) =>
+    `Apply "${name}"? This will overwrite the current plate's marker assignment.`,
+  wsLayoutNoPreviousError: 'No previous layout to apply yet — save the current layout first.',
+  wsLayoutPloidyConflictTitle: 'Ploidy conflict',
+  wsLayoutPloidyConflictBody: (ids: string) =>
+    `Applying this layout would silently change the ploidy of marker(s): ${ids}. Continue anyway?`,
+  wsLayoutForceApplyButton: 'Apply anyway',
+  wsLayoutMissingWellsTitle: 'Some wells are missing on this plate',
 };
 
 export type Translations = {
