@@ -100,6 +100,21 @@ CREATE TABLE IF NOT EXISTS marker_regions (
     FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 );
 
+-- Saved plate layouts: per-user reusable PHYSICAL plate designs (marker set
+-- + optional well-types/sample ids), captured from one session's current
+-- marker set and re-applicable to another. Scope is the owning user only --
+-- TokenData carries only user_id/username/role, there is no team/org
+-- concept, so "sharing" a layout is an explicit copy (POST .../copy), not a
+-- join to a shared scope.
+CREATE TABLE IF NOT EXISTS saved_layouts (
+    id TEXT PRIMARY KEY,
+    owner_user_id TEXT NOT NULL REFERENCES users(id),
+    name TEXT NOT NULL,
+    snapshot_json TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
 -- Projects table (replaces projects.json)
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
