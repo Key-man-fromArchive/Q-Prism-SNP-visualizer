@@ -12,6 +12,8 @@ import type {
   WellTypesResponse,
   WellGroupsResponse,
   QcResponse,
+  MarkerRegion,
+  MarkersResponse,
   SamplesResponse,
   SessionListItem,
   CompareScatterResponse,
@@ -329,6 +331,45 @@ export async function bulkSetWellTypes(
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ assignments }),
+  });
+}
+
+// ============================================================================
+// Markers (multi-marker-per-plate, P4)
+// ============================================================================
+
+export async function getMarkers(sid: string): Promise<MarkersResponse> {
+  return apiFetch<MarkersResponse>(`/api/data/${sid}/markers`);
+}
+
+/** Replaces the session's whole marker (assay) set. */
+export async function saveMarkers(
+  sid: string,
+  markers: MarkerRegion[]
+): Promise<MarkersResponse> {
+  return apiFetch<MarkersResponse>(`/api/data/${sid}/markers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ markers }),
+  });
+}
+
+/** Partial update of one marker's fields (name/wells/ploidy/color/threshold_config). */
+export async function updateMarker(
+  sid: string,
+  markerId: string,
+  patch: Partial<Pick<MarkerRegion, 'name' | 'wells' | 'ploidy' | 'color' | 'threshold_config'>>
+): Promise<MarkersResponse> {
+  return apiFetch<MarkersResponse>(`/api/data/${sid}/markers/${encodeURIComponent(markerId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteMarkers(sid: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/api/data/${sid}/markers`, {
+    method: 'DELETE',
   });
 }
 

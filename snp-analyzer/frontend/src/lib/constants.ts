@@ -35,3 +35,19 @@ export const COLORS = {
 /** Well rows and columns for 96-well plate */
 export const PLATE_ROWS = ["A", "B", "C", "D", "E", "F", "G", "H"] as const;
 export const PLATE_COLS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+
+/**
+ * User-picked marker (assay) color palette for the multi-marker Plate Setup
+ * surface (P4-S1). Fixed hex values so a marker's color stays stable across
+ * light/dark theme (mirrors docs/mockups/multimarker-mockup.html PALETTE).
+ */
+export const MARKER_PALETTE = [
+  "#7c5cd6",
+  "#d98a1e",
+  "#2f9e5a",
+  "#d5504e",
+  "#3f86c4",
+  "#12a3ad",
+  "#b7519f",
+  "#7a8794",
+] as const;
