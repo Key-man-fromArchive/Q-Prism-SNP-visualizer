@@ -15,9 +15,11 @@ import {
   saveLayout,
   deleteLayout,
   applyLayout,
+  listMarkerCatalog,
+  attachMarkerCatalog,
   ApiError,
 } from "@/lib/api";
-import type { MarkerRegion, SavedLayout, LayoutApplyConflict } from "@/types/api";
+import type { MarkerRegion, SavedLayout, LayoutApplyConflict, MarkerCatalogEntry } from "@/types/api";
 import { WellType } from "@/types/api";
 import { MARKER_PALETTE } from "@/lib/constants";
 
@@ -65,6 +67,10 @@ export function PlateSetupTab() {
   const [formName, setFormName] = useState("");
   const [formColor, setFormColor] = useState<string>(MARKER_PALETTE[0]);
   const [formPloidy, setFormPloidy] = useState<number>(2);
+  // Attach-to-catalog (feat/marker-catalog): pick an existing catalog assay
+  // to prefill name/ploidy/color from when creating/editing a marker.
+  const [catalogEntries, setCatalogEntries] = useState<MarkerCatalogEntry[]>([]);
+  const [formCatalogId, setFormCatalogId] = useState<string>("");
 
   // Layout library (P4-S3) -- per-USER, not per-session, so this list is
   // never cleared by the session-change reset below.
@@ -156,6 +162,27 @@ export function PlateSetupTab() {
     void refreshLayouts();
   }, [refreshLayouts]);
 
+  // Load the caller's marker-catalog library (feat/marker-catalog) -- also
+  // per-USER, fetched once on mount. A failure here must never block ad-hoc
+  // marker creation, so it's swallowed silently (the catalog picker just
+  // stays empty).
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await listMarkerCatalog();
+        setCatalogEntries(res.entries);
+      } catch {
+        setCatalogEntries([]);
+      }
+    })();
+  }, []);
+
+  const catalogById = useMemo(() => {
+    const map = new Map<string, MarkerCatalogEntry>();
+    for (const e of catalogEntries) map.set(e.id, e);
+    return map;
+  }, [catalogEntries]);
+
   const wellToMarker = useMemo(() => {
     const map: Record<string, MarkerRegion> = {};
     for (const m of markers) {
@@ -220,6 +247,7 @@ export function PlateSetupTab() {
     setFormName("");
     setFormColor(nextColor(markers));
     setFormPloidy(markers[markers.length - 1]?.ploidy ?? 2);
+    setFormCatalogId("");
   }
 
   function openEditMarkerForm(id: string) {
@@ -229,10 +257,24 @@ export function PlateSetupTab() {
     setFormName(m.name);
     setFormColor(m.color ?? MARKER_PALETTE[0]);
     setFormPloidy(m.ploidy);
+    setFormCatalogId(m.catalog_id ?? "");
   }
 
   function closeMarkerForm() {
     setEditingMarker(null);
+  }
+
+  /** Picking a catalog assay prefills name/ploidy/color from it (task:
+   * "let the user pick an existing catalog assay to create/prefill a marker
+   * from"). The user can still edit any field further before saving. */
+  function pickCatalogEntry(catalogId: string) {
+    setFormCatalogId(catalogId);
+    if (!catalogId) return;
+    const entry = catalogById.get(catalogId);
+    if (!entry) return;
+    setFormName((prev) => (prev.trim() ? prev : entry.name));
+    setFormPloidy(entry.default_ploidy);
+    if (entry.color) setFormColor(entry.color);
   }
 
   async function persist(newMarkers: MarkerRegion[]) {
@@ -251,33 +293,65 @@ export function PlateSetupTab() {
     }
   }
 
-  function saveMarkerForm() {
+  async function saveMarkerForm() {
     const name = formName.trim();
     if (!name) return;
+    const catalogId = formCatalogId || null;
 
     if (editingMarker === "new") {
       const id = genMarkerId();
+      // A brand-new marker with 0 wells is only ever kept client-side (the
+      // backend rejects an empty-wells marker) -- storing catalog_id here
+      // means it rides along automatically the moment `persist()` first
+      // saves this marker (once it receives wells), without a separate
+      // attach-catalog call.
       const created: MarkerRegion = {
         id,
         name,
         wells: [],
         ploidy: formPloidy,
         color: formColor,
+        catalog_id: catalogId,
       };
       setMarkers((prev) => [...prev, created]);
       setPickMarkerId(id);
-    } else if (editingMarker) {
+      setEditingMarker(null);
+      return;
+    }
+
+    if (editingMarker) {
       const editingId = editingMarker;
+      const existing = markers.find((m) => m.id === editingId);
       const next = markers.map((m) =>
-        m.id === editingId ? { ...m, name, color: formColor, ploidy: formPloidy } : m
+        m.id === editingId
+          ? { ...m, name, color: formColor, ploidy: formPloidy, catalog_id: catalogId }
+          : m
       );
       setMarkers(next);
+      setEditingMarker(null);
+
       const target = next.find((m) => m.id === editingId);
-      if (target && target.wells.length > 0) {
-        void persist(next);
+      if (!target || target.wells.length === 0) return; // not yet persisted server-side
+
+      // Marker already exists on the backend: name/color/ploidy go through
+      // the normal bulk persist; a NEW catalog link additionally needs the
+      // dedicated attach-catalog endpoint (the bulk marker-set PUT/POST
+      // doesn't itself run the catalog prefill logic).
+      const merged = await persist(next);
+      if (catalogId && catalogId !== (existing?.catalog_id ?? null) && sessionId) {
+        try {
+          const attached = await attachMarkerCatalog(sessionId, editingId, catalogId);
+          setMarkers((prev) => prev.map((m) => (m.id === editingId ? attached : m)));
+        } catch (err) {
+          setSaveError(
+            err instanceof Error
+              ? err.message
+              : String(err)
+          );
+        }
       }
+      void merged;
     }
-    setEditingMarker(null);
   }
 
   async function applyAssign() {
@@ -547,6 +621,15 @@ export function PlateSetupTab() {
                 <span className="text-xs font-bold text-primary bg-bg rounded px-1.5 py-0.5">
                   {t.wsMarkerPloidyUnit(m.ploidy)}
                 </span>
+                {m.catalog_id && (
+                  <span
+                    data-testid="marker-card-catalog-link"
+                    title={catalogById.get(m.catalog_id)?.name ?? m.catalog_id}
+                    className="text-xs text-text-muted"
+                  >
+                    🔗
+                  </span>
+                )}
                 <button
                   type="button"
                   title={t.wsMarkerFormTitleEdit}
@@ -573,6 +656,28 @@ export function PlateSetupTab() {
               <p className="text-xs font-bold text-text-muted mb-1.5">
                 {editingMarker === "new" ? t.wsMarkerFormTitleNew : t.wsMarkerFormTitleEdit}
               </p>
+
+              {catalogEntries.length > 0 && (
+                <>
+                  <p className="text-xs font-bold text-text-muted mb-1.5">
+                    {t.wsMarkerCatalogSelectLabel}
+                  </p>
+                  <select
+                    data-testid="marker-form-catalog-select"
+                    value={formCatalogId}
+                    onChange={(e) => pickCatalogEntry(e.target.value)}
+                    className="w-full border border-border rounded-md px-2 py-1.5 text-sm bg-surface text-text mb-2.5"
+                  >
+                    <option value="">{t.wsMarkerCatalogSelectNone}</option>
+                    {catalogEntries.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.name}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+
               <input
                 data-testid="marker-name-input"
                 type="text"

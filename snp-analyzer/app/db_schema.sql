@@ -95,9 +95,39 @@ CREATE TABLE IF NOT EXISTS marker_regions (
     ploidy INTEGER NOT NULL DEFAULT 2,
     color TEXT,
     threshold_json TEXT,
+    -- Optional link to a durable marker_catalog entry (see below) this
+    -- session marker was attached to. Nullable: most markers never link.
+    catalog_id TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (session_id, marker_id),
     FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+
+-- Marker (assay) CATALOG: a durable, user-scoped, plate-independent assay
+-- registry. Register an assay ONCE (e.g. "qSwet5.3") with rich detail
+-- (genomic target, chemistry, calibration/validation evidence) and reuse it
+-- across many plates/sessions by linking a session's marker_regions row to
+-- one of these via marker_regions.catalog_id. Scope is the owning user only
+-- (TokenData has no team/org concept) -- sharing is an explicit copy
+-- (POST /api/marker-catalog/{id}/copy), mirroring saved_layouts.
+CREATE TABLE IF NOT EXISTS marker_catalog (
+    id TEXT PRIMARY KEY,
+    owner_user_id TEXT NOT NULL REFERENCES users(id),
+    name TEXT NOT NULL,
+    target_gene TEXT,
+    snp_id TEXT,
+    allele1_base TEXT,
+    allele2_base TEXT,
+    chemistry TEXT,
+    default_ploidy INTEGER NOT NULL DEFAULT 2,
+    color TEXT,
+    expected_dosage_classes INTEGER,
+    interpretation_notes TEXT,
+    asg_target_id TEXT,
+    calibration_json TEXT,
+    validation_json TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
 );
 
 -- Saved plate layouts: per-user reusable PHYSICAL plate designs (marker set
