@@ -483,6 +483,22 @@ const en = {
   wsInspectorEmptyNote: 'Select wells on the plate, then assign a marker/well type.',
   wsMarkerSampleCount: (n: number) => `Sample ${n}`,
   wsMarkerNtcCount: (n: number) => `NTC ${n}`,
+
+  // Analysis surface — per-marker results (P4-S2)
+  wsAnalysisListTitle: 'Per-marker results',
+  wsAnalysisSelectMarkerLabel: 'Select marker',
+  wsAnalysisWellsCount: (n: number) => `${n} well(s)`,
+  wsAnalysisExpectedClasses: (n: number) => `Up to ${n} dosage classes expected`,
+  wsAnalysisObservedClasses: (n: number) => `${n} observed`,
+  wsAnalysisGenotypeCountsTitle: 'Genotype calls',
+  wsAnalysisExcludedLabel: 'Excluded (NTC/control etc.)',
+  wsAnalysisNtcNote:
+    "This marker's background subtraction / NTC baseline is computed from its own NTC wells — not shared plate-wide.",
+  wsAnalysisObservedExceedsWarning: 'Observed class count exceeds the expected ploidy — check the ploidy setting.',
+  wsAnalysisWarningsTitle: 'Warnings',
+  wsAnalysisLoading: 'Analyzing...',
+  wsAnalysisNoMarkersNote: 'No markers yet. Add one and assign wells in the Plate Setup tab.',
+  wsAnalysisRecluster: 'Re-analyze',
 };
 
 export type Translations = {

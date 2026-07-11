@@ -485,6 +485,22 @@ const ko: Translations = {
   wsInspectorEmptyNote: '플레이트에서 웰을 선택한 뒤 마커·웰 유형을 지정하세요.',
   wsMarkerSampleCount: (n: number) => `샘플 ${n}`,
   wsMarkerNtcCount: (n: number) => `NTC ${n}`,
+
+  // Analysis surface — per-marker results (P4-S2)
+  wsAnalysisListTitle: '마커별 결과',
+  wsAnalysisSelectMarkerLabel: '마커 선택',
+  wsAnalysisWellsCount: (n: number) => `웰 ${n}개`,
+  wsAnalysisExpectedClasses: (n: number) => `최대 ${n}개 dosage 클래스 예상`,
+  wsAnalysisObservedClasses: (n: number) => `관측 ${n}개`,
+  wsAnalysisGenotypeCountsTitle: '지노타입 판정',
+  wsAnalysisExcludedLabel: '제외(NTC/대조 등)',
+  wsAnalysisNtcNote:
+    '배경차감·NTC 기준선은 이 마커 자체의 NTC 웰에서 계산됩니다 — 플레이트 전역으로 공유하지 않습니다.',
+  wsAnalysisObservedExceedsWarning: '관측 클래스 수가 예상(배수성)보다 많습니다 — 배수성을 확인하세요.',
+  wsAnalysisWarningsTitle: '경고',
+  wsAnalysisLoading: '분석 중...',
+  wsAnalysisNoMarkersNote: '아직 마커가 없습니다. 플레이트 설정 탭에서 마커를 추가하고 웰을 배정하세요.',
+  wsAnalysisRecluster: '다시 분석',
 };
 
 export default ko;
