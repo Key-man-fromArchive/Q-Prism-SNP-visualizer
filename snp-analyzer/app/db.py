@@ -85,6 +85,25 @@ def _run_migrations(conn: sqlite3.Connection):
         )
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (4)")
 
+    if current < 5:
+        # Migration 5: per-user saved plate layout library (S3 dependency). A
+        # layout snapshots one session's current marker set (+ optional
+        # well-types/sample ids) so it can be applied to a different session
+        # later. Scope is the owning user only (no team/org concept exists in
+        # TokenData). This migration adds the table only -- it does NOT
+        # back-fill any layouts from existing sessions/markers.
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS saved_layouts (
+                id TEXT PRIMARY KEY,
+                owner_user_id TEXT NOT NULL REFERENCES users(id),
+                name TEXT NOT NULL,
+                snapshot_json TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )"""
+        )
+        conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (5)")
+
     conn.commit()
 
 
@@ -317,6 +336,69 @@ def delete_marker_regions(session_id: str):
     """Delete all marker definitions for a session."""
     conn = get_db()
     conn.execute("DELETE FROM marker_regions WHERE session_id = ?", (session_id,))
+    conn.commit()
+
+
+def save_layout(layout_id: str, owner_user_id: str, name: str, snapshot: dict) -> None:
+    """Insert a new saved plate layout row.
+
+    Layouts are immutable-by-id from the router's perspective (no in-place
+    edit endpoint was requested) -- POST /api/layouts and .../copy both
+    create a brand new row via this function."""
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO saved_layouts (id, owner_user_id, name, snapshot_json) VALUES (?, ?, ?, ?)",
+        (layout_id, owner_user_id, name, json.dumps(snapshot)),
+    )
+    conn.commit()
+
+
+def get_layout(layout_id: str) -> dict | None:
+    """Load one saved layout by id (owner-agnostic; callers must check
+    ownership themselves -- see app.routers.layouts._get_owned_layout)."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, owner_user_id, name, snapshot_json, created_at, updated_at "
+        "FROM saved_layouts WHERE id = ?",
+        (layout_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "id": row["id"],
+        "owner_user_id": row["owner_user_id"],
+        "name": row["name"],
+        "snapshot": json.loads(row["snapshot_json"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def list_layouts(owner_user_id: str) -> list[dict]:
+    """List all layouts owned by one user, newest first."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, owner_user_id, name, snapshot_json, created_at, updated_at "
+        "FROM saved_layouts WHERE owner_user_id = ? ORDER BY created_at DESC",
+        (owner_user_id,),
+    ).fetchall()
+    return [
+        {
+            "id": r["id"],
+            "owner_user_id": r["owner_user_id"],
+            "name": r["name"],
+            "snapshot": json.loads(r["snapshot_json"]),
+            "created_at": r["created_at"],
+            "updated_at": r["updated_at"],
+        }
+        for r in rows
+    ]
+
+
+def delete_layout(layout_id: str) -> None:
+    """Delete one saved layout by id (caller must check ownership first)."""
+    conn = get_db()
+    conn.execute("DELETE FROM saved_layouts WHERE id = ?", (layout_id,))
     conn.commit()
 
 
