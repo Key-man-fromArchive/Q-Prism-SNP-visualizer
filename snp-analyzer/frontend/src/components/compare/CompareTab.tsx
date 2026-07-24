@@ -36,7 +36,7 @@ export function CompareTab() {
         setSessions(data);
       } catch (err) {
         console.error('Failed to load sessions:', err);
-        setError('Failed to load sessions');
+        setError(t.errLoadSessions);
       }
     };
     loadSessions();
@@ -61,7 +61,7 @@ export function CompareTab() {
       setStatsData(stats);
     } catch (err) {
       console.error('Compare failed:', err);
-      setError(err instanceof Error ? err.message : 'Failed to compare runs');
+      setError(err instanceof Error ? err.message : t.errCompareRuns);
     } finally {
       setIsLoading(false);
     }

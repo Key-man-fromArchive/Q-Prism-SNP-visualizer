@@ -37,7 +37,7 @@ export function QualityTab() {
       })
       .catch((err) => {
         if (mounted) {
-          setError(err instanceof Error ? err.message : 'Failed to fetch quality data');
+          setError(err instanceof Error ? err.message : t.errLoadQuality);
           setLoading(false);
         }
       });

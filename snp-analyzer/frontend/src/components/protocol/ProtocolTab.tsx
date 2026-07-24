@@ -51,7 +51,7 @@ export function ProtocolTab() {
       })
       .catch((err) => {
         console.error('Failed to load protocol:', err);
-        setError('Failed to load protocol');
+        setError(t.errLoadProtocol);
       })
       .finally(() => setLoading(false));
   }, [sessionId]);
@@ -65,7 +65,7 @@ export function ProtocolTab() {
       window.dispatchEvent(new CustomEvent("asg-result-dirty"));
     } catch (err) {
       console.error('Failed to save protocol:', err);
-      setError('Failed to save protocol');
+      setError(t.errSaveProtocol);
     } finally {
       setLoading(false);
     }

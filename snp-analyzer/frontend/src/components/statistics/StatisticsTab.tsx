@@ -27,7 +27,7 @@ export function StatisticsTab() {
         const data = await getStatistics(sessionId);
         setStats(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load statistics');
+        setError(err instanceof Error ? err.message : t.errLoadStatistics);
       } finally {
         setLoading(false);
       }

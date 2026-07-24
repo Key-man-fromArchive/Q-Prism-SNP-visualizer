@@ -132,12 +132,12 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
 
   const loadProjects = async () => {
     try { setProjects((await getProjects()).projects); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Failed to load projects'); }
+    catch (err) { setError(err instanceof Error ? err.message : t.errLoadProjects); }
   };
 
   const loadSessions = async () => {
     try { setSessions(await getSessions()); setCheckedSessions(new Set()); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Failed to load sessions'); }
+    catch (err) { setError(err instanceof Error ? err.message : t.errLoadSessions); }
   };
 
   // ── Project CRUD ───────────────────────────────────────────────────────────
@@ -148,14 +148,14 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
       await createProject(newProjectName.trim());
       setNewProjectName('');
       await loadProjects();
-    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to create project'); }
+    } catch (err) { setError(err instanceof Error ? err.message : t.errCreateProject); }
     finally { setLoading(false); }
   };
 
   const handleDeleteProject = async (id: string, name: string) => {
     if (!(await confirm({ title: t.delete, message: t.deleteProjectConfirm(name), danger: true }))) return;
     try { setLoading(true); await deleteProject(id); await loadProjects(); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Failed to delete project'); }
+    catch (err) { setError(err instanceof Error ? err.message : t.errDeleteProject); }
     finally { setLoading(false); }
   };
 
@@ -164,7 +164,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
       setLoading(true); setError(null);
       const [pd, sd] = await Promise.all([getProject(id), getProjectSummary(id)]);
       setCurrentProject(pd); setSummary(sd); setView('detail');
-    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load project details'); }
+    } catch (err) { setError(err instanceof Error ? err.message : t.errLoadProjectDetails); }
     finally { setLoading(false); }
   };
 
@@ -181,7 +181,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
       await addProjectSession(currentProject.id, selectedSession);
       const [pd, sd] = await Promise.all([getProject(currentProject.id), getProjectSummary(currentProject.id)]);
       setCurrentProject(pd); setSummary(sd); setSelectedSession('');
-    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to add session'); }
+    } catch (err) { setError(err instanceof Error ? err.message : t.errAddSession); }
     finally { setLoading(false); }
   };
 
@@ -192,7 +192,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
       await removeProjectSession(currentProject.id, sid);
       const [pd, sd] = await Promise.all([getProject(currentProject.id), getProjectSummary(currentProject.id)]);
       setCurrentProject(pd); setSummary(sd);
-    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to remove session'); }
+    } catch (err) { setError(err instanceof Error ? err.message : t.errRemoveSession); }
     finally { setLoading(false); }
   };
 
@@ -207,13 +207,13 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
       setCheckedDetailSessions(new Set());
       const [pd, sd] = await Promise.all([getProject(currentProject.id), getProjectSummary(currentProject.id)]);
       setCurrentProject(pd); setSummary(sd);
-    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to bulk remove sessions'); }
+    } catch (err) { setError(err instanceof Error ? err.message : t.errBulkRemoveSessions); }
     finally { setLoading(false); }
   };
 
   const handleLoadSession = async (sid: string) => {
     try { setLoading(true); setError(null); setSession(sid, await getSessionInfo(sid)); onLoadSession?.(); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Failed to load session'); }
+    catch (err) { setError(err instanceof Error ? err.message : t.errLoadSession); }
     finally { setLoading(false); }
   };
 
@@ -232,7 +232,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
           setCurrentProject(pd); setSummary(sd);
         } catch { /* ok */ }
       }
-    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to delete session'); }
+    } catch (err) { setError(err instanceof Error ? err.message : t.errDeleteSession); }
     finally { setLoading(false); }
   };
 
@@ -260,7 +260,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
       await loadProjects();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed';
-      setError(`Add to "${projectName}": ${msg}`);
+      setError(t.batchAddTo(projectName, msg));
     } finally { setLoading(false); }
   };
 
@@ -274,11 +274,11 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
       setCheckedSessions(new Set());
       await loadProjects();
       if (res.added < count) {
-        setError(`Added ${res.added}/${count} to "${projectName}" (${count - res.added} already in project or missing)`);
+        setError(t.batchAddResult(res.added, count, projectName, count - res.added));
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed';
-      setError(`Bulk add to "${projectName}": ${msg}`);
+      setError(t.batchBulkAddTo(projectName, msg));
     } finally { setLoading(false); }
   };
 
