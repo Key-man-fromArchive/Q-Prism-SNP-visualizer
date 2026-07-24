@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { AlertCircle, RotateCcw, UploadCloud } from "lucide-react";
 import { ApiError, parseImportPreview } from "@/lib/api";
 import { useI18n } from "@/hooks/use-i18n";
+import type { Translations } from "@/locales/en";
 import type {
   AssayModeId,
   ImportPreview,
@@ -66,7 +67,7 @@ export function ImportMappingWizard({
   );
 
   const localIssues = useMemo(
-    () => buildLocalIssues(mapping, channels),
+    () => buildLocalIssues(mapping, channels, t),
     [mapping, channels],
   );
   const channelKey = channels.join("\u0001");
@@ -74,7 +75,7 @@ export function ImportMappingWizard({
   const allIssues = [...previewIssues, ...preview.warnings, ...issues, ...localIssues];
   const requiredRoles = ASSAY_MODES.find((mode) => mode.value === mapping.assay_mode)?.requiredRoles ?? [];
   const roleOptions = getRoleOptions(mapping.assay_mode);
-  const summary = buildPreviewSummary(preview, mapping, channels);
+  const summary = buildPreviewSummary(preview, mapping, channels, t);
 
   useEffect(() => {
     setMapping((current) => {
@@ -353,7 +354,7 @@ export function ImportMappingWizard({
                   className="border border-border rounded-md px-2 py-2 text-sm bg-surface"
                 >
                   {roleOptions.map((role) => (
-                    <option key={role} value={role}>{roleLabel(role)}</option>
+                    <option key={role} value={role}>{roleLabel(role, t)}</option>
                   ))}
                 </select>
               </div>
@@ -380,8 +381,8 @@ export function ImportMappingWizard({
         <h4 className="text-sm font-semibold">{t.imwValidationPreview}</h4>
         <div className="grid gap-3 md:grid-cols-3">
           <SummaryItem label={t.imwAssayMode} value={modeLabel(mapping.assay_mode)} />
-          <SummaryItem label={t.imwNormalization} value={normalizationLabel(mapping.normalization_mode)} />
-          <SummaryItem label={t.imwRoleBinding} value={roleBindingSummary(mapping.channel_roles)} />
+          <SummaryItem label={t.imwNormalization} value={normalizationLabel(mapping.normalization_mode, t)} />
+          <SummaryItem label={t.imwRoleBinding} value={roleBindingSummary(mapping.channel_roles, t)} />
         </div>
         {allIssues.length > 0 && (
           <div className="space-y-2">
@@ -399,13 +400,13 @@ export function ImportMappingWizard({
           </div>
         )}
         {unsupported && (
-          <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <div className="flex gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-text">
             <AlertCircle size={16} className="mt-0.5 shrink-0" />
             <span>{unsupported}</span>
           </div>
         )}
         {submitError && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-danger bg-red-50 px-3 py-2 text-sm text-danger">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
             <span>{submitError}</span>
             <button
               type="button"
@@ -419,28 +420,33 @@ export function ImportMappingWizard({
         )}
       </section>
 
-      <section className="overflow-x-auto">
-        <table className="min-w-full text-left text-[12px]">
-          <thead>
-            <tr className="border-b border-border">
-              {preview.inferred_headers.map((header) => (
-                <th key={header} className="px-2 py-2 font-semibold">{header}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {preview.sample_rows.map((row, rowIndex) => (
-              <tr key={rowIndex} className="border-b border-border last:border-0">
+      <details className="rounded-md border border-border" open>
+        <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-text">
+          {t.imwRawDataTitle(preview.sample_rows.length)}
+        </summary>
+        <div className="overflow-x-auto border-t border-border">
+          <table className="min-w-full text-left text-[12px]">
+            <thead>
+              <tr className="border-b border-border">
                 {preview.inferred_headers.map((header) => (
-                  <td key={header} className="max-w-[180px] truncate px-2 py-2 text-text-muted" title={formatCell(row[header])}>
-                    {formatCell(row[header])}
-                  </td>
+                  <th key={header} className="px-2 py-2 font-semibold">{header}</th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {preview.sample_rows.map((row, rowIndex) => (
+                <tr key={rowIndex} className="border-b border-border last:border-0">
+                  {preview.inferred_headers.map((header) => (
+                    <td key={header} className="max-w-[180px] truncate px-2 py-2 text-text-muted" title={formatCell(row[header])}>
+                      {formatCell(row[header])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
 
       <div className="flex justify-end">
         <button
@@ -534,8 +540,8 @@ function IssueRow({ issue, onUseCommaDecimal }: { issue: ValidationIssue; onUseC
   return (
     <div className={`flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm ${
       issue.recoverable
-        ? "border-amber-300 bg-amber-50 text-amber-900"
-        : "border-danger bg-red-50 text-danger"
+        ? "border-warning/30 bg-warning/10 text-text"
+        : "border-danger/30 bg-danger/10 text-danger"
     }`}>
       <div className="flex min-w-0 items-start gap-2">
         <AlertCircle size={16} className="mt-0.5 shrink-0" />
@@ -555,7 +561,7 @@ function IssueRow({ issue, onUseCommaDecimal }: { issue: ValidationIssue; onUseC
         <button
           type="button"
           onClick={onUseCommaDecimal}
-          className="rounded-md border border-amber-400 px-2 py-1 text-[12px]"
+          className="rounded-md border border-warning px-2 py-1 text-xs"
         >
           {t.imwUseCommaDecimal}
         </button>
@@ -639,7 +645,7 @@ function detectChannels(preview: ImportPreview, structure: TableStructure, mappi
   return unique(candidateChannels);
 }
 
-function buildPreviewSummary(preview: ImportPreview, mapping: MappingConfig, channels: string[]) {
+function buildPreviewSummary(preview: ImportPreview, mapping: MappingConfig, channels: string[], t: Translations) {
   const wells = mapping.well_column
     ? unique(preview.sample_rows.map((row) => stringValue(row[mapping.well_column ?? ""])).filter(Boolean))
     : [];
@@ -648,15 +654,15 @@ function buildPreviewSummary(preview: ImportPreview, mapping: MappingConfig, cha
     : [];
   const cycleSummary = cycles.length > 0
     ? `${Math.min(...cycles)}-${Math.max(...cycles)}`
-    : "Not detected";
+    : t.imwNotDetected;
   return {
-    wells: wells.length > 0 ? `${wells.length} in preview` : "Not detected",
+    wells: wells.length > 0 ? t.imwInPreview(wells.length) : t.imwNotDetected,
     cycles: cycleSummary,
     channels: channels.join(", "),
   };
 }
 
-function buildLocalIssues(mapping: MappingConfig, channels: string[]): ValidationIssue[] {
+function buildLocalIssues(mapping: MappingConfig, channels: string[], t: Translations): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const roles = Object.entries(mapping.channel_roles)
     .filter(([channel, role]) => channels.includes(channel) && !["excluded", "unknown"].includes(role));
@@ -672,7 +678,7 @@ function buildLocalIssues(mapping: MappingConfig, channels: string[]): Validatio
   for (const role of UNIQUE_ROLES) {
     const channelsForRole = roles.filter(([, candidateRole]) => candidateRole === role).map(([channel]) => channel);
     if (channelsForRole.length > 1) {
-      issues.push(makeLocalIssue("duplicate_role_binding", `Role ${roleLabel(role)} is bound to multiple channels: ${channelsForRole.join(", ")}`));
+      issues.push(makeLocalIssue("duplicate_role_binding", `Role ${roleLabel(role, t)} is bound to multiple channels: ${channelsForRole.join(", ")}`));
     }
   }
 
@@ -726,10 +732,10 @@ function getRoleOptions(assayMode: AssayModeId): ImportRole[] {
   return [...roles, "excluded", "unknown"];
 }
 
-function roleLabel(role: ImportRole): string {
-  if (role === "normalization") return "Normalization";
-  if (role === "excluded") return "Excluded";
-  if (role === "unknown") return "Unknown";
+function roleLabel(role: ImportRole, t: Translations): string {
+  if (role === "normalization") return t.imwRoleNormalization;
+  if (role === "excluded") return t.imwRoleExcluded;
+  if (role === "unknown") return t.imwRoleUnknown;
   return role;
 }
 
@@ -737,17 +743,18 @@ function modeLabel(mode: AssayModeId): string {
   return ASSAY_MODES.find((candidate) => candidate.value === mode)?.label ?? mode;
 }
 
-function normalizationLabel(mode: NormalizationMode): string {
-  if (mode === "passive_reference") return "Passive reference";
-  if (mode === "none") return "None";
+
+function normalizationLabel(mode: NormalizationMode, t: Translations): string {
+  if (mode === "passive_reference") return t.imwNormPassive;
+  if (mode === "none") return t.imwNone;
   return mode;
 }
 
-function roleBindingSummary(channelRoles: Record<string, ImportRole>): string {
+function roleBindingSummary(channelRoles: Record<string, ImportRole>, t: Translations): string {
   const bound = Object.entries(channelRoles)
     .filter(([, role]) => role !== "excluded" && role !== "unknown")
-    .map(([channel, role]) => `${roleLabel(role)}=${channel}`);
-  return bound.length > 0 ? bound.join(", ") : "None";
+    .map(([channel, role]) => `${roleLabel(role, t)}=${channel}`);
+  return bound.length > 0 ? bound.join(", ") : t.imwNone;
 }
 
 function isValidationResponse(response: ImportParseResponse): response is Extract<ImportParseResponse, { status: "validation_failed" }> {

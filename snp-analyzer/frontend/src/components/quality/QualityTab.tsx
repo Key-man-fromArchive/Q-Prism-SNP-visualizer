@@ -48,9 +48,9 @@ export function QualityTab() {
   }, [sessionId, useRox]);
 
   const getScoreColor = (score: number): string => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 50) return 'text-amber-600';
-    return 'text-red-600';
+    if (score >= 80) return 'text-success';
+    if (score >= 50) return 'text-warning';
+    return 'text-danger';
   };
 
   const flagLabel = (flag: string): string =>
@@ -63,10 +63,10 @@ export function QualityTab() {
 
   const scoreBuckets: ScoreBucket[] = data
     ? [
-        { range: '90-100', count: 0, percentage: 0, color: 'bg-green-500' },
-        { range: '70-89', count: 0, percentage: 0, color: 'bg-blue-500' },
-        { range: '50-69', count: 0, percentage: 0, color: 'bg-amber-500' },
-        { range: '0-49', count: 0, percentage: 0, color: 'bg-red-500' },
+        { range: '90-100', count: 0, percentage: 0, color: 'bg-success' },
+        { range: '70-89', count: 0, percentage: 0, color: 'bg-info' },
+        { range: '50-69', count: 0, percentage: 0, color: 'bg-warning' },
+        { range: '0-49', count: 0, percentage: 0, color: 'bg-danger' },
       ]
     : [];
 
@@ -116,7 +116,7 @@ export function QualityTab() {
   if (error) {
     return (
       <div className="p-6">
-        <div className="text-red-600">Error: {error}</div>
+        <div className="text-danger">Error: {error}</div>
       </div>
     );
   }

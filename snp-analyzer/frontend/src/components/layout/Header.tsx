@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Check, Save } from "lucide-react";
+import { AlertCircle, Check, Download, Moon, Redo2, Save, Sun, Undo2 } from "lucide-react";
 import { useSessionStore } from "@/stores/session-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { useSelectionStore } from "@/stores/selection-store";
@@ -11,6 +11,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useLanguageStore } from "@/stores/language-store";
 import { QcBadges } from "@/components/shared/QcBadges";
 import { AddToProjectButton } from "@/components/analysis/AddToProjectButton";
+import { Button, IconButton, Menu, type MenuItem } from "@/components/shared/ui";
 import { logout, saveAsgResult } from "@/lib/api";
 
 export function Header() {
@@ -109,19 +110,18 @@ export function Header() {
     [t]
   );
 
+  const exportItems: MenuItem[] = [
+    { key: "csv", label: t.exportCSV, onSelect: () => void safeExport(downloadCSV, t.csvExportFailed)() },
+    { key: "png", label: t.exportPNG, onSelect: () => void safeExport(exportPNG, t.pngExportFailed)() },
+    { key: "print", label: t.exportPrint, onSelect: () => void printReport() },
+    { key: "pdf", label: t.exportPDF, onSelect: () => void safeExport(exportPDF, t.pdfExportFailed)() },
+    { key: "xlsx", label: t.exportXLSX, onSelect: () => void safeExport(exportXLSX, t.xlsxExportFailed)() },
+  ];
+
   return (
-    <header className="bg-surface border-b border-border px-6 py-3 flex items-center gap-4">
-      <h1 className="text-lg font-semibold text-text">
-        {t.appTitle}
-      </h1>
-      <a
-        href="https://www.invirustech.com"
-        target="_blank"
-        rel="noopener"
-        className="ml-auto text-xs text-text-muted border border-border rounded-xl px-2.5 py-0.5 hover:text-primary hover:border-primary transition-colors no-underline"
-      >
-        {t.poweredBy}
-      </a>
+    <header className="bg-surface border-b border-border px-6 py-3 flex items-center gap-3">
+      {/* Left region: brand + session context */}
+      <h1 className="text-lg font-semibold text-text whitespace-nowrap">{t.appTitle}</h1>
 
       {linkedContext && (
         <div className="hidden lg:flex items-center gap-1 text-xs text-text-muted border border-border rounded px-2 py-1">
@@ -136,151 +136,102 @@ export function Header() {
         </div>
       )}
 
-      <div id="session-info" className={`flex gap-2 items-center ${!sessionInfo ? "hidden" : ""}`}>
-        {sessionInfo && (
-          <>
-          <span id="instrument-badge" className="badge">
-            {sessionInfo.instrument}
-          </span>
-          <span id="wells-badge" className="badge">
-            {sessionInfo.num_wells} {t.wells}
-          </span>
-          <span id="cycles-badge" className="badge">
-            {sessionInfo.num_cycles} {t.cycles}
-          </span>
+      {sessionInfo && (
+        <div id="session-info" className="flex gap-2 items-center">
+          <span id="instrument-badge" className="badge">{sessionInfo.instrument}</span>
+          <span id="wells-badge" className="badge">{sessionInfo.num_wells} {t.wells}</span>
+          <span id="cycles-badge" className="badge">{sessionInfo.num_cycles} {t.cycles}</span>
           <QcBadges />
-          </>
+        </div>
+      )}
+
+      {/* Right region: actions + user + locale + theme */}
+      <div className="ml-auto flex items-center gap-2">
+        <a
+          href="https://www.invirustech.com"
+          target="_blank"
+          rel="noopener"
+          className="hidden md:inline-block text-xs text-text-muted border border-border rounded-xl px-2.5 py-0.5 hover:text-primary hover:border-primary transition-colors no-underline"
+        >
+          {t.poweredBy}
+        </a>
+
+        {sessionId && (
+          <div id="export-buttons" className="flex items-center gap-1">
+            <IconButton size="sm" aria-label={t.undo} title={t.undoTooltip} onClick={undo} disabled={!canUndo}>
+              <Undo2 size={16} aria-hidden="true" />
+            </IconButton>
+            <IconButton size="sm" aria-label={t.redo} title={t.redoTooltip} onClick={redo} disabled={!canRedo}>
+              <Redo2 size={16} aria-hidden="true" />
+            </IconButton>
+            <Menu
+              label={t.exportMenu}
+              triggerClassName="px-2.5 py-1 text-xs"
+              trigger={<><Download size={14} aria-hidden="true" /> {t.exportMenu}</>}
+              items={exportItems}
+            />
+            <Button variant="secondary" size="sm" onClick={handleNewUpload} title={t.uploadAnother}>
+              {t.newUpload}
+            </Button>
+            <AddToProjectButton />
+            {authMode === "asg_launch" && (
+              <Button
+                id="asg-save-result-btn"
+                variant="secondary"
+                size="sm"
+                title={asgSaveTitle}
+                onClick={handleAsgSave}
+                disabled={!canSaveToAsg || asgSaveState === "saving"}
+              >
+                {asgSaveState === "saved" ? (
+                  <Check size={13} aria-hidden="true" />
+                ) : asgSaveState === "error" ? (
+                  <AlertCircle size={13} aria-hidden="true" />
+                ) : (
+                  <Save size={13} aria-hidden="true" />
+                )}
+                <span>{asgSaveState === "saving" ? "Saving" : asgSaveState === "saved" ? "Saved" : "ASG"}</span>
+              </Button>
+            )}
+          </div>
         )}
-      </div>
 
-      {sessionId && (
-        <div id="export-buttons" className="flex gap-1 ml-2">
-          <button
-            id="undo-btn"
-            className="badge cursor-pointer hover:text-primary hover:border-primary transition-all disabled:opacity-40 disabled:cursor-default"
-            title={t.undoTooltip}
-            onClick={undo}
-            disabled={!canUndo}
-          >
-            {t.undo}
-          </button>
-          <button
-            id="redo-btn"
-            className="badge cursor-pointer hover:text-primary hover:border-primary transition-all disabled:opacity-40 disabled:cursor-default"
-            title={t.redoTooltip}
-            onClick={redo}
-            disabled={!canRedo}
-          >
-            {t.redo}
-          </button>
-          <span className="w-px bg-border mx-1" />
-          <button
-            id="export-csv-btn"
-            className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
-            title={t.exportCSVTooltip}
-            onClick={safeExport(downloadCSV, t.csvExportFailed)}
-          >
-            {t.exportCSV}
-          </button>
-          <button
-            id="export-png-btn"
-            className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
-            title={t.exportPNGTooltip}
-            onClick={safeExport(exportPNG, t.pngExportFailed)}
-          >
-            {t.exportPNG}
-          </button>
-          <button
-            id="export-print-btn"
-            className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
-            title={t.exportPrintTooltip}
-            onClick={printReport}
-          >
-            {t.exportPrint}
-          </button>
-          <button
-            id="export-pdf-btn"
-            className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
-            title={t.exportPDFTooltip}
-            onClick={safeExport(exportPDF, t.pdfExportFailed)}
-          >
-            {t.exportPDF}
-          </button>
-          <button
-            id="export-xlsx-btn"
-            className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
-            title={t.exportXLSXTooltip}
-            onClick={safeExport(exportXLSX, t.xlsxExportFailed)}
-          >
-            {t.exportXLSX}
-          </button>
-          <button
-            id="new-upload-btn"
-            className="badge cursor-pointer hover:text-primary hover:border-primary transition-all"
-            title={t.uploadAnother}
-            onClick={handleNewUpload}
-          >
-            {t.newUpload}
-          </button>
-          <span className="w-px bg-border mx-1" />
-          <AddToProjectButton />
-          {authMode === "asg_launch" && (
+        {user && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-text whitespace-nowrap">{user.display_name || user.username}</span>
+            <span className={`text-xs px-1.5 py-0.5 rounded-full border ${
+              user.role === "admin" ? "border-primary text-primary" : "border-border text-text-muted"
+            }`}>
+              {user.role}
+            </span>
             <button
-              id="asg-save-result-btn"
-              className="badge cursor-pointer hover:text-primary hover:border-primary transition-all disabled:opacity-40 disabled:cursor-default inline-flex items-center gap-1"
-              title={asgSaveTitle}
-              onClick={handleAsgSave}
-              disabled={!canSaveToAsg || asgSaveState === "saving"}
+              onClick={handleLogout}
+              className="text-xs text-text-muted hover:text-danger cursor-pointer transition-colors"
+              title={t.signOut}
             >
-              {asgSaveState === "saved" ? (
-                <Check size={13} aria-hidden="true" />
-              ) : asgSaveState === "error" ? (
-                <AlertCircle size={13} aria-hidden="true" />
-              ) : (
-                <Save size={13} aria-hidden="true" />
-              )}
-              <span>{asgSaveState === "saving" ? "Saving" : asgSaveState === "saved" ? "Saved" : "ASG"}</span>
+              {t.logout}
             </button>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* User info + Logout */}
-      {user && (
-        <div className="flex items-center gap-2 ml-2">
-          <span className="text-xs text-text">{user.display_name || user.username}</span>
-          <span className={`text-xs px-1.5 py-0.5 rounded-full border ${
-            user.role === 'admin'
-              ? 'border-primary text-primary'
-              : 'border-border text-text-muted'
-          }`}>
-            {user.role}
-          </span>
-          <button
-            onClick={handleLogout}
-            className="text-xs text-text-muted hover:text-red-500 cursor-pointer transition-colors"
-            title={t.signOut}
-          >
-            {t.logout}
-          </button>
-        </div>
-      )}
-
-      <button
-        onClick={() => setLanguage(language === 'en' ? 'ko' : 'en')}
-        title={language === 'en' ? '한국어로 전환' : 'Switch to English'}
-        className="bg-transparent border border-border rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-xs font-bold hover:bg-bg hover:border-primary transition-colors ml-2"
-      >
-        {language === 'en' ? '한' : 'EN'}
-      </button>
-      <button
-        id="dark-mode-toggle"
-        onClick={toggleDarkMode}
-        title={isDark ? t.lightMode : t.darkMode}
-        className="bg-transparent border border-border rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-base hover:bg-bg hover:border-primary transition-colors ml-2"
-      >
-        {isDark ? "\u2600\uFE0F" : "\uD83C\uDF19"}
-      </button>
+        <button
+          onClick={() => setLanguage(language === "en" ? "ko" : "en")}
+          title={language === "en" ? "한국어로 전환" : "Switch to English"}
+          aria-label={language === "en" ? "한국어로 전환" : "Switch to English"}
+          className="bg-transparent border border-border rounded-full w-8 h-8 flex items-center justify-center cursor-pointer text-xs font-bold text-text-muted hover:text-primary hover:border-primary transition-colors"
+        >
+          {language === "en" ? "한" : "EN"}
+        </button>
+        <IconButton
+          id="dark-mode-toggle"
+          aria-label={isDark ? t.lightMode : t.darkMode}
+          title={isDark ? t.lightMode : t.darkMode}
+          onClick={toggleDarkMode}
+          className="border border-border rounded-full"
+        >
+          {isDark ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+        </IconButton>
+      </div>
     </header>
   );
 }

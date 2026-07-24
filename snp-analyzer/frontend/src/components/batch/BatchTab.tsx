@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, X } from 'lucide-react';
 import { useI18n } from '@/hooks/use-i18n';
+import { useConfirm } from '@/hooks/use-confirm';
 import {
   getSessions,
   getProjects,
@@ -106,6 +108,7 @@ function ProjectPicker({ projects, onSelect, disabled, label }: ProjectPickerPro
 // ─── Main Component ──────────────────────────────────────────────────────────
 export function BatchTab({ onLoadSession }: BatchTabProps) {
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirm();
   const [view, setView] = useState<View>('list');
   const [projects, setProjects] = useState<ProjectListResponse['projects']>([]);
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
@@ -150,7 +153,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   };
 
   const handleDeleteProject = async (id: string, name: string) => {
-    if (!window.confirm(t.deleteProjectConfirm(name))) return;
+    if (!(await confirm({ title: t.delete, message: t.deleteProjectConfirm(name), danger: true }))) return;
     try { setLoading(true); await deleteProject(id); await loadProjects(); }
     catch (err) { setError(err instanceof Error ? err.message : 'Failed to delete project'); }
     finally { setLoading(false); }
@@ -197,7 +200,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   const handleBulkRemoveFromProject = async () => {
     if (!currentProject || checkedDetailSessions.size === 0) return;
     const count = checkedDetailSessions.size;
-    if (!window.confirm(t.bulkRemoveConfirm(count, currentProject.name))) return;
+    if (!(await confirm({ title: t.remove, message: t.bulkRemoveConfirm(count, currentProject.name), danger: true }))) return;
     try {
       setLoading(true); setError(null);
       await bulkRemoveProjectSessions(currentProject.id, [...checkedDetailSessions]);
@@ -217,7 +220,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   // ── Session delete (single) ────────────────────────────────────────────────
   const handleDeleteSession = async (sid: string) => {
     const s = sessions.find((x) => x.session_id === sid);
-    if (!window.confirm(t.deleteSessionConfirm(fmtSession(sid, s?.raw_filename)))) return;
+    if (!(await confirm({ title: t.delete, message: t.deleteSessionConfirm(fmtSession(sid, s?.raw_filename)), danger: true }))) return;
     try {
       setLoading(true); setError(null);
       if (activeSessionId === sid) resetSession();
@@ -237,7 +240,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   const handleBulkDelete = async () => {
     const count = checkedSessions.size;
     if (count === 0) return;
-    if (!window.confirm(t.bulkDeleteConfirm(count))) return;
+    if (!(await confirm({ title: t.delete, message: t.bulkDeleteConfirm(count), danger: true }))) return;
     try {
       setLoading(true); setError(null);
       if (activeSessionId && checkedSessions.has(activeSessionId)) resetSession();
@@ -326,20 +329,20 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   for (const s of sessions) if (s.raw_filename) sessionFilenameMap[s.session_id] = s.raw_filename;
 
   const availableSessions = sessions.filter((s) => !currentProject?.session_ids.includes(s.session_id));
-  const getQualityColor = (q: number) => q >= 70 ? 'text-green-600' : q >= 50 ? 'text-amber-600' : 'text-red-600';
+  const getQualityColor = (q: number) => q >= 70 ? 'text-success' : q >= 50 ? 'text-warning' : 'text-danger';
   const getConcordanceColor = (p: number) =>
-    p >= 90 ? 'bg-green-100 border-green-400 text-green-800 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300'
-    : p >= 70 ? 'bg-amber-100 border-amber-400 text-amber-800 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300'
-    : 'bg-red-100 border-red-400 text-red-800 dark:bg-red-900/30 dark:border-red-700 dark:text-red-300';
+    p >= 90 ? 'bg-success/15 border-success/30 text-success'
+    : p >= 70 ? 'bg-warning/15 border-warning/30 text-warning'
+    : 'bg-danger/15 border-danger/30 text-danger';
 
   // ═══════════════════════════════════ List View ═════════════════════════════
   if (view === 'list') {
     return (
       <div className="p-6 flex flex-col gap-6">
         {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded text-red-800 text-sm dark:bg-red-900/20 dark:border-red-800 dark:text-red-300">
+          <div className="p-3 bg-danger/10 border border-danger/30 rounded text-danger text-sm">
             {error}
-            <button onClick={() => setError(null)} className="ml-2 text-red-600 hover:text-red-800 font-bold">&times;</button>
+            <button onClick={() => setError(null)} aria-label={t.close} className="ml-2 text-danger hover:opacity-80 inline-flex items-center align-middle"><X size={14} aria-hidden="true" /></button>
           </div>
         )}
 
@@ -377,7 +380,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                     <td className="py-2 px-3 text-text-muted">{new Date(proj.created_at).toLocaleDateString()}</td>
                     <td className="py-2 px-3 flex gap-2">
                       <button onClick={() => handleViewProject(proj.id)} className="text-primary hover:text-primary/80 text-xs font-medium">{t.view}</button>
-                      <button onClick={() => handleDeleteProject(proj.id, proj.name)} className="text-red-600 hover:text-red-800 text-xs font-medium">{t.delete}</button>
+                      <button onClick={() => handleDeleteProject(proj.id, proj.name)} className="text-danger hover:opacity-80 text-xs font-medium">{t.delete}</button>
                     </td>
                   </tr>
                 ))}
@@ -405,7 +408,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                   <button
                     onClick={handleBulkDelete}
                     disabled={loading}
-                    className="px-2.5 py-1 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 disabled:opacity-50"
+                    className="px-2.5 py-1 bg-danger text-white rounded text-xs font-medium hover:opacity-90 disabled:opacity-50"
                   >
                     {t.deleteSelected(checkedSessions.size)}
                   </button>
@@ -437,7 +440,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                   const isActive = activeSessionId === s.session_id;
                   const checked = checkedSessions.has(s.session_id);
                   return (
-                    <tr key={s.session_id} className={`border-b border-border ${isActive ? 'bg-primary/5' : ''} ${checked ? 'bg-red-50 dark:bg-red-900/10' : ''}`}>
+                    <tr key={s.session_id} className={`border-b border-border ${isActive ? 'bg-primary/5' : ''} ${checked ? 'bg-danger/10' : ''}`}>
                       <td className="py-2 px-2">
                         <input type="checkbox" checked={checked}
                           onChange={() => toggleCheck(s.session_id)}
@@ -464,7 +467,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                             onSelect={(pid, pname) => handleAddToProject(s.session_id, pid, pname)}
                           />
                           <button onClick={() => handleDeleteSession(s.session_id)} disabled={loading}
-                            className="text-red-600 hover:text-red-800 text-xs font-medium disabled:opacity-50">{t.delete}</button>
+                            className="text-danger hover:opacity-80 text-xs font-medium disabled:opacity-50">{t.delete}</button>
                         </div>
                       </td>
                     </tr>
@@ -502,8 +505,8 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button onClick={handleBackToList}
-              className="px-3 py-1.5 bg-surface border border-border rounded text-sm font-medium text-text hover:bg-bg">
-              &#8592; {t.back}
+              className="px-3 py-1.5 bg-surface border border-border rounded text-sm font-medium text-text hover:bg-bg inline-flex items-center gap-1.5">
+              <ArrowLeft size={14} aria-hidden="true" /> {t.back}
             </button>
             <h2 className="text-xl font-semibold text-text">{currentProject.name}</h2>
           </div>
@@ -534,7 +537,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
             <button
               onClick={handleBulkRemoveFromProject}
               disabled={loading}
-              className="px-2.5 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700 disabled:opacity-50"
+              className="px-2.5 py-1 bg-warning text-white rounded text-xs font-medium hover:opacity-90 disabled:opacity-50"
             >
               {t.removeSelectedFromProject(checkedDetailSessions.size)}
             </button>
@@ -550,9 +553,9 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
         )}
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-800 text-sm dark:bg-red-900/20 dark:border-red-800 dark:text-red-300">
+          <div className="mb-4 p-3 bg-danger/10 border border-danger/30 rounded text-danger text-sm">
             {error}
-            <button onClick={() => setError(null)} className="ml-2 text-red-600 hover:text-red-800 font-bold">&times;</button>
+            <button onClick={() => setError(null)} aria-label={t.close} className="ml-2 text-danger hover:opacity-80 inline-flex items-center align-middle"><X size={14} aria-hidden="true" /></button>
           </div>
         )}
 
@@ -590,7 +593,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                 const isActive = activeSessionId === plate.session_id;
                 const detailChecked = checkedDetailSessions.has(plate.session_id);
                 return (
-                  <tr key={plate.session_id} className={`border-b border-border ${isActive ? 'bg-primary/5' : ''} ${detailChecked ? 'bg-amber-50 dark:bg-amber-900/10' : ''}`}>
+                  <tr key={plate.session_id} className={`border-b border-border ${isActive ? 'bg-primary/5' : ''} ${detailChecked ? 'bg-warning/10' : ''}`}>
                     <td className="py-2 px-2">
                       <input type="checkbox" checked={detailChecked}
                         onChange={() => {
@@ -624,7 +627,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                         <button onClick={() => handleRemoveSession(plate.session_id)} disabled={loading}
                           className="text-text-muted hover:text-text text-xs font-medium disabled:opacity-50">{t.remove}</button>
                         <button onClick={() => handleDeleteSession(plate.session_id)} disabled={loading}
-                          className="text-red-600 hover:text-red-800 text-xs font-medium disabled:opacity-50">{t.delete}</button>
+                          className="text-danger hover:opacity-80 text-xs font-medium disabled:opacity-50">{t.delete}</button>
                       </div>
                     </td>
                   </tr>
@@ -649,6 +652,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
           <div className="text-text-muted text-sm text-center py-8">{t.noSessionsInProject}</div>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 }

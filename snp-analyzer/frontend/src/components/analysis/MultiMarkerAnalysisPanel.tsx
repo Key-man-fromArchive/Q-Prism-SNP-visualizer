@@ -8,6 +8,7 @@
 // to ONE selected marker at a time -- markers are genotyped, backgrounded
 // and NTC-baselined completely independently (Q4/Q5).
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Info } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { getScatter, runClustering, listMarkerCatalog } from "@/lib/api";
@@ -213,7 +214,9 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                       {t.wsMarkerPloidyUnit(m.ploidy)}
                     </span>
                     {region?.warnings && region.warnings.length > 0 && (
-                      <span title={region.warnings.join(", ")}>⚠</span>
+                      <span title={region.warnings.join(", ")} className="text-warning">
+                        <AlertTriangle size={13} aria-hidden="true" />
+                      </span>
                     )}
                   </div>
                   <div className="mt-1 text-xs text-text-muted">
@@ -267,8 +270,8 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                   }
                   className={`rounded-full px-3 py-1 text-xs font-semibold border ${
                     dosageTrust === "validated"
-                      ? "bg-green-100 border-green-400 text-green-800 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300"
-                      : "bg-amber-100 border-amber-400 text-amber-800 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300"
+                      ? "bg-success/15 border-success text-success"
+                      : "bg-warning/15 border-warning text-warning"
                   }`}
                 >
                   {dosageTrust === "validated"
@@ -285,7 +288,9 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                   title={observedExceedsExpected ? t.wsAnalysisObservedExceedsWarning : undefined}
                 >
                   {t.wsAnalysisObservedClasses(observedClasses)}
-                  {observedExceedsExpected ? " ⚠" : ""}
+                  {observedExceedsExpected ? (
+                    <AlertTriangle size={12} aria-hidden="true" className="ml-1 inline" />
+                  ) : null}
                 </span>
                 <span className="ml-auto text-xs text-text-muted">
                   {t.wsAnalysisWellsCount(selectedMarker.wells.length)}
@@ -312,14 +317,14 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                 className="flex items-start gap-2 mt-3 px-3 py-2 rounded-md text-xs"
                 style={{ background: "var(--color-primary-soft, rgba(37,99,235,0.08))" }}
               >
-                <span>ℹ</span>
+                <Info size={13} aria-hidden="true" className="mt-0.5 shrink-0" />
                 <span>{t.wsAnalysisNtcNote}</span>
               </div>
 
               {selectedRegion?.warnings && selectedRegion.warnings.length > 0 && (
                 <div
                   data-testid="marker-warnings"
-                  className="mt-2 px-3 py-2 rounded-md text-xs text-amber-700"
+                  className="mt-2 px-3 py-2 rounded-md text-xs text-warning"
                   style={{ background: "rgba(217,119,6,0.12)" }}
                 >
                   <b>{t.wsAnalysisWarningsTitle}:</b> {selectedRegion.warnings.join(", ")}

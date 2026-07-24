@@ -16,7 +16,23 @@ from app.processing.genotype_vocab import MAX_PLOIDY, MIN_PLOIDY, validate_ploid
 # (exercises the skew-robust, rank-preserving caller — not a perfect ladder).
 _ALPHA = 1.25
 _NTC_WELLS = 4
-_CYCLES = [1, 40]  # pre-read (low signal), endpoint (high signal)
+# Full contiguous amplification profile (1..40) so the example behaves like a
+# real qPCR run: the cycle slider, play/animation and amplification overlay are
+# all meaningful, and the endpoint (cycle 40) still carries the full signal used
+# for genotype clustering. (Previously only [1, 40] existed, which left the
+# cycle control — assuming contiguous 1..N cycles — pointing at a non-existent
+# cycle and the scatter blank.)
+_N_CYCLES = 40
+_CYCLES = list(range(1, _N_CYCLES + 1))
+
+
+def _amp_scale(cyc: int) -> float:
+    """Logistic amplification ramp: ~baseline pre-read up to ~1.0 at the endpoint.
+    Matches the old two-point demo at the extremes (cycle 1 ≈ 0.06, cycle 40 ≈ 1.0)."""
+    base = 0.055
+    k = 0.38
+    c0 = 22.0
+    return base + (1.0 - base) / (1.0 + math.exp(-k * (cyc - c0)))
 
 # Realistic 2-D cluster spread: total signal varies well-to-well (sample DNA /
 # amplification efficiency) and each channel carries independent noise, so a
@@ -81,7 +97,7 @@ def build_example(ploidy: int) -> UnifiedData:
             idx += 1
             sample_names[well] = f"d{d}/{ploidy}"
             for cyc in _CYCLES:
-                scale = (0.06 if cyc == 1 else 1.0) * mag
+                scale = _amp_scale(cyc) * mag
                 fam = max(base * scale + n_fam + 0.02, 0.01)
                 allele2 = max((1 - base) * scale + n_a2 + 0.02, 0.01)
                 data.append(WellCycleData(well=well, cycle=cyc, fam=fam, allele2=allele2, rox=1.0))

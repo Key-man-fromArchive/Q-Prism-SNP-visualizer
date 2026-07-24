@@ -19,7 +19,7 @@ def test_list_examples_covers_2x_to_8x():
 def test_build_example_structure(ploidy):
     u = build_example(ploidy)
     assert u.ploidy == ploidy
-    assert u.has_rox and u.cycles == [1, 40]
+    assert u.has_rox and u.cycles == list(range(1, 41))
     assert "NTC" in (u.sample_names or {}).values()
     # signal wells cover every dosage class d/ploidy ("Empty" = the rest of the
     # physical 96-well plate this demo assay doesn't use — see

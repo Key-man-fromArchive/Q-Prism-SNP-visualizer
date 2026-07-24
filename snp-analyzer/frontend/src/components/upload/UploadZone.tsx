@@ -1,10 +1,11 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSessionStore } from "@/stores/session-store";
-import { previewImportFile, uploadFile as apiUpload, loadExample as apiLoadExample } from "@/lib/api";
+import { previewImportFile, uploadFile as apiUpload, loadExample as apiLoadExample, getSessions, getSessionInfo } from "@/lib/api";
+import type { SessionListItem } from "@/types/api";
 import { runtimeAssetPath } from "@/lib/runtime-paths";
 import JSZip from "jszip";
 import { useI18n } from "@/hooks/use-i18n";
-import { CircleHelp, Download } from "lucide-react";
+import { ArrowRight, BookOpen, ChevronDown, ChevronUp, CircleHelp, Download, Upload } from "lucide-react";
 import { ImportMappingWizard } from "@/components/upload/ImportMappingWizard";
 import type { ImportPreview, ImportPreviewResponse, ValidationIssue } from "@/types/api";
 
@@ -52,6 +53,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
   const [previewingImport, setPreviewingImport] = useState(false);
   const [showTemplateHelp, setShowTemplateHelp] = useState(false);
   const [activeTemplateTooltip, setActiveTemplateTooltip] = useState<string | null>(null);
+  const [recentSessions, setRecentSessions] = useState<SessionListItem[]>([]);
 
   const {
     uploadState,
@@ -61,6 +63,33 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
     setUploadProgress,
     setUploadError,
   } = useSessionStore();
+
+  // Recent sessions shortcut (PRD FR-UP-3): surface the latest runs so a return
+  // visit reopens one in a click instead of re-uploading.
+  useEffect(() => {
+    let cancelled = false;
+    getSessions()
+      .then((list) => {
+        if (!cancelled) setRecentSessions(list.slice(0, 5));
+      })
+      .catch(() => {
+        /* no recent sessions / not reachable — silently omit the shortcut */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const openSession = useCallback(
+    async (sid: string) => {
+      try {
+        setSession(sid, await getSessionInfo(sid));
+      } catch {
+        /* ignore — a stale/removed session just stays on the upload screen */
+      }
+    },
+    [setSession]
+  );
 
   const clearImportState = useCallback(() => {
     setImportFile(null);
@@ -78,7 +107,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       setUploadState("uploading");
       setUploadProgress(35);
       setUploadError(null);
-      setStatusMessage(`Previewing import: ${file.name}`);
+      setStatusMessage(t.imwPreviewingFile(file.name));
 
       try {
         const response = await previewImportFile(file);
@@ -87,17 +116,17 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           setImportPreviewIssues(response.issues);
           setUploadState("error");
           setUploadError(response.issues.map((issue) => issue.message).join("; "));
-          setStatusMessage("Import preview needs attention");
+          setStatusMessage(t.imwPreviewNeedsAttention);
           return;
         }
         setImportPreview(response);
         setUploadState("success");
-        setStatusMessage(`Preview ready: ${response.filename || file.name}`);
+        setStatusMessage(t.imwPreviewReady(response.filename || file.name));
       } catch (err) {
         const msg = err instanceof Error ? err.message : t.uploadFailed;
         setUploadState("error");
         setUploadError(msg);
-        setStatusMessage(`Error: ${msg}`);
+        setStatusMessage(t.imwGenericError(msg));
       } finally {
         setPreviewingImport(false);
       }
@@ -126,14 +155,14 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         }, 500);
       } catch (err) {
         if (isSpreadsheetImportFallbackFile(file)) {
-          setStatusMessage(`Raw parser failed; opening import mapping for ${file.name}`);
+          setStatusMessage(t.imwRawFallback(file.name));
           await handleImportPreview(file);
           return;
         }
         setUploadState("error");
         const msg = err instanceof Error ? err.message : t.uploadFailed;
         setUploadError(msg);
-        setStatusMessage(`Error: ${msg}`);
+        setStatusMessage(t.imwGenericError(msg));
       }
     },
     [
@@ -201,8 +230,8 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       if (previewImportFiles.length > 0) {
         if (files.length > 1 || previewImportFiles.length > 1) {
           setUploadState("error");
-          setUploadError("Select one RDML, CSV, TSV, or TXT import file at a time for mapping.");
-          setStatusMessage("Error: Select one import file at a time.");
+          setUploadError(t.imwOneFileError);
+          setStatusMessage(t.imwOneFileStatus);
           return;
         }
         await handleImportPreview(previewImportFiles[0]);
@@ -238,7 +267,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           setUploadState("error");
           const msg = err instanceof Error ? err.message : t.packagingFailed;
           setUploadError(msg);
-          setStatusMessage(`Error: ${msg}`);
+          setStatusMessage(t.imwGenericError(msg));
           return;
         }
       }
@@ -367,10 +396,12 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         onDrop={onDrop}
         onClick={() => fileInputRef.current?.click()}
         className={`border-2 border-dashed rounded-lg p-6 text-center bg-surface transition-colors cursor-pointer ${
-          dragover ? "border-primary bg-blue-50" : "border-border"
+          dragover ? "border-primary bg-primary/10" : "border-border"
         }`}
       >
-        <div className="text-4xl mb-2">&#128196;</div>
+        <div className="flex justify-center mb-2">
+          <Upload size={40} className="text-text-muted" aria-hidden="true" />
+        </div>
         <p className="text-text-muted mb-1">
           {t.dragDrop}
         </p>
@@ -397,7 +428,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
               e.stopPropagation();
               folderInputRef.current?.click();
             }}
-            className="px-6 py-2 bg-surface text-primary border border-primary rounded-lg text-sm cursor-pointer hover:bg-blue-50 transition-colors"
+            className="px-6 py-2 bg-surface text-primary border border-primary rounded-lg text-sm cursor-pointer hover:bg-primary/10 transition-colors"
           >
             {t.browseFolder}
           </button>
@@ -412,8 +443,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
               if (p) handleLoadExample(p);
             }}
             title={t.exampleHint}
-            className="px-3 py-2 bg-surface text-text border rounded-lg text-sm cursor-pointer"
-            style={{ borderColor: "var(--border)" }}
+            className="px-3 py-2 bg-surface text-text border border-border rounded-lg text-sm cursor-pointer"
           >
             <option value="" disabled>
               {t.exampleLoad}
@@ -444,6 +474,26 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           onChange={onFolderChange}
         />
       </div>
+
+      {/* Recent sessions shortcut (FR-UP-3) */}
+      {recentSessions.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-medium text-text-muted mb-1.5">{t.recentSessions}</p>
+          <div className="flex flex-wrap gap-2">
+            {recentSessions.map((s) => (
+              <button
+                key={s.session_id}
+                type="button"
+                onClick={() => openSession(s.session_id)}
+                title={s.raw_filename || s.session_id}
+                className="max-w-[220px] truncate rounded-md border border-border bg-surface px-3 py-1.5 text-xs text-text hover:border-primary hover:text-primary transition-colors cursor-pointer"
+              >
+                {s.raw_filename || s.instrument} · {s.num_wells}{t.wells}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 border border-border rounded-lg bg-surface p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -550,8 +600,8 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       )}
 
       {importFile && !importPreview && importPreviewIssues.length > 0 && (
-        <div className="mt-4 rounded-md border border-danger bg-red-50 p-4 text-sm text-danger">
-          <p className="font-medium">Import preview failed for {importFile.name}</p>
+        <div className="mt-4 rounded-md border border-danger bg-danger/10 p-4 text-sm text-danger">
+          <p className="font-medium">{t.imwPreviewFailedFor(importFile.name)}</p>
           <ul className="mt-2 list-disc list-inside space-y-1">
             {importPreviewIssues.map((issue, index) => (
               <li key={`${issue.code}-${index}`}>{issue.message}</li>
@@ -591,13 +641,15 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       <div className="mt-5 border border-border rounded-lg bg-surface overflow-hidden">
         <button
           onClick={() => setShowGuide((v) => !v)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-[var(--bg)] transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-bg transition-colors"
         >
           <span className="font-semibold flex items-center gap-2">
-            <span className="text-base">&#128218;</span>
+            <BookOpen size={16} aria-hidden="true" />
             {t.guideTitle}
           </span>
-          <span className="text-xs text-text-muted">{showGuide ? "▲" : "▼"}</span>
+          <span className="text-xs text-text-muted">
+            {showGuide ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+          </span>
         </button>
 
         {showGuide && (
@@ -612,11 +664,11 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
               ] as const).map((step, i) => (
                 <div
                   key={step.icon}
-                  className="relative text-center p-3 rounded-lg bg-[var(--bg)]"
+                  className="relative text-center p-3 rounded-lg bg-bg"
                 >
                   {i < 3 && (
-                    <span className="absolute right-[-10px] top-1/2 -translate-y-1/2 text-text-muted text-xs z-10">
-                      &#8594;
+                    <span className="absolute right-[-10px] top-1/2 -translate-y-1/2 text-text-muted z-10">
+                      <ArrowRight size={14} aria-hidden="true" />
                     </span>
                   )}
                   <div className="w-6 h-6 mx-auto mb-1.5 rounded-full bg-primary text-white flex items-center justify-center text-[11px] font-bold">
@@ -633,15 +685,15 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
               <div>
                 <h4 className="text-[12px] font-semibold mb-1.5">{t.guideSupportedFormats}</h4>
                 <div className="space-y-1.5 text-[11px]">
-                  <div className="p-2 rounded bg-[var(--bg)]">
+                  <div className="p-2 rounded bg-bg">
                     <span className="font-medium">{t.guideQS}</span>
                     <span className="text-text-muted block">{t.guideQSFormats}</span>
                   </div>
-                  <div className="p-2 rounded bg-[var(--bg)]">
+                  <div className="p-2 rounded bg-bg">
                     <span className="font-medium">{t.guideCFX}</span>
                     <span className="text-text-muted block">{t.guideCFXFormats}</span>
                   </div>
-                  <div className="p-2 rounded bg-[var(--bg)]">
+                  <div className="p-2 rounded bg-bg">
                     <span className="font-medium">{t.guideImports}</span>
                     <span className="text-text-muted block">{t.guideImportFormats}</span>
                   </div>

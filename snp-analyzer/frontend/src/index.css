@@ -13,6 +13,10 @@
   --color-allele2: #dc2626;
   --color-accent: #10b981;
   --color-danger: #ef4444;
+  /* Semantic status colors (single source; use text-success/warning/info etc.) */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-info: #2563eb;
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
@@ -31,6 +35,10 @@ body.dark {
   --color-danger: #ef4444;
   --color-fam: #60a5fa;
   --color-allele2: #f87171;
+  /* Slightly brighter status hues for dark backgrounds */
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-info: #60a5fa;
 }
 
 /* Smooth theme transitions */
@@ -51,6 +59,7 @@ body {
   padding: 2px 10px;
   font-size: 12px;
   color: var(--color-text-muted);
+  white-space: nowrap;
 }
 
 /* Dark mode overrides */

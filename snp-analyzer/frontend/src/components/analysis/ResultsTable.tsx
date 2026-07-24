@@ -6,6 +6,7 @@ import { UNASSIGNED_TYPE } from "@/lib/constants";
 import { wellInfo, genotypeShortLabel } from "@/lib/genotype";
 import { useWellFilter } from "@/hooks/use-well-filter";
 import { useI18n } from "@/hooks/use-i18n";
+import { StatusState } from "@/components/shared/ui";
 import type { ScatterPoint } from "@/types/api";
 
 const LABEL_MAP: Record<string, string> = {
@@ -59,6 +60,9 @@ export function ResultsTable() {
     <div className="panel results-panel">
       <h3 className="text-sm font-semibold mb-2 text-text">{t.genotypeResults}</h3>
 
+      {scatterPoints.length === 0 ? (
+        <StatusState variant="empty" message={t.scatterEmpty} />
+      ) : (
       <div
         id="results-plate"
         style={{
@@ -100,13 +104,12 @@ export function ResultsTable() {
                 return (
                   <div
                     key={well}
-                    className="result-cell text-center"
+                    className="result-cell text-center text-text-muted"
                     data-well={well}
                     style={{
                       padding: "4px 2px",
                       borderRadius: "3px",
                       background: "transparent",
-                      color: "var(--text-muted)",
                     }}
                   >
                     <span className="text-[9px]">{well}</span>
@@ -150,6 +153,7 @@ export function ResultsTable() {
           </Fragment>
         ))}
       </div>
+      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import { useI18n } from '@/hooks/use-i18n';
 
 interface Props {
@@ -60,9 +61,10 @@ export function KeyboardHelpOverlay({ onClose }: Props) {
           </h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text hover:bg-bg rounded text-2xl leading-none border-0 bg-transparent cursor-pointer"
+            aria-label={t.close}
+            className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text hover:bg-bg rounded leading-none border-0 bg-transparent cursor-pointer"
           >
-            &times;
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 

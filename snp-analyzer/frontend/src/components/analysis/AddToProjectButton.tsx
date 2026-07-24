@@ -86,7 +86,7 @@ export function AddToProjectButton() {
           )}
           {status && (
             <div className={`px-3 py-2 border-t border-border text-xs ${
-              status.startsWith('Added') ? 'text-green-600' : 'text-red-600'
+              status.startsWith('Added') ? 'text-success' : 'text-danger'
             }`}>
               {status}
             </div>

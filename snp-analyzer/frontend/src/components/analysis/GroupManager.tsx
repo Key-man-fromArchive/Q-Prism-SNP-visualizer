@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { X } from "lucide-react";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useI18n } from "@/hooks/use-i18n";
@@ -84,10 +85,11 @@ export function GroupManager({ sessionId, onClose }: GroupManagerProps) {
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h3 className="text-sm font-semibold text-text">{t.wellGroups}</h3>
           <button
-            className="text-text-muted hover:text-text cursor-pointer bg-transparent border-none text-lg"
+            className="text-text-muted hover:text-text cursor-pointer bg-transparent border-none inline-flex items-center"
             onClick={onClose}
+            aria-label={t.close}
           >
-            &times;
+            <X size={16} aria-hidden="true" />
           </button>
         </div>
 
@@ -107,11 +109,9 @@ export function GroupManager({ sessionId, onClose }: GroupManagerProps) {
                   {t.nWells(info.wells.length)}
                 </span>
                 <span
-                  className="text-[10px] ml-1"
-                  style={{
-                    color:
-                      info.source === "parsed" ? "var(--primary)" : "var(--accent)",
-                  }}
+                  className={`text-[10px] ml-1 ${
+                    info.source === "parsed" ? "text-primary" : "text-accent"
+                  }`}
                 >
                   {info.source}
                 </span>
