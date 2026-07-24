@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSessionStore } from "@/stores/session-store";
-import { previewImportFile, uploadFile as apiUpload, loadExample as apiLoadExample } from "@/lib/api";
+import { previewImportFile, uploadFile as apiUpload, loadExample as apiLoadExample, getSessions, getSessionInfo } from "@/lib/api";
+import type { SessionListItem } from "@/types/api";
 import { runtimeAssetPath } from "@/lib/runtime-paths";
 import JSZip from "jszip";
 import { useI18n } from "@/hooks/use-i18n";
@@ -52,6 +53,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
   const [previewingImport, setPreviewingImport] = useState(false);
   const [showTemplateHelp, setShowTemplateHelp] = useState(false);
   const [activeTemplateTooltip, setActiveTemplateTooltip] = useState<string | null>(null);
+  const [recentSessions, setRecentSessions] = useState<SessionListItem[]>([]);
 
   const {
     uploadState,
@@ -61,6 +63,33 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
     setUploadProgress,
     setUploadError,
   } = useSessionStore();
+
+  // Recent sessions shortcut (PRD FR-UP-3): surface the latest runs so a return
+  // visit reopens one in a click instead of re-uploading.
+  useEffect(() => {
+    let cancelled = false;
+    getSessions()
+      .then((list) => {
+        if (!cancelled) setRecentSessions(list.slice(0, 5));
+      })
+      .catch(() => {
+        /* no recent sessions / not reachable — silently omit the shortcut */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const openSession = useCallback(
+    async (sid: string) => {
+      try {
+        setSession(sid, await getSessionInfo(sid));
+      } catch {
+        /* ignore — a stale/removed session just stays on the upload screen */
+      }
+    },
+    [setSession]
+  );
 
   const clearImportState = useCallback(() => {
     setImportFile(null);
@@ -78,7 +107,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       setUploadState("uploading");
       setUploadProgress(35);
       setUploadError(null);
-      setStatusMessage(`Previewing import: ${file.name}`);
+      setStatusMessage(t.imwPreviewingFile(file.name));
 
       try {
         const response = await previewImportFile(file);
@@ -87,17 +116,17 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           setImportPreviewIssues(response.issues);
           setUploadState("error");
           setUploadError(response.issues.map((issue) => issue.message).join("; "));
-          setStatusMessage("Import preview needs attention");
+          setStatusMessage(t.imwPreviewNeedsAttention);
           return;
         }
         setImportPreview(response);
         setUploadState("success");
-        setStatusMessage(`Preview ready: ${response.filename || file.name}`);
+        setStatusMessage(t.imwPreviewReady(response.filename || file.name));
       } catch (err) {
         const msg = err instanceof Error ? err.message : t.uploadFailed;
         setUploadState("error");
         setUploadError(msg);
-        setStatusMessage(`Error: ${msg}`);
+        setStatusMessage(t.imwGenericError(msg));
       } finally {
         setPreviewingImport(false);
       }
@@ -126,14 +155,14 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         }, 500);
       } catch (err) {
         if (isSpreadsheetImportFallbackFile(file)) {
-          setStatusMessage(`Raw parser failed; opening import mapping for ${file.name}`);
+          setStatusMessage(t.imwRawFallback(file.name));
           await handleImportPreview(file);
           return;
         }
         setUploadState("error");
         const msg = err instanceof Error ? err.message : t.uploadFailed;
         setUploadError(msg);
-        setStatusMessage(`Error: ${msg}`);
+        setStatusMessage(t.imwGenericError(msg));
       }
     },
     [
@@ -201,8 +230,8 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       if (previewImportFiles.length > 0) {
         if (files.length > 1 || previewImportFiles.length > 1) {
           setUploadState("error");
-          setUploadError("Select one RDML, CSV, TSV, or TXT import file at a time for mapping.");
-          setStatusMessage("Error: Select one import file at a time.");
+          setUploadError(t.imwOneFileError);
+          setStatusMessage(t.imwOneFileStatus);
           return;
         }
         await handleImportPreview(previewImportFiles[0]);
@@ -238,7 +267,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           setUploadState("error");
           const msg = err instanceof Error ? err.message : t.packagingFailed;
           setUploadError(msg);
-          setStatusMessage(`Error: ${msg}`);
+          setStatusMessage(t.imwGenericError(msg));
           return;
         }
       }
@@ -446,6 +475,26 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         />
       </div>
 
+      {/* Recent sessions shortcut (FR-UP-3) */}
+      {recentSessions.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-medium text-text-muted mb-1.5">{t.recentSessions}</p>
+          <div className="flex flex-wrap gap-2">
+            {recentSessions.map((s) => (
+              <button
+                key={s.session_id}
+                type="button"
+                onClick={() => openSession(s.session_id)}
+                title={s.raw_filename || s.session_id}
+                className="max-w-[220px] truncate rounded-md border border-border bg-surface px-3 py-1.5 text-xs text-text hover:border-primary hover:text-primary transition-colors cursor-pointer"
+              >
+                {s.raw_filename || s.instrument} · {s.num_wells}{t.wells}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 border border-border rounded-lg bg-surface p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -552,7 +601,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
 
       {importFile && !importPreview && importPreviewIssues.length > 0 && (
         <div className="mt-4 rounded-md border border-danger bg-danger/10 p-4 text-sm text-danger">
-          <p className="font-medium">Import preview failed for {importFile.name}</p>
+          <p className="font-medium">{t.imwPreviewFailedFor(importFile.name)}</p>
           <ul className="mt-2 list-disc list-inside space-y-1">
             {importPreviewIssues.map((issue, index) => (
               <li key={`${issue.code}-${index}`}>{issue.message}</li>
