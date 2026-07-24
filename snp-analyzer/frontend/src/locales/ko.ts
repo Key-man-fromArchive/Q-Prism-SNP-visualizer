@@ -135,6 +135,7 @@ const ko: Translations = {
   tabUsers: '사용자',
   tabReferences: '참고문헌',
   tabLibrary: '라이브러리',
+  tabMore: '더보기',
 
   // Analysis Tab
   group: '그룹:',

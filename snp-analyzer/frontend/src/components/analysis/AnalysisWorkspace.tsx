@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
+import { Callout } from "@/components/shared/ui";
 import { useSessionStore } from "@/stores/session-store";
 import { getMarkers } from "@/lib/api";
 import type { MarkerRegion } from "@/types/api";
@@ -131,30 +132,34 @@ export function AnalysisWorkspace() {
         ) : (
           <div data-testid="single-marker-analysis-view">
             {!bannerDismissed && (
-              <div
+              <Callout
+                tone="warning"
+                className="mx-6 mt-4"
                 data-testid="split-marker-banner"
-                className="flex flex-wrap items-center gap-3 mx-6 mt-4 px-4 py-2.5 rounded-md text-sm"
-                style={{ background: "rgba(217,119,6,0.12)", border: "1px solid rgba(217,119,6,0.35)" }}
+                actions={
+                  <>
+                    <button
+                      type="button"
+                      data-testid="split-marker-cta"
+                      onClick={() => setActiveSurface("plate")}
+                      className="px-3 py-1 rounded-md text-sm font-semibold text-primary hover:bg-bg cursor-pointer"
+                    >
+                      {t.wsSplitBannerCta}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="split-marker-dismiss"
+                      aria-label={t.wsSplitBannerDismiss}
+                      onClick={() => setBannerDismissed(true)}
+                      className="px-2 py-1 rounded-md text-text-muted hover:text-text cursor-pointer inline-flex items-center"
+                    >
+                      <X size={16} aria-hidden="true" />
+                    </button>
+                  </>
+                }
               >
-                <span className="flex-1 min-w-[200px] text-text">{t.wsSplitBannerText}</span>
-                <button
-                  type="button"
-                  data-testid="split-marker-cta"
-                  onClick={() => setActiveSurface("plate")}
-                  className="px-3 py-1 rounded-md text-sm font-semibold text-primary hover:bg-bg cursor-pointer"
-                >
-                  {t.wsSplitBannerCta}
-                </button>
-                <button
-                  type="button"
-                  data-testid="split-marker-dismiss"
-                  aria-label={t.wsSplitBannerDismiss}
-                  onClick={() => setBannerDismissed(true)}
-                  className="px-2 py-1 rounded-md text-text-muted hover:text-text cursor-pointer inline-flex items-center"
-                >
-                  <X size={16} aria-hidden="true" />
-                </button>
-              </div>
+                {t.wsSplitBannerText}
+              </Callout>
             )}
             <AnalysisTab />
           </div>

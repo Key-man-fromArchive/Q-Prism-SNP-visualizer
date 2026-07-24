@@ -10,17 +10,16 @@ const TONES: Record<CalloutTone, { cls: string; Icon: typeof Info }> = {
   danger: { cls: "bg-danger/10 border-danger/30 text-text", Icon: XCircle },
 };
 
-export type CalloutProps = {
+export type CalloutProps = React.HTMLAttributes<HTMLDivElement> & {
   tone?: CalloutTone;
   children: React.ReactNode;
   /** Optional trailing actions (e.g. CTA + dismiss). */
   actions?: React.ReactNode;
-  className?: string;
   icon?: boolean;
 };
 
 /** Non-blocking inline banner/notice (PRD FR-NAV-4), token-based and theme-safe. */
-export function Callout({ tone = "info", children, actions, className, icon = true }: CalloutProps) {
+export function Callout({ tone = "info", children, actions, className, icon = true, ...rest }: CalloutProps) {
   const { cls, Icon } = TONES[tone];
   return (
     <div
@@ -29,6 +28,7 @@ export function Callout({ tone = "info", children, actions, className, icon = tr
         cls,
         className
       )}
+      {...rest}
     >
       {icon && <Icon size={16} aria-hidden="true" className="shrink-0" />}
       <span className="flex-1 min-w-[200px]">{children}</span>

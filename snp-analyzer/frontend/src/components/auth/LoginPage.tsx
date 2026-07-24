@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Dna } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { login } from '@/lib/api';
 import { useI18n } from '@/hooks/use-i18n';
@@ -31,6 +32,11 @@ export function LoginPage() {
   return (
     <div className="min-h-screen bg-bg flex items-center justify-center">
       <div className="bg-surface border border-border rounded-lg p-8 w-full max-w-sm shadow-lg">
+        <div className="flex justify-center mb-3">
+          <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary">
+            <Dna size={24} aria-hidden="true" />
+          </span>
+        </div>
         <h1 className="text-xl font-semibold text-text text-center mb-1">
           {t.loginTitle}
         </h1>

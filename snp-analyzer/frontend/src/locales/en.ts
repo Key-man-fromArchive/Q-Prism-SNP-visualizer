@@ -133,6 +133,7 @@ const en = {
   tabUsers: 'Users',
   tabReferences: 'References',
   tabLibrary: 'Library',
+  tabMore: 'More',
 
   // Analysis Tab
   group: 'Group:',

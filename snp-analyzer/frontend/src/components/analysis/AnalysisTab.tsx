@@ -306,12 +306,15 @@ export function AnalysisTab() {
 
   return (
     <div>
+      {/* Single sticky analysis toolbar: cycle control + analyze/ploidy/boundary
+          controls read as one bar and stay visible while scrolling (PRD FR-NAV-2). */}
+      <div className="sticky top-0 z-20 bg-surface border-b border-border">
       {/* Cycle Control */}
       <CycleControl />
 
       {/* Analyze bar */}
       <div
-        className="flex flex-wrap items-center justify-end gap-3 px-6 py-2 border-b border-border"
+        className="flex flex-wrap items-center justify-end gap-3 px-6 py-2"
       >
         {analysis && !analyzeError && (
           <span className="text-xs text-text-muted">
@@ -415,6 +418,7 @@ export function AnalysisTab() {
           )}
         </button>
       </div>
+      </div>{/* end sticky analysis toolbar */}
 
       {/* Group Filter Bar */}
       {(groupNames.length > 0 || hasEmptyWells) && (
@@ -467,16 +471,8 @@ export function AnalysisTab() {
         </div>
       )}
 
-      {/* Analysis Grid - 2x2 layout */}
-      <div
-        className="analysis-grid"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "16px",
-          padding: "16px 24px",
-        }}
-      >
+      {/* Analysis Grid - responsive (1 col narrow, 2 col >= lg) */}
+      <div className="analysis-grid grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 sm:px-6">
         {/* Scatter Plot - top left */}
         <ScatterPlot />
 
