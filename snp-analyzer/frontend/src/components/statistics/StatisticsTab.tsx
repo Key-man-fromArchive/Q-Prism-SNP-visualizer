@@ -55,7 +55,7 @@ export function StatisticsTab() {
   if (error) {
     return (
       <div className="p-6">
-        <p className="text-red-500">Error: {error}</p>
+        <p className="text-danger">Error: {error}</p>
       </div>
     );
   }
@@ -204,8 +204,8 @@ export function StatisticsTab() {
                 <div
                   className={`px-3 py-2 rounded text-sm font-medium ${
                     stats.hwe.in_hwe
-                      ? 'bg-green-500/20 text-green-400'
-                      : 'bg-red-500/20 text-red-400'
+                      ? 'bg-success/15 text-success'
+                      : 'bg-danger/15 text-danger'
                   }`}
                 >
                   {stats.hwe.in_hwe

@@ -21,6 +21,13 @@ const en = {
   statusLoadFailed: 'Failed to load data',
   scatterEmpty: 'No data to plot yet. Run analysis to see the allele-discrimination plot.',
   plateEmpty: 'No plate data yet.',
+  axisCycle: 'Cycle',
+  axisNormRFU: 'Norm. RFU',
+  plateGridAria: 'Plate wells (arrow keys to move, Enter to select, Shift+arrows to extend)',
+  wellSelectedState: 'selected',
+  wellEmptyState: 'empty',
+  toggleColumnAria: (c: string | number) => `Toggle column ${c}`,
+  toggleRowAria: (r: string) => `Toggle row ${r}`,
 
   // Header
   appTitle: 'ASG-PCR SNP Discrimination Analyzer',

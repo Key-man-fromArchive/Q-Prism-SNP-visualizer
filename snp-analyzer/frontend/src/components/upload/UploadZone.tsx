@@ -367,7 +367,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         onDrop={onDrop}
         onClick={() => fileInputRef.current?.click()}
         className={`border-2 border-dashed rounded-lg p-6 text-center bg-surface transition-colors cursor-pointer ${
-          dragover ? "border-primary bg-blue-50" : "border-border"
+          dragover ? "border-primary bg-primary/10" : "border-border"
         }`}
       >
         <div className="flex justify-center mb-2">
@@ -399,7 +399,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
               e.stopPropagation();
               folderInputRef.current?.click();
             }}
-            className="px-6 py-2 bg-surface text-primary border border-primary rounded-lg text-sm cursor-pointer hover:bg-blue-50 transition-colors"
+            className="px-6 py-2 bg-surface text-primary border border-primary rounded-lg text-sm cursor-pointer hover:bg-primary/10 transition-colors"
           >
             {t.browseFolder}
           </button>
@@ -551,7 +551,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       )}
 
       {importFile && !importPreview && importPreviewIssues.length > 0 && (
-        <div className="mt-4 rounded-md border border-danger bg-red-50 p-4 text-sm text-danger">
+        <div className="mt-4 rounded-md border border-danger bg-danger/10 p-4 text-sm text-danger">
           <p className="font-medium">Import preview failed for {importFile.name}</p>
           <ul className="mt-2 list-disc list-inside space-y-1">
             {importPreviewIssues.map((issue, index) => (

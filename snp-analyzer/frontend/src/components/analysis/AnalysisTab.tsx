@@ -353,8 +353,7 @@ export function AnalysisTab() {
         </label>
         {ploidy > 2 && lowSeparation && (
           <span
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-amber-600"
-            style={{ background: "rgba(217,119,6,0.12)" }}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-warning bg-warning/10"
             title={t.lowSeparationHint}
           >
             <AlertTriangle size={13} aria-hidden="true" /> {t.lowSeparation}
@@ -395,7 +394,7 @@ export function AnalysisTab() {
               <ChevronRight size={14} aria-hidden="true" />
             </button>
             {offsetUncertain && (
-              <span className="text-amber-500" title={t.offsetUncertainHint}>
+              <span className="text-warning" title={t.offsetUncertainHint}>
                 <AlertTriangle size={13} aria-hidden="true" />
               </span>
             )}

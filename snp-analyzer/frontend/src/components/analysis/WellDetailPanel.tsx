@@ -86,8 +86,8 @@ export function WellDetailPanel() {
 
         const c = plotlyColors();
         const layout: any = {
-          xaxis: { title: "Cycle", gridcolor: c.gridColor },
-          yaxis: { title: "Norm. RFU", gridcolor: c.gridColor },
+          xaxis: { title: t.axisCycle, gridcolor: c.gridColor },
+          yaxis: { title: t.axisNormRFU, gridcolor: c.gridColor },
           paper_bgcolor: c.paper_bgcolor,
           plot_bgcolor: c.plot_bgcolor,
           font: { color: c.fontColor },

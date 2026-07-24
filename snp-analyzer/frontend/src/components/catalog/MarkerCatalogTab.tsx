@@ -148,8 +148,8 @@ function DosageTrustBadge({ trust }: { trust: "putative" | "validated" }) {
       data-trust={trust}
       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold border ${
         isValidated
-          ? "bg-green-100 border-green-400 text-green-800 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300"
-          : "bg-amber-100 border-amber-400 text-amber-800 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300"
+          ? "bg-success/15 border-success text-success"
+          : "bg-warning/15 border-warning text-warning"
       }`}
     >
       {isValidated ? t.mcatDosageTrustValidated : t.mcatDosageTrustPutative}

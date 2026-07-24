@@ -399,13 +399,13 @@ export function ImportMappingWizard({
           </div>
         )}
         {unsupported && (
-          <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <div className="flex gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-text">
             <AlertCircle size={16} className="mt-0.5 shrink-0" />
             <span>{unsupported}</span>
           </div>
         )}
         {submitError && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-danger bg-red-50 px-3 py-2 text-sm text-danger">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
             <span>{submitError}</span>
             <button
               type="button"
@@ -534,8 +534,8 @@ function IssueRow({ issue, onUseCommaDecimal }: { issue: ValidationIssue; onUseC
   return (
     <div className={`flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm ${
       issue.recoverable
-        ? "border-amber-300 bg-amber-50 text-amber-900"
-        : "border-danger bg-red-50 text-danger"
+        ? "border-warning/30 bg-warning/10 text-text"
+        : "border-danger/30 bg-danger/10 text-danger"
     }`}>
       <div className="flex min-w-0 items-start gap-2">
         <AlertCircle size={16} className="mt-0.5 shrink-0" />
@@ -555,7 +555,7 @@ function IssueRow({ issue, onUseCommaDecimal }: { issue: ValidationIssue; onUseC
         <button
           type="button"
           onClick={onUseCommaDecimal}
-          className="rounded-md border border-amber-400 px-2 py-1 text-[12px]"
+          className="rounded-md border border-warning px-2 py-1 text-xs"
         >
           {t.imwUseCommaDecimal}
         </button>

@@ -114,8 +114,12 @@ export function CycleControl() {
   // External "go to cycle" (e.g. the Analyze button jumping to the suggested cycle)
   useEffect(() => {
     const handler = (e: Event) => {
-      const target = (e as CustomEvent<number>).detail;
-      if (typeof target !== "number") return;
+      const raw = (e as CustomEvent<number>).detail;
+      if (typeof raw !== "number") return;
+      // Clamp to the session's valid cycle range so a stray/out-of-range target
+      // can never leave the scatter/plate requesting a non-existent cycle.
+      const maxCycle = sessionInfo?.num_cycles ?? raw;
+      const target = Math.min(Math.max(1, raw), maxCycle);
       let idx = activeWindowIdx;
       if (windows && windows.length > 0) {
         const found = windows.findIndex(
@@ -131,7 +135,7 @@ export function CycleControl() {
     };
     window.addEventListener("goto-cycle", handler);
     return () => window.removeEventListener("goto-cycle", handler);
-  }, [windows, activeWindowIdx, setCycle, setDataWindow]);
+  }, [windows, activeWindowIdx, sessionInfo?.num_cycles, setCycle, setDataWindow]);
 
   // Hide if single cycle and no multiple windows
   const shouldHide =

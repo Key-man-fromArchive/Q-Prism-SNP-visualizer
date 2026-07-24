@@ -6,7 +6,7 @@ export type CalloutTone = "info" | "success" | "warning" | "danger";
 const TONES: Record<CalloutTone, { cls: string; Icon: typeof Info }> = {
   info: { cls: "bg-primary/10 border-primary/30 text-text", Icon: Info },
   success: { cls: "bg-accent/10 border-accent/30 text-text", Icon: CheckCircle2 },
-  warning: { cls: "bg-amber-500/10 border-amber-500/30 text-text", Icon: AlertTriangle },
+  warning: { cls: "bg-warning/10 border-warning/30 text-text", Icon: AlertTriangle },
   danger: { cls: "bg-danger/10 border-danger/30 text-text", Icon: XCircle },
 };
 

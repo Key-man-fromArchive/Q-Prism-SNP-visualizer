@@ -78,7 +78,7 @@ export function UserManagement() {
   };
 
   if (loading) return <div className="p-6 text-text-muted">{t.loadingUsers}</div>;
-  if (error) return <div className="p-6 text-red-500">{error}</div>;
+  if (error) return <div className="p-6 text-danger">{error}</div>;
 
   // Summary stats for dashboard
   const totalSessions = dashboardUsers.reduce((a, u) => a + u.session_count, 0);
@@ -169,7 +169,7 @@ export function UserManagement() {
                           {u.role}
                         </span>
                         {!u.is_active && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-danger/15 text-danger">
                             {t.userDisabled}
                           </span>
                         )}
@@ -278,7 +278,7 @@ export function UserManagement() {
                         onClick={() => !isSelf && handleToggleActive(u)}
                         disabled={isSelf}
                         className={`text-xs ${
-                          u.is_active ? 'text-green-600' : 'text-red-500'
+                          u.is_active ? 'text-success' : 'text-danger'
                         } ${isSelf ? 'opacity-50 cursor-default' : 'cursor-pointer hover:opacity-80'}`}
                       >
                         {u.is_active ? t.userActive : t.userDisabled}
@@ -291,7 +291,7 @@ export function UserManagement() {
                       {!isSelf && (
                         <button
                           onClick={() => handleDelete(u.id, u.username)}
-                          className="text-xs text-red-500 hover:text-red-700 cursor-pointer"
+                          className="text-xs text-danger hover:opacity-80 cursor-pointer"
                         >
                           {t.delete}
                         </button>
@@ -505,7 +505,7 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
       >
         {loading ? t.creating : t.create}
       </button>
-      {error && <span className="text-sm text-red-500">{error}</span>}
+      {error && <span className="text-sm text-danger">{error}</span>}
     </form>
   );
 }

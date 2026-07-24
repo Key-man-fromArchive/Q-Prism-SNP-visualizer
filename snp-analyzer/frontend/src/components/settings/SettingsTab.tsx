@@ -4,6 +4,7 @@ import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { useI18n } from "@/hooks/use-i18n";
+import { Button, Card } from "@/components/shared/ui";
 import {
   getPresets,
   createPreset,
@@ -148,24 +149,14 @@ export function SettingsTab() {
   }, [sessionId, clusterAlgorithm, currentCycle, ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters, setClusterAssignments]);
 
   return (
-    <div
-      className="settings-grid"
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))",
-        gap: "16px",
-        padding: "16px 24px",
-      }}
-    >
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 sm:px-6">
       {/* Panel 1: Assay Presets */}
-      <div className="panel">
-        <h3 className="text-sm font-semibold mb-3 text-text">{t.assayPresets}</h3>
-
+      <Card title={t.assayPresets}>
         <div className="mb-4">
           <div className="flex gap-2 items-center">
             <select
               id="preset-select"
-              className="flex-1 px-2 py-1.5 border border-border rounded text-[13px] bg-surface text-text"
+              className="flex-1 px-2 py-1.5 border border-border rounded text-sm bg-surface text-text"
               value={selectedPresetId}
               onChange={(e) => setSelectedPresetId(e.target.value)}
             >
@@ -176,23 +167,24 @@ export function SettingsTab() {
                 </option>
               ))}
             </select>
-            <button
+            <Button
               id="apply-preset-btn"
-              className="px-3 py-1.5 bg-primary text-white rounded text-[13px] cursor-pointer border-none hover:bg-primary-hover"
+              size="sm"
               onClick={handleApplyPreset}
               disabled={!selectedPresetId}
             >
               {t.apply}
-            </button>
-            <button
+            </Button>
+            <Button
               id="delete-preset-btn"
-              className="badge cursor-pointer text-danger"
+              variant="danger"
+              size="sm"
               title={t.deleteSelectedPreset}
               onClick={handleDeletePreset}
               disabled={!selectedPresetId}
             >
               {t.del}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -200,26 +192,25 @@ export function SettingsTab() {
           <input
             id="preset-name-input"
             type="text"
-            className="flex-1 px-2 py-1.5 border border-border rounded text-[13px] bg-surface text-text"
+            className="flex-1 px-2 py-1.5 border border-border rounded text-sm bg-surface text-text"
             placeholder={t.newPresetName}
             value={newPresetName}
             onChange={(e) => setNewPresetName(e.target.value)}
           />
-          <button
+          <Button
             id="save-preset-btn"
-            className="px-3 py-1.5 bg-accent text-white rounded text-[13px] cursor-pointer border-none"
+            size="sm"
             onClick={handleSavePreset}
             disabled={!newPresetName.trim()}
           >
             {t.save}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
       {/* Panel 2: Normalization */}
       {sessionInfo?.has_rox === true && (
-        <div id="rox-normalize-group" className="panel">
-          <h3 className="text-sm font-semibold mb-3 text-text">{t.normalization}</h3>
+        <Card id="rox-normalize-group" title={t.normalization}>
           <div className="mb-4">
             <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
               <input
@@ -235,12 +226,11 @@ export function SettingsTab() {
               {t.roxDescription}
             </p>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Panel 3: Scatter Plot Axis */}
-      <div className="panel">
-        <h3 className="text-sm font-semibold mb-3 text-text">{t.scatterPlotAxis}</h3>
+      <Card title={t.scatterPlotAxis}>
         <div className="mb-4">
           <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
             <input
@@ -260,7 +250,7 @@ export function SettingsTab() {
               id="x-axis-min"
               type="number"
               step="0.5"
-              className="w-20 px-2 py-1.5 border border-border rounded text-[13px] disabled:opacity-50 disabled:bg-bg"
+              className="w-20 px-2 py-1.5 border border-border rounded text-sm disabled:opacity-50 disabled:bg-bg"
               value={xMin}
               onChange={(e) => setXMin(parseFloat(e.target.value) || 0)}
               disabled={!fixAxis}
@@ -272,7 +262,7 @@ export function SettingsTab() {
               id="x-axis-max"
               type="number"
               step="0.5"
-              className="w-20 px-2 py-1.5 border border-border rounded text-[13px] disabled:opacity-50 disabled:bg-bg"
+              className="w-20 px-2 py-1.5 border border-border rounded text-sm disabled:opacity-50 disabled:bg-bg"
               value={xMax}
               onChange={(e) => setXMax(parseFloat(e.target.value) || 12)}
               disabled={!fixAxis}
@@ -284,7 +274,7 @@ export function SettingsTab() {
               id="y-axis-min"
               type="number"
               step="0.5"
-              className="w-20 px-2 py-1.5 border border-border rounded text-[13px] disabled:opacity-50 disabled:bg-bg"
+              className="w-20 px-2 py-1.5 border border-border rounded text-sm disabled:opacity-50 disabled:bg-bg"
               value={yMin}
               onChange={(e) => setYMin(parseFloat(e.target.value) || 0)}
               disabled={!fixAxis}
@@ -296,18 +286,17 @@ export function SettingsTab() {
               id="y-axis-max"
               type="number"
               step="0.5"
-              className="w-20 px-2 py-1.5 border border-border rounded text-[13px] disabled:opacity-50 disabled:bg-bg"
+              className="w-20 px-2 py-1.5 border border-border rounded text-sm disabled:opacity-50 disabled:bg-bg"
               value={yMax}
               onChange={(e) => setYMax(parseFloat(e.target.value) || 12)}
               disabled={!fixAxis}
             />
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Panel 4: Auto Clustering */}
-      <div className="panel">
-        <h3 className="text-sm font-semibold mb-3 text-text">{t.autoClustering}</h3>
+      <Card title={t.autoClustering}>
 
         <div className="mb-4">
           <div className="flex gap-4">
@@ -343,7 +332,7 @@ export function SettingsTab() {
                 type="number"
                 min="0"
                 step="0.05"
-                className="w-20 px-2 py-1.5 border border-border rounded text-[13px]"
+                className="w-20 px-2 py-1.5 border border-border rounded text-sm"
                 value={ntcThreshold}
                 onChange={(e) => setNtcThreshold(parseFloat(e.target.value) || 0.1)}
               />
@@ -356,7 +345,7 @@ export function SettingsTab() {
                 min="0"
                 max="1"
                 step="0.05"
-                className="w-20 px-2 py-1.5 border border-border rounded text-[13px]"
+                className="w-20 px-2 py-1.5 border border-border rounded text-sm"
                 value={allele1RatioMax}
                 onChange={(e) => setAllele1RatioMax(parseFloat(e.target.value) || 0.4)}
               />
@@ -369,7 +358,7 @@ export function SettingsTab() {
                 min="0"
                 max="1"
                 step="0.05"
-                className="w-20 px-2 py-1.5 border border-border rounded text-[13px]"
+                className="w-20 px-2 py-1.5 border border-border rounded text-sm"
                 value={allele2RatioMin}
                 onChange={(e) => setAllele2RatioMin(parseFloat(e.target.value) || 0.6)}
               />
@@ -387,7 +376,7 @@ export function SettingsTab() {
                 min="2"
                 max="6"
                 step="1"
-                className="w-20 px-2 py-1.5 border border-border rounded text-[13px]"
+                className="w-20 px-2 py-1.5 border border-border rounded text-sm"
                 value={nClusters}
                 onChange={(e) => setNClusters(parseInt(e.target.value) || 4)}
               />
@@ -396,27 +385,24 @@ export function SettingsTab() {
         )}
 
         {clusterError && (
-          <div className="mb-3 px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded text-xs">
+          <div className="mb-3 px-3 py-2 bg-danger/10 text-danger border border-danger/30 rounded text-xs">
             {clusterError}
           </div>
         )}
 
         <div className="flex gap-2">
-          <button
+          <Button
             id="run-clustering-btn"
-            className="px-4 py-1.5 bg-primary text-white rounded text-[13px] cursor-pointer border-none hover:bg-primary-hover disabled:opacity-50"
+            size="sm"
             onClick={handleRunClustering}
             disabled={!sessionId || clusterLoading}
           >
             {clusterLoading ? t.running : t.runAutoClustering}
-          </button>
-          <button
+          </Button>
+          <Button
             id="toggle-threshold-lines-btn"
-            className={`px-4 py-1.5 rounded text-[13px] cursor-pointer border ${
-              showThresholdLines
-                ? "bg-primary text-white border-primary"
-                : "bg-surface text-primary border-primary"
-            }`}
+            variant={showThresholdLines ? "primary" : "secondary"}
+            size="sm"
             onClick={() => {
               setShowThresholdLines((v) => !v);
               window.dispatchEvent(
@@ -427,13 +413,12 @@ export function SettingsTab() {
             }}
           >
             {showThresholdLines ? t.hideThresholdLines : t.showThresholdLines}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
       {/* Panel 5: Display Layers */}
-      <div className="panel">
-        <h3 className="text-sm font-semibold mb-3 text-text">{t.displayLayers}</h3>
+      <Card title={t.displayLayers}>
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
             <input
@@ -456,21 +441,23 @@ export function SettingsTab() {
             {t.showManualTypesLayer}
           </label>
         </div>
-      </div>
+      </Card>
 
       {/* Panel 6: Reset */}
-      <div className="panel flex items-center gap-3">
-        <button
+      <Card className="flex items-center gap-3">
+        <Button
           id="reset-defaults-btn"
-          className="px-4 py-1.5 bg-surface text-danger border border-danger rounded text-[13px] cursor-pointer hover:bg-red-50"
+          variant="secondary"
+          size="sm"
+          className="text-danger border-danger hover:bg-danger/10 hover:text-danger"
           onClick={resetToDefaults}
         >
           {t.resetToDefaults}
-        </button>
+        </Button>
         <span className="text-xs text-text-muted">
           {t.resetDescription}
         </span>
-      </div>
+      </Card>
     </div>
   );
 }

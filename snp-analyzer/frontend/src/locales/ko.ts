@@ -23,6 +23,13 @@ const ko: Translations = {
   statusLoadFailed: '데이터를 불러오지 못했습니다',
   scatterEmpty: '표시할 데이터가 없습니다. 분석을 실행하면 대립유전자 판별 산점도가 표시됩니다.',
   plateEmpty: '플레이트 데이터가 없습니다.',
+  axisCycle: '사이클',
+  axisNormRFU: '정규화 RFU',
+  plateGridAria: '플레이트 웰 (화살표로 이동, Enter로 선택, Shift+화살표로 범위 선택)',
+  wellSelectedState: '선택됨',
+  wellEmptyState: '빈 웰',
+  toggleColumnAria: (c: string | number) => `${c}열 전체 토글`,
+  toggleRowAria: (r: string) => `${r}행 전체 토글`,
 
   // Header
   appTitle: 'ASG-PCR SNP 판별 분석기',
