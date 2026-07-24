@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, X } from 'lucide-react';
 import { useI18n } from '@/hooks/use-i18n';
+import { useConfirm } from '@/hooks/use-confirm';
 import {
   getSessions,
   getProjects,
@@ -107,6 +108,7 @@ function ProjectPicker({ projects, onSelect, disabled, label }: ProjectPickerPro
 // ─── Main Component ──────────────────────────────────────────────────────────
 export function BatchTab({ onLoadSession }: BatchTabProps) {
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirm();
   const [view, setView] = useState<View>('list');
   const [projects, setProjects] = useState<ProjectListResponse['projects']>([]);
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
@@ -151,7 +153,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   };
 
   const handleDeleteProject = async (id: string, name: string) => {
-    if (!window.confirm(t.deleteProjectConfirm(name))) return;
+    if (!(await confirm({ title: t.delete, message: t.deleteProjectConfirm(name), danger: true }))) return;
     try { setLoading(true); await deleteProject(id); await loadProjects(); }
     catch (err) { setError(err instanceof Error ? err.message : 'Failed to delete project'); }
     finally { setLoading(false); }
@@ -198,7 +200,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   const handleBulkRemoveFromProject = async () => {
     if (!currentProject || checkedDetailSessions.size === 0) return;
     const count = checkedDetailSessions.size;
-    if (!window.confirm(t.bulkRemoveConfirm(count, currentProject.name))) return;
+    if (!(await confirm({ title: t.remove, message: t.bulkRemoveConfirm(count, currentProject.name), danger: true }))) return;
     try {
       setLoading(true); setError(null);
       await bulkRemoveProjectSessions(currentProject.id, [...checkedDetailSessions]);
@@ -218,7 +220,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   // ── Session delete (single) ────────────────────────────────────────────────
   const handleDeleteSession = async (sid: string) => {
     const s = sessions.find((x) => x.session_id === sid);
-    if (!window.confirm(t.deleteSessionConfirm(fmtSession(sid, s?.raw_filename)))) return;
+    if (!(await confirm({ title: t.delete, message: t.deleteSessionConfirm(fmtSession(sid, s?.raw_filename)), danger: true }))) return;
     try {
       setLoading(true); setError(null);
       if (activeSessionId === sid) resetSession();
@@ -238,7 +240,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   const handleBulkDelete = async () => {
     const count = checkedSessions.size;
     if (count === 0) return;
-    if (!window.confirm(t.bulkDeleteConfirm(count))) return;
+    if (!(await confirm({ title: t.delete, message: t.bulkDeleteConfirm(count), danger: true }))) return;
     try {
       setLoading(true); setError(null);
       if (activeSessionId && checkedSessions.has(activeSessionId)) resetSession();
@@ -650,6 +652,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
           <div className="text-text-muted text-sm text-center py-8">{t.noSessionsInProject}</div>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 }

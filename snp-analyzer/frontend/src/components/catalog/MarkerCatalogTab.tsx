@@ -9,6 +9,7 @@
 // badge (validated=green / putative=amber) is shown.
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/hooks/use-i18n";
+import { useConfirm } from "@/hooks/use-confirm";
 import {
   listMarkerCatalog,
   createMarkerCatalogEntry,
@@ -158,6 +159,7 @@ function DosageTrustBadge({ trust }: { trust: "putative" | "validated" }) {
 
 export function MarkerCatalogTab() {
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirm();
   const [entries, setEntries] = useState<MarkerCatalogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -223,7 +225,7 @@ export function MarkerCatalogTab() {
   }
 
   async function handleDelete(entry: MarkerCatalogEntry) {
-    if (!window.confirm(t.mcatDeleteConfirm(entry.name))) return;
+    if (!(await confirm({ title: t.delete, message: t.mcatDeleteConfirm(entry.name), danger: true }))) return;
     setError(null);
     try {
       await deleteMarkerCatalogEntry(entry.id);
@@ -620,6 +622,7 @@ export function MarkerCatalogTab() {
           </div>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 }

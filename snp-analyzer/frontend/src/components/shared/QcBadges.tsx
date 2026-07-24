@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useSelectionStore } from '@/stores/selection-store';
@@ -45,21 +46,25 @@ export function QcBadges() {
     return null;
   }
 
-  // Helper function to determine badge color
+  // Theme-aware status colors via design tokens (dark mode overrides the vars).
+  const SUCCESS = 'var(--color-success)';
+  const WARNING = 'var(--color-warning)';
+  const DANGER = 'var(--color-danger)';
+
   const getCallRateColor = (rate: number): string => {
-    if (rate >= 90) return '#10b981'; // green
-    if (rate >= 70) return '#f59e0b'; // amber
-    return '#ef4444'; // red
+    if (rate >= 90) return SUCCESS;
+    if (rate >= 70) return WARNING;
+    return DANGER;
   };
 
   const getClusterSepColor = (sep: number): string => {
-    if (sep >= 2.0) return '#10b981'; // green
-    if (sep >= 1.0) return '#f59e0b'; // amber
-    return '#ef4444'; // red
+    if (sep >= 2.0) return SUCCESS;
+    if (sep >= 1.0) return WARNING;
+    return DANGER;
   };
 
   const getNtcColor = (status: string): string => {
-    return status === 'ok' ? '#10b981' : '#ef4444';
+    return status === 'ok' ? SUCCESS : DANGER;
   };
 
   const callRatePercent = Math.round(qcData.call_rate * 100);
@@ -110,10 +115,11 @@ export function QcBadges() {
       {/* Control / NTC-overlap QC warnings */}
       {qcData.warnings && qcData.warnings.length > 0 && (
         <span
-          className="badge qc-badge"
-          style={{ borderColor: '#f59e0b', color: '#f59e0b', fontWeight: 600 }}
+          className="badge qc-badge inline-flex items-center gap-1"
+          style={{ borderColor: 'var(--color-warning)', color: 'var(--color-warning)', fontWeight: 600 }}
           title={qcData.warnings.join('\n')}
         >
+          <AlertTriangle size={11} aria-hidden="true" />
           {t.qcWarnings(qcData.warnings.length)}
         </span>
       )}
