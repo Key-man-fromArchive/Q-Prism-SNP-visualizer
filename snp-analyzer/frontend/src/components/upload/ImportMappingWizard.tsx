@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { AlertCircle, RotateCcw, UploadCloud } from "lucide-react";
+import { AlertCircle, Check, ChevronLeft, ChevronRight, RotateCcw, UploadCloud } from "lucide-react";
 import { ApiError, parseImportPreview } from "@/lib/api";
 import { useI18n } from "@/hooks/use-i18n";
 import type { Translations } from "@/locales/en";
@@ -51,6 +51,7 @@ export function ImportMappingWizard({
   const [unsupported, setUnsupported] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [step, setStep] = useState(1); // guided flow: 1=structure 2=columns 3=roles 4=review
 
   useEffect(() => {
     const nextStructure = inferStructure(preview);
@@ -59,6 +60,7 @@ export function ImportMappingWizard({
     setIssues([]);
     setUnsupported(null);
     setSubmitError(null);
+    setStep(1); // a fresh/re-preview rebuilds the mapping — restart the flow
   }, [preview]);
 
   const channels = useMemo(
@@ -76,6 +78,40 @@ export function ImportMappingWizard({
   const requiredRoles = ASSAY_MODES.find((mode) => mode.value === mapping.assay_mode)?.requiredRoles ?? [];
   const roleOptions = getRoleOptions(mapping.assay_mode);
   const summary = buildPreviewSummary(preview, mapping, channels, t);
+
+  // ── Derived step validity (guided flow gating) ────────────────────────────
+  const step2Complete =
+    !!mapping.well_column &&
+    !!mapping.cycle_column &&
+    (structure === "long"
+      ? !!mapping.dye_column && !!mapping.rfu_column
+      : Object.keys(mapping.rfu_columns).length > 0 &&
+        Object.values(mapping.rfu_columns).every((col) => preview.inferred_headers.includes(col)));
+
+  const boundRoles = new Set(
+    Object.entries(mapping.channel_roles)
+      .filter(([channel, role]) => channels.includes(channel) && !["excluded", "unknown"].includes(role))
+      .map(([, role]) => role)
+  );
+  const noDuplicateUniqueRole = [...UNIQUE_ROLES].every(
+    (role) =>
+      Object.entries(mapping.channel_roles).filter(
+        ([channel, r]) => channels.includes(channel) && r === role
+      ).length <= 1
+  );
+  const step3Complete =
+    requiredRoles.every((role) => boundRoles.has(role)) &&
+    noDuplicateUniqueRole &&
+    (mapping.normalization_mode !== "passive_reference" || boundRoles.has("normalization"));
+
+  // Local validity gates the obviously-invalid submit; server (/parse) issues
+  // are the source of truth post-submit (routed back to the relevant step).
+  const hasBlockingServerIssue = allIssues.some((issue) => !issue.recoverable);
+  const canImport = step2Complete && step3Complete && !hasBlockingServerIssue;
+
+  const stepComplete = (n: number) => (n === 1 ? true : n === 2 ? step2Complete : n === 3 ? step3Complete : true);
+  const STEP_TITLES = [t.imwStepStructure, t.imwStepColumns, t.imwStepRoles, t.imwStepReview];
+  const goToStep = (n: number) => setStep(Math.min(4, Math.max(1, n)));
 
   useEffect(() => {
     setMapping((current) => {
@@ -152,6 +188,7 @@ export function ImportMappingWizard({
     setIssues([]);
     setUnsupported(null);
     setSubmitError(null);
+    setStep(2); // structure changed rebuilds mapping; keep the user just past step 1
   }
 
   async function handleImport() {
@@ -167,6 +204,18 @@ export function ImportMappingWizard({
 
       if (isValidationResponse(response)) {
         setIssues(response.issues);
+        // Route the user to the step most relevant to the returned issues so
+        // they fix it in context instead of re-scanning the whole form.
+        const codes = response.issues.map((i) => i.code);
+        const roleRelated = response.issues.some(
+          (i) => i.channel_id || /role|normalization|assay/i.test(i.code)
+        );
+        const columnRelated = response.issues.some(
+          (i) => i.column || /column|well|cycle|rfu|dye|header|delimiter|decimal/i.test(i.code)
+        );
+        if (roleRelated && !columnRelated) setStep(3);
+        else if (columnRelated) setStep(2);
+        else if (codes.length) setStep(4);
         return;
       }
       if (isUnsupportedResponse(response)) {
@@ -221,6 +270,40 @@ export function ImportMappingWizard({
         <SummaryItem label={t.imwRowsShown} value={`${preview.sample_rows.length}`} />
       </section>
 
+      {/* Guided step indicator */}
+      <ol className="flex flex-wrap items-center gap-2" aria-label={t.imwStepOf(step, 4)}>
+        {STEP_TITLES.map((title, i) => {
+          const n = i + 1;
+          const done = stepComplete(n) && n < step;
+          const active = n === step;
+          const reachable = n <= step || stepComplete(n - 1);
+          return (
+            <li key={title}>
+              <button
+                type="button"
+                data-testid={`wizard-step-${n}`}
+                aria-current={active ? "step" : undefined}
+                disabled={!reachable}
+                onClick={() => reachable && goToStep(n)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                  active
+                    ? "border-primary bg-primary text-white"
+                    : done
+                    ? "border-success/40 text-success hover:bg-bg"
+                    : "border-border text-text-muted hover:bg-bg disabled:opacity-40 disabled:hover:bg-transparent"
+                }`}
+              >
+                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-black/10 text-[10px]">
+                  {done ? <Check size={11} aria-hidden="true" /> : n}
+                </span>
+                {title}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+
+      {step === 1 && (
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{t.imwTableStructure}</span>
@@ -294,19 +377,20 @@ export function ImportMappingWizard({
           </Field>
         </div>
       </section>
+      )}
 
-      <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-        <div className="space-y-3">
+      {step === 2 && (
+      <section className="space-y-3">
           <h4 className="text-sm font-semibold">{t.imwColumnMapping}</h4>
           <div className="grid gap-3 md:grid-cols-2">
-            <ColumnSelect label={t.imwWell} value={mapping.well_column} headers={preview.inferred_headers} onChange={(value) => setColumn("well_column", value)} />
-            <ColumnSelect label={t.imwCycle} value={mapping.cycle_column} headers={preview.inferred_headers} onChange={(value) => setColumn("cycle_column", value)} />
+            <ColumnSelect label={t.imwWell} value={mapping.well_column} headers={preview.inferred_headers} onChange={(value) => setColumn("well_column", value)} autoDetected={!!preview.suggested_mapping?.well_column && mapping.well_column === preview.suggested_mapping.well_column} />
+            <ColumnSelect label={t.imwCycle} value={mapping.cycle_column} headers={preview.inferred_headers} onChange={(value) => setColumn("cycle_column", value)} autoDetected={!!preview.suggested_mapping?.cycle_column && mapping.cycle_column === preview.suggested_mapping.cycle_column} />
             <ColumnSelect label={t.imwSample} value={mapping.sample_column} headers={preview.inferred_headers} onChange={(value) => setColumn("sample_column", value)} optional />
             <ColumnSelect label={t.imwTarget} value={mapping.target_column} headers={preview.inferred_headers} onChange={(value) => setColumn("target_column", value)} optional />
             {structure === "long" ? (
               <>
-                <ColumnSelect label={t.imwDyeChannel} value={mapping.dye_column} headers={preview.inferred_headers} onChange={(value) => setColumn("dye_column", value)} />
-                <ColumnSelect label={t.imwRfu} value={mapping.rfu_column} headers={preview.inferred_headers} onChange={(value) => setColumn("rfu_column", value)} />
+                <ColumnSelect label={t.imwDyeChannel} value={mapping.dye_column} headers={preview.inferred_headers} onChange={(value) => setColumn("dye_column", value)} autoDetected={!!preview.suggested_mapping?.dye_column && mapping.dye_column === preview.suggested_mapping.dye_column} />
+                <ColumnSelect label={t.imwRfu} value={mapping.rfu_column} headers={preview.inferred_headers} onChange={(value) => setColumn("rfu_column", value)} autoDetected={!!preview.suggested_mapping?.rfu_column && mapping.rfu_column === preview.suggested_mapping.rfu_column} />
                 <ColumnSelect label={t.imwRole} value={mapping.role_column} headers={preview.inferred_headers} onChange={(value) => setColumn("role_column", value)} optional />
               </>
             ) : (
@@ -329,9 +413,11 @@ export function ImportMappingWizard({
               </div>
             )}
           </div>
-        </div>
+      </section>
+      )}
 
-        <div className="space-y-3">
+      {step === 3 && (
+      <section className="space-y-3">
           <h4 className="text-sm font-semibold">{t.imwAssayRoleBinding}</h4>
           <div className="flex flex-wrap gap-2">
             {ASSAY_MODES.map((mode) => (
@@ -374,9 +460,10 @@ export function ImportMappingWizard({
           <p className="text-[12px] text-text-muted">
             {t.imwRequiredRoles(requiredRoles.join(", "))}
           </p>
-        </div>
       </section>
+      )}
 
+      {step === 4 && (
       <section className="space-y-3">
         <h4 className="text-sm font-semibold">{t.imwValidationPreview}</h4>
         <div className="grid gap-3 md:grid-cols-3">
@@ -419,8 +506,9 @@ export function ImportMappingWizard({
           </div>
         )}
       </section>
+      )}
 
-      <details className="rounded-md border border-border" open>
+      <details className="rounded-md border border-border" open={step === 4}>
         <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-text">
           {t.imwRawDataTitle(preview.sample_rows.length)}
         </summary>
@@ -448,22 +536,48 @@ export function ImportMappingWizard({
         </div>
       </details>
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-2">
         <button
           type="button"
-          onClick={handleImport}
-          disabled={importing || previewing}
-          className="inline-flex items-center gap-2 px-5 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary-hover disabled:opacity-60"
+          data-testid="wizard-back"
+          onClick={() => goToStep(step - 1)}
+          disabled={step === 1}
+          className="inline-flex items-center gap-1.5 px-3 py-2 border border-border rounded-md text-sm hover:bg-bg disabled:opacity-40 disabled:cursor-default"
         >
-          <UploadCloud size={16} />
-          {importing ? t.imwImporting : t.imwImport}
+          <ChevronLeft size={16} aria-hidden="true" />
+          {t.imwBack}
         </button>
+
+        {step < 4 ? (
+          <button
+            type="button"
+            data-testid="wizard-next"
+            onClick={() => goToStep(step + 1)}
+            disabled={!stepComplete(step)}
+            className="inline-flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary-hover disabled:opacity-50 disabled:cursor-default"
+          >
+            {t.imwNext}
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            data-testid="wizard-import"
+            onClick={handleImport}
+            disabled={importing || previewing || !canImport}
+            title={!canImport ? t.imwRequiredRoles(requiredRoles.join(", ")) : undefined}
+            className="inline-flex items-center gap-2 px-5 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary-hover disabled:opacity-60 disabled:cursor-default"
+          >
+            <UploadCloud size={16} />
+            {importing ? t.imwImporting : t.imwImport}
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
     <label className="space-y-1 text-[12px] text-text-muted">
       <span>{label}</span>
@@ -478,16 +592,28 @@ function ColumnSelect({
   headers,
   onChange,
   optional = false,
+  autoDetected = false,
 }: {
   label: string;
   value: string | null;
   headers: string[];
   onChange: (value: string | null) => void;
   optional?: boolean;
+  autoDetected?: boolean;
 }) {
   const { t } = useI18n();
+  const labelNode = (
+    <span className="inline-flex items-center gap-1.5">
+      {label}{optional ? ` (${t.imwOptional})` : ""}
+      {autoDetected && value && (
+        <span className="inline-flex items-center rounded-full bg-success/15 px-1.5 py-0.5 text-[10px] font-medium text-success">
+          {t.imwAutoDetected}
+        </span>
+      )}
+    </span>
+  );
   return (
-    <Field label={`${label}${optional ? ` (${t.imwOptional})` : ""}`}>
+    <Field label={labelNode}>
       <select
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value || null)}
@@ -671,20 +797,26 @@ function buildLocalIssues(mapping: MappingConfig, channels: string[], t: Transla
 
   for (const role of requiredRoles) {
     if (!boundRoles.has(role)) {
-      issues.push(makeLocalIssue("missing_required_role", `Missing required role binding: ${role}`));
+      issues.push(makeLocalIssue("missing_required_role", t.imwIssueMissingRole(roleLabel(role, t))));
     }
   }
 
   for (const role of UNIQUE_ROLES) {
     const channelsForRole = roles.filter(([, candidateRole]) => candidateRole === role).map(([channel]) => channel);
     if (channelsForRole.length > 1) {
-      issues.push(makeLocalIssue("duplicate_role_binding", `Role ${roleLabel(role, t)} is bound to multiple channels: ${channelsForRole.join(", ")}`));
+      issues.push(makeLocalIssue("duplicate_role_binding", t.imwIssueDuplicateRole(roleLabel(role, t), channelsForRole.join(", "))));
     }
   }
 
-  if (!mapping.well_column) issues.push(makeLocalIssue("missing_field", "Well column is not mapped."));
-  if (!mapping.cycle_column) issues.push(makeLocalIssue("missing_field", "Cycle column is not mapped."));
-  if (channels.length === 0) issues.push(makeLocalIssue("missing_field", "No reporter channels were detected."));
+  if (!mapping.well_column) issues.push(makeLocalIssue("missing_field", t.imwIssueWellUnmapped));
+  if (!mapping.cycle_column) issues.push(makeLocalIssue("missing_field", t.imwIssueCycleUnmapped));
+  if (channels.length === 0) issues.push(makeLocalIssue("missing_field", t.imwIssueNoChannels));
+
+  // Passive-reference normalization requires a channel bound to the
+  // `normalization` role (server rejects otherwise — assays/registry.py).
+  if (mapping.normalization_mode === "passive_reference" && !boundRoles.has("normalization")) {
+    issues.push(makeLocalIssue("missing_required_role", t.imwIssueNormalizationRequired));
+  }
 
   return issues;
 }

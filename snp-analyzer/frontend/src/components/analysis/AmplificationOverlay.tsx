@@ -142,7 +142,7 @@ export function AmplificationOverlay() {
         className={visible ? "" : "hidden"}
       >
         {loading && (
-          <p className="text-sm text-text-muted">Loading overlay...</p>
+          <p className="text-sm text-text-muted">{t.overlayLoading}</p>
         )}
         <div
           id="overlay-plot"

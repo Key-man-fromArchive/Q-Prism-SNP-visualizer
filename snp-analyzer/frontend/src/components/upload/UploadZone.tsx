@@ -378,7 +378,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         setTimeout(() => setSession(info.session_id, info), 300);
       } catch (err) {
         setUploadState("error");
-        setStatusMessage(err instanceof Error ? err.message : "Failed to load example");
+        setStatusMessage(err instanceof Error ? err.message : t.errLoadExample);
       }
     },
     [setSession, setUploadState, t],
