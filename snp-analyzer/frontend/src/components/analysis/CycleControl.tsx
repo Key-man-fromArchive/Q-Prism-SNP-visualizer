@@ -1,6 +1,7 @@
 // @TASK Frontend - Cycle Control Component
 // @SPEC User can select data windows and navigate through cycles with play/pause
 import { useEffect, useRef, useState } from 'react';
+import { Pause, Play } from 'lucide-react';
 import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useI18n } from '@/hooks/use-i18n';
@@ -34,14 +35,30 @@ export function CycleControl() {
     setActiveWindowIdx(ampIdx >= 0 ? ampIdx : 0);
   }, [windows]);
 
-  // When window changes, set initial cycle
+  // When window changes, set initial cycle.
   useEffect(() => {
     const win = windows?.[activeWindowIdx];
-    if (!win) return;
+    const suggestedCycle = sessionInfo?.suggested_cycle;
+
+    // No data windows (e.g. synthetic examples / plain per-cycle imports): the
+    // store's currentCycle would otherwise stay at its initial 0, and every
+    // cycle-gated fetch (ScatterPlot guards `if (!currentCycle) return`) would
+    // silently skip — leaving the allele-discrimination plot blank. Initialise
+    // against the full cycle range so the analysis surface has data on load.
+    if (!win) {
+      const n = sessionInfo?.num_cycles ?? 1;
+      let initial = n;
+      if (suggestedCycle != null && suggestedCycle >= 1 && suggestedCycle <= n) {
+        initial = suggestedCycle;
+      }
+      setRelativeValue(initial);
+      setCycle(initial);
+      setDataWindow(null);
+      return;
+    }
 
     const wCycles = win.end_cycle - win.start_cycle + 1;
     let initial = wCycles;
-    const suggestedCycle = sessionInfo?.suggested_cycle;
 
     if (suggestedCycle != null) {
       const rel = suggestedCycle - win.start_cycle + 1;
@@ -53,7 +70,7 @@ export function CycleControl() {
     setRelativeValue(initial);
     setCycle(win.start_cycle + initial - 1);
     setDataWindow(win.name);
-  }, [activeWindowIdx, windows, sessionInfo?.suggested_cycle, setCycle, setDataWindow]);
+  }, [activeWindowIdx, windows, sessionInfo?.suggested_cycle, sessionInfo?.num_cycles, setCycle, setDataWindow]);
 
   // Debounced slider change
   const handleSliderChange = (val: number) => {
@@ -172,8 +189,10 @@ export function CycleControl() {
               className="w-8 h-8 flex items-center justify-center border border-border rounded bg-surface cursor-pointer text-text hover:bg-bg"
               onClick={() => setPlaying(!isPlaying)}
               title={t.playPause}
+              aria-label={t.playPause}
+              aria-pressed={isPlaying}
             >
-              {isPlaying ? '\u23F8' : '\u25B6'}
+              {isPlaying ? <Pause size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
             </button>
             <input
               type="range"

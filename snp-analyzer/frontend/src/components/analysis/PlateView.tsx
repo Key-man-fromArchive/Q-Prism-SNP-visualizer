@@ -1,7 +1,7 @@
 // @TASK Frontend - Plate View Component
 // @SPEC Renders 96-well plate grid with drag selection and genotype coloring
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useSelectionStore } from '@/stores/selection-store';
@@ -11,6 +11,7 @@ import { WELL_TYPE_INFO } from '@/lib/constants';
 import { wellInfo, dosageOfLabel } from '@/lib/genotype';
 import { useWellFilter } from '@/hooks/use-well-filter';
 import { useI18n } from '@/hooks/use-i18n';
+import { StatusState } from '@/components/shared/ui';
 
 interface DragRect {
   left: number;
@@ -40,6 +41,8 @@ export function PlateView() {
 
   // Re-fetch trigger (incremented when well types change)
   const [refetchTrigger, setRefetchTrigger] = useState(0);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     const handler = () => setRefetchTrigger((n) => n + 1);
@@ -48,20 +51,27 @@ export function PlateView() {
   }, []);
 
   // Fetch plate data when dependencies change
+  const fetchPlateData = useCallback(async () => {
+    if (!sessionId || !currentCycle) {
+      setStatus("loading");
+      return;
+    }
+    setStatus((s) => (s === "ready" ? s : "loading"));
+    setFetchError(null);
+    try {
+      const res = await getPlate(sessionId, currentCycle, useRox);
+      setPlateData(res.wells);
+      setStatus("ready");
+    } catch (error) {
+      console.error('Failed to fetch plate data:', error);
+      setFetchError(error instanceof Error ? error.message : String(error));
+      setStatus("error");
+    }
+  }, [sessionId, currentCycle, useRox, setPlateData]);
+
   useEffect(() => {
-    if (!sessionId || currentCycle === undefined) return;
-
-    const fetchPlateData = async () => {
-      try {
-        const res = await getPlate(sessionId, currentCycle, useRox);
-        setPlateData(res.wells);
-      } catch (error) {
-        console.error('Failed to fetch plate data:', error);
-      }
-    };
-
-    fetchPlateData();
-  }, [sessionId, currentCycle, useRox, setPlateData, refetchTrigger]);
+    void fetchPlateData();
+  }, [fetchPlateData, refetchTrigger]);
 
   const { plateRows, plateCols, isWellVisible } = useWellFilter();
   const isLargePlate = plateCols.length > 12;
@@ -203,7 +213,20 @@ export function PlateView() {
     >
       <h3 className="text-sm font-semibold mb-3 text-text">{t.plateView} ({plateRows.length}×{plateCols.length})</h3>
 
-      <div style={{ overflowX: 'auto' }}>
+      {status === "loading" && <StatusState variant="loading" message={t.loading} />}
+      {status === "error" && (
+        <StatusState
+          variant="error"
+          message={t.statusLoadFailed}
+          detail={fetchError ?? undefined}
+          action={{ label: t.retry, onClick: () => void fetchPlateData() }}
+        />
+      )}
+      {status === "ready" && plateWells.length === 0 && (
+        <StatusState variant="empty" message={t.plateEmpty} />
+      )}
+
+      <div style={{ overflowX: 'auto', display: status === "ready" && plateWells.length > 0 ? undefined : 'none' }}>
       <div
         id="plate-grid"
         className="plate-grid select-none"

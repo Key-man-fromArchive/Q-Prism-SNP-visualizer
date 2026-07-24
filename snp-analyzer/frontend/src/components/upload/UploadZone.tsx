@@ -4,7 +4,7 @@ import { previewImportFile, uploadFile as apiUpload, loadExample as apiLoadExamp
 import { runtimeAssetPath } from "@/lib/runtime-paths";
 import JSZip from "jszip";
 import { useI18n } from "@/hooks/use-i18n";
-import { CircleHelp, Download } from "lucide-react";
+import { ArrowRight, BookOpen, ChevronDown, ChevronUp, CircleHelp, Download, Upload } from "lucide-react";
 import { ImportMappingWizard } from "@/components/upload/ImportMappingWizard";
 import type { ImportPreview, ImportPreviewResponse, ValidationIssue } from "@/types/api";
 
@@ -370,7 +370,9 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           dragover ? "border-primary bg-blue-50" : "border-border"
         }`}
       >
-        <div className="text-4xl mb-2">&#128196;</div>
+        <div className="flex justify-center mb-2">
+          <Upload size={40} className="text-text-muted" aria-hidden="true" />
+        </div>
         <p className="text-text-muted mb-1">
           {t.dragDrop}
         </p>
@@ -412,8 +414,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
               if (p) handleLoadExample(p);
             }}
             title={t.exampleHint}
-            className="px-3 py-2 bg-surface text-text border rounded-lg text-sm cursor-pointer"
-            style={{ borderColor: "var(--border)" }}
+            className="px-3 py-2 bg-surface text-text border border-border rounded-lg text-sm cursor-pointer"
           >
             <option value="" disabled>
               {t.exampleLoad}
@@ -591,13 +592,15 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       <div className="mt-5 border border-border rounded-lg bg-surface overflow-hidden">
         <button
           onClick={() => setShowGuide((v) => !v)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-[var(--bg)] transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-bg transition-colors"
         >
           <span className="font-semibold flex items-center gap-2">
-            <span className="text-base">&#128218;</span>
+            <BookOpen size={16} aria-hidden="true" />
             {t.guideTitle}
           </span>
-          <span className="text-xs text-text-muted">{showGuide ? "▲" : "▼"}</span>
+          <span className="text-xs text-text-muted">
+            {showGuide ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+          </span>
         </button>
 
         {showGuide && (
@@ -612,11 +615,11 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
               ] as const).map((step, i) => (
                 <div
                   key={step.icon}
-                  className="relative text-center p-3 rounded-lg bg-[var(--bg)]"
+                  className="relative text-center p-3 rounded-lg bg-bg"
                 >
                   {i < 3 && (
-                    <span className="absolute right-[-10px] top-1/2 -translate-y-1/2 text-text-muted text-xs z-10">
-                      &#8594;
+                    <span className="absolute right-[-10px] top-1/2 -translate-y-1/2 text-text-muted z-10">
+                      <ArrowRight size={14} aria-hidden="true" />
                     </span>
                   )}
                   <div className="w-6 h-6 mx-auto mb-1.5 rounded-full bg-primary text-white flex items-center justify-center text-[11px] font-bold">
@@ -633,15 +636,15 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
               <div>
                 <h4 className="text-[12px] font-semibold mb-1.5">{t.guideSupportedFormats}</h4>
                 <div className="space-y-1.5 text-[11px]">
-                  <div className="p-2 rounded bg-[var(--bg)]">
+                  <div className="p-2 rounded bg-bg">
                     <span className="font-medium">{t.guideQS}</span>
                     <span className="text-text-muted block">{t.guideQSFormats}</span>
                   </div>
-                  <div className="p-2 rounded bg-[var(--bg)]">
+                  <div className="p-2 rounded bg-bg">
                     <span className="font-medium">{t.guideCFX}</span>
                     <span className="text-text-muted block">{t.guideCFXFormats}</span>
                   </div>
-                  <div className="p-2 rounded bg-[var(--bg)]">
+                  <div className="p-2 rounded bg-bg">
                     <span className="font-medium">{t.guideImports}</span>
                     <span className="text-text-muted block">{t.guideImportFormats}</span>
                   </div>

@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Ruler, Target } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
@@ -310,8 +311,7 @@ export function AnalysisTab() {
 
       {/* Analyze bar */}
       <div
-        className="flex flex-wrap items-center justify-end gap-3 px-6 py-2"
-        style={{ borderBottom: "1px solid var(--border)" }}
+        className="flex flex-wrap items-center justify-end gap-3 px-6 py-2 border-b border-border"
       >
         {analysis && !analyzeError && (
           <span className="text-xs text-text-muted">
@@ -342,8 +342,7 @@ export function AnalysisTab() {
               handleAnalyze();
             }}
             disabled={analyzing || !sessionId}
-            className="rounded-md border px-1.5 py-1 text-sm bg-surface cursor-pointer"
-            style={{ borderColor: "var(--border)" }}
+            className="rounded-md border border-border px-1.5 py-1 text-sm bg-surface cursor-pointer"
           >
             {[2, 3, 4, 5, 6, 7, 8].map((p) => (
               <option key={p} value={p}>
@@ -358,7 +357,7 @@ export function AnalysisTab() {
             style={{ background: "rgba(217,119,6,0.12)" }}
             title={t.lowSeparationHint}
           >
-            ⚠ {t.lowSeparation}
+            <AlertTriangle size={13} aria-hidden="true" /> {t.lowSeparation}
           </span>
         )}
         {/* Draggable genotype-boundary lines — only meaningful in manual mode */}
@@ -369,11 +368,10 @@ export function AnalysisTab() {
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer disabled:opacity-50 ${
             showBoundaryLines && showManualTypes
               ? "bg-primary text-white"
-              : "border text-text"
+              : "border border-border text-text"
           }`}
-          style={showBoundaryLines && showManualTypes ? undefined : { borderColor: "var(--border)" }}
         >
-          📏 {t.boundaryLines}
+          <Ruler size={14} aria-hidden="true" /> {t.boundaryLines}
         </button>
         {/* Observed-window offset: which absolute dosages the observed classes are */}
         {showManualTypes && showBoundaryLines && boundaries && (
@@ -382,23 +380,23 @@ export function AnalysisTab() {
             <button
               onClick={() => shiftOffset(-1)}
               disabled={offset <= 0}
-              className="px-1.5 py-0.5 rounded border cursor-pointer disabled:opacity-40"
-              style={{ borderColor: "var(--border)" }}
+              aria-label={t.offsetLabel}
+              className="px-1.5 py-0.5 rounded border border-border cursor-pointer disabled:opacity-40"
             >
-              ◀
+              <ChevronLeft size={14} aria-hidden="true" />
             </button>
             <span className="tabular-nums font-medium text-text">{offset}</span>
             <button
               onClick={() => shiftOffset(1)}
               disabled={offset >= ploidy - boundaries.length}
-              className="px-1.5 py-0.5 rounded border cursor-pointer disabled:opacity-40"
-              style={{ borderColor: "var(--border)" }}
+              aria-label={t.offsetLabel}
+              className="px-1.5 py-0.5 rounded border border-border cursor-pointer disabled:opacity-40"
             >
-              ▶
+              <ChevronRight size={14} aria-hidden="true" />
             </button>
             {offsetUncertain && (
               <span className="text-amber-500" title={t.offsetUncertainHint}>
-                ⚠
+                <AlertTriangle size={13} aria-hidden="true" />
               </span>
             )}
           </span>
@@ -409,15 +407,20 @@ export function AnalysisTab() {
           title={t.analyzeHint}
           className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary-hover disabled:opacity-60 cursor-pointer"
         >
-          {analyzing ? t.analyzing : `🎯 ${t.analyzeButton}`}
+          {analyzing ? (
+            t.analyzing
+          ) : (
+            <>
+              <Target size={14} aria-hidden="true" /> {t.analyzeButton}
+            </>
+          )}
         </button>
       </div>
 
       {/* Group Filter Bar */}
       {(groupNames.length > 0 || hasEmptyWells) && (
         <div
-          className="flex items-center gap-3 px-6 py-2"
-          style={{ borderBottom: "1px solid var(--border)" }}
+          className="flex items-center gap-3 px-6 py-2 border-b border-border"
         >
           {groupNames.length > 0 && (
             <>

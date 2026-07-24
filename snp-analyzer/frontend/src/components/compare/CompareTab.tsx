@@ -2,6 +2,7 @@
 // @SPEC SNP Discrimination Analyzer - Compare Tab
 
 import { useEffect, useRef, useState, Fragment } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import Plotly from 'plotly.js-dist-min';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useI18n } from '@/hooks/use-i18n';
@@ -168,8 +169,8 @@ export function CompareTab() {
         <h2 className="text-lg font-semibold text-text mb-3">{t.compareRuns}</h2>
 
         {!hasEnoughSessions ? (
-          <div className="text-amber-500 text-sm">
-            ⚠️ {t.uploadAtLeast2}
+          <div className="text-amber-500 text-sm flex items-center gap-1.5">
+            <AlertTriangle size={14} aria-hidden="true" /> {t.uploadAtLeast2}
           </div>
         ) : (
           <Fragment>

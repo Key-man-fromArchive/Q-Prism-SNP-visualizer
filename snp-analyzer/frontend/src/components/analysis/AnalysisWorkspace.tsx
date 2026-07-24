@@ -3,6 +3,7 @@
 // @TEST e2e/p4-s0-single-marker-default.spec.ts, e2e/p4-s1-plate-setup.spec.ts
 
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { getMarkers } from "@/lib/api";
@@ -149,9 +150,9 @@ export function AnalysisWorkspace() {
                   data-testid="split-marker-dismiss"
                   aria-label={t.wsSplitBannerDismiss}
                   onClick={() => setBannerDismissed(true)}
-                  className="px-2 py-1 rounded-md text-text-muted hover:text-text cursor-pointer"
+                  className="px-2 py-1 rounded-md text-text-muted hover:text-text cursor-pointer inline-flex items-center"
                 >
-                  ×
+                  <X size={16} aria-hidden="true" />
                 </button>
               </div>
             )}

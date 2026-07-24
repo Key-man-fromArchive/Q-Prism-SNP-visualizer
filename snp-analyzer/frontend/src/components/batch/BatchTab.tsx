@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, X } from 'lucide-react';
 import { useI18n } from '@/hooks/use-i18n';
 import {
   getSessions,
@@ -339,7 +340,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded text-red-800 text-sm dark:bg-red-900/20 dark:border-red-800 dark:text-red-300">
             {error}
-            <button onClick={() => setError(null)} className="ml-2 text-red-600 hover:text-red-800 font-bold">&times;</button>
+            <button onClick={() => setError(null)} aria-label={t.close} className="ml-2 text-red-600 hover:text-red-800 inline-flex items-center align-middle"><X size={14} aria-hidden="true" /></button>
           </div>
         )}
 
@@ -502,8 +503,8 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button onClick={handleBackToList}
-              className="px-3 py-1.5 bg-surface border border-border rounded text-sm font-medium text-text hover:bg-bg">
-              &#8592; {t.back}
+              className="px-3 py-1.5 bg-surface border border-border rounded text-sm font-medium text-text hover:bg-bg inline-flex items-center gap-1.5">
+              <ArrowLeft size={14} aria-hidden="true" /> {t.back}
             </button>
             <h2 className="text-xl font-semibold text-text">{currentProject.name}</h2>
           </div>
@@ -552,7 +553,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-800 text-sm dark:bg-red-900/20 dark:border-red-800 dark:text-red-300">
             {error}
-            <button onClick={() => setError(null)} className="ml-2 text-red-600 hover:text-red-800 font-bold">&times;</button>
+            <button onClick={() => setError(null)} aria-label={t.close} className="ml-2 text-red-600 hover:text-red-800 inline-flex items-center align-middle"><X size={14} aria-hidden="true" /></button>
           </div>
         )}
 

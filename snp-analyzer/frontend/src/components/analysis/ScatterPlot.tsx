@@ -11,6 +11,7 @@ import { genotypeClasses, wellInfo, labelByRatio, defaultRatioCuts } from "@/lib
 import { plotlyColors } from "@/lib/plotly-theme";
 import { useWellFilter } from "@/hooks/use-well-filter";
 import { useI18n } from "@/hooks/use-i18n";
+import { StatusState } from "@/components/shared/ui";
 import type { ScatterPoint } from "@/types/api";
 
 function effectiveType(
@@ -77,14 +78,28 @@ export function ScatterPlot() {
     return () => window.removeEventListener("welltypes-changed", handler);
   }, []);
 
+  // Request lifecycle so the panel shows loading/empty/error instead of a blank
+  // 560px void (PRD FR-ST-1/ST-3). `loading` covers both an in-flight fetch and
+  // waiting for the cycle to initialise.
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   // Fetch scatter data
   const fetchData = useCallback(async () => {
-    if (!sessionId || !currentCycle) return;
+    if (!sessionId || !currentCycle) {
+      setStatus("loading");
+      return;
+    }
+    setStatus((s) => (s === "ready" ? s : "loading"));
+    setFetchError(null);
     try {
       const res = await getScatter(sessionId, currentCycle, useRox);
       setScatterData(res.points, res.allele2_dye, res.channel_labels);
+      setStatus("ready");
     } catch (err) {
       console.error("Failed to fetch scatter data:", err);
+      setFetchError(err instanceof Error ? err.message : String(err));
+      setStatus("error");
     }
   }, [sessionId, currentCycle, useRox, setScatterData]);
 
@@ -496,10 +511,34 @@ export function ScatterPlot() {
     };
   }, []);
 
+  // Overlay a status placeholder over the (always-mounted) Plotly container so
+  // the plot instance persists across states and never shows as a blank void.
+  const showEmpty = status === "ready" && scatterPoints.length === 0;
+  const overlay =
+    status === "loading" ? (
+      <StatusState variant="loading" message={t.loading} />
+    ) : status === "error" ? (
+      <StatusState
+        variant="error"
+        message={t.statusLoadFailed}
+        detail={fetchError ?? undefined}
+        action={{ label: t.retry, onClick: () => void fetchData() }}
+      />
+    ) : showEmpty ? (
+      <StatusState variant="empty" message={t.scatterEmpty} />
+    ) : null;
+
   return (
     <div className="panel scatter-panel">
       <h3 className="text-sm font-semibold mb-2 text-text">{t.alleleDiscrimination}</h3>
-      <div id="scatter-plot" ref={plotRef} style={{ width: "100%", height: "560px" }} />
+      <div className="relative" style={{ height: "560px" }}>
+        <div id="scatter-plot" ref={plotRef} style={{ width: "100%", height: "100%" }} />
+        {overlay && (
+          <div className="absolute inset-0 flex items-center justify-center bg-surface">
+            {overlay}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

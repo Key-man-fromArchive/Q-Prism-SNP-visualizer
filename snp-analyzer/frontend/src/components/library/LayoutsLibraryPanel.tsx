@@ -9,6 +9,7 @@
 // @TEST e2e/p4-s3-layout.spec.ts
 
 import { useEffect, useMemo, useState } from "react";
+import { X } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { listLayouts, saveLayout, deleteLayout, copyLayout, applyLayout, ApiError } from "@/lib/api";
@@ -228,7 +229,7 @@ export function LayoutsLibraryPanel() {
                       onClick={() => handleDelete(l)}
                       className="w-6 h-6 grid place-items-center rounded-md text-text-muted hover:text-danger hover:bg-bg cursor-pointer"
                     >
-                      ✕
+                      <X size={14} aria-hidden="true" />
                     </button>
                   </div>
                 </div>

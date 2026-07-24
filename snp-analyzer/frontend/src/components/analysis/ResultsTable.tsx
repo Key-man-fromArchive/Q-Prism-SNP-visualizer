@@ -100,13 +100,12 @@ export function ResultsTable() {
                 return (
                   <div
                     key={well}
-                    className="result-cell text-center"
+                    className="result-cell text-center text-text-muted"
                     data-well={well}
                     style={{
                       padding: "4px 2px",
                       borderRadius: "3px",
                       background: "transparent",
-                      color: "var(--text-muted)",
                     }}
                   >
                     <span className="text-[9px]">{well}</span>

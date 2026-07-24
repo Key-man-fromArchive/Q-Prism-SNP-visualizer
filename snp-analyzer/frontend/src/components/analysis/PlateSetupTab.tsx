@@ -3,6 +3,7 @@
 // @TEST e2e/p4-s1-plate-setup.spec.ts
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { Link2, Pencil } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { useDataStore } from "@/stores/data-store";
@@ -576,21 +577,22 @@ export function PlateSetupTab() {
                   <span
                     data-testid="marker-card-catalog-link"
                     title={catalogById.get(m.catalog_id)?.name ?? m.catalog_id}
-                    className="text-xs text-text-muted"
+                    className="text-xs text-text-muted inline-flex items-center"
                   >
-                    🔗
+                    <Link2 size={12} aria-hidden="true" />
                   </span>
                 )}
                 <button
                   type="button"
                   title={t.wsMarkerFormTitleEdit}
+                  aria-label={t.wsMarkerFormTitleEdit}
                   onClick={(e) => {
                     e.stopPropagation();
                     openEditMarkerForm(m.id);
                   }}
-                  className="text-text-muted hover:text-text cursor-pointer"
+                  className="text-text-muted hover:text-text cursor-pointer inline-flex items-center"
                 >
-                  ✎
+                  <Pencil size={13} aria-hidden="true" />
                 </button>
               </div>
               <div className="mt-1.5 text-xs text-text-muted">
