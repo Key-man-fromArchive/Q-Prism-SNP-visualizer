@@ -8,9 +8,11 @@ from fastapi.responses import StreamingResponse
 
 from app.models import UnifiedData
 from app.processing.genotype_vocab import DEFAULT_PLOIDY, label_by_ratio
+from app.processing.background import BackgroundMode
 from app.processing.normalize import normalize_for_cycle
+from app.processing.ratio_origin import compute_ratio_origin, shift_points_to_origin
 from app.routers.upload import sessions
-from app.routers.clustering import cluster_store, welltype_store
+from app.routers.clustering import cluster_store, welltype_store, ntc_wells_for
 from app.auth import CurrentUser, check_session_access
 
 router = APIRouter()
@@ -69,6 +71,7 @@ async def export_csv(
     current_user: CurrentUser,
     cycle: int = Query(default=0),
     use_rox: bool = Query(default=True),
+    background: BackgroundMode = Query(default="none"),
 ):
     """Export scatter data as a downloadable CSV file."""
     check_session_access(sid, current_user)
@@ -83,7 +86,16 @@ async def export_csv(
             f"Cycle {cycle} not available. Range: {unified.cycles[0]}-{unified.cycles[-1]}",
         )
 
-    points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
+    points = normalize_for_cycle(unified, cycle, use_rox=use_rox, background=background)
+    # The exported columns are the values as measured. The genotype fallback and
+    # the low-signal cutoff are ratios, so they are computed against the plate's
+    # own no-signal origin instead of (0, 0) -- see app/processing/ratio_origin.py.
+    called = {
+        p.well: p
+        for p in shift_points_to_origin(
+            points, compute_ratio_origin(points, ntc_wells_for(sid, unified))
+        )
+    }
 
     cluster_assignments: dict[str, str] = {}
     confidences: dict[str, float] = {}
@@ -130,11 +142,11 @@ async def export_csv(
 
     # Data rows (sorted by well for consistent output)
     plate_ploidy = getattr(unified, "ploidy", 2)
-    umin = _undetermined_min(points)
+    umin = _undetermined_min(called.values())
     for p in sorted(points, key=lambda pt: (pt.well[0], int(pt.well[1:]))):
         ploidy = well_ploidy.get(p.well, plate_ploidy)
         genotype = _determine_genotype(
-            p.well, p.norm_fam, p.norm_allele2,
+            p.well, called[p.well].norm_fam, called[p.well].norm_allele2,
             cluster_assignments, manual_assignments, ploidy, umin,
         )
         conf = confidences.get(p.well)
@@ -166,7 +178,12 @@ async def export_csv(
 
 
 @router.get("/api/data/{sid}/export/xlsx")
-async def export_xlsx(sid: str, current_user: CurrentUser, use_rox: bool = Query(default=True)):
+async def export_xlsx(
+    sid: str,
+    current_user: CurrentUser,
+    use_rox: bool = Query(default=True),
+    background: BackgroundMode = Query(default="none"),
+):
     """XLSX workbook: Summary sheet (embedded allele-discrimination plot +
     metadata + QC) and a Results sheet with the full genotype table."""
     from collections import Counter
@@ -182,7 +199,16 @@ async def export_xlsx(sid: str, current_user: CurrentUser, use_rox: bool = Query
     analysed = cluster_store[sid].cycle if sid in cluster_store else 0
     cycle = analysed if analysed and analysed in unified.cycles else max(unified.cycles)
 
-    points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
+    points = normalize_for_cycle(unified, cycle, use_rox=use_rox, background=background)
+    # The exported columns are the values as measured. The genotype fallback and
+    # the low-signal cutoff are ratios, so they are computed against the plate's
+    # own no-signal origin instead of (0, 0) -- see app/processing/ratio_origin.py.
+    called = {
+        p.well: p
+        for p in shift_points_to_origin(
+            points, compute_ratio_origin(points, ntc_wells_for(sid, unified))
+        )
+    }
     cluster_assignments = cluster_store[sid].assignments if sid in cluster_store else {}
     confidences = (cluster_store[sid].confidences or {}) if sid in cluster_store else {}
     regions = cluster_store[sid].regions if sid in cluster_store else None
@@ -214,11 +240,12 @@ async def export_xlsx(sid: str, current_user: CurrentUser, use_rox: bool = Query
 
     scatter_points: list[dict] = []
     table_rows: list[list] = []
-    umin = _undetermined_min(points)
+    umin = _undetermined_min(called.values())
     for p in sorted(points, key=lambda pt: (pt.well[0], int(pt.well[1:]))):
         well_gt_ploidy = well_ploidy.get(p.well, ploidy)
         gt = _determine_genotype(
-            p.well, p.norm_fam, p.norm_allele2, cluster_assignments, manual_assignments, well_gt_ploidy, umin
+            p.well, called[p.well].norm_fam, called[p.well].norm_allele2,
+            cluster_assignments, manual_assignments, well_gt_ploidy, umin
         )
         scatter_points.append({
             "well": p.well,

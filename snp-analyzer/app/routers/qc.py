@@ -6,10 +6,12 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.models import UnifiedData
+from app.processing.background import BackgroundMode
 from app.processing.genotype_vocab import label_by_ratio
 from app.processing.normalize import normalize_for_cycle
+from app.processing.ratio_origin import compute_ratio_origin, shift_points_to_origin
 from app.routers.upload import sessions
-from app.routers.clustering import cluster_store, welltype_store
+from app.routers.clustering import cluster_store, welltype_store, ntc_wells_for
 from app.auth import CurrentUser, check_session_access
 
 router = APIRouter()
@@ -212,6 +214,7 @@ async def qc_metrics(
     current_user: CurrentUser,
     cycle: int = Query(default=0),
     use_rox: bool = Query(default=True),
+    background: BackgroundMode = Query(default="none"),
 ):
     """Compute quality-control metrics for the current dataset."""
     check_session_access(sid, current_user)
@@ -226,7 +229,14 @@ async def qc_metrics(
             f"Cycle {cycle} not available. Range: {unified.cycles[0]}-{unified.cycles[-1]}",
         )
 
-    points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
+    points = normalize_for_cycle(unified, cycle, use_rox=use_rox, background=background)
+    # Every threshold below is a fraction of the plate's median total signal,
+    # and every fallback call is a fam-fraction — both measured from the
+    # plate's no-signal origin, not from (0, 0). On raw endpoint data those are
+    # not the same point: see app/processing/ratio_origin.py.
+    points = shift_points_to_origin(
+        points, compute_ratio_origin(points, ntc_wells_for(sid, unified))
+    )
 
     cluster_assignments: dict[str, str] = {}
     if sid in cluster_store:

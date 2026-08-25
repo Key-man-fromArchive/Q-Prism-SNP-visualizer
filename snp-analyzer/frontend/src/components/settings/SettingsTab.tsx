@@ -11,7 +11,7 @@ import {
   deletePreset as apiDeletePreset,
   runClustering as apiRunClustering,
 } from "@/lib/api";
-import type { PresetResponse } from "@/types/api";
+import type { BackgroundMode, PresetResponse } from "@/types/api";
 
 export function SettingsTab() {
   const { t } = useI18n();
@@ -25,6 +25,7 @@ export function SettingsTab() {
 
   const {
     useRox, setUseRox,
+    backgroundMode, setBackgroundMode,
     fixAxis, setFixAxis,
     xMin, setXMin, xMax, setXMax,
     yMin, setYMin, yMax, setYMax,
@@ -136,6 +137,7 @@ export function SettingsTab() {
               }
             : null,
         n_clusters: nClusters,
+        background: backgroundMode,
       });
       setClusterAssignments(result.assignments);
       window.dispatchEvent(new CustomEvent("asg-result-dirty"));
@@ -146,7 +148,7 @@ export function SettingsTab() {
     } finally {
       setClusterLoading(false);
     }
-  }, [sessionId, clusterAlgorithm, currentCycle, ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters, setClusterAssignments]);
+  }, [sessionId, clusterAlgorithm, currentCycle, ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters, backgroundMode, setClusterAssignments]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 sm:px-6">
@@ -205,6 +207,23 @@ export function SettingsTab() {
           >
             {t.save}
           </Button>
+        </div>
+      </Card>
+
+      {/* Panel 2a: Background subtraction — raw RFU by default */}
+      <Card id="background-subtract-group" title={t.backgroundSubtraction}>
+        <div className="mb-4">
+          <select
+            id="background-mode-select"
+            className="w-full px-2 py-1.5 border border-border rounded text-sm bg-surface text-text"
+            value={backgroundMode}
+            onChange={(e) => setBackgroundMode(e.target.value as BackgroundMode)}
+          >
+            <option value="none">{t.backgroundNone}</option>
+            <option value="pre_read">{t.backgroundPreRead}</option>
+            <option value="channel_min">{t.backgroundChannelMin}</option>
+          </select>
+          <p className="text-xs text-text-muted mt-1">{t.backgroundDescription}</p>
         </div>
       </Card>
 

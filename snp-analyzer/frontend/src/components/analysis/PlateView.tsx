@@ -29,6 +29,7 @@ export function PlateView() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const { showManualTypes, showAutoCluster } = useSettingsStore();
   const useRox = useSettingsStore((s) => s.useRox);
+  const backgroundMode = useSettingsStore((s) => s.backgroundMode);
   const ploidy = useSettingsStore((s) => s.ploidy);
   const { selectedWell, selectedWells, selectWell, selectWells, clearSelection, currentCycle } = useSelectionStore();
   const { plateWells, setPlateData } = useDataStore();
@@ -59,7 +60,7 @@ export function PlateView() {
     setStatus((s) => (s === "ready" ? s : "loading"));
     setFetchError(null);
     try {
-      const res = await getPlate(sessionId, currentCycle, useRox);
+      const res = await getPlate(sessionId, currentCycle, useRox, backgroundMode);
       setPlateData(res.wells);
       setStatus("ready");
     } catch (error) {
@@ -67,7 +68,7 @@ export function PlateView() {
       setFetchError(error instanceof Error ? error.message : String(error));
       setStatus("error");
     }
-  }, [sessionId, currentCycle, useRox, setPlateData]);
+  }, [sessionId, currentCycle, useRox, backgroundMode, setPlateData]);
 
   useEffect(() => {
     void fetchPlateData();

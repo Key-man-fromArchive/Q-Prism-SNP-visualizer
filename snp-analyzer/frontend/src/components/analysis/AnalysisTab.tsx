@@ -191,6 +191,7 @@ export function AnalysisTab() {
         },
         n_clusters: nClusters,
         ploidy: useSettingsStore.getState().ploidy,
+        background: useSettingsStore.getState().backgroundMode,
       });
       setClusterAssignments(result.assignments);
       setBoundaries(result.boundaries ?? null);
@@ -240,6 +241,7 @@ export function AnalysisTab() {
           },
           n_clusters: nClusters,
           ploidy: useSettingsStore.getState().ploidy,
+          background: useSettingsStore.getState().backgroundMode,
         });
         window.dispatchEvent(new CustomEvent("welltypes-changed"));
       } catch (err) {

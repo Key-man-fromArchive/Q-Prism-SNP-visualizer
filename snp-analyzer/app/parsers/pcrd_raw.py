@@ -88,18 +88,13 @@ def parse_pcrd(file_path: str) -> UnifiedData:
     # Classify reads into data windows and assign sequential cycle numbers
     data_windows, cycle_data = _classify_reads_into_windows(plate_reads)
 
-    # Background removal. Two cases:
-    #   - Amplification run (>1 read): subtract the pre-read as a flat baseline,
-    #     falling back to the first amplification cycle when there is no pre-read.
-    #   - Single endpoint / allelic-discrimination read (1 read): there is no
-    #     earlier cycle to baseline against, so subtracting the read from itself
-    #     would zero the reporters. Instead subtract a per-channel background floor
-    #     (the plate-wide minimum of each reporter) so the endpoint FAM/HEX signal
-    #     is preserved for genotyping. ROX (passive) is never subtracted.
-    if len(cycle_data) <= 1:
-        _subtract_channel_background(cycle_data)
-    else:
-        _subtract_baseline(cycle_data, data_windows)
+    # No background subtraction. This is a KASP-like allele-specific endpoint
+    # assay: the RFU at the read IS the measurement, so there is no cycle that
+    # legitimately stands in for zero signal, and subtracting one subtracts
+    # part of the answer. Raw instrument RFU is what gets stored — the same as
+    # every other parser here — and baseline modes are available at query time
+    # instead (app/processing/background.py), which keeps the choice
+    # reversible rather than baking it into the session.
 
     # Build UnifiedData
     wells_set: set[str] = set()
@@ -137,6 +132,8 @@ def parse_pcrd(file_path: str) -> UnifiedData:
         protocol_steps=protocol_steps or None,
         data_windows=data_windows if data_windows else None,
         well_groups=well_groups,
+        background_mode="none",
+        ntc_wells=sorted(ntc_wells, key=_well_sort_key) or None,
     )
 
 
@@ -526,98 +523,6 @@ def _classify_reads_into_windows(
         windows.append(DataWindow(name=name, start_cycle=start, end_cycle=end))
 
     return windows, cycle_data
-
-
-def _subtract_baseline(
-    cycle_data: list[dict],
-    data_windows: list[DataWindow],
-) -> None:
-    """Subtract the pre-read as a flat baseline from all cycles.
-
-    Raw .pcrd PAr data includes hardware background (~3000-5000 RFU per channel)
-    that has to come off before the reporter signal is usable.
-
-    This used to subtract the *first amplification cycle*, which silently assumes
-    that reading starts before anything has amplified. ASG-PCR protocols do not
-    all do that. Measured on three runs of the same assay (2026-08-24), where the
-    protocols differ only in how many cycles run before the first plate read:
-
-        protocol   cycles before 1st read   raw FAM at 1st read (Pos / NTC)
-        v4         25                       4,770 / 4,293
-        v7, v8     35                       10,233 / 4,688
-
-    v8 is already fully amplified when it starts reading. Taking that read as the
-    baseline subtracts the amplification away: every well drops to ~0 and the
-    discrimination the run actually produced disappears, or goes negative exactly
-    where separation is best. The run looks like a failure when it is not — and
-    the later a protocol starts reading, the worse the damage.
-
-    The 30 C pre-read is the correct reference. It is taken before cycling, with
-    the DYE-TAG fully annealed to its quencher, so it is the true dark state and
-    it does not move with the protocol's read schedule. Subtracting it leaves a
-    small constant offset (the 30 C vs 40 C difference in quench efficiency),
-    which is uniform across wells and does not affect discrimination.
-
-    Runs with no pre-read fall back to the previous behaviour.
-    """
-    # Prefer the pre-read; fall back to the first amplification cycle.
-    baseline_idx = None
-    for w in data_windows:
-        if w.name == "Pre-read":
-            baseline_idx = w.start_cycle - 1  # convert to 0-indexed
-            break
-    if baseline_idx is None:
-        for w in data_windows:
-            if w.name == "Amplification":
-                baseline_idx = w.start_cycle - 1
-                break
-    amp_start_idx = baseline_idx or 0
-
-    if amp_start_idx >= len(cycle_data):
-        return
-
-    # Copy baseline values (avoid aliasing — baseline dict IS a cycle_data entry)
-    baseline: dict[str, dict] = {}
-    for well_id, rfu in cycle_data[amp_start_idx]["wells"].items():
-        baseline[well_id] = {
-            "fam": rfu["fam"],
-            "allele2": rfu["allele2"],
-            "rox": rfu.get("rox"),
-        }
-
-    # Subtract baseline from reporter dyes only (FAM + allele2).
-    # ROX is a passive reference dye — its raw value is used for
-    # plate-loading normalization and should NOT be baseline-subtracted.
-    for entry in cycle_data:
-        for well_id, rfu in entry["wells"].items():
-            bl = baseline.get(well_id)
-            if bl is None:
-                continue
-            rfu["fam"] -= bl["fam"]
-            rfu["allele2"] -= bl["allele2"]
-
-
-def _subtract_channel_background(cycle_data: list[dict]) -> None:
-    """Endpoint case: subtract a per-channel background FLOOR from the reporters.
-
-    A single plate read (endpoint / allelic-discrimination) has no earlier cycle
-    to baseline against, and raw PAr means carry a large optical background
-    (~2000-4000 RFU) that swamps the allele signal (every well's fam/allele2 ratio
-    collapses to ~0.5). The background floor is the plate-wide minimum of each
-    reporter channel — the well with the least of that dye approximates zero
-    signal for it. Subtracting it (clamped at 0) restores the discrimination
-    signal. ROX (passive reference) is left untouched for normalization.
-    """
-    if not cycle_data:
-        return
-    wells = cycle_data[0]["wells"]
-    if not wells:
-        return
-    fam_bg = min(r["fam"] for r in wells.values())
-    a2_bg = min(r["allele2"] for r in wells.values())
-    for rfu in wells.values():
-        rfu["fam"] = max(rfu["fam"] - fam_bg, 0.0)
-        rfu["allele2"] = max(rfu["allele2"] - a2_bg, 0.0)
 
 
 def _parse_well_groups(

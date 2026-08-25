@@ -1,4 +1,5 @@
 import type {
+  BackgroundMode,
   UploadResponse,
   ScatterResponse,
   PlateResponse,
@@ -177,35 +178,39 @@ export async function parseImportPreview(request: ImportParseRequest): Promise<I
 export async function getScatter(
   sid: string,
   cycle?: number,
-  useRox?: boolean
+  useRox?: boolean,
+  background?: BackgroundMode
 ): Promise<ScatterResponse> {
-  const query = buildQuery({ cycle, use_rox: useRox });
+  const query = buildQuery({ cycle, use_rox: useRox, background });
   return apiFetch<ScatterResponse>(`/api/data/${sid}/scatter${query}`);
 }
 
 export async function getPlate(
   sid: string,
   cycle?: number,
-  useRox?: boolean
+  useRox?: boolean,
+  background?: BackgroundMode
 ): Promise<PlateResponse> {
-  const query = buildQuery({ cycle, use_rox: useRox });
+  const query = buildQuery({ cycle, use_rox: useRox, background });
   return apiFetch<PlateResponse>(`/api/data/${sid}/plate${query}`);
 }
 
 export async function getAmplification(
   sid: string,
   wells: string[],
-  useRox?: boolean
+  useRox?: boolean,
+  background?: BackgroundMode
 ): Promise<AmplificationResponse> {
-  const query = buildQuery({ wells: wells.join(','), use_rox: useRox });
+  const query = buildQuery({ wells: wells.join(','), use_rox: useRox, background });
   return apiFetch<AmplificationResponse>(`/api/data/${sid}/amplification${query}`);
 }
 
 export async function getAllAmplification(
   sid: string,
-  useRox?: boolean
+  useRox?: boolean,
+  background?: BackgroundMode
 ): Promise<AmplificationResponse> {
-  const query = buildQuery({ use_rox: useRox });
+  const query = buildQuery({ use_rox: useRox, background });
   return apiFetch<AmplificationResponse>(`/api/data/${sid}/amplification/all${query}`);
 }
 
@@ -219,9 +224,10 @@ export async function getCtData(
 
 export async function exportPdf(
   sid: string,
-  useRox?: boolean
+  useRox?: boolean,
+  background?: BackgroundMode
 ): Promise<Blob> {
-  const query = buildQuery({ use_rox: useRox });
+  const query = buildQuery({ use_rox: useRox, background });
   const res = await fetch(apiUrl(`/api/data/${sid}/export/pdf${query}`), { credentials: 'same-origin' });
 
   if (!res.ok) {
@@ -233,9 +239,10 @@ export async function exportPdf(
 
 export async function exportXlsx(
   sid: string,
-  useRox?: boolean
+  useRox?: boolean,
+  background?: BackgroundMode
 ): Promise<Blob> {
-  const query = buildQuery({ use_rox: useRox });
+  const query = buildQuery({ use_rox: useRox, background });
   const res = await fetch(apiUrl(`/api/data/${sid}/export/xlsx${query}`), { credentials: 'same-origin' });
 
   if (!res.ok) {
@@ -551,9 +558,10 @@ export async function deleteAllWellGroups(sid: string): Promise<{ status: string
 export async function exportCsv(
   sid: string,
   cycle?: number,
-  useRox?: boolean
+  useRox?: boolean,
+  background?: BackgroundMode
 ): Promise<Blob> {
-  const query = buildQuery({ cycle, use_rox: useRox });
+  const query = buildQuery({ cycle, use_rox: useRox, background });
   const res = await fetch(apiUrl(`/api/data/${sid}/export/csv${query}`), { credentials: 'same-origin' });
 
   if (!res.ok) {
@@ -570,9 +578,10 @@ export async function exportCsv(
 export async function getQc(
   sid: string,
   cycle?: number,
-  useRox?: boolean
+  useRox?: boolean,
+  background?: BackgroundMode
 ): Promise<QcResponse> {
-  const query = buildQuery({ cycle, use_rox: useRox });
+  const query = buildQuery({ cycle, use_rox: useRox, background });
   return apiFetch<QcResponse>(`/api/data/${sid}/qc${query}`);
 }
 

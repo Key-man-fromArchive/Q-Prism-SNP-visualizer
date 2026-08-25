@@ -29,6 +29,28 @@ class DataWindow(BaseModel):
     end_cycle: int    # inclusive absolute cycle
 
 
+class RatioOrigin(BaseModel):
+    """Origin the fam-fraction ratio is measured from.
+
+    Raw endpoint RFU carries an optical background on both reporter channels
+    (~2000-4000 RFU), and a common offset on both axes drags every
+    ``fam/(fam+allele2)`` ratio toward 0.5 — which is what ratio-based calling
+    and the radial boundary lines are measured against. The plate's own
+    no-template wells mark where "no signal" actually sits, so they are the
+    origin those ratios are taken from. Displayed and stored values stay raw:
+    this shifts the CALLING geometry, not the data.
+
+    ``source`` says where it came from, so a view can state it rather than
+    implying an authority the number does not have:
+      - ``ntc``       — median of the plate's no-template wells (preferred)
+      - ``plate_min`` — per-channel plate-wide minimum (no NTC well known)
+      - ``zero``      — no points at all; ratios measured from (0, 0)
+    """
+    fam: float = 0.0
+    allele2: float = 0.0
+    source: str = "zero"
+
+
 class UnifiedData(BaseModel):
     instrument: str                  # "QuantStudio 3" or "CFX Opus"
     allele2_dye: str                 # "VIC" or "HEX"
@@ -45,6 +67,14 @@ class UnifiedData(BaseModel):
     normalization_dye: str | None = None
     role_channels: dict[str, str] | None = None
     ploidy: int = 2                  # allele copies per locus (2=diploid .. 8)
+    # What has been subtracted from the reporter channels in ``data``.
+    # None/"none" == raw instrument RFU, which is the default for every parser:
+    # this is a KASP-like allele-specific endpoint assay, so the raw value at
+    # the read IS the measurement (see app/processing/background.py).
+    background_mode: str | None = None
+    # No-template wells as declared in the instrument's own plate setup.
+    # Used as the ratio origin when the operator has not marked NTCs by hand.
+    ntc_wells: list[str] | None = None
 
 
 class UploadResponse(BaseModel):
@@ -277,6 +307,10 @@ class ClusteringRequest(BaseModel):
     # well subset and ploidy. When None, the whole plate is clustered as one
     # marker (the historical single-marker path, unchanged).
     regions: list[MarkerRegion] | None = None
+    # Background subtraction to apply before clustering. Must match what the
+    # user is looking at, or the calls would be computed on different numbers
+    # than the plot shows. None => "none" (raw), the default everywhere.
+    background: Literal["none", "pre_read", "channel_min"] | None = None
 
 
 class ClusteringResult(BaseModel):

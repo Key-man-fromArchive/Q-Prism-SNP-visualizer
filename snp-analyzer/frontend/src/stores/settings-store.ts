@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { BackgroundMode } from '@/types/api';
 
 interface SettingsState {
   useRox: boolean;
+  backgroundMode: BackgroundMode;
   fixAxis: boolean;
   xMin: number;
   xMax: number;
@@ -20,6 +22,7 @@ interface SettingsState {
   showEmptyWells: boolean;
   // Actions
   setUseRox: (v: boolean) => void;
+  setBackgroundMode: (v: BackgroundMode) => void;
   setFixAxis: (v: boolean) => void;
   setXMin: (v: number) => void;
   setXMax: (v: number) => void;
@@ -40,6 +43,9 @@ interface SettingsState {
 
 const defaults = {
   useRox: true,
+  // Raw RFU. An endpoint allele-specific read has no cycle that stands in for
+  // zero signal, so subtracting one subtracts part of the answer.
+  backgroundMode: 'none' as BackgroundMode,
   fixAxis: false,
   xMin: 0,
   xMax: 12,
@@ -63,6 +69,7 @@ export const useSettingsStore = create<SettingsState>()(
       ...defaults,
 
       setUseRox: (v) => set({ useRox: v }),
+      setBackgroundMode: (v) => set({ backgroundMode: v }),
       setFixAxis: (v) => set({ fixAxis: v }),
       setXMin: (v) => set({ xMin: v }),
       setXMax: (v) => set({ xMax: v }),

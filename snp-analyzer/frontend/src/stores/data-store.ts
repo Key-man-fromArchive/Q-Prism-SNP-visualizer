@@ -1,11 +1,18 @@
 import { create } from 'zustand';
-import type { ChannelLabels, ScatterPoint, PlateWell } from '@/types/api';
+import type { ChannelLabels, RatioOrigin, ScatterPoint, PlateWell } from '@/types/api';
+
+/** Ratios measured from (0, 0) — what a plate with no background looks like. */
+export const ZERO_ORIGIN: RatioOrigin = { fam: 0, allele2: 0, source: 'zero' };
 
 interface DataState {
   scatterPoints: ScatterPoint[];
   plateWells: PlateWell[];
   allele2Dye: string;
   channelLabels: ChannelLabels | null;
+  /** Origin the scatter's fam-fraction ratios and boundary rays start from.
+   *  Supplied by the backend alongside the (raw) points, so the plot labels
+   *  wells by exactly the geometry the backend clustered against. */
+  ratioOrigin: RatioOrigin;
   clusterAssignments: Record<string, string>;
   wellTypeAssignments: Record<string, string>;
   boundaries: number[] | null; // K-1 internal radial-line positions (descending fam-fraction)
@@ -16,7 +23,8 @@ interface DataState {
   setScatterData: (
     points: ScatterPoint[],
     allele2Dye: string,
-    channelLabels?: ChannelLabels | null
+    channelLabels?: ChannelLabels | null,
+    ratioOrigin?: RatioOrigin | null
   ) => void;
   setPlateData: (wells: PlateWell[]) => void;
   setClusterAssignments: (assignments: Record<string, string>) => void;
@@ -33,6 +41,7 @@ export const useDataStore = create<DataState>((set) => ({
   plateWells: [],
   allele2Dye: '',
   channelLabels: null,
+  ratioOrigin: ZERO_ORIGIN,
   clusterAssignments: {},
   wellTypeAssignments: {},
   boundaries: null,
@@ -40,8 +49,13 @@ export const useDataStore = create<DataState>((set) => ({
   offsetUncertain: false,
   lowSeparation: false,
 
-  setScatterData: (points, allele2Dye, channelLabels) =>
-    set({ scatterPoints: points, allele2Dye, channelLabels: channelLabels ?? null }),
+  setScatterData: (points, allele2Dye, channelLabels, ratioOrigin) =>
+    set({
+      scatterPoints: points,
+      allele2Dye,
+      channelLabels: channelLabels ?? null,
+      ratioOrigin: ratioOrigin ?? ZERO_ORIGIN,
+    }),
   setPlateData: (wells) => set({ plateWells: wells }),
   setClusterAssignments: (assignments) =>
     set({ clusterAssignments: assignments }),
@@ -57,6 +71,7 @@ export const useDataStore = create<DataState>((set) => ({
       plateWells: [],
       allele2Dye: '',
       channelLabels: null,
+      ratioOrigin: ZERO_ORIGIN,
       clusterAssignments: {},
       wellTypeAssignments: {},
       boundaries: null,

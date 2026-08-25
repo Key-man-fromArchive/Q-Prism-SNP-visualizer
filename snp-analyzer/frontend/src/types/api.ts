@@ -182,6 +182,23 @@ export type SessionListItem = {
 // Visualization Data
 // ============================================================================
 
+/** Instrument baseline removed before the reporters are read. "none" (raw
+ *  RFU) is the default: this is a KASP-like endpoint assay, so the value at
+ *  the read IS the measurement. The others are opt-in, for reading a real
+ *  amplification curve or comparing against CFX Maestro's baseline fit. */
+export type BackgroundMode = 'none' | 'pre_read' | 'channel_min';
+
+/** Point a fam-fraction of 0.5 is measured from. Raw endpoint RFU carries an
+ *  optical background on both channels, so (0, 0) is not where "no signal"
+ *  sits and every ratio taken from it collapses toward 0.5. `source` says
+ *  whether this came from the plate's NTC wells, a per-channel plate minimum
+ *  (no NTC known), or nothing at all. */
+export type RatioOrigin = {
+  fam: number;
+  allele2: number;
+  source: 'ntc' | 'plate_min' | 'zero';
+};
+
 export type ScatterPoint = {
   well: string;
   norm_fam: number;
@@ -282,6 +299,9 @@ export type ClusteringRequest = {
   threshold_config?: ThresholdConfig | null;
   n_clusters: number;
   ploidy?: number | null; // allele copies per locus (2=diploid .. 8); null => session value
+  // Must match what the plot is showing, or the calls come from different
+  // numbers than the operator is looking at. null => 'none' (raw).
+  background?: BackgroundMode | null;
 };
 
 export type ClusteringResult = {
@@ -509,12 +529,17 @@ export type QualityResult = {
 export type ScatterResponse = RoleLabelMetadata & {
   cycle: number;
   allele2_dye: string;
+  /** Points are raw; this is the origin their ratios are measured from. */
+  ratio_origin?: RatioOrigin;
+  background_mode?: BackgroundMode;
   points: ScatterPoint[];
 };
 
 export type PlateResponse = RoleLabelMetadata & {
   cycle: number;
   allele2_dye: string;
+  ratio_origin?: RatioOrigin;
+  background_mode?: BackgroundMode;
   wells: PlateWell[];
 };
 

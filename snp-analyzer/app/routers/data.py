@@ -7,10 +7,12 @@ from app.models import (
     ProtocolStep,
     UnifiedData,
 )
+from app.processing.background import BackgroundMode
 from app.processing.normalize import normalize_for_cycle, normalize
+from app.processing.ratio_origin import compute_ratio_origin
 from app.role_labels import build_role_label_metadata
 from app.routers.upload import sessions
-from app.routers.clustering import cluster_store, welltype_store
+from app.routers.clustering import cluster_store, welltype_store, ntc_wells_for
 from app.auth import CurrentUser, check_session_access
 
 router = APIRouter()
@@ -45,7 +47,13 @@ async def suggest_cycle(sid: str, current_user: CurrentUser):
 
 
 @router.get("/api/data/{sid}/scatter")
-async def scatter_data(sid: str, current_user: CurrentUser, cycle: int = Query(default=0), use_rox: bool = Query(default=True)):
+async def scatter_data(
+    sid: str,
+    current_user: CurrentUser,
+    cycle: int = Query(default=0),
+    use_rox: bool = Query(default=True),
+    background: BackgroundMode = Query(default="none"),
+):
     check_session_access(sid, current_user)
     unified = _get_session(sid)
 
@@ -55,7 +63,12 @@ async def scatter_data(sid: str, current_user: CurrentUser, cycle: int = Query(d
     if cycle not in unified.cycles:
         raise HTTPException(400, f"Cycle {cycle} not available. Range: {unified.cycles[0]}-{unified.cycles[-1]}")
 
-    points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
+    points = normalize_for_cycle(unified, cycle, use_rox=use_rox, background=background)
+
+    # Where a fam-fraction of 0.5 actually is on THIS plate. The points below
+    # are raw; the client needs the same origin the backend clustered against
+    # to draw the boundary rays and label by ratio consistently.
+    ratio_origin = compute_ratio_origin(points, ntc_wells_for(sid, unified))
 
     cluster_assignments = {}
     confidences = {}
@@ -67,6 +80,8 @@ async def scatter_data(sid: str, current_user: CurrentUser, cycle: int = Query(d
     return {
         "cycle": cycle,
         "allele2_dye": unified.allele2_dye,
+        "background_mode": background,
+        "ratio_origin": ratio_origin.model_dump(),
         **build_role_label_metadata(unified),
         "points": [
             ScatterPoint(
@@ -87,14 +102,21 @@ async def scatter_data(sid: str, current_user: CurrentUser, cycle: int = Query(d
 
 
 @router.get("/api/data/{sid}/plate")
-async def plate_data(sid: str, current_user: CurrentUser, cycle: int = Query(default=0), use_rox: bool = Query(default=True)):
+async def plate_data(
+    sid: str,
+    current_user: CurrentUser,
+    cycle: int = Query(default=0),
+    use_rox: bool = Query(default=True),
+    background: BackgroundMode = Query(default="none"),
+):
     check_session_access(sid, current_user)
     unified = _get_session(sid)
 
     if cycle <= 0:
         cycle = max(unified.cycles)
 
-    points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
+    points = normalize_for_cycle(unified, cycle, use_rox=use_rox, background=background)
+    ratio_origin = compute_ratio_origin(points, ntc_wells_for(sid, unified))
 
     cluster_assignments_plate = {}
     confidences_plate = {}
@@ -107,8 +129,12 @@ async def plate_data(sid: str, current_user: CurrentUser, cycle: int = Query(def
     for p in points:
         row = ord(p.well[0]) - ord("A")
         col = int(p.well[1:]) - 1
-        total = p.norm_fam + p.norm_allele2
-        ratio = p.norm_fam / total if total > 0 else 0.5
+        # Measured from the plate's own no-signal origin, like every other
+        # ratio here -- from (0, 0) a raw endpoint plate reads ~0.5 everywhere.
+        fam = max(p.norm_fam - ratio_origin.fam, 0.0)
+        allele2 = max(p.norm_allele2 - ratio_origin.allele2, 0.0)
+        total = fam + allele2
+        ratio = fam / total if total > 0 else 0.5
         wells.append(
             PlateWell(
                 well=p.well,
@@ -127,6 +153,8 @@ async def plate_data(sid: str, current_user: CurrentUser, cycle: int = Query(def
     return {
         "cycle": cycle,
         "allele2_dye": unified.allele2_dye,
+        "background_mode": background,
+        "ratio_origin": ratio_origin.model_dump(),
         **build_role_label_metadata(unified),
         "wells": wells,
     }
@@ -134,7 +162,11 @@ async def plate_data(sid: str, current_user: CurrentUser, cycle: int = Query(def
 
 @router.get("/api/data/{sid}/amplification")
 async def amplification_data(
-    sid: str, current_user: CurrentUser, wells: str = Query(default=""), use_rox: bool = Query(default=True)
+    sid: str,
+    current_user: CurrentUser,
+    wells: str = Query(default=""),
+    use_rox: bool = Query(default=True),
+    background: BackgroundMode = Query(default="none"),
 ):
     check_session_access(sid, current_user)
     unified = _get_session(sid)
@@ -143,7 +175,7 @@ async def amplification_data(
     if not well_list:
         raise HTTPException(400, "Provide at least one well, e.g., ?wells=A5,A6")
 
-    all_normalized = normalize(unified, use_rox=use_rox)
+    all_normalized = normalize(unified, use_rox=use_rox, background=background)
 
     curves = []
     for well in well_list:
@@ -169,11 +201,16 @@ async def amplification_data(
 
 
 @router.get("/api/data/{sid}/amplification/all")
-async def amplification_all(sid: str, current_user: CurrentUser, use_rox: bool = Query(default=True)):
+async def amplification_all(
+    sid: str,
+    current_user: CurrentUser,
+    use_rox: bool = Query(default=True),
+    background: BackgroundMode = Query(default="none"),
+):
     """Return amplification curves for ALL wells with effective genotype type."""
     check_session_access(sid, current_user)
     unified = _get_session(sid)
-    all_normalized = normalize(unified, use_rox=use_rox)
+    all_normalized = normalize(unified, use_rox=use_rox, background=background)
 
     # Get genotype assignments
     ca = cluster_store.get(sid)
@@ -225,7 +262,12 @@ async def ct_data(sid: str, current_user: CurrentUser, use_rox: bool = Query(def
 
 
 @router.get("/api/data/{sid}/export/pdf")
-async def export_pdf(sid: str, current_user: CurrentUser, use_rox: bool = Query(default=True)):
+async def export_pdf(
+    sid: str,
+    current_user: CurrentUser,
+    use_rox: bool = Query(default=True),
+    background: BackgroundMode = Query(default="none"),
+):
     check_session_access(sid, current_user)
     from fastapi.responses import Response
     from app.processing.normalize import normalize_for_cycle
@@ -236,7 +278,7 @@ async def export_pdf(sid: str, current_user: CurrentUser, use_rox: bool = Query(
     cycle = max(unified.cycles)
 
     # Get scatter points with effective types
-    points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
+    points = normalize_for_cycle(unified, cycle, use_rox=use_rox, background=background)
     cluster_assignments = cluster_store.get(sid, None)
     manual_assignments = welltype_store.get(sid, {})
 

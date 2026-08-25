@@ -33,12 +33,18 @@ export function ScatterPlot() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const { useRox, fixAxis, xMin, xMax, yMin, yMax, showAutoCluster, showManualTypes } =
     useSettingsStore();
+  const backgroundMode = useSettingsStore((s) => s.backgroundMode);
   const ploidy = useSettingsStore((s) => s.ploidy);
   const ntcThreshold = useSettingsStore((s) => s.ntcThreshold);
   const showBoundaryLines = useSettingsStore((s) => s.showBoundaryLines);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const { selectWell, selectWells, clearSelection, selectedWell } = useSelectionStore();
   const { scatterPoints, allele2Dye, channelLabels: roleLabels, clusterAssignments, wellTypeAssignments } = useDataStore();
+  const ratioOrigin = useDataStore((s) => s.ratioOrigin);
+  // The drag handlers are registered once per tool-open, so they read the
+  // origin through a ref rather than re-binding every time it changes.
+  const originRef = useRef(ratioOrigin);
+  originRef.current = ratioOrigin;
   const setScatterData = useDataStore((s) => s.setScatterData);
   const boundaries = useDataStore((s) => s.boundaries);
   const setBoundaries = useDataStore((s) => s.setBoundaries);
@@ -93,15 +99,15 @@ export function ScatterPlot() {
     setStatus((s) => (s === "ready" ? s : "loading"));
     setFetchError(null);
     try {
-      const res = await getScatter(sessionId, currentCycle, useRox);
-      setScatterData(res.points, res.allele2_dye, res.channel_labels);
+      const res = await getScatter(sessionId, currentCycle, useRox, backgroundMode);
+      setScatterData(res.points, res.allele2_dye, res.channel_labels, res.ratio_origin);
       setStatus("ready");
     } catch (err) {
       console.error("Failed to fetch scatter data:", err);
       setFetchError(err instanceof Error ? err.message : String(err));
       setStatus("error");
     }
-  }, [sessionId, currentCycle, useRox, setScatterData]);
+  }, [sessionId, currentCycle, useRox, backgroundMode, setScatterData]);
 
   useEffect(() => {
     fetchData();
@@ -128,9 +134,14 @@ export function ScatterPlot() {
       if (showManualTypes && point.manual_type) return point.manual_type;
       const auto = point.auto_cluster;
       if (auto === "NTC" || auto === "Positive Control") return auto;
-      const total = point.norm_fam + point.norm_allele2;
+      // Measured from the plate's no-signal origin, not from (0, 0): the
+      // points are raw RFU and both channels carry an optical background, so
+      // ratios taken from zero collapse toward 0.5 for every well.
+      const fam = Math.max(point.norm_fam - ratioOrigin.fam, 0);
+      const allele2 = Math.max(point.norm_allele2 - ratioOrigin.allele2, 0);
+      const total = fam + allele2;
       if (total <= 0) return "Unassigned";
-      return labelByRatio(point.norm_fam / total, ploidy, bnd!, offset);
+      return labelByRatio(fam / total, ploidy, bnd!, offset);
     };
 
     // Group points by effective type
@@ -216,21 +227,25 @@ export function ScatterPlot() {
 
     const axisTitleFont = { size: 14, color: colors.fontColor };
 
-    // Radial boundary lines: ray from the origin along (r, 1-r); a fixed
-    // fam-fraction r is a fixed angle. Extend each ray to the data extent so it
-    // spans the plot without distorting autorange.
+    // Radial boundary lines: ray from the RATIO ORIGIN along (r, 1-r); a fixed
+    // fam-fraction r is a fixed angle about that point. Anchoring the rays at
+    // (0, 0) instead would draw a fan that does not match the calls, since the
+    // calls above measure their ratios from the origin. Extend each ray to the
+    // data extent so it spans the plot without distorting autorange.
     let ext = 1;
-    for (const p of visiblePoints) ext = Math.max(ext, p.norm_fam, p.norm_allele2);
+    for (const p of visiblePoints) {
+      ext = Math.max(ext, p.norm_fam - ratioOrigin.fam, p.norm_allele2 - ratioOrigin.allele2);
+    }
     ext *= 1.05;
     const shapes = bnd
       ? bnd.map((r) => {
           const tlen = ext / Math.max(r, 1 - r, 1e-6);
           return {
             type: "line",
-            x0: 0,
-            y0: 0,
-            x1: tlen * r,
-            y1: tlen * (1 - r),
+            x0: ratioOrigin.fam,
+            y0: ratioOrigin.allele2,
+            x1: ratioOrigin.fam + tlen * r,
+            y1: ratioOrigin.allele2 + tlen * (1 - r),
             line: { color: colors.fontColor, width: 2, dash: "dot" },
             layer: "above",
           };
@@ -314,6 +329,7 @@ export function ScatterPlot() {
     linesActive,
     editBoundaries,
     offset,
+    ratioOrigin,
     isWellVisible,
     selectWell,
     selectWells,
@@ -383,9 +399,12 @@ export function ScatterPlot() {
       if (px < 0 || py < 0 || px > xa._length || py > ya._length) return null;
       const dx = xa.range[0] + (px / xa._length) * (xa.range[1] - xa.range[0]);
       const dy = ya.range[1] - (py / ya._length) * (ya.range[1] - ya.range[0]);
-      const total = dx + dy;
+      // Same origin the rays are drawn from, so the line follows the cursor.
+      const fx = Math.max(dx - originRef.current.fam, 0);
+      const fy = Math.max(dy - originRef.current.allele2, 0);
+      const total = fx + fy;
       if (total <= 0) return null;
-      return Math.max(0, Math.min(1, dx / total));
+      return Math.max(0, Math.min(1, fx / total));
     };
 
     const persist = async (cuts: number[], off: number) => {
@@ -405,6 +424,7 @@ export function ScatterPlot() {
           },
           n_clusters: 4,
           ploidy, // fixed organism ploidy, NOT the line count
+          background: backgroundMode,
         });
         window.dispatchEvent(new CustomEvent("welltypes-changed"));
       } catch (err) {
@@ -499,7 +519,7 @@ export function ScatterPlot() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [linesActive, sessionId, currentCycle, ntcThreshold, ploidy, setBoundaries, setOffset]);
+  }, [linesActive, sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, setBoundaries, setOffset]);
 
   // Cleanup
   useEffect(() => {
