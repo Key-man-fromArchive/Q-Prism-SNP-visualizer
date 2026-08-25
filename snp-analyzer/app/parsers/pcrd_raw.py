@@ -89,8 +89,8 @@ def parse_pcrd(file_path: str) -> UnifiedData:
     data_windows, cycle_data = _classify_reads_into_windows(plate_reads)
 
     # Background removal. Two cases:
-    #   - Amplification run (>1 read): subtract the first amplification cycle as a
-    #     flat baseline (delta-Rn style).
+    #   - Amplification run (>1 read): subtract the pre-read as a flat baseline,
+    #     falling back to the first amplification cycle when there is no pre-read.
     #   - Single endpoint / allelic-discrimination read (1 read): there is no
     #     earlier cycle to baseline against, so subtracting the read from itself
     #     would zero the reporters. Instead subtract a per-channel background floor
@@ -532,18 +532,46 @@ def _subtract_baseline(
     cycle_data: list[dict],
     data_windows: list[DataWindow],
 ) -> None:
-    """Subtract first amplification cycle as flat baseline from all cycles.
+    """Subtract the pre-read as a flat baseline from all cycles.
 
-    Raw .pcrd PAr data includes hardware background (~3000-5000 RFU per channel).
-    Subtracting the first amplification cycle removes this background and produces
-    values comparable to CFX Maestro's baseline-subtracted export (within 1-8%).
+    Raw .pcrd PAr data includes hardware background (~3000-5000 RFU per channel)
+    that has to come off before the reporter signal is usable.
+
+    This used to subtract the *first amplification cycle*, which silently assumes
+    that reading starts before anything has amplified. ASG-PCR protocols do not
+    all do that. Measured on three runs of the same assay (2026-08-24), where the
+    protocols differ only in how many cycles run before the first plate read:
+
+        protocol   cycles before 1st read   raw FAM at 1st read (Pos / NTC)
+        v4         25                       4,770 / 4,293
+        v7, v8     35                       10,233 / 4,688
+
+    v8 is already fully amplified when it starts reading. Taking that read as the
+    baseline subtracts the amplification away: every well drops to ~0 and the
+    discrimination the run actually produced disappears, or goes negative exactly
+    where separation is best. The run looks like a failure when it is not — and
+    the later a protocol starts reading, the worse the damage.
+
+    The 30 C pre-read is the correct reference. It is taken before cycling, with
+    the DYE-TAG fully annealed to its quencher, so it is the true dark state and
+    it does not move with the protocol's read schedule. Subtracting it leaves a
+    small constant offset (the 30 C vs 40 C difference in quench efficiency),
+    which is uniform across wells and does not affect discrimination.
+
+    Runs with no pre-read fall back to the previous behaviour.
     """
-    # Find the first amplification cycle index
-    amp_start_idx = 0
+    # Prefer the pre-read; fall back to the first amplification cycle.
+    baseline_idx = None
     for w in data_windows:
-        if w.name == "Amplification":
-            amp_start_idx = w.start_cycle - 1  # convert to 0-indexed
+        if w.name == "Pre-read":
+            baseline_idx = w.start_cycle - 1  # convert to 0-indexed
             break
+    if baseline_idx is None:
+        for w in data_windows:
+            if w.name == "Amplification":
+                baseline_idx = w.start_cycle - 1
+                break
+    amp_start_idx = baseline_idx or 0
 
     if amp_start_idx >= len(cycle_data):
         return
