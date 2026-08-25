@@ -104,3 +104,33 @@ def test_qc_flags_failed_positive_control(client):
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert any("PCdead" in w for w in body["warnings"])
+
+
+def test_contaminated_ntc_is_flagged_even_though_it_sets_the_ratio_origin(client):
+    """The NTC wells define the ratio origin used for genotype calls, so asking
+    "is this NTC bright?" in that space is self-defeating: the well would be
+    subtracted to (0, 0) by its own contamination and read as clean. The
+    signal-level control checks are asked of the well as measured instead.
+
+    This is the single-NTC case, where the trap is unavoidable if the two
+    questions share one reference point.
+    """
+    _register(client, "s1", _unified([("NTConly", 0.90, 0.06)]))
+    client.clustering.welltype_store["s1"] = {"NTConly": "NTC"}
+    body = client.client.get("/api/data/s1/qc?cycle=1&use_rox=false").json()
+
+    assert body["ntc_check"]["ok"] is False
+    assert any("NTConly" in w for w in body["warnings"])
+    # Reported at its measured brightness, not at the origin it defines.
+    signal = next(w["signal"] for w in body["ntc_check"]["wells"] if w["well"] == "NTConly")
+    assert signal == pytest.approx(0.96)
+
+
+def test_a_clean_ntc_is_not_flagged(client):
+    """The other side of the same check: a dark NTC must stay unflagged."""
+    _register(client, "s1", _unified([("NTCok", 0.02, 0.02)]))
+    client.clustering.welltype_store["s1"] = {"NTCok": "NTC"}
+    body = client.client.get("/api/data/s1/qc?cycle=1&use_rox=false").json()
+
+    assert body["ntc_check"]["ok"] is True
+    assert not any("NTCok" in w for w in body["warnings"])

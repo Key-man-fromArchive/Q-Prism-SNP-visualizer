@@ -230,11 +230,21 @@ async def qc_metrics(
         )
 
     points = normalize_for_cycle(unified, cycle, use_rox=use_rox, background=background)
-    # Every threshold below is a fraction of the plate's median total signal,
-    # and every fallback call is a fam-fraction — both measured from the
-    # plate's no-signal origin, not from (0, 0). On raw endpoint data those are
-    # not the same point: see app/processing/ratio_origin.py.
-    points = shift_points_to_origin(
+
+    # Two different questions get asked of this plate, and they need different
+    # reference points.
+    #
+    # A genotype is a fam-FRACTION, i.e. an angle, and on raw endpoint data the
+    # angle has to be measured from where "no signal" actually sits rather than
+    # from (0, 0) — see app/processing/ratio_origin.py. Hence ``called``.
+    #
+    # "Is this NTC well contaminated?" is not an angle. It asks whether the well
+    # is BRIGHT, and it must be asked of the well as measured. Asking it in
+    # ``called`` space is self-defeating: the NTC wells are what define that
+    # origin, so a contaminated NTC is subtracted to (0, 0) by its own
+    # contamination and reads as perfectly clean. The signal-level control
+    # checks below therefore stay on ``points``.
+    called = shift_points_to_origin(
         points, compute_ratio_origin(points, ntc_wells_for(sid, unified))
     )
 
@@ -243,18 +253,23 @@ async def qc_metrics(
         cluster_assignments = cluster_store[sid].assignments
     manual_assignments = welltype_store.get(sid, {})
 
-    # Scale reference: the plate's own median total signal. Every threshold below
-    # is a fraction of this, so a low-ROX kit (large magnitudes) works unchanged.
+    # Scale references: the plate's own median total signal, in each space.
+    # Every threshold is a fraction of one of these, so a low-ROX kit (large
+    # magnitudes) works unchanged.
     signals = sorted(p.norm_fam + p.norm_allele2 for p in points)
     median_signal = signals[len(signals) // 2] if signals else 0.0
-    undetermined_min = _UNDETERMINED_FRAC * median_signal
     ntc_hot = _NTC_HOT_FRAC * median_signal
+    no_amp_max = _UNDETERMINED_FRAC * median_signal
+
+    call_signals = sorted(p.norm_fam + p.norm_allele2 for p in called)
+    call_median = call_signals[len(call_signals) // 2] if call_signals else 0.0
+    undetermined_min = _UNDETERMINED_FRAC * call_median
 
     # --- Call rate ---
     n_total = len(points)
     n_called = 0
     ploidy = getattr(unified, "ploidy", 2)
-    for p in points:
+    for p in called:
         genotype = _determine_genotype(
             p.well, p.norm_fam, p.norm_allele2,
             cluster_assignments, manual_assignments, undetermined_min, ploidy,
@@ -283,7 +298,8 @@ async def qc_metrics(
                 )
         elif effective_type == "Positive Control":
             # A positive control should amplify; near-NTC signal means it failed.
-            if signal <= undetermined_min:
+            # Also a brightness question, so also judged as measured.
+            if signal <= no_amp_max:
                 warnings.append(
                     f"Positive control {p.well} shows no amplification — check the run."
                 )
@@ -314,7 +330,7 @@ async def qc_metrics(
         # the client so it can prefer the per-marker breakdown for display.
         result["authoritative"] = "markers"
         result["markers"] = [
-            _marker_qc(r, points, manual_assignments, undetermined_min).model_dump()
+            _marker_qc(r, called, manual_assignments, undetermined_min).model_dump()
             for r in ca.regions
         ]
 
