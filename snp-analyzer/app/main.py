@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+
+from app.processing.background import BackgroundModeError
 from fastapi.staticfiles import StaticFiles
 
 from app.routers import upload, import_api, data, clustering, export, qc, sample, compare, statistics, presets, quality, batch, asg, examples, layouts, marker_catalog
@@ -128,6 +130,19 @@ app = FastAPI(
     lifespan=lifespan,
     root_path=SNP_ROOT_PATH,
 )
+
+
+@app.exception_handler(BackgroundModeError)
+async def _background_mode_error(request, exc: BackgroundModeError):
+    """A background mode the run cannot be read with is bad input, not a bug.
+
+    Narrow on purpose: only this exception type is mapped, so a genuine
+    ValueError from anywhere else still surfaces as a 500 instead of being
+    quietly relabelled as the caller's fault.
+    """
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse({"detail": str(exc)}, status_code=400)
 
 
 @app.middleware("http")

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.auth import CurrentUser, check_session_access
 from app.config import is_asg_launch_mode
+from app.processing.background import available_background_modes
 from app.routers.upload import sessions
 
 router = APIRouter()
@@ -198,6 +199,7 @@ async def get_session_info(sid: str, current_user: CurrentUser):
         ] if unified.data_windows else None,
         "suggested_cycle": suggested,
         "well_groups": unified.well_groups,
+        "background_modes": available_background_modes(unified),
     }
 
 

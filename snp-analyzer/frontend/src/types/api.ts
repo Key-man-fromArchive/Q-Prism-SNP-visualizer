@@ -66,6 +66,11 @@ export type UploadResponse = {
   has_rox: boolean;
   data_windows: DataWindow[] | null;
   suggested_cycle: number | null;
+  /** Background modes this run can legitimately be read with. The excluded
+   *  ones distort rather than baseline it — a per-cycle plate floor changes the
+   *  SHAPE of a multi-cycle curve, not its offset, and can erase a Ct outright.
+   *  Decided by the backend; the client offers exactly these. */
+  background_modes?: BackgroundMode[];
   well_groups: Record<string, string[]> | null;
 };
 

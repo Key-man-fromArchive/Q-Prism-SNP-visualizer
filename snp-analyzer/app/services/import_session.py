@@ -5,6 +5,7 @@ import uuid
 
 from app import asg_session, db
 from app.models import DataWindow, UnifiedData, UploadResponse
+from app.processing.background import available_background_modes
 from app.processing import ntc_detection
 
 
@@ -32,6 +33,7 @@ def create_session_from_import(
         data_windows=_dump_data_windows(unified.data_windows),
         suggested_cycle=suggested_cycle,
         well_groups=unified.well_groups,
+        background_modes=available_background_modes(unified),
     )
 
 

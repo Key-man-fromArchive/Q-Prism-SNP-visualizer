@@ -251,6 +251,7 @@ const ko: Translations = {
   backgroundPreRead: '사전 판독(30 °C) 기준 차감',
   backgroundChannelMin: '채널별 플레이트 최소값 차감',
   backgroundDescription: '기본은 끔입니다. KASP 계열 대립유전자 특이 endpoint 판독이므로 판독 시점의 RFU 자체가 측정값이고, 무신호를 대신할 사이클이 없습니다. 실제 증폭 곡선을 볼 때나 CFX Maestro의 baseline fit과 비교할 때만 켜세요. 어느 쪽이든 유전형 비율은 항상 플레이트의 NTC 웰을 원점으로 계산합니다.',
+  backgroundOnlyRawAvailable: '이 런은 사전 판독이 없고, 사이클별 최소값 차감은 곡선의 오프셋이 아니라 모양을 바꿉니다. 따라서 왜곡 없이 읽을 수 있는 방식은 raw RFU뿐입니다.',
   scatterPlotAxis: '산점도 축 설정',
   fixAxisRange: '축 범위 고정',
   xAxisMin: 'X축 최소',

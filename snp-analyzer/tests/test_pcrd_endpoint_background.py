@@ -17,7 +17,9 @@ from app.processing.background import (
     BACKGROUND_CHANNEL_MIN,
     BACKGROUND_NONE,
     BACKGROUND_PRE_READ,
+    BackgroundModeError,
     apply_background,
+    available_background_modes,
 )
 
 
@@ -111,6 +113,48 @@ def test_unknown_mode_is_rejected():
         apply_background(plate, "first_cycle")
 
 
+# ---------------------------------------------------------------------------
+# Which modes a given run can be read with
+# ---------------------------------------------------------------------------
+
+def test_single_endpoint_read_offers_the_channel_floor_and_not_a_pre_read():
+    plate = _endpoint({"A1": (3351, 2402, 2784), "H1": (2832, 2271, 2782)})
+    assert available_background_modes(plate) == [BACKGROUND_NONE, BACKGROUND_CHANNEL_MIN]
+
+
+def test_a_run_with_a_pre_read_offers_it_and_not_the_channel_floor():
+    """A per-cycle plate floor is not a per-well constant, so on a multi-read
+    run it reshapes curves instead of offsetting them — it erased a Ct outright
+    in testing. It is offered only where it was ever correct: a single read."""
+    run = _run(preread={"POS": 4155.0}, reads=[{"POS": 10233.0}, {"POS": 13352.0}])
+    assert available_background_modes(run) == [BACKGROUND_NONE, BACKGROUND_PRE_READ]
+
+
+def test_a_multi_read_run_with_no_pre_read_offers_nothing_but_raw():
+    """The pre-read fallback (baseline on the first amplification read) is the
+    hazard this module documents, so it is not offered as a choice."""
+    run = _run(preread={"POS": 4155.0}, reads=[{"POS": 10233.0}, {"POS": 13352.0}])
+    run = run.model_copy(update={
+        "data_windows": [w for w in run.data_windows if w.name != "Pre-read"],
+    })
+    assert available_background_modes(run) == [BACKGROUND_NONE]
+
+
+def test_a_mode_the_run_cannot_be_read_with_is_refused():
+    run = _run(preread={"POS": 4155.0}, reads=[{"POS": 10233.0}, {"POS": 13352.0}])
+    with pytest.raises(BackgroundModeError, match="not valid for this run"):
+        apply_background(run, BACKGROUND_CHANNEL_MIN)
+
+    plate = _endpoint({"A1": (3351, 2402, 2784)})
+    with pytest.raises(BackgroundModeError, match="not valid for this run"):
+        apply_background(plate, BACKGROUND_PRE_READ)
+
+
+def test_refusal_is_bad_input_not_a_bug():
+    """app.main maps this to a 400, so the caller is told why."""
+    assert issubclass(BackgroundModeError, ValueError)
+
+
 def test_a_transform_never_mutates_the_stored_raw_data():
     plate = _endpoint({"A1": (3351, 2402, 2784), "H1": (2832, 2271, 2782)})
     apply_background(plate, BACKGROUND_CHANNEL_MIN)
@@ -146,11 +190,21 @@ def test_channel_min_clamps_at_zero():
 
 
 def test_channel_min_floors_each_cycle_separately():
-    """Otherwise the global minimum is always the earliest read, which would
-    make this a first-cycle baseline by the back door."""
+    """A global minimum would always come from the earliest read, making this a
+    first-cycle baseline by the back door.
+
+    Exercised through the private helper because a multi-read run can no longer
+    reach this mode at all (``available_background_modes`` refuses it — a
+    per-cycle floor reshapes curves rather than offsetting them). The property
+    is still worth pinning: it is what makes the mode correct for the single
+    read it IS offered for, and what a future relaxation of the gate would
+    have to preserve.
+    """
+    from app.processing.background import _subtract_channel_min
+
     run = _run(preread={"POS": 4155.0, "NTC": 3814.0},
                reads=[{"POS": 10233.0, "NTC": 4688.0}])
-    out = apply_background(run, BACKGROUND_CHANNEL_MIN)
+    out = run.model_copy(update={"data": _subtract_channel_min(run)})
     assert _at(out, 1)["POS"].fam == 4155.0 - 3814.0
     assert _at(out, 2)["POS"].fam == 10233.0 - 4688.0   # not 10233 - 3814
 
@@ -200,18 +254,26 @@ def test_separation_never_goes_negative_where_it_is_real():
         assert w["POS"].fam > w["NTC"].fam
 
 
-def test_pre_read_falls_back_to_the_first_amplification_cycle():
-    """No pre-read in the protocol: the fallback carries the hazard above,
-    which is why it is a fallback and not the default."""
-    run = _run(preread={"POS": 0.0, "NTC": 0.0},
+def test_pre_read_baselines_on_the_pre_read_cycle_and_nothing_else():
+    """There is no fallback to the first amplification read: that read may be
+    fully amplified already, and baselining there subtracts the result. A run
+    without a pre-read is refused the mode instead (see the availability tests).
+    """
+    from app.processing.background import baseline_cycle
+
+    run = _run(preread={"POS": 4163.0, "NTC": 3751.0},
                reads=[{"POS": 4770.0, "NTC": 4293.0},
                       {"POS": 10042.0, "NTC": 4658.0}])
-    run = run.model_copy(update={
+    assert baseline_cycle(run) == 1                            # the pre-read
+    out = apply_background(run, BACKGROUND_PRE_READ)
+    assert _at(out, 1)["POS"].fam == 0.0                       # the reference itself
+    assert _at(out, 2)["POS"].fam == 4770.0 - 4163.0
+    assert _at(out, 3)["POS"].fam == 10042.0 - 4163.0
+
+    stripped = run.model_copy(update={
         "data_windows": [w for w in run.data_windows if w.name != "Pre-read"],
     })
-    out = apply_background(run, BACKGROUND_PRE_READ)
-    assert _at(out, 2)["POS"].fam == 0.0                       # baselined on itself
-    assert _at(out, 3)["POS"].fam == 10042.0 - 4770.0
+    assert baseline_cycle(stripped) is None
 
 
 def test_pre_read_leaves_rox_alone():
