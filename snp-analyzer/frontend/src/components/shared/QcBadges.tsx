@@ -11,6 +11,7 @@ export function QcBadges() {
   const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
   const useRox = useSettingsStore((s) => s.useRox);
+  const backgroundMode = useSettingsStore((s) => s.backgroundMode);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
 
   const [qcData, setQcData] = useState<QcResponse | null>(null);
@@ -25,7 +26,7 @@ export function QcBadges() {
     const fetchQc = async () => {
       setIsLoading(true);
       try {
-        const data = await getQc(sessionId, currentCycle, useRox);
+        const data = await getQc(sessionId, currentCycle, useRox, backgroundMode);
         setQcData(data);
       } catch (error) {
         console.error('Failed to fetch QC data:', error);
@@ -36,7 +37,7 @@ export function QcBadges() {
     };
 
     fetchQc();
-  }, [sessionId, currentCycle, useRox]);
+  }, [sessionId, currentCycle, useRox, backgroundMode]);
 
   if (!sessionId || isLoading) {
     return null;

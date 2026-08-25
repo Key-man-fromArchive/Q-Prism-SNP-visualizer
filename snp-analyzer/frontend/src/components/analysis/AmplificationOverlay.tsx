@@ -18,6 +18,7 @@ export function AmplificationOverlay() {
 
   const sessionId = useSessionStore((s) => s.sessionId);
   const useRox = useSettingsStore((s) => s.useRox);
+  const backgroundMode = useSettingsStore((s) => s.backgroundMode);
   const ploidy = useSettingsStore((s) => s.ploidy);
   const allele2Dye = useDataStore((s) => s.allele2Dye);
   const roleLabels = useDataStore((s) => s.channelLabels);
@@ -39,7 +40,7 @@ export function AmplificationOverlay() {
 
     (async () => {
       try {
-        const res = await getAllAmplification(sessionId, useRox);
+        const res = await getAllAmplification(sessionId, useRox, backgroundMode);
         if (cancelled || !plotRef.current) return;
 
         const curves = res.curves;
@@ -100,7 +101,7 @@ export function AmplificationOverlay() {
     return () => {
       cancelled = true;
     };
-  }, [visible, channel, sessionId, useRox, allele2Dye, roleLabels]);
+  }, [visible, channel, sessionId, useRox, backgroundMode, allele2Dye, roleLabels]);
 
   // Cleanup on unmount
   useEffect(() => {

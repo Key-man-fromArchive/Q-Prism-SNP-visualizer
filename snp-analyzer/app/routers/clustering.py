@@ -22,6 +22,7 @@ from app.processing.clustering import (
 )
 from app.processing.genotype_vocab import validate_ploidy
 from app.processing.normalize import normalize_for_cycle
+from app.processing.ratio_origin import compute_ratio_origin, shift_to_origin
 from app.routers.upload import sessions
 from app.auth import CurrentUser, check_session_access
 
@@ -70,6 +71,24 @@ def _get_session(sid: str):
     if sid not in sessions:
         raise HTTPException(404, "Session not found")
     return sessions[sid]
+
+
+def ntc_wells_for(sid: str, unified) -> set[str]:
+    """The plate's no-template wells, for use as the ratio origin.
+
+    A hand-marked NTC is the operator's own statement about the plate and wins
+    outright — including over a plate setup that declared different wells,
+    which is exactly the case where the operator is correcting it. Only with
+    no manual NTC at all does the instrument's declared setup stand in.
+    """
+    marked = {
+        well
+        for well, wtype in welltype_store.get(sid, {}).items()
+        if wtype == WellType.NTC.value
+    }
+    if marked:
+        return marked
+    return set(getattr(unified, "ntc_wells", None) or [])
 
 
 def _cluster_point_dicts(
@@ -301,7 +320,7 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
     if cycle not in unified.cycles:
         raise HTTPException(400, f"Cycle {cycle} not available")
 
-    points = normalize_for_cycle(unified, cycle)
+    points = normalize_for_cycle(unified, cycle, background=req.background)
     # Wells manually marked as "Omit" have data but should not skew clustering
     # (bad/spiked readings would drag kmeans centroids or threshold ratios).
     omitted = {
@@ -309,11 +328,21 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
         for well, wtype in welltype_store.get(sid, {}).items()
         if wtype == WellType.OMIT.value
     }
-    point_dicts = [
-        {"well": p.well, "norm_fam": p.norm_fam, "norm_allele2": p.norm_allele2}
-        for p in points
-        if p.well not in omitted
-    ]
+    # Every call below this line is a ratio, so it needs an origin that means
+    # "no signal". Raw endpoint RFU does not put that at (0, 0) -- see
+    # app/processing/ratio_origin.py. The origin is taken from ALL of the
+    # cycle's points (an omitted well is excluded from the fit, but omitting a
+    # well is not a statement about where background sits), then applied to
+    # the clustering input only. The plot keeps the raw values.
+    origin = compute_ratio_origin(points, ntc_wells_for(sid, unified))
+    point_dicts = shift_to_origin(
+        [
+            {"well": p.well, "norm_fam": p.norm_fam, "norm_allele2": p.norm_allele2}
+            for p in points
+            if p.well not in omitted
+        ],
+        origin,
+    )
 
     # User-marked controls anchor the analysis: they are honored as-is and
     # excluded from the clustering input. Allele-1/Allele-2 controls (C1) are

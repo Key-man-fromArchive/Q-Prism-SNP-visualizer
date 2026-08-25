@@ -16,6 +16,7 @@ export function useExports(): {
 } {
   const sessionId = useSessionStore((state) => state.sessionId);
   const useRox = useSettingsStore((state) => state.useRox);
+  const backgroundMode = useSettingsStore((state) => state.backgroundMode);
 
   const downloadCSV = useCallback(async () => {
     if (!sessionId) {
@@ -23,7 +24,7 @@ export function useExports(): {
     }
 
     try {
-      const blob = await exportCsv(sessionId, undefined, useRox);
+      const blob = await exportCsv(sessionId, undefined, useRox, backgroundMode);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -36,7 +37,7 @@ export function useExports(): {
       console.error('Failed to download CSV:', error);
       throw error;
     }
-  }, [sessionId, useRox]);
+  }, [sessionId, useRox, backgroundMode]);
 
   const exportPNG = useCallback(async () => {
     const el = document.getElementById('scatter-plot');
@@ -70,7 +71,7 @@ export function useExports(): {
     }
 
     try {
-      const blob = await exportPdf(sessionId, useRox);
+      const blob = await exportPdf(sessionId, useRox, backgroundMode);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -83,7 +84,7 @@ export function useExports(): {
       console.error('Failed to export PDF:', error);
       throw error;
     }
-  }, [sessionId, useRox]);
+  }, [sessionId, useRox, backgroundMode]);
 
   const exportXLSX = useCallback(async () => {
     if (!sessionId) {
@@ -91,7 +92,7 @@ export function useExports(): {
     }
 
     try {
-      const blob = await exportXlsx(sessionId, useRox);
+      const blob = await exportXlsx(sessionId, useRox, backgroundMode);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -104,7 +105,7 @@ export function useExports(): {
       console.error('Failed to export XLSX:', error);
       throw error;
     }
-  }, [sessionId, useRox]);
+  }, [sessionId, useRox, backgroundMode]);
 
   const printReport = useCallback(() => {
     window.print();

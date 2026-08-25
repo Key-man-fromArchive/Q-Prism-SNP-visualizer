@@ -170,6 +170,10 @@ def save_session(session_id: str, unified, filename: str = "", user_id: str | No
         metadata["normalization_dye"] = unified.normalization_dye
     if unified.role_channels:
         metadata["role_channels"] = unified.role_channels
+    if unified.background_mode is not None:
+        metadata["background_mode"] = unified.background_mode
+    if unified.ntc_wells:
+        metadata["ntc_wells"] = unified.ntc_wells
     metadata["ploidy"] = getattr(unified, "ploidy", 2)
 
     conn.execute(
@@ -622,6 +626,8 @@ def load_all_sessions():
             normalization_dye=metadata.get("normalization_dye"),
             role_channels=metadata.get("role_channels"),
             ploidy=int(metadata.get("ploidy", 2)),
+            background_mode=metadata.get("background_mode"),
+            ntc_wells=metadata.get("ntc_wells"),
         )
 
         # Load clustering results

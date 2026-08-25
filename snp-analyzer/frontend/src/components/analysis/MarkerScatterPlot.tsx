@@ -13,7 +13,14 @@ import { dosageOfLabel, defaultRatioCuts, wellInfo } from "@/lib/genotype";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { channelLabels } from "@/lib/channel-labels";
 import { updateMarker } from "@/lib/api";
-import type { ChannelLabels, MarkerRegion, RegionResult, ScatterPoint } from "@/types/api";
+import { ZERO_ORIGIN } from "@/stores/data-store";
+import type {
+  ChannelLabels,
+  MarkerRegion,
+  RatioOrigin,
+  RegionResult,
+  ScatterPoint,
+} from "@/types/api";
 
 // Plotly's own module typings (src/plotly.d.ts) are untyped (`any`); this
 // narrow shape covers only the internal fields this component reads off a
@@ -29,6 +36,10 @@ type MarkerScatterPlotProps = {
   marker: MarkerRegion;
   region: RegionResult | undefined;
   points: ScatterPoint[]; // whole-plate scatter points (filtered internally to marker.wells)
+  // Origin the boundary rays and the drag math measure their fam-fraction
+  // from. The points are raw RFU, so on endpoint data this is not (0, 0) --
+  // see app/processing/ratio_origin.py.
+  ratioOrigin?: RatioOrigin | null;
   allele2Dye?: string | null;
   roleLabels?: ChannelLabels | null;
   onBoundariesPersisted: () => void | Promise<void>;
@@ -39,10 +50,14 @@ export function MarkerScatterPlot({
   marker,
   region,
   points,
+  ratioOrigin,
   allele2Dye,
   roleLabels,
   onBoundariesPersisted,
 }: MarkerScatterPlotProps) {
+  const origin = ratioOrigin ?? ZERO_ORIGIN;
+  const originRef = useRef(origin);
+  originRef.current = origin;
   const plotRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
 
@@ -125,17 +140,19 @@ export function MarkerScatterPlot({
     }
 
     let ext = 1;
-    for (const p of scopedPoints) ext = Math.max(ext, p.norm_fam, p.norm_allele2);
+    for (const p of scopedPoints) {
+      ext = Math.max(ext, p.norm_fam - origin.fam, p.norm_allele2 - origin.allele2);
+    }
     ext *= 1.05;
     const cuts = editRef.current;
     const shapes = cuts.map((r) => {
       const tlen = ext / Math.max(r, 1 - r, 1e-6);
       return {
         type: "line",
-        x0: 0,
-        y0: 0,
-        x1: tlen * r,
-        y1: tlen * (1 - r),
+        x0: origin.fam,
+        y0: origin.allele2,
+        x1: origin.fam + tlen * r,
+        y1: origin.allele2 + tlen * (1 - r),
         line: { color: colors.fontColor, width: 2, dash: "dot" },
         layer: "above",
       };
@@ -177,7 +194,7 @@ export function MarkerScatterPlot({
     } else {
       Plotly.react(plotRef.current, traces, layout, config);
     }
-  }, [scopedPoints, assignmentFor, ploidy, editBoundaries, allele2Dye, roleLabels]);
+  }, [scopedPoints, assignmentFor, ploidy, editBoundaries, origin, allele2Dye, roleLabels]);
 
   // Drag a radial boundary line; persists to the marker's threshold_config on
   // release (PUT /markers/{id}) then asks the parent to re-cluster so the
@@ -198,9 +215,12 @@ export function MarkerScatterPlot({
       if (px < 0 || py < 0 || px > xa._length || py > ya._length) return null;
       const dx = xa.range[0] + (px / xa._length) * (xa.range[1] - xa.range[0]);
       const dy = ya.range[1] - (py / ya._length) * (ya.range[1] - ya.range[0]);
-      const total = dx + dy;
+      // Same origin the rays are anchored at, so the line follows the cursor.
+      const fx = Math.max(dx - originRef.current.fam, 0);
+      const fy = Math.max(dy - originRef.current.allele2, 0);
+      const total = fx + fy;
       if (total <= 0) return null;
-      return Math.max(0, Math.min(1, dx / total));
+      return Math.max(0, Math.min(1, fx / total));
     };
 
     const persist = async (cuts: number[]) => {

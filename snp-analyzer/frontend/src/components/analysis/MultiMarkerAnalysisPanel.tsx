@@ -11,9 +11,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Info } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
+import { useSettingsStore } from "@/stores/settings-store";
+import { ZERO_ORIGIN } from "@/stores/data-store";
 import { getScatter, runClustering, listMarkerCatalog } from "@/lib/api";
 import { ClusteringAlgorithm } from "@/types/api";
-import type { ChannelLabels, MarkerCatalogEntry, MarkerRegion, RegionResult, ScatterPoint } from "@/types/api";
+import type { ChannelLabels, MarkerCatalogEntry, MarkerRegion, RatioOrigin, RegionResult, ScatterPoint } from "@/types/api";
 import { genotypeShortLabel, wellInfo } from "@/lib/genotype";
 import { MARKER_PALETTE } from "@/lib/constants";
 import { dosageTrustForMarker } from "@/lib/marker-catalog";
@@ -46,6 +48,9 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   const [scatterPoints, setScatterPoints] = useState<ScatterPoint[]>([]);
   const [allele2Dye, setAllele2Dye] = useState<string>("");
   const [roleLabels, setRoleLabels] = useState<ChannelLabels | null>(null);
+  const [ratioOrigin, setRatioOrigin] = useState<RatioOrigin>(ZERO_ORIGIN);
+  const useRox = useSettingsStore((s) => s.useRox);
+  const backgroundMode = useSettingsStore((s) => s.backgroundMode);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(
     markers[0]?.id ?? null
   );
@@ -82,6 +87,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
         algorithm: ClusteringAlgorithm.AUTO,
         cycle: 0, // 0 => backend uses the last cycle
         n_clusters: 4,
+        background: backgroundMode,
       });
       const byId: Record<string, RegionResult> = {};
       for (const r of result.regions ?? []) byId[r.id] = r;
@@ -91,19 +97,20 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     } finally {
       setLoading(false);
     }
-  }, [sessionId, markers.length]);
+  }, [sessionId, markers.length, backgroundMode]);
 
   const fetchScatter = useCallback(async () => {
     if (!sessionId) return;
     try {
-      const res = await getScatter(sessionId);
+      const res = await getScatter(sessionId, undefined, useRox, backgroundMode);
       setScatterPoints(res.points);
       setAllele2Dye(res.allele2_dye);
       setRoleLabels(res.channel_labels ?? null);
+      setRatioOrigin(res.ratio_origin ?? ZERO_ORIGIN);
     } catch (err) {
       console.error("Failed to fetch scatter data:", err);
     }
-  }, [sessionId]);
+  }, [sessionId, useRox, backgroundMode]);
 
   // Trigger clustering of the saved markers + load scatter points whenever
   // this surface is entered with markers defined.
@@ -306,6 +313,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                   marker={selectedMarker}
                   region={selectedRegion}
                   points={scatterPoints}
+                  ratioOrigin={ratioOrigin}
                   allele2Dye={allele2Dye}
                   roleLabels={roleLabels}
                   onBoundariesPersisted={runCluster}

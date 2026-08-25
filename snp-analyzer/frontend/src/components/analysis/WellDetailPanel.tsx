@@ -18,6 +18,7 @@ export function WellDetailPanel() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const useRox = useSettingsStore((s) => s.useRox);
+  const backgroundMode = useSettingsStore((s) => s.backgroundMode);
   const ploidy = useSettingsStore((s) => s.ploidy);
   const { selectedWell, currentCycle } = useSelectionStore();
   const scatterPoints = useDataStore((s) => s.scatterPoints);
@@ -45,7 +46,7 @@ export function WellDetailPanel() {
 
     (async () => {
       try {
-        const res = await getAmplification(sessionId, [selectedWell], useRox);
+        const res = await getAmplification(sessionId, [selectedWell], useRox, backgroundMode);
         if (cancelled || !plotRef.current) return;
 
         const curve: AmplificationCurve | undefined = res.curves[0];
@@ -109,7 +110,7 @@ export function WellDetailPanel() {
     return () => {
       cancelled = true;
     };
-  }, [selectedWell, sessionId, useRox, currentCycle, allele2Dye, roleLabels, numCycles]);
+  }, [selectedWell, sessionId, useRox, backgroundMode, currentCycle, allele2Dye, roleLabels, numCycles]);
 
   // Cleanup on unmount
   useEffect(() => {
