@@ -63,3 +63,38 @@ def test_quality_is_scale_invariant():
     for w in small:
         assert small[w]["score"] == large[w]["score"], w
         assert small[w]["flags"] == large[w]["flags"], w
+
+
+def _with_offset(unified: UnifiedData, offset: float) -> UnifiedData:
+    """The same plate read with an optical background on both reporters."""
+    return unified.model_copy(update={
+        "data": [
+            d.model_copy(update={"fam": d.fam + offset, "allele2": d.allele2 + offset})
+            for d in unified.data
+        ]
+    })
+
+
+def test_quality_is_offset_invariant():
+    """Raw reporter channels carry 2000-4000 RFU of optical background and
+    nothing subtracts it any more (app/processing/background.py). Scoring the
+    absolute peak gave a background-only well 10.6 of 40 magnitude points and
+    dropped its low_signal flag, because 3000 is not under 15% of a 9000
+    median. Every term reads amplitude above the well's own baseline instead,
+    so the offset cancels exactly.
+    """
+    plate = _unified(dead_well=True)
+    plain = score_all_wells(plate, use_rox=False)
+    offset = score_all_wells(_with_offset(plate, 3000.0), use_rox=False)
+
+    assert set(plain) == set(offset)
+    for w in plain:
+        assert plain[w]["score"] == offset[w]["score"], w
+        assert plain[w]["flags"] == offset[w]["flags"], w
+    # The dead well gets no credit for background: both amplitude terms are 0
+    # and it is flagged, with or without the offset. (Its remaining 30 points
+    # are the noise term — a perfectly flat well has a perfectly clean
+    # baseline. That is the rubric's own judgement, unchanged here.)
+    assert offset["DEAD"]["magnitude_score"] == 0
+    assert offset["DEAD"]["rise_score"] == 0
+    assert "low_signal" in offset["DEAD"]["flags"]

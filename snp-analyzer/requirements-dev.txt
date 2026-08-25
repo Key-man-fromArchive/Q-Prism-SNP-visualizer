@@ -1,0 +1,26 @@
+# Test dependencies. requirements.txt alone is not enough to run the suite:
+#
+#   pytest          the runner
+#   httpx           fastapi.testclient.TestClient is built on it
+#   pytest-asyncio  tests/test_upload_preview_contract.py marks async tests
+#                   with @pytest.mark.asyncio; without the plugin those 7
+#                   tests fail with "async def functions are not natively
+#                   supported" rather than being skipped.
+#
+# Install both files into the venv, never into the host interpreter:
+#
+#   python -m venv venv && . venv/bin/activate
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   pytest
+#
+# The venv matters beyond tidiness. requirements.txt pins bcrypt==4.0.1
+# because passlib 1.7.4 probes its backend at import time by hashing a secret
+# longer than 72 bytes; bcrypt >= 5 rejects that outright, the bcrypt backend
+# fails to initialise, and every test that touches authentication -- i.e. the
+# entire API layer, ~106 tests -- errors out before it runs. A host that has
+# picked up a newer bcrypt elsewhere will do exactly that, and the failure
+# looks like an unrelated environment problem rather than a version conflict.
+-r requirements.txt
+pytest==9.1.1
+pytest-asyncio==1.4.0
+httpx==0.28.1

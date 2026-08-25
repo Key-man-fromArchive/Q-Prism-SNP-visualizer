@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
@@ -58,12 +58,30 @@ export function SettingsTab() {
     loadPresetList();
   }, [loadPresetList]);
 
+  // A mode absent from the run's own list is not offered. Until a session is
+  // loaded there is nothing to constrain, so all three show.
+  const backgroundModeOptions = useMemo(() => {
+    const labels: Record<BackgroundMode, string> = {
+      none: t.backgroundNone,
+      pre_read: t.backgroundPreRead,
+      channel_min: t.backgroundChannelMin,
+    };
+    const allowed = sessionInfo?.background_modes;
+    const modes: BackgroundMode[] = allowed ?? ["none", "pre_read", "channel_min"];
+    return modes.map((value) => ({ value, label: labels[value] }));
+  }, [sessionInfo, t]);
+
   const handleApplyPreset = useCallback(() => {
     const preset = presets.find((p) => p.id === selectedPresetId);
     if (!preset) return;
 
     const s = preset.settings;
     if (s.use_rox !== undefined) setUseRox(s.use_rox);
+    // A preset may name a mode this run cannot be read with (they are saved
+    // per operator, not per run), so honor it only if the run allows it.
+    if (s.background !== undefined && backgroundModeOptions.some((o) => o.value === s.background)) {
+      setBackgroundMode(s.background);
+    }
     if (s.fix_axis !== undefined) setFixAxis(s.fix_axis);
     if (s.x_min !== undefined) setXMin(s.x_min);
     if (s.x_max !== undefined) setXMax(s.x_max);
@@ -75,8 +93,8 @@ export function SettingsTab() {
     if (s.allele2_ratio_min !== undefined) setAllele2RatioMin(s.allele2_ratio_min);
     if (s.n_clusters !== undefined) setNClusters(s.n_clusters);
   }, [
-    selectedPresetId, presets,
-    setUseRox, setFixAxis, setXMin, setXMax, setYMin, setYMax,
+    selectedPresetId, presets, backgroundModeOptions,
+    setUseRox, setBackgroundMode, setFixAxis, setXMin, setXMax, setYMin, setYMax,
     setClusterAlgorithm, setNtcThreshold, setAllele1RatioMax, setAllele2RatioMin, setNClusters,
   ]);
 
@@ -92,6 +110,7 @@ export function SettingsTab() {
         allele2_ratio_min: allele2RatioMin,
         n_clusters: nClusters,
         use_rox: useRox,
+        background: backgroundMode,
         fix_axis: fixAxis,
         x_min: xMin,
         x_max: xMax,
@@ -105,7 +124,7 @@ export function SettingsTab() {
     }
   }, [
     newPresetName, clusterAlgorithm, ntcThreshold, allele1RatioMax, allele2RatioMin,
-    nClusters, useRox, fixAxis, xMin, xMax, yMin, yMax, loadPresetList,
+    nClusters, useRox, backgroundMode, fixAxis, xMin, xMax, yMin, yMax, loadPresetList,
   ]);
 
   const handleDeletePreset = useCallback(async () => {
@@ -210,7 +229,10 @@ export function SettingsTab() {
         </div>
       </Card>
 
-      {/* Panel 2a: Background subtraction — raw RFU by default */}
+      {/* Panel 2a: Background subtraction — raw RFU by default. Only the modes
+          this run can actually be read with are offered; the backend decides
+          which those are and rejects the rest, because the excluded ones
+          distort the data rather than baseline it. */}
       <Card id="background-subtract-group" title={t.backgroundSubtraction}>
         <div className="mb-4">
           <select
@@ -219,11 +241,14 @@ export function SettingsTab() {
             value={backgroundMode}
             onChange={(e) => setBackgroundMode(e.target.value as BackgroundMode)}
           >
-            <option value="none">{t.backgroundNone}</option>
-            <option value="pre_read">{t.backgroundPreRead}</option>
-            <option value="channel_min">{t.backgroundChannelMin}</option>
+            {backgroundModeOptions.map(({ value, label }) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
           </select>
           <p className="text-xs text-text-muted mt-1">{t.backgroundDescription}</p>
+          {backgroundModeOptions.length === 1 && (
+            <p className="text-xs text-text-muted mt-1">{t.backgroundOnlyRawAvailable}</p>
+          )}
         </div>
       </Card>
 

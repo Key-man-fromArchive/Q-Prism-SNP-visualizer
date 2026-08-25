@@ -249,6 +249,7 @@ const en = {
   backgroundPreRead: 'Pre-read (30 °C) as baseline',
   backgroundChannelMin: 'Per-channel plate minimum',
   backgroundDescription: 'Off by default: this is a KASP-like allele-specific endpoint assay, so the RFU at the read is the measurement and no cycle stands in for zero signal. Turn it on only to read a real amplification curve, or to compare against CFX Maestro\'s baseline fit. Genotype ratios are always measured from the plate\'s own NTC wells either way.',
+  backgroundOnlyRawAvailable: 'This run has no pre-read, and a per-cycle plate floor would reshape its curves rather than offset them — so raw RFU is the only reading of it that is not a distortion.',
   scatterPlotAxis: 'Scatter Plot Axis',
   fixAxisRange: 'Fix axis range',
   xAxisMin: 'X axis min',

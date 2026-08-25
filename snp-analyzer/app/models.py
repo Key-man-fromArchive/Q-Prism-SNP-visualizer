@@ -87,6 +87,10 @@ class UploadResponse(BaseModel):
     data_windows: list[DataWindow] | None = None
     suggested_cycle: int | None = None
     well_groups: dict[str, list[str]] | None = None
+    # Background modes this run can legitimately be read with. The excluded
+    # ones distort rather than baseline it, so the client offers only these
+    # instead of re-deriving the rule (see processing/background.py).
+    background_modes: list[str] = ["none"]
 
 
 class UploadPreviewRequiredResponse(BaseModel):

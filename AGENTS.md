@@ -9,12 +9,12 @@ A Vite/React frontend is under `snp-analyzer/frontend/`, with source in `src/`, 
 ## Build, Test, and Development Commands
 
 - `cd snp-analyzer && docker compose up --build`: build and run the full app on `http://localhost:8002`.
-- `cd snp-analyzer && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt`: prepare Python dependencies.
+- `cd snp-analyzer && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt -r requirements-dev.txt`: prepare Python dependencies. Install into the venv, not the host interpreter — `requirements.txt` pins `bcrypt==4.0.1` for passlib 1.7.4, and a host that has picked up bcrypt 5 elsewhere errors out of every auth-touching test (the whole API layer) before it runs.
 - `cd snp-analyzer && uvicorn app.main:app --reload --port 8002`: run the FastAPI backend locally.
 - `npm install && npx playwright install chromium && npx playwright test`: install and run root Playwright E2E tests against port `8002`.
 - `cd snp-analyzer/frontend && npm run dev`: run the Vite frontend during UI development.
 - `cd snp-analyzer/frontend && npm run build && npm run lint`: type-check, build, and lint the React frontend.
-- `cd snp-analyzer && pytest`: run backend Python tests.
+- `cd snp-analyzer && pytest`: run backend Python tests (368 pass from a venv built with both requirements files).
 
 ## Coding Style & Naming Conventions
 
