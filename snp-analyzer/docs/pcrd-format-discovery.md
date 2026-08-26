@@ -127,20 +127,44 @@ Each `TemperatureStep` element has:
 Steps inside a GOTO loop execute `optionGotoCycle + 1` total times
 (the initial pass plus N repeats).
 
-### ASG-PCR Protocol Example
-```
-Step 0: 30°C  60s  [PlateRead] → Pre-read (1 cycle)
-Step 1: 94°C 900s               → Initial denaturation
-Step 2: 94°C  20s               → Denaturation (cycling)
-Step 3: 61°C  60s  [PlateRead] [Increment -0.6°C] → Touchdown annealing
-Step 4: GOTO step 2, 9 cycles   → 10 total cycles at steps 2-3
-Step 5: 94°C  20s               → Denaturation (cycling)
-Step 6: 55°C  60s  [PlateRead]  → Data collection
-Step 7: GOTO step 5, 12 cycles  → 13 total cycles at steps 5-6
-Step 8: 30°C  60s  [PlateRead]  → Post-read (1 cycle)
+### ASG-PCR Protocol — real production profiles
 
-Result: 25 plate reads total (1 + 10 + 13 + 1)
-```
+> **2026-08-26.** The two-tier block that used to sit here (ending at 55 °C, 25
+> plate reads) came from an early QuantStudio `.eds` and is NOT what the CFX
+> production protocols do. It was read by another team as "ASG-PCR bottoms out at
+> 55 °C and has no 40 °C step", which is wrong and cost a round of analysis.
+> Below are the actual `protocol2BaseList` values, as parsed into
+> `sessions.metadata_json.protocol_steps` by `app/parsers/pcrd_raw.py`.
+
+Every production profile is **3-tier (v9: 4)** and every plate read happens at
+**40 °C**, because the FRET cassette's measured binding temperature is 50 °C —
+the reaction must drop below 50 °C for a reporter to exist, so the 40 °C step
+cannot be removed.
+
+| Stage | v4 (previous production) | v7 | v8 | v9 |
+|---|---|---|---|---|
+| Pre-read | 30 °C 60 s ● | 30 °C 60 s ● | 30 °C 60 s ● | 30 °C 60 s ● |
+| Initial denaturation | 94 °C 300 s | 94 °C 300 s | 94 °C 300 s | 94 °C 300 s |
+| Tier 1 (touchdown) | 94/20 + **61**/60 ×10 | 94/20 + **64**/60 ×10 | 94/20 + **61**/60 ×10 | 94/20 + **61**/60 ×10 |
+| Tier 2 | 94/15 + 60/**5** ×15 | 94/10 + 60/**60** ×25 | 94/10 + 60/**60** ×25 | 94/15 + 60/**5** ×15 |
+| Tier 3a (no read) | — | — | — | 94/10 + 60/30 ×10 |
+| Tier 3b (read) | 95/10 + 60/60 + **40/10 ●** ×20 | 94/10 + 60/30 + **40/10 ●** ×10 | 94/10 + 60/30 + **40/10 ●** ×10 | 94/10 + 60/30 + **40/10 ●** ×10 |
+| Post-read | 30 °C 30 s ● | 30 °C 30 s ● | 30 °C 30 s ● | 30 °C 30 s ● |
+| Plate reads | 20 | 10 | 10 | 10 |
+| 60 °C total | 1,275 s | 1,800 s | 1,800 s | 675 s |
+| ≤50 °C total | 738 s | 369 s | 369 s | 369 s |
+
+● = plate read. Touchdown decrements 0.6 °C/cycle (61.0 → 55.6, or 64.0 → 58.6 on v7).
+
+**Cost of one read** (2.6 °C/s effective ramp, from 54 measured read timestamps):
+50→40 descent 3.8 s + 40 °C hold 10.0 s + optical scan 19.2 s + 40→50 ascent
+3.8 s = **36.9 s below 50 °C**, or 44.6 s of wall clock.
+
+The production choice is **v9 with Tier 3b reduced to 3 reads** — same best
+separation ratio (R min 4.72, reached at read #1), 1.8 min below 50 °C instead of
+12.3 min, and 57.0 min total instead of 87.6.
+
+For the full comparison and the evidence, see the V4-vs-V9 report.
 
 ## 6. Data Windows
 
