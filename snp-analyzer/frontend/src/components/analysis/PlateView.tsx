@@ -12,6 +12,7 @@ import { wellInfo, dosageOfLabel } from '@/lib/genotype';
 import { useWellFilter } from '@/hooks/use-well-filter';
 import { useI18n } from '@/hooks/use-i18n';
 import { StatusState } from '@/components/shared/ui';
+import type { PlateWell } from '@/types/api';
 
 interface DragRect {
   left: number;
@@ -20,25 +21,46 @@ interface DragRect {
   height: number;
 }
 
-export function PlateView() {
+type PlateViewProps = {
+  scopeWells?: readonly string[];
+  ploidyOverride?: number;
+};
+
+export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   const { t } = useI18n();
   const panelRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
   // Stores
   const sessionId = useSessionStore((s) => s.sessionId);
-  const { showManualTypes, showAutoCluster } = useSettingsStore();
+  const showManualTypes = useSettingsStore((s) => s.showManualTypes);
+  const showAutoCluster = useSettingsStore((s) => s.showAutoCluster);
   const useRox = useSettingsStore((s) => s.useRox);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
-  const ploidy = useSettingsStore((s) => s.ploidy);
-  const { selectedWell, selectedWells, selectWell, selectWells, clearSelection, currentCycle } = useSelectionStore();
-  const { plateWells, setPlateData } = useDataStore();
+  const storedPloidy = useSettingsStore((s) => s.ploidy);
+  const ploidy = ploidyOverride ?? storedPloidy;
+  const selectedWell = useSelectionStore((s) => s.selectedWell);
+  const selectedWells = useSelectionStore((s) => s.selectedWells);
+  const selectWell = useSelectionStore((s) => s.selectWell);
+  const selectWells = useSelectionStore((s) => s.selectWells);
+  const clearSelection = useSelectionStore((s) => s.clearSelection);
+  const currentCycle = useSelectionStore((s) => s.currentCycle);
+  const plateWells = useDataStore((s) => s.plateWells);
+  const setPlateData = useDataStore((s) => s.setPlateData);
+  const scopeSet = useMemo(
+    () => (scopeWells ? new Set(scopeWells) : null),
+    [scopeWells]
+  );
 
   // Drag selection state
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragRect, setDragRect] = useState<DragRect | null>(null);
+  const dragAdditiveRef = useRef(false);
+  const didDragRef = useRef(false);
   const dragThreshold = 5;
+  const [activeCell, setActiveCell] = useState({ r: 0, c: 0 });
+  const anchorRef = useRef({ r: 0, c: 0 });
 
   // Re-fetch trigger (incremented when well types change)
   const [refetchTrigger, setRefetchTrigger] = useState(0);
@@ -48,7 +70,11 @@ export function PlateView() {
   useEffect(() => {
     const handler = () => setRefetchTrigger((n) => n + 1);
     window.addEventListener("welltypes-changed", handler);
-    return () => window.removeEventListener("welltypes-changed", handler);
+    window.addEventListener("analysis-results-changed", handler);
+    return () => {
+      window.removeEventListener("welltypes-changed", handler);
+      window.removeEventListener("analysis-results-changed", handler);
+    };
   }, []);
 
   // Fetch plate data when dependencies change
@@ -71,6 +97,8 @@ export function PlateView() {
   }, [sessionId, currentCycle, useRox, backgroundMode, setPlateData]);
 
   useEffect(() => {
+    // Network completion, not this effect body, performs the state update.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchPlateData();
   }, [fetchPlateData, refetchTrigger]);
 
@@ -87,7 +115,7 @@ export function PlateView() {
   }, [plateWells]);
 
   // Calculate well color based on type or ratio
-  const getWellColor = (wellData: any): string => {
+  const getWellColor = (wellData: PlateWell | undefined): string => {
     if (!wellData) return '';
 
     // Determine effective type
@@ -119,16 +147,30 @@ export function PlateView() {
   // Handle well click
   const handleWellClick = (wellId: string, event: React.MouseEvent) => {
     event.stopPropagation();
+    if (didDragRef.current) {
+      didDragRef.current = false;
+      return;
+    }
+    const row = plateRows.indexOf(wellId[0]);
+    const col = plateCols.indexOf(parseInt(wellId.slice(1), 10));
+    if (event.shiftKey && row >= 0 && col >= 0) {
+      selectWells(rangeWells(anchorRef.current, { r: row, c: col }));
+      return;
+    }
+    if (event.ctrlKey || event.metaKey) {
+      toggleWells([wellId]);
+      anchorRef.current = { r: row, c: col };
+      return;
+    }
     selectWell(wellId, 'plate');
+    anchorRef.current = { r: row, c: col };
   };
 
   // Handle drag start
   const handleMouseDown = (event: React.MouseEvent) => {
-    // Only start drag if clicking on the panel background, not a well
-    if ((event.target as HTMLElement).closest('.plate-well')) {
-      return;
-    }
-
+    if (event.button !== 0 || !(event.target as HTMLElement).closest('#plate-grid')) return;
+    dragAdditiveRef.current = event.ctrlKey || event.metaKey;
+    didDragRef.current = false;
     setDragStart({ x: event.clientX, y: event.clientY });
   };
 
@@ -142,6 +184,7 @@ export function PlateView() {
     // Start dragging if moved beyond threshold
     if (!isDragging && (deltaX > dragThreshold || deltaY > dragThreshold)) {
       setIsDragging(true);
+      didDragRef.current = true;
     }
 
     if (isDragging) {
@@ -155,7 +198,7 @@ export function PlateView() {
   };
 
   // Handle drag end
-  const handleMouseUp = (_event: React.MouseEvent) => {
+  const handleMouseUp = () => {
     if (isDragging && dragRect && gridRef.current) {
       // Find wells within selection rectangle
       const wellElements = gridRef.current.querySelectorAll('.plate-well[data-well]');
@@ -180,7 +223,11 @@ export function PlateView() {
       });
 
       if (selectedWellIds.length > 0) {
-        selectWells(selectedWellIds);
+        if (dragAdditiveRef.current) {
+          selectWells(Array.from(new Set([...selectedWells, ...selectedWellIds])));
+        } else {
+          selectWells(selectedWellIds);
+        }
       }
     }
 
@@ -206,9 +253,6 @@ export function PlateView() {
 
   // ── Keyboard grid navigation (roving tabindex, PRD FR-X-3) ─────────────────
   const wellBtnRefs = useRef<Map<string, HTMLButtonElement | null>>(new Map());
-  const [activeCell, setActiveCell] = useState({ r: 0, c: 0 });
-  const anchorRef = useRef({ r: 0, c: 0 });
-
   const wellIdAt = (r: number, c: number) => `${plateRows[r]}${plateCols[c]}`;
   const focusCell = (r: number, c: number) => wellBtnRefs.current.get(wellIdAt(r, c))?.focus();
 
@@ -217,7 +261,10 @@ export function PlateView() {
     if (ids.length === 0) return;
     const cur = new Set(selectedWells);
     const allSelected = ids.every((w) => cur.has(w));
-    for (const w of ids) (allSelected ? cur.delete(w) : cur.add(w));
+    for (const w of ids) {
+      if (allSelected) cur.delete(w);
+      else cur.add(w);
+    }
     const next = [...cur];
     if (next.length) selectWells(next);
     else clearSelection();
@@ -356,6 +403,7 @@ export function PlateView() {
               const isEmpty = !hasData;
               // Has data but excluded from plots (omitted, group-filtered, or hidden Empty)
               const isExcluded = hasData && !isWellVisible(wellId);
+              const isOutOfScope = hasData && scopeSet !== null && !scopeSet.has(wellId);
               const isActive = activeCell.r === rIdx && activeCell.c === cIdx;
 
               const wellColor = isEmpty ? '' : getWellColor(wellData);
@@ -388,6 +436,7 @@ export function PlateView() {
                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1
                     ${isEmpty ? 'empty bg-bg opacity-40' : ''}
                     ${isExcluded ? 'opacity-40' : ''}
+                    ${isOutOfScope ? 'opacity-20' : ''}
                     ${isSelected ? 'selected ring-2 ring-primary ring-offset-1' : ''}
                     ${isMultiSelected && !isSelected ? 'ring-1 ring-primary/50' : ''}
                   `}
@@ -399,12 +448,11 @@ export function PlateView() {
                   }}
                   onClick={(e) => {
                     setActiveCell({ r: rIdx, c: cIdx });
-                    anchorRef.current = { r: rIdx, c: cIdx };
                     if (!isEmpty) handleWellClick(wellId, e);
                   }}
                   title={
                     wellData
-                      ? `${wellId}: ${wellData.sample_name || 'No sample'}${isExcluded ? ' (excluded)' : ''}`
+                      ? `${wellId}: ${wellData.sample_name || 'No sample'}${isExcluded ? ' (excluded)' : ''}${isOutOfScope ? ' (outside marker)' : ''}`
                       : wellId
                   }
                 />

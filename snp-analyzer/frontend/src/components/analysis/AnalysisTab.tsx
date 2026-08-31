@@ -23,6 +23,7 @@ import { ResultsTable } from "./ResultsTable";
 import { AmplificationOverlay } from "./AmplificationOverlay";
 import { WellTypePopup } from "./WellTypePopup";
 import { GroupManager } from "./GroupManager";
+import { WellSelectionToolbar } from "./WellSelectionToolbar";
 
 export function AnalysisTab() {
   const { t } = useI18n();
@@ -30,7 +31,6 @@ export function AnalysisTab() {
   const wellGroups = useSessionStore((s) => s.wellGroups);
   const setWellGroups = useSessionStore((s) => s.setWellGroups);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
-  const selectedWells = useSelectionStore((s) => s.selectedWells);
   const selectedGroup = useSelectionStore((s) => s.selectedGroup);
   const setGroup = useSelectionStore((s) => s.setGroup);
   const { showEmptyWells, setShowEmptyWells } = useSettingsStore();
@@ -94,18 +94,6 @@ export function AnalysisTab() {
     document.addEventListener("contextmenu", handleContextMenu);
     return () => document.removeEventListener("contextmenu", handleContextMenu);
   }, []);
-
-  // Auto-show popup on multi-select (more than 1 well selected via drag)
-  useEffect(() => {
-    if (selectedWells.length > 1) {
-      // Position popup near center of viewport
-      setPopupPos({
-        x: window.innerWidth / 2 - 90,
-        y: window.innerHeight / 2 - 150,
-      });
-      setPopupWells(selectedWells);
-    }
-  }, [selectedWells]);
 
   const handleAssignType = useCallback(
     async (wellType: string) => {
@@ -472,6 +460,10 @@ export function AnalysisTab() {
           )}
         </div>
       )}
+
+      <div className="px-4 pt-4 sm:px-6">
+        <WellSelectionToolbar />
+      </div>
 
       {/* Analysis Grid - responsive (1 col narrow, 2 col >= lg) */}
       <div className="analysis-grid grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 sm:px-6">

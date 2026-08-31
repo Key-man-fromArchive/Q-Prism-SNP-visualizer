@@ -4,6 +4,7 @@ interface SelectionState {
   selectedWell: string | null;
   selectedWells: string[]; // multi-select
   selectedGroup: string | null; // well group filter (null = all)
+  focusSelectedWells: boolean; // show only selected wells in scatter plots
   currentCycle: number;
   currentDataWindow: string | null; // "Pre-read", "Amplification", "Post-read"
   isPlaying: boolean;
@@ -12,6 +13,7 @@ interface SelectionState {
   selectWells: (wells: string[]) => void;
   clearSelection: () => void;
   setGroup: (group: string | null) => void;
+  setFocusSelectedWells: (focus: boolean) => void;
   setCycle: (cycle: number) => void;
   setDataWindow: (name: string | null) => void;
   setPlaying: (v: boolean) => void;
@@ -21,11 +23,12 @@ export const useSelectionStore = create<SelectionState>((set) => ({
   selectedWell: null,
   selectedWells: [],
   selectedGroup: null,
+  focusSelectedWells: false,
   currentCycle: 0,
   currentDataWindow: null,
   isPlaying: false,
 
-  selectWell: (well, _source) =>
+  selectWell: (well) =>
     set({
       selectedWell: well,
       selectedWells: well ? [well] : [],
@@ -39,8 +42,10 @@ export const useSelectionStore = create<SelectionState>((set) => ({
     set({
       selectedWell: null,
       selectedWells: [],
+      focusSelectedWells: false,
     }),
   setGroup: (group) => set({ selectedGroup: group }),
+  setFocusSelectedWells: (focus) => set({ focusSelectedWells: focus }),
   setCycle: (cycle) => set({ currentCycle: cycle }),
   setDataWindow: (name) => set({ currentDataWindow: name }),
   setPlaying: (v) => set({ isPlaying: v }),

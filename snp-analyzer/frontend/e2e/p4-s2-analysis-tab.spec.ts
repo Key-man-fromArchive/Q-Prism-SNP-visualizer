@@ -27,6 +27,25 @@ test.describe("P4-S2: Analysis tab — per-marker results", () => {
     await expect(page.locator("#cycle-slider")).toBeVisible();
   });
 
+  test("plate stays visible and selected wells can focus the marker scatter", async ({ page }) => {
+    await loadExample(page, 6);
+    await defineMarkersOnColumns(page, ["qSwet5.3", "qTotal11.1"], 6);
+
+    await page.getByTestId("workspace-tab-analysis").click();
+    await expect(page.locator("#plate-grid")).toBeVisible();
+
+    await page.locator('[data-well="A1"]').click();
+    await expect(page.getByTestId("analysis-selection-count")).toContainText("1");
+
+    const focus = page.getByTestId("scatter-selected-only");
+    await focus.click();
+    await expect(focus).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("marker-scatter")).toHaveAttribute(
+      "data-visible-wells",
+      "1",
+    );
+  });
+
   test("<=3 markers: dropdown selector; scatter/counts/ploidy switch per marker", async ({
     page,
   }) => {

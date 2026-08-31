@@ -50,6 +50,11 @@ const ko: Translations = {
   wellEmptyState: '빈 웰',
   toggleColumnAria: (c: string | number) => `${c}열 전체 토글`,
   toggleRowAria: (r: string) => `${r}행 전체 토글`,
+  selectionHelp: '플레이트 웰을 고르거나 산점도에서 영역을 드래그하세요.',
+  selectedWellCount: (n: number) => `${n}개 웰 선택`,
+  showSelectedScatterWells: '선택 웰만 보기',
+  showAllScatterWells: '전체 웰 보기',
+  clearWellSelection: '선택 해제',
 
   // Header
   appTitle: 'ASG-PCR SNP 판별 분석기',

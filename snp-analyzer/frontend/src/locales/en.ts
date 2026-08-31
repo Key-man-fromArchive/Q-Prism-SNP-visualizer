@@ -48,6 +48,11 @@ const en = {
   wellEmptyState: 'empty',
   toggleColumnAria: (c: string | number) => `Toggle column ${c}`,
   toggleRowAria: (r: string) => `Toggle row ${r}`,
+  selectionHelp: 'Select wells on the plate or drag across scatter points.',
+  selectedWellCount: (n: number) => `${n} selected`,
+  showSelectedScatterWells: 'Show selected only',
+  showAllScatterWells: 'Show all wells',
+  clearWellSelection: 'Clear',
 
   // Header
   appTitle: 'ASG-PCR SNP Discrimination Analyzer',

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from "react";
+import { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import Plotly from "plotly.js-dist-min";
 import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -38,13 +38,16 @@ export function ScatterPlot() {
   const ntcThreshold = useSettingsStore((s) => s.ntcThreshold);
   const showBoundaryLines = useSettingsStore((s) => s.showBoundaryLines);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
-  const { selectWell, selectWells, clearSelection, selectedWell } = useSelectionStore();
+  const { selectWell, selectWells, clearSelection, selectedWells, focusSelectedWells } = useSelectionStore();
+  const selectedWellSet = useMemo(() => new Set(selectedWells), [selectedWells]);
   const { scatterPoints, allele2Dye, channelLabels: roleLabels, clusterAssignments, wellTypeAssignments } = useDataStore();
   const ratioOrigin = useDataStore((s) => s.ratioOrigin);
   // The drag handlers are registered once per tool-open, so they read the
   // origin through a ref rather than re-binding every time it changes.
   const originRef = useRef(ratioOrigin);
-  originRef.current = ratioOrigin;
+  useEffect(() => {
+    originRef.current = ratioOrigin;
+  }, [ratioOrigin]);
   const setScatterData = useDataStore((s) => s.setScatterData);
   const boundaries = useDataStore((s) => s.boundaries);
   const setBoundaries = useDataStore((s) => s.setBoundaries);
@@ -121,7 +124,10 @@ export function ScatterPlot() {
     // entirely (by manual_type, authoritative from the backend) so they never
     // become plot markers OR influence the auto-ranged x/y axes.
     const visiblePoints = scatterPoints.filter(
-      (p) => p.manual_type !== "Omit" && isWellVisible(p.well)
+      (p) =>
+        p.manual_type !== "Omit" &&
+        isWellVisible(p.well) &&
+        (!focusSelectedWells || selectedWellSet.has(p.well))
     );
 
     // In boundary mode the wedges between the radial lines define the genotype
@@ -331,13 +337,16 @@ export function ScatterPlot() {
     offset,
     ratioOrigin,
     isWellVisible,
+    focusSelectedWells,
+    selectedWellSet,
     selectWell,
     selectWells,
     clearSelection,
     t,
   ]);
 
-  // Highlight selected well
+  // Highlight every selected well. Multi-selection is the normal plate-review
+  // workflow, not merely an intermediate state before assigning a well type.
   useEffect(() => {
     if (!plotRef.current || !initialized.current) return;
     const el = plotRef.current as any;
@@ -347,10 +356,10 @@ export function ScatterPlot() {
     const colors = plotlyColors();
     for (let t = 0; t < data.length; t++) {
       const customdata = data[t].customdata || [];
-      const sizes = customdata.map((w: string) => (w === selectedWell ? 18 : 12));
-      const lineWidths = customdata.map((w: string) => (w === selectedWell ? 3 : 1));
+      const sizes = customdata.map((w: string) => (selectedWellSet.has(w) ? 18 : 12));
+      const lineWidths = customdata.map((w: string) => (selectedWellSet.has(w) ? 3 : 1));
       const lineColors = customdata.map((w: string) =>
-        w === selectedWell ? colors.selectedLineColor : colors.markerLineColor
+        selectedWellSet.has(w) ? colors.selectedLineColor : colors.markerLineColor
       );
 
       Plotly.restyle(plotRef.current!, {
@@ -359,7 +368,7 @@ export function ScatterPlot() {
         "marker.line.color": [lineColors],
       }, [t]);
     }
-  }, [selectedWell, scatterPoints]);
+  }, [selectedWells, selectedWellSet, scatterPoints]);
 
   // Listen for dark mode changes to update Plotly layout
   useEffect(() => {
@@ -523,9 +532,10 @@ export function ScatterPlot() {
 
   // Cleanup
   useEffect(() => {
+    const plot = plotRef.current;
     return () => {
-      if (plotRef.current && initialized.current) {
-        Plotly.purge(plotRef.current);
+      if (plot && initialized.current) {
+        Plotly.purge(plot);
         initialized.current = false;
       }
     };
@@ -552,7 +562,16 @@ export function ScatterPlot() {
     <div className="panel scatter-panel">
       <h3 className="text-sm font-semibold mb-2 text-text">{t.alleleDiscrimination}</h3>
       <div className="relative" style={{ height: "560px" }}>
-        <div id="scatter-plot" ref={plotRef} style={{ width: "100%", height: "100%" }} />
+        <div
+          id="scatter-plot"
+          data-visible-wells={
+            focusSelectedWells
+              ? scatterPoints.filter((p) => selectedWellSet.has(p.well)).length
+              : scatterPoints.length
+          }
+          ref={plotRef}
+          style={{ width: "100%", height: "100%" }}
+        />
         {overlay && (
           <div className="absolute inset-0 flex items-center justify-center bg-surface">
             {overlay}

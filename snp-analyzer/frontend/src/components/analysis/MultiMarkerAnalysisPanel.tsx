@@ -7,14 +7,14 @@
 // (assay). Scopes the whole analysis view (scatter/counts/ploidy/NTC note)
 // to ONE selected marker at a time -- markers are genotyped, backgrounded
 // and NTC-baselined completely independently (Q4/Q5).
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Info } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Info, Target } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
-import { ZERO_ORIGIN } from "@/stores/data-store";
-import { getScatter, runClustering, listMarkerCatalog } from "@/lib/api";
+import { useDataStore, ZERO_ORIGIN } from "@/stores/data-store";
+import { getScatter, runClustering, listMarkerCatalog, suggestCycle, type CycleSuggestion } from "@/lib/api";
 import { ClusteringAlgorithm } from "@/types/api";
 import type { ChannelLabels, MarkerCatalogEntry, MarkerRegion, RatioOrigin, RegionResult, ScatterPoint } from "@/types/api";
 import { genotypeShortLabel, wellInfo } from "@/lib/genotype";
@@ -22,6 +22,8 @@ import { MARKER_PALETTE } from "@/lib/constants";
 import { dosageTrustForMarker } from "@/lib/marker-catalog";
 import { MarkerScatterPlot } from "./MarkerScatterPlot";
 import { CycleControl } from "./CycleControl";
+import { PlateView } from "./PlateView";
+import { WellSelectionToolbar } from "./WellSelectionToolbar";
 
 const SIDEBAR_THRESHOLD = 4; // >=4 markers -> sidebar; <=3 -> dropdown (Q8)
 
@@ -46,6 +48,8 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
+  const isPlaying = useSelectionStore((s) => s.isPlaying);
+  const setClusterAssignments = useDataStore((s) => s.setClusterAssignments);
 
   const [regionsById, setRegionsById] = useState<Record<string, RegionResult>>({});
   const [scatterPoints, setScatterPoints] = useState<ScatterPoint[]>([]);
@@ -59,6 +63,10 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<CycleSuggestion | null>(null);
+  const clusterRequestRef = useRef(0);
+  const scatterRequestRef = useRef(0);
+  const skipAutoClusterCycleRef = useRef<number | null>(null);
   // Per-marker dosage-trust hedge (feat/marker-catalog): fetched once
   // per-USER (not per-session), same as the catalog picker in
   // PlateSetupTab.tsx. A fetch failure never blocks analysis -- an unknown
@@ -78,8 +86,14 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [markers]);
 
-  const runCluster = useCallback(async () => {
+  const markerSignature = useMemo(
+    () => markers.map((m) => `${m.id}:${m.ploidy}:${m.wells.join(",")}`).join("|"),
+    [markers]
+  );
+
+  const runCluster = useCallback(async (cycleOverride?: number) => {
     if (!sessionId || markers.length === 0) return;
+    const requestId = ++clusterRequestRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -88,24 +102,30 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
       // override in threshold_config).
       const result = await runClustering(sessionId, {
         algorithm: ClusteringAlgorithm.AUTO,
-        cycle: currentCycle || 0, // 0 only while CycleControl is initializing
+        cycle: cycleOverride ?? currentCycle ?? 0, // 0 only while CycleControl is initializing
         n_clusters: 4,
         background: backgroundMode,
       });
+      if (requestId !== clusterRequestRef.current) return;
       const byId: Record<string, RegionResult> = {};
       for (const r of result.regions ?? []) byId[r.id] = r;
       setRegionsById(byId);
+      setClusterAssignments(result.assignments ?? {});
+      window.dispatchEvent(new CustomEvent("analysis-results-changed"));
     } catch (err) {
+      if (requestId !== clusterRequestRef.current) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (requestId === clusterRequestRef.current) setLoading(false);
     }
-  }, [sessionId, markers.length, currentCycle, backgroundMode]);
+  }, [sessionId, markers.length, currentCycle, backgroundMode, setClusterAssignments]);
 
   const fetchScatter = useCallback(async () => {
     if (!sessionId) return;
+    const requestId = ++scatterRequestRef.current;
     try {
       const res = await getScatter(sessionId, currentCycle || undefined, useRox, backgroundMode);
+      if (requestId !== scatterRequestRef.current) return;
       setScatterPoints(res.points);
       setAllele2Dye(res.allele2_dye);
       setRoleLabels(res.channel_labels ?? null);
@@ -115,12 +135,43 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     }
   }, [sessionId, currentCycle, useRox, backgroundMode]);
 
-  // Trigger clustering of the saved markers + load scatter points whenever
-  // this surface is entered with markers defined.
+  // Scatter follows the cycle immediately. Clustering is deferred until the
+  // input settles, and is paused during playback, avoiding three heavy server
+  // requests on every animation frame.
   useEffect(() => {
-    void runCluster();
     void fetchScatter();
-  }, [runCluster, fetchScatter]);
+  }, [fetchScatter]);
+
+  useEffect(() => {
+    if (!currentCycle || isPlaying) return;
+    if (skipAutoClusterCycleRef.current === currentCycle) {
+      skipAutoClusterCycleRef.current = null;
+      return;
+    }
+    const timer = window.setTimeout(() => void runCluster(), 220);
+    return () => window.clearTimeout(timer);
+  }, [runCluster, currentCycle, isPlaying, markerSignature]);
+
+  const handleAnalyze = useCallback(async () => {
+    if (!sessionId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const suggestion = await suggestCycle(sessionId);
+      const cycle = suggestion.suggested_cycle ?? currentCycle;
+      setAnalysis(suggestion);
+      if (suggestion.suggested_cycle) {
+        if (suggestion.suggested_cycle !== currentCycle) {
+          skipAutoClusterCycleRef.current = suggestion.suggested_cycle;
+        }
+        window.dispatchEvent(new CustomEvent("goto-cycle", { detail: suggestion.suggested_cycle }));
+      }
+      await runCluster(cycle);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.analyzeFailed);
+      setLoading(false);
+    }
+  }, [sessionId, currentCycle, runCluster, t.analyzeFailed]);
 
   useEffect(() => {
     (async () => {
@@ -173,7 +224,28 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
 
   return (
     <div>
+      <div className="sticky top-0 z-20 border-b border-border bg-surface">
       <CycleControl />
+      <div className="flex flex-wrap items-center justify-end gap-3 px-6 py-2">
+        {analysis?.suggested_cycle != null && (
+          <span className="text-xs text-text-muted">
+            {t.analyzeSuggestedCycle(String(analysis.suggested_cycle))}
+            {analysis.ntc_onset_cycle != null
+              ? ` · ${t.analyzeNtcOnset(analysis.ntc_onset_cycle)}`
+              : ` · ${t.analyzeNtcNone}`}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={handleAnalyze}
+          disabled={loading || !sessionId}
+          title={t.analyzeHint}
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+        >
+          {loading ? t.analyzing : <><Target size={14} aria-hidden="true" /> {t.analyzeButton}</>}
+        </button>
+      </div>
+      </div>
       <div className="p-6 grid gap-4" style={{ gridTemplateColumns: "260px minmax(0,1fr)" }}>
       {/* Marker selector */}
       <div className="panel">
@@ -308,7 +380,11 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                 </span>
               </div>
 
-              {loading ? (
+              <div className="mb-3">
+                <WellSelectionToolbar />
+              </div>
+
+              {loading && !selectedRegion ? (
                 <p className="text-sm text-text-muted py-10 text-center">{t.wsAnalysisLoading}</p>
               ) : (
                 <MarkerScatterPlot
@@ -343,6 +419,11 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                 </div>
               )}
             </div>
+
+            <PlateView
+              scopeWells={selectedMarker.wells}
+              ploidyOverride={selectedMarker.ploidy}
+            />
 
             <div className="panel">
               <h3 className="text-sm font-semibold mb-3 text-text">

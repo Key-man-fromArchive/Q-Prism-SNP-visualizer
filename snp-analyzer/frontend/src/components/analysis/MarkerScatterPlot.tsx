@@ -14,6 +14,7 @@ import { plotlyColors } from "@/lib/plotly-theme";
 import { channelLabels } from "@/lib/channel-labels";
 import { updateMarker } from "@/lib/api";
 import { ZERO_ORIGIN } from "@/stores/data-store";
+import { useSelectionStore } from "@/stores/selection-store";
 import type {
   ChannelLabels,
   MarkerRegion,
@@ -57,16 +58,27 @@ export function MarkerScatterPlot({
 }: MarkerScatterPlotProps) {
   const origin = ratioOrigin ?? ZERO_ORIGIN;
   const originRef = useRef(origin);
-  originRef.current = origin;
+  useEffect(() => {
+    originRef.current = origin;
+  }, [origin]);
   const plotRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
+  const eventsBound = useRef(false);
+  const selectedWells = useSelectionStore((s) => s.selectedWells);
+  const focusSelectedWells = useSelectionStore((s) => s.focusSelectedWells);
+  const selectWell = useSelectionStore((s) => s.selectWell);
+  const selectWells = useSelectionStore((s) => s.selectWells);
+  const clearSelection = useSelectionStore((s) => s.clearSelection);
+  const selectedWellSet = useMemo(() => new Set(selectedWells), [selectedWells]);
 
   const ploidy = marker.ploidy;
   const wellSet = useMemo(() => new Set(marker.wells), [marker.wells]);
-  const scopedPoints = useMemo(
-    () => points.filter((p) => wellSet.has(p.well)),
-    [points, wellSet]
-  );
+  const scopedPoints = useMemo(() => {
+    const markerPoints = points.filter((p) => wellSet.has(p.well));
+    return focusSelectedWells
+      ? markerPoints.filter((p) => selectedWellSet.has(p.well))
+      : markerPoints;
+  }, [points, wellSet, focusSelectedWells, selectedWellSet]);
 
   // Seeded once from the marker's current region result (boundaries/offset),
   // falling back to equal-spacing cuts when there's no prior result yet. The
@@ -130,11 +142,20 @@ export function MarkerScatterPlot({
         hoverinfo: "text",
         hovertemplate: "%{text}<extra></extra>",
         marker: {
-          size: typeKey === "NTC" ? 9 : 11,
+          size: pts.map((p) =>
+            selectedWellSet.has(p.well) ? 17 : typeKey === "NTC" ? 9 : 11
+          ),
           color: info.color,
           symbol: info.symbol,
           opacity: typeKey === "NTC" ? 1.0 : 0.85,
-          line: { width: 1, color: colors.markerLineColor },
+          line: {
+            width: pts.map((p) => (selectedWellSet.has(p.well) ? 3 : 1)),
+            color: pts.map((p) =>
+              selectedWellSet.has(p.well)
+                ? colors.selectedLineColor
+                : colors.markerLineColor
+            ),
+          },
         },
       });
     }
@@ -176,7 +197,8 @@ export function MarkerScatterPlot({
       plot_bgcolor: colors.plot_bgcolor,
       font: { color: colors.fontColor },
       hovermode: "closest",
-      dragmode: false,
+      dragmode: "select",
+      uirevision: `marker-${marker.id}`,
       shapes,
       margin: { t: 10, r: 10, b: 46, l: 56 },
       legend: { orientation: "h", y: -0.2 },
@@ -184,17 +206,45 @@ export function MarkerScatterPlot({
 
     const config = {
       responsive: true,
-      displayModeBar: false,
+      displayModeBar: true,
+      modeBarButtonsToRemove: ["toImage", "sendDataToCloud", "zoom2d", "pan2d"],
     };
 
     if (!initialized.current) {
       Plotly.newPlot(plotRef.current, traces, layout, config).then(() => {
         initialized.current = true;
+        const gd = plotRef.current as PlotlyGraphDiv & {
+          on?: (name: string, handler: (data?: { points?: Array<{ customdata?: string }> }) => void) => void;
+        };
+        if (!gd || !gd.on || eventsBound.current) return;
+        eventsBound.current = true;
+        gd.on("plotly_click", (data) => {
+          const well = data?.points?.[0]?.customdata;
+          if (well) selectWell(well, "scatter");
+        });
+        gd.on("plotly_selected", (data) => {
+          const wells = data?.points?.map((p) => p.customdata).filter((w): w is string => !!w) ?? [];
+          if (wells.length > 0) selectWells(wells);
+        });
+        gd.on("plotly_deselect", () => clearSelection());
       });
     } else {
       Plotly.react(plotRef.current, traces, layout, config);
     }
-  }, [scopedPoints, assignmentFor, ploidy, editBoundaries, origin, allele2Dye, roleLabels]);
+  }, [
+    scopedPoints,
+    assignmentFor,
+    ploidy,
+    editBoundaries,
+    origin,
+    allele2Dye,
+    roleLabels,
+    marker.id,
+    selectedWellSet,
+    selectWell,
+    selectWells,
+    clearSelection,
+  ]);
 
   // Drag a radial boundary line; persists to the marker's threshold_config on
   // release (PUT /markers/{id}) then asks the parent to re-cluster so the
@@ -292,15 +342,22 @@ export function MarkerScatterPlot({
   }, [sessionId, marker.id, onBoundariesPersisted]);
 
   useEffect(() => {
+    const plot = plotRef.current;
     return () => {
-      if (plotRef.current && initialized.current) {
-        Plotly.purge(plotRef.current);
+      if (plot && initialized.current) {
+        Plotly.purge(plot);
         initialized.current = false;
+        eventsBound.current = false;
       }
     };
   }, []);
 
   return (
-    <div data-testid="marker-scatter" ref={plotRef} style={{ width: "100%", height: "440px" }} />
+    <div
+      data-testid="marker-scatter"
+      data-visible-wells={scopedPoints.length}
+      ref={plotRef}
+      style={{ width: "100%", height: "440px" }}
+    />
   );
 }
