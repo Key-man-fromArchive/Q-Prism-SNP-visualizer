@@ -31,6 +31,28 @@ def test_control_wells_are_honored_and_excluded_from_clustering():
     assert all(assign[f"B{i}"] == "Allele 2 Homo" for i in range(10))
 
 
+def test_imported_control_types_anchor_api_clustering(client):
+    unified = _unified([
+        ("NTC_imported", 0.01, 0.01),
+        ("A1_imported", 0.98, 0.02),
+    ])
+    unified.imported_well_types = {
+        "NTC_imported": "NTC",
+        "A1_imported": "Allele 1 Control",
+    }
+    _register(client, "s1", unified)
+
+    response = client.client.post(
+        "/api/data/s1/cluster",
+        json={"algorithm": "auto", "cycle": 1, "ploidy": 2},
+    )
+
+    assert response.status_code == 200, response.text
+    assignments = response.json()["assignments"]
+    assert assignments["NTC_imported"] == "NTC"
+    assert assignments["A1_imported"] == "Allele 1 Control"
+
+
 def _unified(extra: list[tuple[str, float, float]]) -> UnifiedData:
     """Three genotype clusters (strong signal) plus caller-supplied extra wells."""
     data: list[WellCycleData] = []

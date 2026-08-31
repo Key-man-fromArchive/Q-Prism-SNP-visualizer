@@ -73,19 +73,19 @@ def _get_session(sid: str):
     return sessions[sid]
 
 
-def ntc_wells_for(sid: str, unified) -> set[str]:
-    """The plate's no-template wells, for use as the ratio origin.
-
-    Instrument-declared types seed the plate. Manual assignments then override
-    them per well, so an operator can both add an NTC and correct an imported
-    NTC back to Sample without the source metadata silently reappearing.
-    """
+def effective_well_types_for(sid: str, unified) -> dict[str, str]:
+    """Merge instrument metadata with operator overrides for analysis."""
     imported = dict(getattr(unified, "imported_well_types", None) or {})
     for well in getattr(unified, "ntc_wells", None) or []:
         imported.setdefault(well, WellType.NTC.value)
     imported.update(welltype_store.get(sid, {}))
+    return imported
+
+
+def ntc_wells_for(sid: str, unified) -> set[str]:
+    """The plate's effective no-template wells, for use as ratio origin."""
     return {
-        well for well, well_type in imported.items()
+        well for well, well_type in effective_well_types_for(sid, unified).items()
         if well_type == WellType.NTC.value
     }
 
@@ -322,9 +322,10 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
     points = normalize_for_cycle(unified, cycle, background=req.background)
     # Wells manually marked as "Omit" have data but should not skew clustering
     # (bad/spiked readings would drag kmeans centroids or threshold ratios).
+    effective_well_types = effective_well_types_for(sid, unified)
     omitted = {
         well
-        for well, wtype in welltype_store.get(sid, {}).items()
+        for well, wtype in effective_well_types.items()
         if wtype == WellType.OMIT.value
     }
     # Every call below this line is a ratio, so it needs an origin that means
@@ -350,7 +351,7 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
     # like NTC/Positive Control, but also feed the offset resolution.
     control_wells = {
         well: wtype
-        for well, wtype in welltype_store.get(sid, {}).items()
+        for well, wtype in effective_well_types.items()
         if wtype in (
             WellType.NTC.value,
             WellType.POSITIVE_CONTROL.value,
