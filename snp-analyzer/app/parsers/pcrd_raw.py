@@ -47,6 +47,12 @@ _PCRD_PASSWORD = _load_pcrd_password()
 
 # Well sample types that indicate an assigned well
 _ASSIGNED_TYPES = {"wcSample", "wcNTC", "wcPostiveControl", "wcPositiveControl"}
+_IMPORTED_WELL_TYPE_MAP = {
+    "wcSample": "Unknown",
+    "wcNTC": "NTC",
+    "wcPostiveControl": "Positive Control",
+    "wcPositiveControl": "Positive Control",
+}
 
 
 def parse_pcrd(file_path: str) -> UnifiedData:
@@ -67,15 +73,21 @@ def parse_pcrd(file_path: str) -> UnifiedData:
             "Only 96-well plates (8×12) are currently supported."
         )
 
-    channel_map, allele2_dye, has_rox, sample_names, ntc_wells, assigned_wells = (
+    (
+        channel_map,
+        allele2_dye,
+        has_rox,
+        sample_names,
+        ntc_wells,
+        assigned_wells,
+        target_names,
+        imported_types,
+    ) = (
         _parse_dye_layers(plate_setup)
     )
 
     if not assigned_wells:
         raise ValueError("No assigned wells found in .pcrd file (all wells are empty).")
-
-    # Parse well groups
-    well_groups = _parse_well_groups(plate_setup, assigned_wells)
 
     # Parse protocol for display
     protocol_steps = _parse_protocol(root)
@@ -121,6 +133,20 @@ def parse_pcrd(file_path: str) -> UnifiedData:
             well_id = _well_index_to_id(plate_idx)
             sample_names_by_id[well_id] = name
 
+    imported_types_by_id = {
+        _well_index_to_id(plate_idx): well_type
+        for plate_idx, well_type in imported_types.items()
+        if 0 <= plate_idx < 96
+    }
+    imported_markers: dict[str, list[str]] = {}
+    for plate_idx, target_name in target_names.items():
+        if 0 <= plate_idx < 96:
+            well_id = _well_index_to_id(plate_idx)
+            if well_id in wells_set:
+                imported_markers.setdefault(target_name, []).append(well_id)
+    for wells in imported_markers.values():
+        wells.sort(key=_well_sort_key)
+
     return UnifiedData(
         instrument="CFX Opus (raw)",
         allele2_dye=allele2_dye,
@@ -129,9 +155,13 @@ def parse_pcrd(file_path: str) -> UnifiedData:
         data=data,
         has_rox=has_rox,
         sample_names=sample_names_by_id or None,
+        imported_well_types=imported_types_by_id or None,
+        imported_markers=imported_markers or None,
         protocol_steps=protocol_steps or None,
         data_windows=data_windows if data_windows else None,
-        well_groups=well_groups,
+        # CFX wellGroup is an analysis subset, not a marker assignment. Do
+        # not surface instrument-generated Group 1..12 as plate markers.
+        well_groups=None,
         background_mode="none",
         ntc_wells=sorted(ntc_wells, key=_well_sort_key) or None,
     )
@@ -163,12 +193,16 @@ def _parse_dye_layers(plate_setup: ET.Element) -> tuple[
     dict[int, str],       # sample_names: plate_index -> sample_id
     set[str],             # ntc_wells: set of well IDs
     set[int],             # assigned_wells: set of plate indices
+    dict[int, str],       # target_names: plate_index -> explicit gene/target
+    dict[int, str],       # imported_types: plate_index -> WellType value
 ]:
     """Parse dyeLayersList for channel mapping, well assignments, and sample names."""
     channel_map: dict[str, int] = {}
     sample_names: dict[int, str] = {}
     ntc_wells: set[str] = set()
     assigned_wells: set[int] = set()
+    target_candidates: dict[int, set[str]] = {}
+    imported_types: dict[int, str] = {}
     allele2_dye = "VIC"
     has_rox = False
 
@@ -197,9 +231,25 @@ def _parse_dye_layers(plate_setup: ET.Element) -> tuple[
             if ws_type == "wcNTC" and 0 <= plate_idx < 96:
                 ntc_wells.add(_well_index_to_id(plate_idx))
 
+            if ws_type in _IMPORTED_WELL_TYPE_MAP and plate_idx not in imported_types:
+                imported_types[plate_idx] = _IMPORTED_WELL_TYPE_MAP[ws_type]
+
             sample_id = ws.get("sampleId", "")
             if sample_id and plate_idx not in sample_names:
                 sample_names[plate_idx] = sample_id
+
+            # CFX repeats wellSample entries across dye layers. A target is
+            # trusted only when every non-empty layer agrees for that well.
+            target_name = next(
+                (
+                    ws.get(field, "").strip()
+                    for field in ("geneName", "targetName", "assayName")
+                    if ws.get(field, "").strip()
+                ),
+                "",
+            )
+            if target_name:
+                target_candidates.setdefault(plate_idx, set()).add(target_name)
 
     # Validate dye presence
     if "FAM" not in channel_map:
@@ -213,7 +263,21 @@ def _parse_dye_layers(plate_setup: ET.Element) -> tuple[
             "This .pcrd file may not be from an SNP discrimination experiment."
         )
 
-    return channel_map, allele2_dye, has_rox, sample_names, ntc_wells, assigned_wells
+    target_names = {
+        plate_idx: next(iter(names))
+        for plate_idx, names in target_candidates.items()
+        if len(names) == 1
+    }
+    return (
+        channel_map,
+        allele2_dye,
+        has_rox,
+        sample_names,
+        ntc_wells,
+        assigned_wells,
+        target_names,
+        imported_types,
+    )
 
 
 def _parse_protocol(root: ET.Element) -> list[ProtocolStep]:

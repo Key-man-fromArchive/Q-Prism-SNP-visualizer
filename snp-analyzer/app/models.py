@@ -59,6 +59,14 @@ class UnifiedData(BaseModel):
     data: list[WellCycleData]       # all raw readings
     has_rox: bool = True
     sample_names: dict[str, str] | None = None  # well -> sample name
+    # Explicit plate-setup roles declared by the source file. These are kept
+    # separate from manual_welltypes so the UI can show file provenance while
+    # still allowing an operator override to win.
+    imported_well_types: dict[str, str] | None = None
+    # Explicit target/assay assignments declared by the instrument. This is
+    # deliberately NOT populated from generic CFX wellGroup entries: a group
+    # is only an analysis subset, not evidence that it is a marker.
+    imported_markers: dict[str, list[str]] | None = None
     protocol_steps: list[ProtocolStep] | None = None  # from .eds tcprotocol.xml
     data_windows: list[DataWindow] | None = None
     well_groups: dict[str, list[str]] | None = None

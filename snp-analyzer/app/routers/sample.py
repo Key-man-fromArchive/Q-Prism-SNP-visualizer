@@ -39,7 +39,8 @@ async def get_samples(sid: str, current_user: CurrentUser):
     """Return merged sample names (parsed + user overrides) for all wells."""
     check_session_access(sid, current_user)
     merged = _merged_samples(sid)
-    return {"samples": merged}
+    unified = _get_session(sid)
+    return {"samples": merged, "imported_samples": unified.sample_names or {}}
 
 
 @router.put("/api/data/{sid}/samples")
@@ -60,7 +61,8 @@ async def update_samples(sid: str, body: SampleNamesUpdate, current_user: Curren
         save_sample_override(sid, well, name)
 
     merged = _merged_samples(sid)
-    return {"samples": merged}
+    unified = _get_session(sid)
+    return {"samples": merged, "imported_samples": unified.sample_names or {}}
 
 
 @router.delete("/api/data/{sid}/samples")
@@ -75,7 +77,7 @@ async def delete_samples(sid: str, current_user: CurrentUser):
 
     unified = sessions[sid]
     parsed = dict(unified.sample_names) if unified.sample_names else {}
-    return {"samples": parsed}
+    return {"samples": parsed, "imported_samples": parsed}
 
 
 @router.get("/api/sessions")

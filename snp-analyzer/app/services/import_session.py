@@ -20,6 +20,15 @@ def create_session_from_import(
     session_store[session_id] = unified
 
     db.save_session(session_id, unified, filename=filename, user_id=user_id)
+    imported_regions = _build_imported_marker_regions(unified)
+    if imported_regions:
+        db.save_marker_regions(session_id, imported_regions)
+        # The marker endpoint is backed by an in-memory cache during the
+        # current process, so seed it at the same time as its durable copy.
+        from app.models import MarkerRegion
+        from app.routers.clustering import marker_store
+
+        marker_store[session_id] = [MarkerRegion(**region) for region in imported_regions]
     asg_session.bind_session_to_current_asg_launch(session_id, user_id)
     suggested_cycle = ntc_detection.compute_suggested_cycle(unified)
 
@@ -35,6 +44,33 @@ def create_session_from_import(
         well_groups=unified.well_groups,
         background_modes=available_background_modes(unified),
     )
+
+
+def _build_imported_marker_regions(unified: UnifiedData) -> list[dict[str, object]]:
+    """Convert explicit instrument assay assignments into editable markers."""
+    palette = [
+        "#7c5cd6", "#d98a1e", "#2f9e5a", "#d5504e",
+        "#3f86c4", "#12a3ad", "#b7519f", "#7a8794",
+    ]
+    plate_wells = set(unified.wells)
+    regions: list[dict[str, object]] = []
+    occupied: set[str] = set()
+    imported_markers = getattr(unified, "imported_markers", None) or {}
+    for index, (name, raw_wells) in enumerate(imported_markers.items()):
+        wells = [well for well in raw_wells if well in plate_wells and well not in occupied]
+        if not name.strip() or not wells:
+            continue
+        occupied.update(wells)
+        regions.append({
+            "id": f"imported-{index + 1}",
+            "name": name.strip(),
+            "wells": wells,
+            "ploidy": getattr(unified, "ploidy", 2),
+            "color": palette[index % len(palette)],
+            "threshold_config": None,
+            "catalog_id": None,
+        })
+    return regions
 
 
 def _dump_data_windows(data_windows: list[DataWindow] | None) -> list[dict[str, int | str]] | None:

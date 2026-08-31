@@ -49,6 +49,8 @@ export type UnifiedData = {
   data: WellCycleData[];
   has_rox: boolean;
   sample_names: Record<string, string> | null;
+  imported_well_types?: Record<string, string> | null;
+  imported_markers?: Record<string, string[]> | null;
   protocol_steps: ProtocolStep[] | null;
   data_windows: DataWindow[] | null;
 };
@@ -576,6 +578,7 @@ export type QcResponse = {
 
 export type WellTypesResponse = {
   assignments: Record<string, string>;
+  imported_assignments?: Record<string, string>;
 };
 
 export type WellGroupsResponse = {
@@ -584,6 +587,7 @@ export type WellGroupsResponse = {
 
 export type SamplesResponse = {
   samples: Record<string, string>;
+  imported_samples?: Record<string, string>;
 };
 
 // ============================================================================

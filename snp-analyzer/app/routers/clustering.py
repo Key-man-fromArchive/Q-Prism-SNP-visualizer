@@ -76,19 +76,18 @@ def _get_session(sid: str):
 def ntc_wells_for(sid: str, unified) -> set[str]:
     """The plate's no-template wells, for use as the ratio origin.
 
-    A hand-marked NTC is the operator's own statement about the plate and wins
-    outright — including over a plate setup that declared different wells,
-    which is exactly the case where the operator is correcting it. Only with
-    no manual NTC at all does the instrument's declared setup stand in.
+    Instrument-declared types seed the plate. Manual assignments then override
+    them per well, so an operator can both add an NTC and correct an imported
+    NTC back to Sample without the source metadata silently reappearing.
     """
-    marked = {
-        well
-        for well, wtype in welltype_store.get(sid, {}).items()
-        if wtype == WellType.NTC.value
+    imported = dict(getattr(unified, "imported_well_types", None) or {})
+    for well in getattr(unified, "ntc_wells", None) or []:
+        imported.setdefault(well, WellType.NTC.value)
+    imported.update(welltype_store.get(sid, {}))
+    return {
+        well for well, well_type in imported.items()
+        if well_type == WellType.NTC.value
     }
-    if marked:
-        return marked
-    return set(getattr(unified, "ntc_wells", None) or [])
 
 
 def _cluster_point_dicts(
@@ -463,14 +462,26 @@ async def set_well_types(sid: str, update: ManualWellTypeUpdate, current_user: C
     for well in update.wells:
         save_welltype(sid, well, update.well_type.value)
 
-    return {"status": "ok", "assignments": welltype_store[sid]}
+    unified = _get_session(sid)
+    assignments = dict(unified.imported_well_types or {})
+    assignments.update(welltype_store[sid])
+    return {
+        "status": "ok",
+        "assignments": assignments,
+        "imported_assignments": unified.imported_well_types or {},
+    }
 
 
 @router.get("/api/data/{sid}/welltypes")
 async def get_well_types(sid: str, current_user: CurrentUser):
     check_session_access(sid, current_user)
-    _get_session(sid)
-    return {"assignments": welltype_store.get(sid, {})}
+    unified = _get_session(sid)
+    assignments = dict(unified.imported_well_types or {})
+    assignments.update(welltype_store.get(sid, {}))
+    return {
+        "assignments": assignments,
+        "imported_assignments": unified.imported_well_types or {},
+    }
 
 
 @router.delete("/api/data/{sid}/welltypes")
@@ -497,7 +508,14 @@ async def bulk_replace_well_types(sid: str, body: BulkWellTypeReplace, current_u
     for well, wtype in body.assignments.items():
         save_welltype(sid, well, wtype)
 
-    return {"status": "ok", "assignments": welltype_store[sid]}
+    unified = _get_session(sid)
+    assignments = dict(unified.imported_well_types or {})
+    assignments.update(welltype_store[sid])
+    return {
+        "status": "ok",
+        "assignments": assignments,
+        "imported_assignments": unified.imported_well_types or {},
+    }
 
 
 # ============================================================================

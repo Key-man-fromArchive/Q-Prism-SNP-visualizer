@@ -12,6 +12,8 @@ import {
   saveMarkers,
   getWellTypes,
   setWellTypes as apiSetWellTypes,
+  getSamples,
+  updateSamples,
   listLayouts,
   saveLayout,
   applyLayout,
@@ -66,6 +68,9 @@ export function PlateSetupTab() {
   // is persisted the moment it receives >=1 well via 배정/unassign.
   const [markers, setMarkers] = useState<MarkerRegion[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [sampleNames, setSampleNames] = useState<Record<string, string>>({});
+  const [importedSampleNames, setImportedSampleNames] = useState<Record<string, string>>({});
+  const [importedWellTypes, setImportedWellTypes] = useState<Record<string, string>>({});
 
   const [selectedWells, setSelectedWells] = useState<string[]>([]);
   const [pickMarkerId, setPickMarkerId] = useState<string | null>(null);
@@ -105,6 +110,9 @@ export function PlateSetupTab() {
   if (sessionId !== prevSessionId) {
     setPrevSessionId(sessionId);
     setMarkers([]);
+    setSampleNames({});
+    setImportedSampleNames({});
+    setImportedWellTypes({});
     setSelectedWells([]);
     setPickMarkerId(null);
     setSelectionAnchor(null);
@@ -145,6 +153,7 @@ export function PlateSetupTab() {
       try {
         const res = await getWellTypes(sessionId);
         setWellTypeAssignments(res.assignments || {});
+        setImportedWellTypes(res.imported_assignments || {});
       } catch {
         // welltypes endpoint may be empty for a fresh session
       }
@@ -153,6 +162,34 @@ export function PlateSetupTab() {
     window.addEventListener("welltypes-changed", load);
     return () => window.removeEventListener("welltypes-changed", load);
   }, [sessionId, setWellTypeAssignments]);
+
+  // Sample names parsed from PCRD/EDS are already mergeable with manual
+  // overrides in the backend. Plate Setup is where the operator needs them,
+  // so keep this view on that same merged source of truth.
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await getSamples(sessionId);
+        if (!cancelled) {
+          setSampleNames(res.samples || {});
+          setImportedSampleNames(res.imported_samples || {});
+        }
+      } catch {
+        if (!cancelled) {
+          setSampleNames({});
+          setImportedSampleNames({});
+        }
+      }
+    };
+    void load();
+    window.addEventListener("samples-changed", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("samples-changed", load);
+    };
+  }, [sessionId]);
 
   // Load the caller's saved-layout library. Layouts are owned per-USER, not
   // per-session, so this is fetched once on mount rather than re-keyed on
@@ -469,6 +506,21 @@ export function PlateSetupTab() {
     }
   }
 
+  async function saveSampleName(well: string, name: string) {
+    if (!sessionId) return;
+    const previous = sampleNames[well] ?? "";
+    if (name === previous) return;
+    setSampleNames((current) => ({ ...current, [well]: name }));
+    try {
+      const result = await updateSamples(sessionId, { [well]: name });
+      setSampleNames(result.samples);
+      window.dispatchEvent(new CustomEvent("samples-changed"));
+    } catch (err) {
+      setSampleNames((current) => ({ ...current, [well]: previous }));
+      setSaveError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   // ---- Layout library (P4-S3) -- CONTEXTUAL quick actions only ----------
   // The full browse/manage UI (list every saved layout, rename/copy/delete)
   // now lives in the top-level Library tab's "레이아웃" sub-tab
@@ -591,12 +643,22 @@ export function PlateSetupTab() {
   // wells.
   const hideHet = !!singleWellMarker && singleWellMarker.ploidy > 2;
   const currentWellType = singleWell ? wellTypeAssignments[singleWell] : undefined;
+  const importedMarkerCount = markers.filter((marker) => marker.id.startsWith("imported-")).length;
 
   return (
     <div className="p-6">
       {saveError && (
         <div className="mb-3 px-3 py-2 rounded-md text-sm text-danger bg-danger/10">
           {saveError}
+        </div>
+      )}
+
+      {importedMarkerCount > 0 && (
+        <div
+          data-testid="imported-markers-banner"
+          className="mb-3 px-3 py-2 rounded-md text-sm text-text bg-primary/10 border border-primary/30"
+        >
+          {t.wsImportedMarkers(importedMarkerCount)}
         </div>
       )}
 
@@ -1016,6 +1078,9 @@ export function PlateSetupTab() {
                     const id = `${row}${col}`;
                     const marker = wellToMarker[id];
                     const isSelected = selectedWells.includes(id);
+                    const sampleName = sampleNames[id];
+                    const wellType = wellTypeAssignments[id];
+                    const titleParts = [id, sampleName, marker?.name, wellType].filter(Boolean);
                     return (
                       <button
                         key={id}
@@ -1027,20 +1092,31 @@ export function PlateSetupTab() {
                         onPointerDown={(event) => beginWellSelection(id, event)}
                         onPointerEnter={() => extendWellSelection(id)}
                         onPointerUp={endWellSelection}
-                        title={id}
+                        title={titleParts.join(" · ")}
                         style={{
                           background: marker ? marker.color ?? undefined : undefined,
                           outline: isSelected ? "2px solid var(--color-primary)" : "none",
                           outlineOffset: "1px",
-                          aspectRatio: "1",
+                          minHeight: plateCols.length > 12 ? "28px" : "42px",
                         }}
-                        className={`rounded-full border cursor-pointer text-[8px] font-mono ${
+                        className={`rounded-md border cursor-pointer min-w-0 px-0.5 text-[8px] ${
                           marker
                             ? "border-transparent text-white"
                             : "bg-bg border-border text-text-muted"
                         }`}
                       >
-                        {id}
+                        <span className="block font-mono font-semibold">{id}</span>
+                        {sampleName && plateCols.length <= 12 && (
+                          <span
+                            data-testid={`well-sample-${id}`}
+                            className="block truncate leading-tight"
+                          >
+                            {sampleName}
+                          </span>
+                        )}
+                        {wellType === WellType.NTC && (
+                          <span className="block font-bold leading-tight">NTC</span>
+                        )}
                       </button>
                     );
                   })}
@@ -1055,6 +1131,33 @@ export function PlateSetupTab() {
           <h3 className="text-sm font-semibold mb-3 text-text">{t.wsWellInspectorTitle}</h3>
           {selectedWells.length > 0 ? (
             <div data-testid="well-inspector">
+              {singleWell && (
+                <div className="mb-3">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <label htmlFor="plate-sample-name" className="text-xs font-bold text-text-muted">
+                      {t.wsSampleNameLabel}
+                    </label>
+                    {(importedSampleNames[singleWell] || importedWellTypes[singleWell]) && (
+                      <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-primary/10 text-primary">
+                        {t.wsImportedMetadataBadge}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    id="plate-sample-name"
+                    data-testid="sample-name-input"
+                    type="text"
+                    defaultValue={sampleNames[singleWell] ?? ""}
+                    key={`${singleWell}:${sampleNames[singleWell] ?? ""}`}
+                    placeholder={t.wsSampleNamePlaceholder}
+                    onBlur={(event) => void saveSampleName(singleWell, event.currentTarget.value.trim())}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
+                    className="w-full border border-border rounded-md px-2.5 py-1.5 text-sm bg-surface text-text"
+                  />
+                </div>
+              )}
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
@@ -1077,6 +1180,17 @@ export function PlateSetupTab() {
                   }`}
                 >
                   {t.wsWellTypeNtc}
+                </button>
+                <button
+                  type="button"
+                  data-testid="well-type-positive"
+                  aria-pressed={currentWellType === WellType.POSITIVE_CONTROL}
+                  onClick={() => setWellType(WellType.POSITIVE_CONTROL)}
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-semibold cursor-pointer border border-border ${
+                    currentWellType === WellType.POSITIVE_CONTROL ? "bg-primary text-white" : "bg-bg text-text"
+                  }`}
+                >
+                  {t.wsWellTypePositive}
                 </button>
                 <button
                   type="button"

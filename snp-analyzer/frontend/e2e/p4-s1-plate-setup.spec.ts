@@ -54,6 +54,20 @@ test.describe("P4-S1: Plate Setup tab", () => {
     await expect(well).toHaveAttribute("data-assigned", "false");
   });
 
+  test("parsed sample names are visible in the plate and editable in the inspector", async ({ page }) => {
+    await expect(page.getByTestId("well-sample-A1")).toBeVisible();
+    const parsedName = (await page.getByTestId("well-sample-A1").textContent())?.trim();
+    expect(parsedName).toBeTruthy();
+
+    await page.getByTestId("well-A1").click();
+    await expect(page.getByTestId("sample-name-input")).toHaveValue(parsedName ?? "");
+    await expect(page.getByText("파일에서 가져옴")).toBeVisible();
+
+    await page.getByTestId("sample-name-input").fill("Edited sample");
+    await page.getByTestId("sample-name-input").press("Enter");
+    await expect(page.getByTestId("well-sample-A1")).toHaveText("Edited sample");
+  });
+
   test("clicking a well toggles selection on/off", async ({ page }) => {
     const well = page.getByTestId("well-A1");
     await well.click();

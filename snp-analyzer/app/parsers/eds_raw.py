@@ -104,13 +104,13 @@ def parse_eds(file_path: str) -> UnifiedData:
             plate_dims = _parse_plate_dims(zf.read(exp_path))
 
         # Find plate_setup.xml (optional, for sample names and marker groups)
-        sample_names = {}
+        sample_names: dict[int, str] = {}
         marker_groups_raw: dict[str, list[int]] | None = None
+        imported_types_raw: dict[int, str] = {}
         ps_path = _find_file(names, "plate_setup.xml")
         if ps_path:
             ps_xml = zf.read(ps_path)
-            sample_names = _parse_plate_setup(ps_xml)
-            marker_groups_raw = _parse_marker_groups(ps_xml)
+            sample_names, marker_groups_raw, imported_types_raw = _parse_plate_metadata(ps_xml)
 
         # Find tcprotocol.xml (optional, for protocol steps)
         protocol_steps = []
@@ -254,16 +254,28 @@ def parse_eds(file_path: str) -> UnifiedData:
         if 0 <= well_idx < num_wells:
             sample_names_by_id[well_index_to_id(well_idx, plate_cols)] = name
 
-    # Convert marker groups from well indices to well IDs, filter to assigned wells
-    well_groups: dict[str, list[str]] | None = None
+    # Convert explicit assay assignments from well indices to well IDs. These
+    # become first-class editable markers when the session is created; they
+    # are not legacy well groups.
+    imported_markers: dict[str, list[str]] | None = None
     if marker_groups_raw:
-        well_groups = {}
+        imported_markers = {}
         for marker_name, indices in marker_groups_raw.items():
             ids = [well_index_to_id(idx, plate_cols) for idx in indices if 0 <= idx < num_wells and well_index_to_id(idx, plate_cols) in wells_set]
             if ids:
-                well_groups[marker_name] = sorted(ids, key=_well_sort_key)
-        if len(well_groups) <= 1:
-            well_groups = None
+                imported_markers[marker_name] = sorted(set(ids), key=_well_sort_key)
+        if not imported_markers:
+            imported_markers = None
+
+    imported_well_types = {
+        well_index_to_id(idx, plate_cols): well_type
+        for idx, well_type in imported_types_raw.items()
+        if 0 <= idx < num_wells and well_index_to_id(idx, plate_cols) in wells_set
+    }
+    ntc_wells = sorted(
+        (well for well, well_type in imported_well_types.items() if well_type == "NTC"),
+        key=_well_sort_key,
+    )
 
     return UnifiedData(
         instrument="QuantStudio 3 (raw)" if num_wells == 96 else f"QuantStudio (raw, {num_wells}-well)",
@@ -273,9 +285,12 @@ def parse_eds(file_path: str) -> UnifiedData:
         data=data,
         has_rox=has_rox,
         sample_names=sample_names_by_id or None,
+        imported_well_types=imported_well_types or None,
+        imported_markers=imported_markers,
         protocol_steps=protocol_steps or None,
         data_windows=windows if windows else None,
-        well_groups=well_groups,
+        well_groups=None,
+        ntc_wells=ntc_wells or None,
     )
 
 
@@ -322,59 +337,93 @@ def _parse_multicomponent(xml_data: bytes) -> tuple[
 
 def _parse_plate_setup(xml_data: bytes) -> dict[int, str]:
     """Parse plate_setup.xml for well -> sample name mapping."""
-    root = ET.fromstring(xml_data)
-    sample_names: dict[int, str] = {}
-
-    for fm in root.findall(".//FeatureMap"):
-        feature = fm.find("Feature")
-        if feature is None:
-            continue
-        fid = feature.findtext("Id", "")
-        if fid != "sample":
-            continue
-        for fv in fm.findall("FeatureValue"):
-            idx_text = fv.findtext("Index")
-            if idx_text is None:
-                continue
-            well_idx = int(idx_text)
-            name = fv.findtext(".//Sample/Name", "")
-            if name:
-                sample_names[well_idx] = name
-
+    sample_names, _, _ = _parse_plate_metadata(xml_data)
     return sample_names
 
 
 def _parse_marker_groups(xml_data: bytes) -> dict[str, list[int]] | None:
     """Parse plate_setup.xml for marker-task groups.
 
-    Returns {marker_name: [well_indices]} or None if only one marker.
+    Returns {marker_name: [well_indices]} for every explicit marker, including
+    a single-marker plate, or None when the file declares no marker.
     """
-    root = ET.fromstring(xml_data)
-    groups: dict[str, list[int]] = {}
-
-    for fm in root.findall(".//FeatureMap"):
-        feature = fm.find("Feature")
-        if feature is None:
-            continue
-        fid = feature.findtext("Id", "")
-        if fid != "marker-task":
-            continue
-        for fv in fm.findall("FeatureValue"):
-            idx_text = fv.findtext("Index")
-            if idx_text is None:
-                continue
-            well_idx = int(idx_text)
-            marker_name = fv.findtext(".//MarkerTask/Marker/Name", "")
-            if not marker_name:
-                continue
-            if marker_name not in groups:
-                groups[marker_name] = []
-            groups[marker_name].append(well_idx)
-
-    # Return None if single marker or no markers (no group UI needed)
-    if len(groups) <= 1:
-        return None
+    _, groups, _ = _parse_plate_metadata(xml_data)
     return groups
+
+
+def _parse_plate_metadata(
+    xml_data: bytes,
+) -> tuple[dict[int, str], dict[str, list[int]] | None, dict[int, str]]:
+    """Parse explicit sample, assay, and task metadata from plate_setup.xml."""
+    root = ET.fromstring(xml_data)
+    sample_names: dict[int, str] = {}
+    marker_groups: dict[str, list[int]] = {}
+    well_types: dict[int, str] = {}
+
+    for feature_map in root.findall(".//FeatureMap"):
+        feature_id = feature_map.findtext("Feature/Id", "").strip().lower()
+        for feature_value in feature_map.findall("FeatureValue"):
+            index_text = feature_value.findtext("Index")
+            if index_text is None:
+                continue
+            well_idx = int(index_text)
+
+            if feature_id == "sample":
+                name = feature_value.findtext(".//Sample/Name", "").strip()
+                if name:
+                    sample_names[well_idx] = name
+
+            if feature_id == "marker-task":
+                marker_name = feature_value.findtext(
+                    ".//MarkerTask/Marker/Name", ""
+                ).strip()
+                if marker_name:
+                    marker_groups.setdefault(marker_name, []).append(well_idx)
+
+            if well_type := _parse_eds_well_type(feature_value, feature_id):
+                well_types[well_idx] = well_type
+
+    groups = marker_groups or None
+    return sample_names, groups, well_types
+
+
+def _parse_eds_well_type(feature_value: ET.Element, feature_id: str) -> str | None:
+    """Map QuantStudio task/sample-type values onto the application's roles."""
+    task_roots: list[ET.Element] = []
+    for element in feature_value.iter():
+        tag = element.tag.rsplit("}", 1)[-1].lower()
+        if tag in {"task", "sampletype", "welltype"}:
+            task_roots.append(element)
+
+    if not task_roots and feature_id not in {"task", "sample-type", "well-type"}:
+        return None
+
+    candidates: set[str] = set()
+    roots = task_roots or [feature_value]
+    for root in roots:
+        for text in root.itertext():
+            normalized = re.sub(r"[^A-Z0-9]+", "_", text.strip().upper()).strip("_")
+            if normalized:
+                candidates.add(normalized)
+
+    mappings = {
+        "NTC": "NTC",
+        "NEGATIVE_CONTROL": "NTC",
+        "NO_TEMPLATE_CONTROL": "NTC",
+        "UNKNOWN": "Unknown",
+        "SAMPLE": "Unknown",
+        "POSITIVE_CONTROL": "Positive Control",
+        "POSITIVE_1_1": "Allele 1 Control",
+        "POSITIVE_CONTROL_1_1": "Allele 1 Control",
+        "POSITIVE_2_2": "Allele 2 Control",
+        "POSITIVE_CONTROL_2_2": "Allele 2 Control",
+        "POSITIVE_1_2": "Heterozygous",
+        "POSITIVE_CONTROL_1_2": "Heterozygous",
+    }
+    for candidate in candidates:
+        if candidate in mappings:
+            return mappings[candidate]
+    return None
 
 
 def _parse_protocol(xml_data: bytes) -> list[ProtocolStep]:

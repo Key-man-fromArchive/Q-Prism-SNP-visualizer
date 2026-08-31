@@ -156,6 +156,10 @@ def save_session(session_id: str, unified, filename: str = "", user_id: str | No
     metadata = {}
     if unified.sample_names:
         metadata["sample_names"] = unified.sample_names
+    if unified.imported_well_types:
+        metadata["imported_well_types"] = unified.imported_well_types
+    if unified.imported_markers:
+        metadata["imported_markers"] = unified.imported_markers
     if unified.protocol_steps:
         metadata["protocol_steps"] = [s.model_dump() for s in unified.protocol_steps]
     if unified.data_windows:
@@ -618,6 +622,8 @@ def load_all_sessions():
             data=data,
             has_rox=bool(row["has_rox"]),
             sample_names=sample_names,
+            imported_well_types=metadata.get("imported_well_types"),
+            imported_markers=metadata.get("imported_markers"),
             protocol_steps=protocol_steps,
             data_windows=data_windows,
             well_groups=well_groups,
