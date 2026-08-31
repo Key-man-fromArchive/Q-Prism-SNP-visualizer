@@ -36,8 +36,8 @@ export function AnalysisWorkspace() {
   // renders: >=1 marker => the per-marker MultiMarkerAnalysisPanel (P4-S2),
   // 0 markers => the legacy single-marker (whole-plate) view + split banner
   // (P4-S0). Re-fetched on session change and every time this surface is
-  // (re-)entered, so wells/markers assigned on the Plate Setup surface are
-  // picked up without requiring a full page reload.
+  // updated through the markers-changed event, so merely switching surfaces
+  // does not repeat an identical API request and analysis render.
   const [markers, setMarkers] = useState<MarkerRegion[]>([]);
 
   // A freshly-loaded session starts back on the Analysis surface with the
@@ -75,7 +75,7 @@ export function AnalysisWorkspace() {
       cancelled = true;
       window.removeEventListener("markers-changed", load);
     };
-  }, [sessionId, activeSurface]);
+  }, [sessionId]);
 
   return (
     <div>

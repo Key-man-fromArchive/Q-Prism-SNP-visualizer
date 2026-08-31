@@ -80,20 +80,30 @@ export function MarkerScatterPlot({
       : markerPoints;
   }, [points, wellSet, focusSelectedWells, selectedWellSet]);
 
-  // Seeded once from the marker's current region result (boundaries/offset),
-  // falling back to equal-spacing cuts when there's no prior result yet. The
-  // parent mounts this component with `key={marker.id}` so switching markers
-  // (or a fresh region arriving after this marker's own drag is persisted +
-  // re-clustered) always seeds from a clean, up-to-date `region` instead of
-  // needing an effect to re-seed an existing instance in place.
-  const [editBoundaries, setEditBoundaries] = useState<number[]>(() =>
-    region?.boundaries && region.boundaries.length
-      ? [...region.boundaries]
-      : defaultRatioCuts(ploidy)
+  // Keep the Plotly instance mounted across marker switches. Boundary edits
+  // are keyed by the marker/result signature, so a new marker starts from its
+  // own saved cuts without forcing a costly Plotly purge/newPlot cycle.
+  const boundarySeed = useMemo(
+    () =>
+      region?.boundaries && region.boundaries.length
+        ? [...region.boundaries]
+        : defaultRatioCuts(ploidy),
+    [region, ploidy]
   );
+  const boundaryKey = `${marker.id}:${region?.boundaries?.join(",") ?? "default"}:${region?.offset ?? 0}`;
+  const [boundaryEdit, setBoundaryEdit] = useState(() => ({
+    key: boundaryKey,
+    cuts: boundarySeed,
+  }));
+  const editBoundaries = boundaryEdit.key === boundaryKey ? boundaryEdit.cuts : boundarySeed;
   const editRef = useRef<number[]>(editBoundaries);
   const dragIndexRef = useRef<number | null>(null);
   const offsetRef = useRef<number>(region?.offset ?? 0);
+
+  useEffect(() => {
+    editRef.current = editBoundaries;
+    offsetRef.current = region?.offset ?? 0;
+  }, [editBoundaries, region?.offset]);
 
   const assignmentFor = useCallback(
     (well: string): string | null => region?.assignments?.[well] ?? null,
@@ -322,7 +332,7 @@ export function MarkerScatterPlot({
       const lo = idx < cuts.length - 1 ? cuts[idx + 1] + 0.002 : 0.001;
       cuts[idx] = Math.max(lo, Math.min(hi, r));
       editRef.current = cuts;
-      setEditBoundaries(cuts);
+      setBoundaryEdit({ key: boundaryKey, cuts });
     };
 
     const onUp = () => {
@@ -339,7 +349,7 @@ export function MarkerScatterPlot({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [sessionId, marker.id, onBoundariesPersisted]);
+  }, [sessionId, marker.id, boundaryKey, onBoundariesPersisted]);
 
   useEffect(() => {
     const plot = plotRef.current;

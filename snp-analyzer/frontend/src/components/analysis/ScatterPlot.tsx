@@ -31,16 +31,30 @@ export function ScatterPlot() {
   const initialized = useRef(false);
 
   const sessionId = useSessionStore((s) => s.sessionId);
-  const { useRox, fixAxis, xMin, xMax, yMin, yMax, showAutoCluster, showManualTypes } =
-    useSettingsStore();
+  const useRox = useSettingsStore((s) => s.useRox);
+  const fixAxis = useSettingsStore((s) => s.fixAxis);
+  const xMin = useSettingsStore((s) => s.xMin);
+  const xMax = useSettingsStore((s) => s.xMax);
+  const yMin = useSettingsStore((s) => s.yMin);
+  const yMax = useSettingsStore((s) => s.yMax);
+  const showAutoCluster = useSettingsStore((s) => s.showAutoCluster);
+  const showManualTypes = useSettingsStore((s) => s.showManualTypes);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
   const ploidy = useSettingsStore((s) => s.ploidy);
   const ntcThreshold = useSettingsStore((s) => s.ntcThreshold);
   const showBoundaryLines = useSettingsStore((s) => s.showBoundaryLines);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
-  const { selectWell, selectWells, clearSelection, selectedWells, focusSelectedWells } = useSelectionStore();
+  const selectWell = useSelectionStore((s) => s.selectWell);
+  const selectWells = useSelectionStore((s) => s.selectWells);
+  const clearSelection = useSelectionStore((s) => s.clearSelection);
+  const selectedWells = useSelectionStore((s) => s.selectedWells);
+  const focusSelectedWells = useSelectionStore((s) => s.focusSelectedWells);
   const selectedWellSet = useMemo(() => new Set(selectedWells), [selectedWells]);
-  const { scatterPoints, allele2Dye, channelLabels: roleLabels, clusterAssignments, wellTypeAssignments } = useDataStore();
+  const scatterPoints = useDataStore((s) => s.scatterPoints);
+  const allele2Dye = useDataStore((s) => s.allele2Dye);
+  const roleLabels = useDataStore((s) => s.channelLabels);
+  const clusterAssignments = useDataStore((s) => s.clusterAssignments);
+  const wellTypeAssignments = useDataStore((s) => s.wellTypeAssignments);
   const ratioOrigin = useDataStore((s) => s.ratioOrigin);
   // The drag handlers are registered once per tool-open, so they read the
   // origin through a ref rather than re-binding every time it changes.

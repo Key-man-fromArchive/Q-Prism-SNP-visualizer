@@ -16,7 +16,7 @@ import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore, ZERO_ORIGIN } from "@/stores/data-store";
 import { getScatter, runClustering, listMarkerCatalog, suggestCycle, type CycleSuggestion } from "@/lib/api";
 import { ClusteringAlgorithm } from "@/types/api";
-import type { ChannelLabels, MarkerCatalogEntry, MarkerRegion, RatioOrigin, RegionResult, ScatterPoint } from "@/types/api";
+import type { MarkerCatalogEntry, MarkerRegion, RegionResult } from "@/types/api";
 import { genotypeShortLabel, wellInfo } from "@/lib/genotype";
 import { MARKER_PALETTE } from "@/lib/constants";
 import { dosageTrustForMarker } from "@/lib/marker-catalog";
@@ -24,6 +24,9 @@ import { MarkerScatterPlot } from "./MarkerScatterPlot";
 import { CycleControl } from "./CycleControl";
 import { PlateView } from "./PlateView";
 import { WellSelectionToolbar } from "./WellSelectionToolbar";
+import { WellDetailPanel } from "./WellDetailPanel";
+import { ResultsTable } from "./ResultsTable";
+import { AmplificationOverlay } from "./AmplificationOverlay";
 
 const SIDEBAR_THRESHOLD = 4; // >=4 markers -> sidebar; <=3 -> dropdown (Q8)
 
@@ -50,12 +53,12 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const isPlaying = useSelectionStore((s) => s.isPlaying);
   const setClusterAssignments = useDataStore((s) => s.setClusterAssignments);
-
+  const scatterPoints = useDataStore((s) => s.scatterPoints);
+  const allele2Dye = useDataStore((s) => s.allele2Dye);
+  const roleLabels = useDataStore((s) => s.channelLabels);
+  const ratioOrigin = useDataStore((s) => s.ratioOrigin);
+  const setScatterData = useDataStore((s) => s.setScatterData);
   const [regionsById, setRegionsById] = useState<Record<string, RegionResult>>({});
-  const [scatterPoints, setScatterPoints] = useState<ScatterPoint[]>([]);
-  const [allele2Dye, setAllele2Dye] = useState<string>("");
-  const [roleLabels, setRoleLabels] = useState<ChannelLabels | null>(null);
-  const [ratioOrigin, setRatioOrigin] = useState<RatioOrigin>(ZERO_ORIGIN);
   const useRox = useSettingsStore((s) => s.useRox);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(
@@ -111,7 +114,6 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
       for (const r of result.regions ?? []) byId[r.id] = r;
       setRegionsById(byId);
       setClusterAssignments(result.assignments ?? {});
-      window.dispatchEvent(new CustomEvent("analysis-results-changed"));
     } catch (err) {
       if (requestId !== clusterRequestRef.current) return;
       setError(err instanceof Error ? err.message : String(err));
@@ -126,14 +128,16 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     try {
       const res = await getScatter(sessionId, currentCycle || undefined, useRox, backgroundMode);
       if (requestId !== scatterRequestRef.current) return;
-      setScatterPoints(res.points);
-      setAllele2Dye(res.allele2_dye);
-      setRoleLabels(res.channel_labels ?? null);
-      setRatioOrigin(res.ratio_origin ?? ZERO_ORIGIN);
+      setScatterData(
+        res.points,
+        res.allele2_dye,
+        res.channel_labels,
+        res.ratio_origin ?? ZERO_ORIGIN
+      );
     } catch (err) {
       console.error("Failed to fetch scatter data:", err);
     }
-  }, [sessionId, currentCycle, useRox, backgroundMode]);
+  }, [sessionId, currentCycle, useRox, backgroundMode, setScatterData]);
 
   // Scatter follows the cycle immediately. Clustering is deferred until the
   // input settles, and is paused during playback, avoiding three heavy server
@@ -246,10 +250,16 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
         </button>
       </div>
       </div>
-      <div className="p-6 grid gap-4" style={{ gridTemplateColumns: "260px minmax(0,1fr)" }}>
+      <div
+        className={`grid grid-cols-1 gap-4 p-4 sm:p-6 ${
+          useSidebar ? "xl:grid-cols-[260px_minmax(0,1fr)]" : ""
+        }`}
+      >
       {/* Marker selector */}
-      <div className="panel">
-        <h3 className="text-sm font-semibold mb-3 text-text">{t.wsAnalysisListTitle}</h3>
+      <div className={`panel ${useSidebar ? "" : "flex flex-wrap items-center gap-3"}`}>
+        <h3 className={`text-sm font-semibold text-text ${useSidebar ? "mb-3" : ""}`}>
+          {t.wsAnalysisListTitle}
+        </h3>
 
         {!useSidebar && (
           <select
@@ -257,7 +267,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
             aria-label={t.wsAnalysisSelectMarkerLabel}
             value={selectedMarkerId ?? ""}
             onChange={(e) => setSelectedMarkerId(e.target.value)}
-            className="w-full border border-border rounded-md px-2 py-1.5 text-sm bg-surface text-text mb-1"
+            className="w-full max-w-sm border border-border rounded-md px-2 py-1.5 text-sm bg-surface text-text"
           >
             {markers.map((m) => (
               <option key={m.id} value={m.id}>
@@ -320,7 +330,8 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
 
         {selectedMarker && (
           <>
-            <div className="panel">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="panel min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <span
                   className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs bg-bg border border-border text-text"
@@ -384,11 +395,10 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                 <WellSelectionToolbar />
               </div>
 
-              {loading && !selectedRegion ? (
+              {loading && !selectedRegion && scatterPoints.length === 0 ? (
                 <p className="text-sm text-text-muted py-10 text-center">{t.wsAnalysisLoading}</p>
               ) : (
                 <MarkerScatterPlot
-                  key={selectedMarker.id}
                   sessionId={sessionId ?? ""}
                   marker={selectedMarker}
                   region={selectedRegion}
@@ -424,7 +434,9 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
               scopeWells={selectedMarker.wells}
               ploidyOverride={selectedMarker.ploidy}
             />
+            </div>
 
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="panel">
               <h3 className="text-sm font-semibold mb-3 text-text">
                 {t.wsAnalysisGenotypeCountsTitle}
@@ -464,6 +476,11 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                 </div>
               </div>
             </div>
+            <WellDetailPanel ploidyOverride={selectedMarker.ploidy} />
+            </div>
+
+            <ResultsTable ploidyOverride={selectedMarker.ploidy} />
+            <AmplificationOverlay ploidyOverride={selectedMarker.ploidy} />
           </>
         )}
       </div>

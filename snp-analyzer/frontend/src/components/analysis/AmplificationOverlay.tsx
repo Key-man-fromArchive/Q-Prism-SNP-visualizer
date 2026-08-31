@@ -9,7 +9,9 @@ import { plotlyColors } from "@/lib/plotly-theme";
 import { wellInfo } from "@/lib/genotype";
 import { useI18n } from "@/hooks/use-i18n";
 
-export function AmplificationOverlay() {
+type AmplificationOverlayProps = { ploidyOverride?: number };
+
+export function AmplificationOverlay({ ploidyOverride }: AmplificationOverlayProps = {}) {
   const { t } = useI18n();
   const plotRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
@@ -19,7 +21,8 @@ export function AmplificationOverlay() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const useRox = useSettingsStore((s) => s.useRox);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
-  const ploidy = useSettingsStore((s) => s.ploidy);
+  const storedPloidy = useSettingsStore((s) => s.ploidy);
+  const ploidy = ploidyOverride ?? storedPloidy;
   const allele2Dye = useDataStore((s) => s.allele2Dye);
   const roleLabels = useDataStore((s) => s.channelLabels);
 
@@ -101,7 +104,7 @@ export function AmplificationOverlay() {
     return () => {
       cancelled = true;
     };
-  }, [visible, channel, sessionId, useRox, backgroundMode, allele2Dye, roleLabels]);
+  }, [visible, channel, sessionId, useRox, backgroundMode, allele2Dye, roleLabels, ploidy]);
 
   // Cleanup on unmount
   useEffect(() => {

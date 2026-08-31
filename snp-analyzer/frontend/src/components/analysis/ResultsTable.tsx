@@ -41,12 +41,16 @@ function effectiveType(
   return null;
 }
 
-export function ResultsTable() {
+type ResultsTableProps = { ploidyOverride?: number };
+
+export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
   const { t } = useI18n();
   const scatterPoints = useDataStore((s) => s.scatterPoints);
-  const { selectWell } = useSelectionStore();
-  const { showAutoCluster, showManualTypes } = useSettingsStore();
-  const ploidy = useSettingsStore((s) => s.ploidy);
+  const selectWell = useSelectionStore((s) => s.selectWell);
+  const showAutoCluster = useSettingsStore((s) => s.showAutoCluster);
+  const showManualTypes = useSettingsStore((s) => s.showManualTypes);
+  const storedPloidy = useSettingsStore((s) => s.ploidy);
+  const ploidy = ploidyOverride ?? storedPloidy;
 
   const { visibleRows, visibleCols } = useWellFilter();
 

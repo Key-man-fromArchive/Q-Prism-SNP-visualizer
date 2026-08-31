@@ -64,6 +64,22 @@ Upload ──▶ [ Workspace ]
 웰 배정 겹침 / 구세션 마커메타 없음 / import 레이아웃 웰이 플레이트에 없음 / 96 vs 384 명명 불일치 / CSV 중복 웰 / 대소문자·공백 마커명 / ploidy 누락·무효 / 파일 NTC와 import 레이아웃 충돌 / 마커 웰 수 부족(클러스터 불가) / 마커에 샘플 없이 NTC만 / 동일 sample id가 여러 마커(정상, 오류 아님) / 레이아웃 편집 후 stale 결과 무효화 / export가 마커별인지 전체인지 명시.
 **최대 위험 = 조용한 정합성 실패**: 마커 혼합 풀링 클러스터링, 레이아웃 편집 후 낡은 threshold 적용.
 
+## 4.1 연결 선택 UX 재조사 (2026-08-31)
+
+공식 도구 문서를 다시 대조한 결과, 분석 화면의 플레이트는 설정용 부속물이 아니라 산점도의 선택 컨트롤이다.
+
+- QuantStudio는 플레이트에서 단일 클릭, 드래그, Ctrl 비연속 선택, 행·열 선택을 제공하고 선택 웰 데이터를 플롯에 연결한다. 산점도에서 고른 점도 Plate Layout/Well Table에서 역으로 확인한다. ([Select plate wells](https://apps.thermofisher.com/apps/help/MAN0010414/GUID-5DC6648D-CE9D-49CB-A26B-66ED0B768FC6.html), [Display data from selected wells](https://apps.thermofisher.com/apps/help/MAN0010414/GUID-43047CB5-44B0-482E-B0E3-D0869EFBA01D.html), [Desktop guide](https://documents.thermofisher.com/TFS-Assets/LSG/manuals/MAN0010408_QuantStudioDesign_Analysis_Desktop_Software_UG.pdf))
+- CFX Maestro의 Allelic Discrimination 화면도 산점도, 웰 표, 플레이트 맵, 사이클 선택을 한 작업면에 유지하고 산점도 드래그 선택을 `Selected Wells` 작업에 연결한다. ([CFX Maestro guide](https://www.bio-rad.com/sites/default/files/webroot/web/pdf/lsr/literature/10000126764.pdf))
+- Plotly는 기존 그래프를 덮어쓰는 `newPlot`보다 `Plotly.react` 갱신이 효율적이라고 명시한다. ([Plotly function reference](https://plotly.com/javascript/plotlyjs-function-reference/))
+
+따라서 Q-Prism의 확정 동작은 다음과 같다.
+
+- 마커 유무와 관계없이 분석 화면에 플레이트, 산점도, 선택 웰 상세, 결과표, 증폭곡선을 유지한다.
+- 플레이트 선택은 산점도에서 강조되며, `선택 웰만 보기`로 명시적 포커스가 가능하다. 산점도 클릭·박스·라쏘 선택은 플레이트로 역반영한다.
+- 다중 선택 자체는 편집 팝업을 열지 않는다. 웰 유형 편집은 우클릭이라는 별도 명령으로 유지한다.
+- 1~3개 마커는 상단 드롭다운, 4개 이상만 사이드바를 사용한다. 마커 전환은 Plotly 인스턴스를 재사용한다.
+- 사이클 재생 중에는 산점도/플레이트만 갱신하고 전체 클러스터링은 정지 후 한 번 수행한다.
+
 ## 4.5 3-에이전트 리뷰 반영 (codex·fable·sonnet, 2026-07-10) — 구현 전 필수 수정
 목업+결정문서+실코드를 세 모델이 각기 다른 렌즈로 검토. 아래는 **구현 착수 전 반드시 닫아야 할** 확정 항목.
 

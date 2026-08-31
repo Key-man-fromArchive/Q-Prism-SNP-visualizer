@@ -70,7 +70,9 @@ test("08 — Marker Catalog tab: create a validated assay", async ({ page }) => 
   await page.getByTestId("catalog-form-save").click();
   await expect(form).toBeHidden();
 
-  const row = page.getByTestId("catalog-entry-row").filter({ hasText: "qSwet5.3" });
+  const row = page.getByTestId("catalog-entry-row").filter({
+    has: page.getByText("qSwet5.3", { exact: true }),
+  }).first();
   await expect(row).toBeVisible({ timeout: 10_000 });
   await expect(row.getByTestId("catalog-dosage-trust-badge")).toHaveAttribute(
     "data-trust",

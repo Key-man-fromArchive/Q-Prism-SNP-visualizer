@@ -10,7 +10,9 @@ import { channelLabels, normalizationLabel } from "@/lib/channel-labels";
 import { plotlyColors } from "@/lib/plotly-theme";
 import type { AmplificationCurve } from "@/types/api";
 
-export function WellDetailPanel() {
+type WellDetailPanelProps = { ploidyOverride?: number };
+
+export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   const { t } = useI18n();
   const plotRef = useRef<HTMLDivElement>(null);
   const plotInitRef = useRef(false);
@@ -19,8 +21,10 @@ export function WellDetailPanel() {
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const useRox = useSettingsStore((s) => s.useRox);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
-  const ploidy = useSettingsStore((s) => s.ploidy);
-  const { selectedWell, currentCycle } = useSelectionStore();
+  const storedPloidy = useSettingsStore((s) => s.ploidy);
+  const ploidy = ploidyOverride ?? storedPloidy;
+  const selectedWell = useSelectionStore((s) => s.selectedWell);
+  const currentCycle = useSelectionStore((s) => s.currentCycle);
   const scatterPoints = useDataStore((s) => s.scatterPoints);
   const allele2Dye = useDataStore((s) => s.allele2Dye);
   const roleLabels = useDataStore((s) => s.channelLabels);

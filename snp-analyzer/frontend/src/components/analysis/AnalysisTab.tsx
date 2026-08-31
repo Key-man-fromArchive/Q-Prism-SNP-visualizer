@@ -33,7 +33,8 @@ export function AnalysisTab() {
   const clearSelection = useSelectionStore((s) => s.clearSelection);
   const selectedGroup = useSelectionStore((s) => s.selectedGroup);
   const setGroup = useSelectionStore((s) => s.setGroup);
-  const { showEmptyWells, setShowEmptyWells } = useSettingsStore();
+  const showEmptyWells = useSettingsStore((s) => s.showEmptyWells);
+  const setShowEmptyWells = useSettingsStore((s) => s.setShowEmptyWells);
   const wellTypeAssignments = useDataStore((s) => s.wellTypeAssignments);
   const setWellTypeAssignments = useDataStore((s) => s.setWellTypeAssignments);
 
@@ -48,7 +49,10 @@ export function AnalysisTab() {
   const offset = useDataStore((s) => s.offset);
   const offsetUncertain = useDataStore((s) => s.offsetUncertain);
   const lowSeparation = useDataStore((s) => s.lowSeparation);
-  const { ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters } = useSettingsStore();
+  const ntcThreshold = useSettingsStore((s) => s.ntcThreshold);
+  const allele1RatioMax = useSettingsStore((s) => s.allele1RatioMax);
+  const allele2RatioMin = useSettingsStore((s) => s.allele2RatioMin);
+  const nClusters = useSettingsStore((s) => s.nClusters);
   const ploidy = useSettingsStore((s) => s.ploidy);
   const setPloidy = useSettingsStore((s) => s.setPloidy);
   const showManualTypes = useSettingsStore((s) => s.showManualTypes);

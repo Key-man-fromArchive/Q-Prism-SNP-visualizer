@@ -30,9 +30,9 @@ test("06/07 — References tab renders citations + scope note", async ({ page })
   await expect(goToProjectsLink).toBeVisible({ timeout: 15_000 });
   await goToProjectsLink.click();
 
-  const tabButton = page.locator("#tab-references");
+  await page.getByRole("button", { name: /더보기|more/i }).click();
+  const tabButton = page.getByRole("menuitem", { name: /참고문헌|references/i });
   await expect(tabButton).toBeVisible({ timeout: 15_000 });
-  await expect(tabButton).toBeEnabled({ timeout: 15_000 });
   await tabButton.click();
 
   const panel = page.getByTestId("references-tab");

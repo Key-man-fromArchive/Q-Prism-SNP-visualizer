@@ -33,8 +33,11 @@ test.describe("P4-S2: Analysis tab — per-marker results", () => {
 
     await page.getByTestId("workspace-tab-analysis").click();
     await expect(page.locator("#plate-grid")).toBeVisible();
+    await expect(page.locator("#results-plate")).toBeVisible();
+    await expect(page.locator("#detail-content")).toBeVisible();
+    await expect(page.locator("#toggle-overlay-btn")).toBeVisible();
 
-    await page.locator('[data-well="A1"]').click();
+    await page.locator('#plate-grid [data-well="A1"]').click();
     await expect(page.getByTestId("analysis-selection-count")).toContainText("1");
 
     const focus = page.getByTestId("scatter-selected-only");
@@ -63,10 +66,40 @@ test.describe("P4-S2: Analysis tab — per-marker results", () => {
     await expect(page.getByTestId("marker-ploidy-badge")).toContainText("6배체");
     await expect(page.getByTestId("marker-expected-classes")).toContainText("7");
 
-    // Switching markers re-renders scatter/counts for the newly selected one.
+    // Switching markers updates the existing Plotly surface instead of
+    // purging/recreating it (which caused a visible hitch).
+    const scatterElement = await page.getByTestId("marker-scatter").elementHandle();
     await selector.selectOption({ label: "qTotal11.1" });
     await expect(page.getByTestId("marker-scatter")).toBeVisible();
+    expect(
+      await page.evaluate(
+        (previous) => document.querySelector('[data-testid="marker-scatter"]') === previous,
+        scatterElement,
+      ),
+    ).toBe(true);
     await expect(page.getByTestId("marker-ploidy-badge")).toContainText("6배체");
+  });
+
+  test("cycle playback defers clustering until playback stops", async ({ page }) => {
+    await loadExample(page, 6);
+    await defineMarkersOnColumns(page, ["qSwet5.3"], 6);
+    await page.getByTestId("workspace-tab-analysis").click();
+    await expect(page.getByTestId("marker-scatter")).toBeVisible();
+    await page.waitForTimeout(700);
+
+    let clusterRequests = 0;
+    page.on("request", (request) => {
+      if (/\/api\/data\/[^/]+\/cluster$/.test(new URL(request.url()).pathname)) {
+        clusterRequests += 1;
+      }
+    });
+
+    await page.locator("#play-btn").click();
+    await page.waitForTimeout(1_200);
+    expect(clusterRequests).toBe(0);
+    await page.locator("#play-btn").click();
+    await page.waitForTimeout(500);
+    expect(clusterRequests).toBeLessThanOrEqual(1);
   });
 
   test("4+ markers: sidebar of marker cards replaces the dropdown", async ({ page }) => {

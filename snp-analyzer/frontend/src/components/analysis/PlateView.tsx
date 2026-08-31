@@ -70,11 +70,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   useEffect(() => {
     const handler = () => setRefetchTrigger((n) => n + 1);
     window.addEventListener("welltypes-changed", handler);
-    window.addEventListener("analysis-results-changed", handler);
-    return () => {
-      window.removeEventListener("welltypes-changed", handler);
-      window.removeEventListener("analysis-results-changed", handler);
-    };
+    return () => window.removeEventListener("welltypes-changed", handler);
   }, []);
 
   // Fetch plate data when dependencies change

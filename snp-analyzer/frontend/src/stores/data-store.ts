@@ -58,7 +58,16 @@ export const useDataStore = create<DataState>((set) => ({
     }),
   setPlateData: (wells) => set({ plateWells: wells }),
   setClusterAssignments: (assignments) =>
-    set({ clusterAssignments: assignments }),
+    set((state) => ({
+      clusterAssignments: assignments,
+      // Keep the already-loaded plate in sync without another /plate request.
+      // Cycle changes still fetch fresh RFU values; clustering only changes the
+      // call displayed on each existing well.
+      plateWells: state.plateWells.map((well) => ({
+        ...well,
+        auto_cluster: assignments[well.well] ?? null,
+      })),
+    })),
   setWellTypeAssignments: (assignments) =>
     set({ wellTypeAssignments: assignments }),
   setBoundaries: (boundaries) => set({ boundaries }),

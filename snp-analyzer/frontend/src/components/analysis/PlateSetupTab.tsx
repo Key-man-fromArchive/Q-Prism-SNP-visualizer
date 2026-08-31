@@ -393,6 +393,7 @@ export function PlateSetupTab() {
       const res = await saveMarkers(sessionId, persistable);
       const merged = [...res.markers, ...empties];
       setMarkers(merged);
+      window.dispatchEvent(new CustomEvent("markers-changed"));
       return merged;
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
