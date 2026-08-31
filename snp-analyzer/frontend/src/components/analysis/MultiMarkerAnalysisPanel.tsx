@@ -12,6 +12,7 @@ import { AlertTriangle, Info } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useSelectionStore } from "@/stores/selection-store";
 import { ZERO_ORIGIN } from "@/stores/data-store";
 import { getScatter, runClustering, listMarkerCatalog } from "@/lib/api";
 import { ClusteringAlgorithm } from "@/types/api";
@@ -20,6 +21,7 @@ import { genotypeShortLabel, wellInfo } from "@/lib/genotype";
 import { MARKER_PALETTE } from "@/lib/constants";
 import { dosageTrustForMarker } from "@/lib/marker-catalog";
 import { MarkerScatterPlot } from "./MarkerScatterPlot";
+import { CycleControl } from "./CycleControl";
 
 const SIDEBAR_THRESHOLD = 4; // >=4 markers -> sidebar; <=3 -> dropdown (Q8)
 
@@ -43,6 +45,7 @@ type MultiMarkerAnalysisPanelProps = {
 export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelProps) {
   const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
+  const currentCycle = useSelectionStore((s) => s.currentCycle);
 
   const [regionsById, setRegionsById] = useState<Record<string, RegionResult>>({});
   const [scatterPoints, setScatterPoints] = useState<ScatterPoint[]>([]);
@@ -85,7 +88,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
       // override in threshold_config).
       const result = await runClustering(sessionId, {
         algorithm: ClusteringAlgorithm.AUTO,
-        cycle: 0, // 0 => backend uses the last cycle
+        cycle: currentCycle || 0, // 0 only while CycleControl is initializing
         n_clusters: 4,
         background: backgroundMode,
       });
@@ -97,12 +100,12 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     } finally {
       setLoading(false);
     }
-  }, [sessionId, markers.length, backgroundMode]);
+  }, [sessionId, markers.length, currentCycle, backgroundMode]);
 
   const fetchScatter = useCallback(async () => {
     if (!sessionId) return;
     try {
-      const res = await getScatter(sessionId, undefined, useRox, backgroundMode);
+      const res = await getScatter(sessionId, currentCycle || undefined, useRox, backgroundMode);
       setScatterPoints(res.points);
       setAllele2Dye(res.allele2_dye);
       setRoleLabels(res.channel_labels ?? null);
@@ -110,15 +113,14 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     } catch (err) {
       console.error("Failed to fetch scatter data:", err);
     }
-  }, [sessionId, useRox, backgroundMode]);
+  }, [sessionId, currentCycle, useRox, backgroundMode]);
 
   // Trigger clustering of the saved markers + load scatter points whenever
   // this surface is entered with markers defined.
   useEffect(() => {
     void runCluster();
     void fetchScatter();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, markers.map((m) => m.id).join(","), markers.length]);
+  }, [runCluster, fetchScatter]);
 
   useEffect(() => {
     (async () => {
@@ -170,7 +172,9 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   }
 
   return (
-    <div className="p-6 grid gap-4" style={{ gridTemplateColumns: "260px minmax(0,1fr)" }}>
+    <div>
+      <CycleControl />
+      <div className="p-6 grid gap-4" style={{ gridTemplateColumns: "260px minmax(0,1fr)" }}>
       {/* Marker selector */}
       <div className="panel">
         <h3 className="text-sm font-semibold mb-3 text-text">{t.wsAnalysisListTitle}</h3>
@@ -381,6 +385,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
             </div>
           </>
         )}
+      </div>
       </div>
     </div>
   );

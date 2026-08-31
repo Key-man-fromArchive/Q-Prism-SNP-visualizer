@@ -18,6 +18,15 @@ import { defineMarkersOnColumns } from "./helpers/define-markers";
  * RED-first: these testids do not exist yet.
  */
 test.describe("P4-S2: Analysis tab — per-marker results", () => {
+  test("cycle control remains available after markers are defined", async ({ page }) => {
+    await loadExample(page, 6);
+    await defineMarkersOnColumns(page, ["qSwet5.3"], 6);
+
+    await page.getByTestId("workspace-tab-analysis").click();
+    await expect(page.locator("#cycle-control")).toBeVisible();
+    await expect(page.locator("#cycle-slider")).toBeVisible();
+  });
+
   test("<=3 markers: dropdown selector; scatter/counts/ploidy switch per marker", async ({
     page,
   }) => {
