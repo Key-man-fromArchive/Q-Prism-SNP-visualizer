@@ -80,6 +80,37 @@ test.describe("P4-S1: Plate Setup tab", () => {
     }
   });
 
+  test("Shift-click selects a rectangular range and the corner control selects all wells", async ({ page }) => {
+    await page.getByTestId("well-A1").click();
+    await page.getByTestId("well-C3").click({ modifiers: ["Shift"] });
+
+    for (const row of ["A", "B", "C"]) {
+      for (const col of [1, 2, 3]) {
+        await expect(page.getByTestId(`well-${row}${col}`)).toHaveAttribute("aria-pressed", "true");
+      }
+    }
+    await expect(page.getByTestId("well-D4")).toHaveAttribute("aria-pressed", "false");
+
+    await page.getByTestId("select-all-wells").click();
+    await expect(page.getByTestId("well-H12")).toHaveAttribute("aria-pressed", "true");
+    await page.getByTestId("select-all-wells").click();
+    await expect(page.getByTestId("well-A1")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("dragging across wells selects their rectangular block", async ({ page }) => {
+    const start = await page.getByTestId("well-A1").boundingBox();
+    const end = await page.getByTestId("well-C3").boundingBox();
+    if (!start || !end) throw new Error("Plate wells must be visible for drag selection");
+
+    await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2, { steps: 8 });
+    await page.mouse.up();
+
+    await expect(page.getByTestId("selection-count")).toContainText("9");
+    await expect(page.getByTestId("well-C3")).toHaveAttribute("aria-pressed", "true");
+  });
+
   test("creating a marker: name + color picker + ploidy", async ({ page }) => {
     await page.getByTestId("add-marker-button").click();
     const form = page.getByTestId("marker-form");

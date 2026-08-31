@@ -2,7 +2,7 @@
 // @SPEC docs/multi-marker-ux-decision.md §3.5 (well select -> marker pick -> 배정)
 // @TEST e2e/p4-s1-plate-setup.spec.ts
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link2, Pencil } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
@@ -26,6 +26,12 @@ import { extractLayoutConflict, extractLayoutMissingWellsMessage } from "@/lib/l
 
 const ROW_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const PLOIDY_OPTIONS = [2, 3, 4, 5, 6, 7, 8];
+
+type DragSelection = {
+  startWell: string;
+  initialWells: string[];
+  additive: boolean;
+};
 
 function genMarkerId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -63,6 +69,8 @@ export function PlateSetupTab() {
 
   const [selectedWells, setSelectedWells] = useState<string[]>([]);
   const [pickMarkerId, setPickMarkerId] = useState<string | null>(null);
+  const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
+  const dragSelection = useRef<DragSelection | null>(null);
 
   const [editingMarker, setEditingMarker] = useState<"new" | string | null>(null);
   const [formName, setFormName] = useState("");
@@ -99,6 +107,7 @@ export function PlateSetupTab() {
     setMarkers([]);
     setSelectedWells([]);
     setPickMarkerId(null);
+    setSelectionAnchor(null);
     setEditingMarker(null);
     setSaveError(null);
   }
@@ -208,10 +217,63 @@ export function PlateSetupTab() {
     return n;
   }, [plateRows, plateCols, wellToMarker]);
 
+  function wellsInRectangle(startWell: string, endWell: string): string[] {
+    const startRow = plateRows.indexOf(startWell[0]);
+    const endRow = plateRows.indexOf(endWell[0]);
+    const startCol = Number(startWell.slice(1));
+    const endCol = Number(endWell.slice(1));
+    if (startRow < 0 || endRow < 0 || !Number.isFinite(startCol) || !Number.isFinite(endCol)) {
+      return [endWell];
+    }
+
+    const ids: string[] = [];
+    for (let row = Math.min(startRow, endRow); row <= Math.max(startRow, endRow); row += 1) {
+      for (let col = Math.min(startCol, endCol); col <= Math.max(startCol, endCol); col += 1) {
+        ids.push(`${plateRows[row]}${col}`);
+      }
+    }
+    return ids;
+  }
+
   function toggleWell(id: string) {
     setSelectedWells((prev) =>
       prev.includes(id) ? prev.filter((w) => w !== id) : [...prev, id]
     );
+    setSelectionAnchor(id);
+  }
+
+  function selectWellRange(id: string, additive: boolean) {
+    const range = wellsInRectangle(selectionAnchor ?? id, id);
+    setSelectedWells((prev) =>
+      additive ? Array.from(new Set([...prev, ...range])) : range
+    );
+  }
+
+  function beginWellSelection(id: string, event: ReactPointerEvent<HTMLButtonElement>) {
+    if (event.shiftKey) {
+      selectWellRange(id, event.ctrlKey || event.metaKey);
+      return;
+    }
+
+    toggleWell(id);
+    dragSelection.current = {
+      startWell: id,
+      initialWells: selectedWells,
+      additive: event.ctrlKey || event.metaKey,
+    };
+  }
+
+  function extendWellSelection(id: string) {
+    const drag = dragSelection.current;
+    if (!drag) return;
+    const range = wellsInRectangle(drag.startWell, id);
+    setSelectedWells(
+      drag.additive ? Array.from(new Set([...drag.initialWells, ...range])) : range
+    );
+  }
+
+  function endWellSelection() {
+    dragSelection.current = null;
   }
 
   function toggleCol(col: number) {
@@ -239,6 +301,7 @@ export function PlateSetupTab() {
   function clearSelection() {
     setSelectedWells([]);
     setPickMarkerId(null);
+    setSelectionAnchor(null);
   }
 
   function nextColor(current: MarkerRegion[]): string {
@@ -913,7 +976,21 @@ export function PlateSetupTab() {
                 gap: "4px",
               }}
             >
-              <div />
+              <button
+                type="button"
+                data-testid="select-all-wells"
+                aria-label={t.wsSelectAllWells}
+                title={t.wsSelectAllWells}
+                onClick={() => {
+                  const allWells = plateRows.flatMap((row) => plateCols.map((col) => `${row}${col}`));
+                  const allSelected = allWells.every((id) => selectedWells.includes(id));
+                  setSelectedWells(allSelected ? [] : allWells);
+                  setSelectionAnchor(null);
+                }}
+                className="text-xs font-semibold text-text-muted hover:text-primary cursor-pointer text-center"
+              >
+                ⌗
+              </button>
               {plateCols.map((col) => (
                 <button
                   key={`col-${col}`}
@@ -944,9 +1021,12 @@ export function PlateSetupTab() {
                         key={id}
                         type="button"
                         data-testid={`well-${id}`}
+                        data-well-id={id}
                         aria-pressed={isSelected}
                         data-assigned={marker ? "true" : "false"}
-                        onClick={() => toggleWell(id)}
+                        onPointerDown={(event) => beginWellSelection(id, event)}
+                        onPointerEnter={() => extendWellSelection(id)}
+                        onPointerUp={endWellSelection}
                         title={id}
                         style={{
                           background: marker ? marker.color ?? undefined : undefined,
