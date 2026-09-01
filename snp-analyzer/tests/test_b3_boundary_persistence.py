@@ -426,3 +426,28 @@ def test_single_marker_threshold_path_unchanged_by_region_rule():
     assert assignments == {
         "W0": "Allele 2 Homo", "W1": "Heterozygous", "W2": "Allele 1 Homo",
     }
+
+
+def test_manual_boundaries_still_honor_control_well_roles():
+    """A strict genotype-ray override must never relabel declared controls."""
+    from app.models import ClusteringAlgorithm, ThresholdConfig
+    from app.routers.clustering import _cluster_point_dicts
+
+    points = _points({"NTC1": 0.5, "PC1": 0.5, "S1": 0.9})
+    config = ThresholdConfig(
+        ntc_threshold=0.0,
+        ntc_fam_max=600.0,
+        ntc_allele2_max=600.0,
+        boundaries=[0.7, 0.3],
+    )
+    controls = {"NTC1": "NTC", "PC1": "Positive Control"}
+
+    assignments, confidences, _, _ = _cluster_point_dicts(
+        points, controls, ClusteringAlgorithm.AUTO, config, 4, ploidy=2,
+    )
+
+    assert assignments["NTC1"] == "NTC"
+    assert assignments["PC1"] == "Positive Control"
+    assert assignments["S1"] == "Allele 1 Homo"
+    assert confidences["NTC1"] == 1.0
+    assert confidences["PC1"] == 1.0

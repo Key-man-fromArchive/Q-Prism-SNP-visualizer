@@ -14,6 +14,12 @@ import { useI18n } from "@/hooks/use-i18n";
 import { StatusState } from "@/components/shared/ui";
 import type { ScatterPoint } from "@/types/api";
 
+type PlotlyAxis = { _length?: number; _offset?: number; range?: [number, number] };
+type PlotlyGraphDiv = HTMLDivElement & {
+  _fullLayout?: { xaxis?: PlotlyAxis; yaxis?: PlotlyAxis };
+  data?: Array<Record<string, unknown>>;
+};
+
 function effectiveType(
   autoCluster: string | null,
   manualType: string | null,
@@ -67,7 +73,32 @@ export function ScatterPlot() {
   const setBoundaries = useDataStore((s) => s.setBoundaries);
   const offset = useDataStore((s) => s.offset);
   const setOffset = useDataStore((s) => s.setOffset);
+  const ntcCorner = useDataStore((s) => s.ntcCorner);
+  const setNtcCorner = useDataStore((s) => s.setNtcCorner);
   const { isWellVisible } = useWellFilter();
+
+  const inferredNtcCorner = useMemo(() => {
+    const ntcs = scatterPoints.filter(
+      (point) => point.manual_type === "NTC" || point.auto_cluster === "NTC"
+    );
+    const maxX = Math.max(1, ...scatterPoints.map((point) => point.norm_fam));
+    const maxY = Math.max(1, ...scatterPoints.map((point) => point.norm_allele2));
+    if (ntcs.length > 0) {
+      return {
+        fam: Math.max(...ntcs.map((point) => point.norm_fam)) + maxX * 0.02,
+        allele2: Math.max(...ntcs.map((point) => point.norm_allele2)) + maxY * 0.02,
+      };
+    }
+    return {
+      fam: ratioOrigin.fam + maxX * 0.08,
+      allele2: ratioOrigin.allele2 + maxY * 0.08,
+    };
+  }, [scatterPoints, ratioOrigin]);
+  const effectiveNtcCorner = ntcCorner ?? inferredNtcCorner;
+  const ntcLiveRef = useRef(effectiveNtcCorner);
+  useEffect(() => {
+    ntcLiveRef.current = effectiveNtcCorner;
+  }, [effectiveNtcCorner]);
 
   // Draggable radial genotype-boundary lines (manual mode). Rendered only when
   // manual types are active AND the boundary toggle is on. The number of lines
@@ -242,6 +273,24 @@ export function ScatterPlot() {
       });
     }
 
+    traces.push({
+      x: [effectiveNtcCorner.fam],
+      y: [effectiveNtcCorner.allele2],
+      mode: "markers",
+      type: "scatter",
+      name: "NTC threshold",
+      showlegend: false,
+      hovertemplate:
+        `NTC: ${labels.fam} ≤ ${effectiveNtcCorner.fam.toFixed(2)}<br>` +
+        `${labels.allele2} ≤ ${effectiveNtcCorner.allele2.toFixed(2)}<extra></extra>`,
+      marker: {
+        size: 13,
+        color: "#f59e0b",
+        symbol: ntcCorner ? "diamond" : "diamond-open",
+        line: { width: 2, color: colors.markerLineColor },
+      },
+    });
+
     const xLabel = useRox ? normalizedLabel(labels.fam, labels, true) : `${labels.fam} (raw RFU)`;
     const yLabel = useRox ? normalizedLabel(labels.allele2, labels, true) : `${labels.allele2} (raw RFU)`;
 
@@ -257,7 +306,7 @@ export function ScatterPlot() {
       ext = Math.max(ext, p.norm_fam - ratioOrigin.fam, p.norm_allele2 - ratioOrigin.allele2);
     }
     ext *= 1.05;
-    const shapes = bnd
+    const shapes: Record<string, unknown>[] = bnd
       ? bnd.map((r) => {
           const tlen = ext / Math.max(r, 1 - r, 1e-6);
           return {
@@ -271,6 +320,44 @@ export function ScatterPlot() {
           };
         })
       : [];
+    const axisMaxX = Math.max(
+      effectiveNtcCorner.fam * 1.1,
+      ...visiblePoints.map((point) => point.norm_fam * 1.05),
+      1
+    );
+    const axisMaxY = Math.max(
+      effectiveNtcCorner.allele2 * 1.1,
+      ...visiblePoints.map((point) => point.norm_allele2 * 1.05),
+      1
+    );
+    shapes.push(
+      {
+        type: "rect",
+        x0: 0,
+        y0: 0,
+        x1: effectiveNtcCorner.fam,
+        y1: effectiveNtcCorner.allele2,
+        fillcolor: "rgba(245, 158, 11, 0.13)",
+        line: { width: 0 },
+        layer: "below",
+      },
+      {
+        type: "line",
+        x0: effectiveNtcCorner.fam,
+        y0: 0,
+        x1: effectiveNtcCorner.fam,
+        y1: axisMaxY,
+        line: { color: "#f59e0b", width: 2, dash: "dash" },
+      },
+      {
+        type: "line",
+        x0: 0,
+        y0: effectiveNtcCorner.allele2,
+        x1: axisMaxX,
+        y1: effectiveNtcCorner.allele2,
+        line: { color: "#f59e0b", width: 2, dash: "dash" },
+      }
+    );
 
     const layout: any = {
       xaxis: {
@@ -357,6 +444,8 @@ export function ScatterPlot() {
     selectWells,
     clearSelection,
     t,
+    effectiveNtcCorner,
+    ntcCorner,
   ]);
 
   // Highlight every selected well. Multi-selection is the normal plate-review
@@ -369,6 +458,7 @@ export function ScatterPlot() {
 
     const colors = plotlyColors();
     for (let t = 0; t < data.length; t++) {
+      if (data[t].name === "NTC threshold") continue;
       const customdata = data[t].customdata || [];
       const sizes = customdata.map((w: string) => (selectedWellSet.has(w) ? 18 : 12));
       const lineWidths = customdata.map((w: string) => (selectedWellSet.has(w) ? 3 : 1));
@@ -402,6 +492,110 @@ export function ScatterPlot() {
     window.addEventListener("dark-mode-changed", handler);
     return () => window.removeEventListener("dark-mode-changed", handler);
   }, []);
+
+  // The amber corner controls an explicit lower-left NTC quadrant. Keep live
+  // dragging out of React state (and therefore out of the expensive Plotly
+  // render path); commit once on release and re-run the current analysis mode.
+  useEffect(() => {
+    const gd = plotRef.current as PlotlyGraphDiv | null;
+    if (!gd) return;
+    let dragging = false;
+
+    const clientToData = (clientX: number, clientY: number) => {
+      const xa = gd._fullLayout?.xaxis;
+      const ya = gd._fullLayout?.yaxis;
+      if (!xa?._length || !ya?._length || !xa.range || !ya.range) return null;
+      const box = gd.getBoundingClientRect();
+      const px = clientX - box.left - (xa._offset ?? 0);
+      const py = clientY - box.top - (ya._offset ?? 0);
+      if (px < 0 || py < 0 || px > xa._length || py > ya._length) return null;
+      return {
+        fam: xa.range[0] + (px / xa._length) * (xa.range[1] - xa.range[0]),
+        allele2: ya.range[1] - (py / ya._length) * (ya.range[1] - ya.range[0]),
+      };
+    };
+
+    const onDown = (event: MouseEvent) => {
+      const point = clientToData(event.clientX, event.clientY);
+      const xa = gd._fullLayout?.xaxis;
+      const ya = gd._fullLayout?.yaxis;
+      if (!point || !xa?._length || !ya?._length || !xa.range || !ya.range) return;
+      const dx = Math.abs(point.fam - ntcLiveRef.current.fam) /
+        Math.abs(xa.range[1] - xa.range[0]) * xa._length;
+      const dy = Math.abs(point.allele2 - ntcLiveRef.current.allele2) /
+        Math.abs(ya.range[1] - ya.range[0]) * ya._length;
+      if (Math.hypot(dx, dy) > 18) return;
+      dragging = true;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+
+    const onMove = (event: MouseEvent) => {
+      if (!dragging) return;
+      const point = clientToData(event.clientX, event.clientY);
+      if (!point) return;
+      const next = {
+        fam: Math.max(0, point.fam),
+        allele2: Math.max(0, point.allele2),
+      };
+      ntcLiveRef.current = next;
+      const shapeBase = editRef.current?.length ?? 0;
+      void Plotly.relayout(gd, {
+        [`shapes[${shapeBase}].x1`]: next.fam,
+        [`shapes[${shapeBase}].y1`]: next.allele2,
+        [`shapes[${shapeBase + 1}].x0`]: next.fam,
+        [`shapes[${shapeBase + 1}].x1`]: next.fam,
+        [`shapes[${shapeBase + 2}].y0`]: next.allele2,
+        [`shapes[${shapeBase + 2}].y1`]: next.allele2,
+      });
+      void Plotly.restyle(
+        gd,
+        { x: [[next.fam]], y: [[next.allele2]], "marker.symbol": "diamond" },
+        [(gd.data?.length ?? 1) - 1]
+      );
+    };
+
+    const onUp = async () => {
+      if (!dragging) return;
+      dragging = false;
+      const next = ntcLiveRef.current;
+      setNtcCorner(next);
+      if (!sessionId) return;
+      const cuts = linesActive ? editRef.current : null;
+      try {
+        const result = await runClustering(sessionId, {
+          algorithm: cuts ? "threshold" : "auto",
+          cycle: currentCycle ?? 0,
+          threshold_config: {
+            ntc_threshold: ntcThreshold,
+            ntc_fam_max: next.fam,
+            ntc_allele2_max: next.allele2,
+            allele1_ratio_max: 0.4,
+            allele2_ratio_min: 0.6,
+            boundaries: cuts,
+            offset: useDataStore.getState().offset,
+          },
+          n_clusters: useSettingsStore.getState().nClusters,
+          ploidy,
+          background: backgroundMode,
+          use_rox: useRox,
+        });
+        useDataStore.getState().setClusterAssignments(result.assignments);
+        window.dispatchEvent(new CustomEvent("welltypes-changed"));
+      } catch (error) {
+        console.error("Failed to persist NTC quadrant:", error);
+      }
+    };
+
+    gd.addEventListener("mousedown", onDown, true);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      gd.removeEventListener("mousedown", onDown, true);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, linesActive, setNtcCorner]);
 
   // Drag / add / delete the radial boundary lines (manual mode). A drag moves
   // the nearest ray; a double-click on a ray deletes it (ploidy-1), elsewhere
@@ -440,6 +634,8 @@ export function ScatterPlot() {
           cycle: currentCycle ?? 0,
           threshold_config: {
             ntc_threshold: ntcThreshold,
+            ntc_fam_max: useDataStore.getState().ntcCorner?.fam ?? null,
+            ntc_allele2_max: useDataStore.getState().ntcCorner?.allele2 ?? null,
             allele1_ratio_max: 0.4,
             allele2_ratio_min: 0.6,
             boundaries: cuts,
@@ -448,6 +644,7 @@ export function ScatterPlot() {
           n_clusters: 4,
           ploidy, // fixed organism ploidy, NOT the line count
           background: backgroundMode,
+          use_rox: useRox,
         });
         window.dispatchEvent(new CustomEvent("welltypes-changed"));
       } catch (err) {
@@ -542,7 +739,7 @@ export function ScatterPlot() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [linesActive, sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, setBoundaries, setOffset]);
+  }, [linesActive, sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setBoundaries, setOffset]);
 
   // Cleanup
   useEffect(() => {

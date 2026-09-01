@@ -19,6 +19,7 @@ interface DataState {
   offset: number;              // dosage of the lowest observed class (window position in 0..ploidy)
   offsetUncertain: boolean;    // true when auto could not anchor the offset
   lowSeparation: boolean;      // true when adjacent dosage classes overlap (poorly resolved)
+  ntcCorner: { fam: number; allele2: number } | null;
   // Actions
   setScatterData: (
     points: ScatterPoint[],
@@ -33,6 +34,7 @@ interface DataState {
   setOffset: (offset: number) => void;
   setOffsetUncertain: (v: boolean) => void;
   setLowSeparation: (v: boolean) => void;
+  setNtcCorner: (corner: { fam: number; allele2: number } | null) => void;
   clearData: () => void;
 }
 
@@ -48,6 +50,7 @@ export const useDataStore = create<DataState>((set) => ({
   offset: 0,
   offsetUncertain: false,
   lowSeparation: false,
+  ntcCorner: null,
 
   setScatterData: (points, allele2Dye, channelLabels, ratioOrigin) =>
     set({
@@ -74,6 +77,7 @@ export const useDataStore = create<DataState>((set) => ({
   setOffset: (offset) => set({ offset }),
   setOffsetUncertain: (v) => set({ offsetUncertain: v }),
   setLowSeparation: (v) => set({ lowSeparation: v }),
+  setNtcCorner: (ntcCorner) => set({ ntcCorner }),
   clearData: () =>
     set({
       scatterPoints: [],
@@ -87,5 +91,6 @@ export const useDataStore = create<DataState>((set) => ({
       offset: 0,
       offsetUncertain: false,
       lowSeparation: false,
+      ntcCorner: null,
     }),
 }));

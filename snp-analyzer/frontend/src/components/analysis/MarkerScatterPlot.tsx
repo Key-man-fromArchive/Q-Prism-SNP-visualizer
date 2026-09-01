@@ -30,6 +30,7 @@ import type {
 type PlotlyAxis = { _length?: number; _offset?: number; range?: [number, number] };
 type PlotlyGraphDiv = HTMLDivElement & {
   _fullLayout?: { xaxis?: PlotlyAxis; yaxis?: PlotlyAxis };
+  data?: unknown[];
 };
 
 type MarkerScatterPlotProps = {
@@ -79,6 +80,10 @@ export function MarkerScatterPlot({
       ? markerPoints.filter((p) => selectedWellSet.has(p.well))
       : markerPoints;
   }, [points, wellSet, focusSelectedWells, selectedWellSet]);
+  const assignmentFor = useCallback(
+    (well: string): string | null => region?.assignments?.[well] ?? null,
+    [region]
+  );
 
   // Keep the Plotly instance mounted across marker switches. Boundary edits
   // are keyed by the marker/result signature, so a new marker starts from its
@@ -98,17 +103,60 @@ export function MarkerScatterPlot({
   const editBoundaries = boundaryEdit.key === boundaryKey ? boundaryEdit.cuts : boundarySeed;
   const editRef = useRef<number[]>(editBoundaries);
   const dragIndexRef = useRef<number | null>(null);
+  const dragNtcRef = useRef(false);
   const offsetRef = useRef<number>(region?.offset ?? 0);
+
+  const ntcSeed = useMemo(() => {
+    const savedX = marker.threshold_config?.ntc_fam_max;
+    const savedY = marker.threshold_config?.ntc_allele2_max;
+    if (savedX != null && savedY != null) return { x: savedX, y: savedY };
+
+    const markerPoints = points.filter((p) => wellSet.has(p.well));
+    const ntcPoints = markerPoints.filter((p) => assignmentFor(p.well) === "NTC");
+    const maxX = Math.max(1, ...markerPoints.map((p) => p.norm_fam));
+    const maxY = Math.max(1, ...markerPoints.map((p) => p.norm_allele2));
+    if (ntcPoints.length > 0) {
+      return {
+        x: Math.max(...ntcPoints.map((p) => p.norm_fam)) + maxX * 0.02,
+        y: Math.max(...ntcPoints.map((p) => p.norm_allele2)) + maxY * 0.02,
+      };
+    }
+    return {
+      x: origin.fam + maxX * 0.08,
+      y: origin.allele2 + maxY * 0.08,
+    };
+  }, [marker.threshold_config, points, wellSet, assignmentFor, origin]);
+  const ntcKey = `${marker.id}:${marker.threshold_config?.ntc_fam_max ?? "auto"}:${marker.threshold_config?.ntc_allele2_max ?? "auto"}`;
+  const [ntcEdit, setNtcEdit] = useState(() => ({
+    key: ntcKey,
+    corner: ntcSeed,
+    enabled:
+      marker.threshold_config?.ntc_fam_max != null &&
+      marker.threshold_config?.ntc_allele2_max != null,
+  }));
+  const effectiveNtc = useMemo(
+    () =>
+      ntcEdit.key === ntcKey
+        ? ntcEdit
+        : {
+            key: ntcKey,
+            corner: ntcSeed,
+            enabled:
+              marker.threshold_config?.ntc_fam_max != null &&
+              marker.threshold_config?.ntc_allele2_max != null,
+          },
+    [ntcEdit, ntcKey, ntcSeed, marker.threshold_config]
+  );
+  const ntcRef = useRef(effectiveNtc);
 
   useEffect(() => {
     editRef.current = editBoundaries;
     offsetRef.current = region?.offset ?? 0;
   }, [editBoundaries, region?.offset]);
 
-  const assignmentFor = useCallback(
-    (well: string): string | null => region?.assignments?.[well] ?? null,
-    [region]
-  );
+  useEffect(() => {
+    ntcRef.current = effectiveNtc;
+  }, [effectiveNtc]);
 
   useEffect(() => {
     if (!plotRef.current) return;
@@ -170,13 +218,31 @@ export function MarkerScatterPlot({
       });
     }
 
+    traces.push({
+      x: [effectiveNtc.corner.x],
+      y: [effectiveNtc.corner.y],
+      mode: "markers",
+      type: "scatter",
+      name: "NTC threshold",
+      showlegend: false,
+      hovertemplate:
+        `NTC: FAM ≤ ${effectiveNtc.corner.x.toFixed(2)}<br>` +
+        `${allele2Dye || "Allele 2"} ≤ ${effectiveNtc.corner.y.toFixed(2)}<extra></extra>`,
+      marker: {
+        size: 13,
+        color: "#f59e0b",
+        symbol: effectiveNtc.enabled ? "diamond" : "diamond-open",
+        line: { width: 2, color: colors.markerLineColor },
+      },
+    });
+
     let ext = 1;
     for (const p of scopedPoints) {
       ext = Math.max(ext, p.norm_fam - origin.fam, p.norm_allele2 - origin.allele2);
     }
     ext *= 1.05;
     const cuts = editRef.current;
-    const shapes = cuts.map((r) => {
+    const shapes: Record<string, unknown>[] = cuts.map((r) => {
       const tlen = ext / Math.max(r, 1 - r, 1e-6);
       return {
         type: "line",
@@ -188,6 +254,44 @@ export function MarkerScatterPlot({
         layer: "above",
       };
     });
+    const axisMaxX = Math.max(
+      effectiveNtc.corner.x * 1.1,
+      ...scopedPoints.map((p) => p.norm_fam * 1.05),
+      1
+    );
+    const axisMaxY = Math.max(
+      effectiveNtc.corner.y * 1.1,
+      ...scopedPoints.map((p) => p.norm_allele2 * 1.05),
+      1
+    );
+    shapes.push(
+      {
+        type: "rect",
+        x0: 0,
+        y0: 0,
+        x1: effectiveNtc.corner.x,
+        y1: effectiveNtc.corner.y,
+        fillcolor: "rgba(245, 158, 11, 0.13)",
+        line: { width: 0 },
+        layer: "below",
+      },
+      {
+        type: "line",
+        x0: effectiveNtc.corner.x,
+        y0: 0,
+        x1: effectiveNtc.corner.x,
+        y1: axisMaxY,
+        line: { color: "#f59e0b", width: 2, dash: "dash" },
+      },
+      {
+        type: "line",
+        x0: 0,
+        y0: effectiveNtc.corner.y,
+        x1: axisMaxX,
+        y1: effectiveNtc.corner.y,
+        line: { color: "#f59e0b", width: 2, dash: "dash" },
+      }
+    );
 
     const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
     const layout: Record<string, unknown> = {
@@ -251,6 +355,7 @@ export function MarkerScatterPlot({
     roleLabels,
     marker.id,
     selectedWellSet,
+    effectiveNtc,
     selectWell,
     selectWells,
     clearSelection,
@@ -264,7 +369,7 @@ export function MarkerScatterPlot({
     const gd = plotRef.current as PlotlyGraphDiv | null;
     if (!gd) return;
 
-    const clientToRatio = (clientX: number, clientY: number): number | null => {
+    const clientToData = (clientX: number, clientY: number): { x: number; y: number } | null => {
       const fl = gd._fullLayout;
       const xa = fl?.xaxis;
       const ya = fl?.yaxis;
@@ -273,24 +378,39 @@ export function MarkerScatterPlot({
       const px = clientX - bb.left - (xa._offset ?? 0);
       const py = clientY - bb.top - (ya._offset ?? 0);
       if (px < 0 || py < 0 || px > xa._length || py > ya._length) return null;
-      const dx = xa.range[0] + (px / xa._length) * (xa.range[1] - xa.range[0]);
-      const dy = ya.range[1] - (py / ya._length) * (ya.range[1] - ya.range[0]);
+      return {
+        x: xa.range[0] + (px / xa._length) * (xa.range[1] - xa.range[0]),
+        y: ya.range[1] - (py / ya._length) * (ya.range[1] - ya.range[0]),
+      };
+    };
+
+    const clientToRatio = (clientX: number, clientY: number): number | null => {
+      const data = clientToData(clientX, clientY);
+      if (!data) return null;
       // Same origin the rays are anchored at, so the line follows the cursor.
-      const fx = Math.max(dx - originRef.current.fam, 0);
-      const fy = Math.max(dy - originRef.current.allele2, 0);
+      const fx = Math.max(data.x - originRef.current.fam, 0);
+      const fy = Math.max(data.y - originRef.current.allele2, 0);
       const total = fx + fy;
       if (total <= 0) return null;
       return Math.max(0, Math.min(1, fx / total));
     };
 
-    const persist = async (cuts: number[]) => {
+    const persist = async (ntcOnly: boolean) => {
       try {
+        const ntc = ntcRef.current;
+        const current = marker.threshold_config;
         await updateMarker(sessionId, marker.id, {
           threshold_config: {
-            ntc_threshold: 0.1,
-            allele1_ratio_max: 0.4,
-            allele2_ratio_min: 0.6,
-            boundaries: cuts,
+            ntc_threshold: current?.ntc_threshold ?? 0.1,
+            ntc_fam_max: ntc.enabled ? ntc.corner.x : null,
+            ntc_allele2_max: ntc.enabled ? ntc.corner.y : null,
+            allele1_ratio_max: current?.allele1_ratio_max ?? 0.4,
+            allele2_ratio_min: current?.allele2_ratio_min ?? 0.6,
+            // Moving only the NTC corner must not accidentally freeze the
+            // current AUTO-generated genotype rays into a strict manual
+            // boundary override. Preserve manual cuts only if they already
+            // existed; a radial-line drag remains the action that enables them.
+            boundaries: ntcOnly ? current?.boundaries ?? null : editRef.current,
             offset: offsetRef.current,
           },
         });
@@ -303,6 +423,22 @@ export function MarkerScatterPlot({
     const NEAR = 0.04;
 
     const onDown = (e: MouseEvent) => {
+      const data = clientToData(e.clientX, e.clientY);
+      const fl = gd._fullLayout;
+      const xa = fl?.xaxis;
+      const ya = fl?.yaxis;
+      if (data && xa?._length && ya?._length && xa.range && ya.range) {
+        const dxPx = Math.abs(data.x - ntcRef.current.corner.x) /
+          Math.abs(xa.range[1] - xa.range[0]) * xa._length;
+        const dyPx = Math.abs(data.y - ntcRef.current.corner.y) /
+          Math.abs(ya.range[1] - ya.range[0]) * ya._length;
+        if (Math.hypot(dxPx, dyPx) <= 18) {
+          dragNtcRef.current = true;
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+      }
       const cuts = editRef.current;
       const r = clientToRatio(e.clientX, e.clientY);
       if (r == null) return;
@@ -323,6 +459,31 @@ export function MarkerScatterPlot({
     };
 
     const onMove = (e: MouseEvent) => {
+      if (dragNtcRef.current) {
+        const data = clientToData(e.clientX, e.clientY);
+        if (!data) return;
+        const next = {
+          key: ntcKey,
+          corner: { x: Math.max(0, data.x), y: Math.max(0, data.y) },
+          enabled: true,
+        };
+        ntcRef.current = next;
+        const shapeBase = editRef.current.length;
+        void Plotly.relayout(gd, {
+          [`shapes[${shapeBase}].x1`]: next.corner.x,
+          [`shapes[${shapeBase}].y1`]: next.corner.y,
+          [`shapes[${shapeBase + 1}].x0`]: next.corner.x,
+          [`shapes[${shapeBase + 1}].x1`]: next.corner.x,
+          [`shapes[${shapeBase + 2}].y0`]: next.corner.y,
+          [`shapes[${shapeBase + 2}].y1`]: next.corner.y,
+        });
+        void Plotly.restyle(
+          gd,
+          { x: [[next.corner.x]], y: [[next.corner.y]], "marker.symbol": "diamond" },
+          [gd.data?.length ? gd.data.length - 1 : 0]
+        );
+        return;
+      }
       const idx = dragIndexRef.current;
       if (idx == null) return;
       const cuts = [...editRef.current];
@@ -336,9 +497,12 @@ export function MarkerScatterPlot({
     };
 
     const onUp = () => {
-      if (dragIndexRef.current == null) return;
+      if (!dragNtcRef.current && dragIndexRef.current == null) return;
+      const ntcOnly = dragNtcRef.current;
+      dragNtcRef.current = false;
       dragIndexRef.current = null;
-      persist(editRef.current);
+      if (ntcOnly) setNtcEdit(ntcRef.current);
+      void persist(ntcOnly);
     };
 
     gd.addEventListener("mousedown", onDown, true);
@@ -349,7 +513,7 @@ export function MarkerScatterPlot({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [sessionId, marker.id, boundaryKey, onBoundariesPersisted]);
+  }, [sessionId, marker.id, marker.threshold_config, boundaryKey, ntcKey, onBoundariesPersisted]);
 
   useEffect(() => {
     const plot = plotRef.current;

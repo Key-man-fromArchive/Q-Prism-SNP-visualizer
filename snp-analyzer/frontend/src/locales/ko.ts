@@ -55,6 +55,11 @@ const ko: Translations = {
   showSelectedScatterWells: '선택 웰만 보기',
   showAllScatterWells: '전체 웰 보기',
   clearWellSelection: '선택 해제',
+  manualGroupLabel: (n: number) => `그룹 ${n}`,
+  manualGroupAdd: '그룹 추가',
+  manualGroupNamePlaceholder: '그룹 이름',
+  manualGroupSelectFirst: '먼저 웰을 선택하세요',
+  manualGroupSaveFailed: '웰 그룹을 저장하지 못했습니다.',
 
   // Header
   appTitle: 'ASG-PCR SNP 판별 분석기',

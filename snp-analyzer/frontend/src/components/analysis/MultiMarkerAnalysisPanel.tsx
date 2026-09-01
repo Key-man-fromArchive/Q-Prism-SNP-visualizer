@@ -108,6 +108,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
         cycle: cycleOverride ?? currentCycle ?? 0, // 0 only while CycleControl is initializing
         n_clusters: 4,
         background: backgroundMode,
+        use_rox: useRox,
       });
       if (requestId !== clusterRequestRef.current) return;
       const byId: Record<string, RegionResult> = {};
@@ -120,7 +121,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     } finally {
       if (requestId === clusterRequestRef.current) setLoading(false);
     }
-  }, [sessionId, markers.length, currentCycle, backgroundMode, setClusterAssignments]);
+  }, [sessionId, markers.length, currentCycle, backgroundMode, useRox, setClusterAssignments]);
 
   const fetchScatter = useCallback(async () => {
     if (!sessionId) return;

@@ -178,12 +178,15 @@ export function AnalysisTab() {
         cycle,
         threshold_config: {
           ntc_threshold: ntcThreshold,
+          ntc_fam_max: useDataStore.getState().ntcCorner?.fam ?? null,
+          ntc_allele2_max: useDataStore.getState().ntcCorner?.allele2 ?? null,
           allele1_ratio_max: allele1RatioMax,
           allele2_ratio_min: allele2RatioMin,
         },
         n_clusters: nClusters,
         ploidy: useSettingsStore.getState().ploidy,
         background: useSettingsStore.getState().backgroundMode,
+        use_rox: useSettingsStore.getState().useRox,
       });
       setClusterAssignments(result.assignments);
       setBoundaries(result.boundaries ?? null);
@@ -226,6 +229,8 @@ export function AnalysisTab() {
           cycle: currentCycle ?? 0,
           threshold_config: {
             ntc_threshold: ntcThreshold,
+            ntc_fam_max: st.ntcCorner?.fam ?? null,
+            ntc_allele2_max: st.ntcCorner?.allele2 ?? null,
             allele1_ratio_max: 0.4,
             allele2_ratio_min: 0.6,
             boundaries: bnd,
@@ -234,6 +239,7 @@ export function AnalysisTab() {
           n_clusters: nClusters,
           ploidy: useSettingsStore.getState().ploidy,
           background: useSettingsStore.getState().backgroundMode,
+          use_rox: useSettingsStore.getState().useRox,
         });
         window.dispatchEvent(new CustomEvent("welltypes-changed"));
       } catch (err) {

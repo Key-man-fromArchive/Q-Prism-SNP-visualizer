@@ -7,8 +7,9 @@ export async function login(page: Page) {
   await page.goto('/');
   await page.locator('#username').fill(ADMIN_USERNAME);
   await page.locator('#password').fill(ADMIN_PASSWORD);
-  await page.getByRole('button', { name: 'Sign In' }).click();
-  await expect(page.locator('header h1')).toHaveText('ASG-PCR SNP Discrimination Analyzer');
+  // Language-independent: E2E contexts may inherit either Korean or English.
+  await page.locator('form button[type="submit"]').click();
+  await expect(page.locator('#file-input')).toBeAttached();
 }
 
 export async function loginRequest(request: APIRequestContext) {
@@ -24,7 +25,7 @@ export async function loginRequest(request: APIRequestContext) {
 export async function uploadAndWait(page: Page, filePath: string) {
   await login(page);
   await page.locator('#file-input').setInputFiles(filePath);
-  await expect(page.locator('#upload-status')).toContainText('Parsed', { timeout: 15000 });
+  await expect(page.locator('#upload-status')).toContainText(/Parsed|파싱 완료/, { timeout: 15000 });
   await expect(page.locator('#analysis-panel')).not.toHaveClass(/hidden/, { timeout: 5000 });
   await page.waitForTimeout(1000);
 }

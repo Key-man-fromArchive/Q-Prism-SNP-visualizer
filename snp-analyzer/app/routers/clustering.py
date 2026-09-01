@@ -117,8 +117,16 @@ def _cluster_point_dicts(
     # Confidence has no fitted mixture to score against here, so it is a
     # simple distance-to-cut proxy (see ``boundary_confidences``).
     if config.boundaries:
-        assignments = cluster_threshold(point_dicts, config, ploidy=ploidy)
-        confidences = boundary_confidences(point_dicts, config, ploidy=ploidy)
+        fixed_controls = {
+            point["well"]: control_wells[point["well"]]
+            for point in point_dicts
+            if point["well"] in control_wells
+        }
+        sample_points = [point for point in point_dicts if point["well"] not in fixed_controls]
+        assignments = cluster_threshold(sample_points, config, ploidy=ploidy)
+        assignments.update(fixed_controls)
+        confidences = boundary_confidences(sample_points, config, ploidy=ploidy)
+        confidences.update({well: 1.0 for well in fixed_controls})
         window = {
             "boundaries": list(config.boundaries),
             "offset": config.offset,
@@ -131,13 +139,23 @@ def _cluster_point_dicts(
         assignments, confidences = cluster_auto(
             point_dicts,
             ntc_threshold=config.ntc_threshold,
+            ntc_fam_max=config.ntc_fam_max,
+            ntc_allele2_max=config.ntc_allele2_max,
             control_wells=control_wells,
             ploidy=ploidy,
             warnings=warnings,
             anchor_state=anchor_state,
         )
     elif algorithm == ClusteringAlgorithm.THRESHOLD:
-        assignments = cluster_threshold(point_dicts, config, ploidy=ploidy)
+        fixed_controls = {
+            point["well"]: control_wells[point["well"]]
+            for point in point_dicts
+            if point["well"] in control_wells
+        }
+        sample_points = [point for point in point_dicts if point["well"] not in fixed_controls]
+        assignments = cluster_threshold(sample_points, config, ploidy=ploidy)
+        assignments.update(fixed_controls)
+        confidences.update({well: 1.0 for well in fixed_controls})
     else:
         assignments = cluster_kmeans(point_dicts, n_clusters)
 
@@ -319,7 +337,9 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
     if cycle not in unified.cycles:
         raise HTTPException(400, f"Cycle {cycle} not available")
 
-    points = normalize_for_cycle(unified, cycle, background=req.background)
+    points = normalize_for_cycle(
+        unified, cycle, use_rox=req.use_rox, background=req.background
+    )
     # Wells manually marked as "Omit" have data but should not skew clustering
     # (bad/spiked readings would drag kmeans centroids or threshold ratios).
     effective_well_types = effective_well_types_for(sid, unified)
@@ -337,7 +357,15 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
     origin = compute_ratio_origin(points, ntc_wells_for(sid, unified))
     point_dicts = shift_to_origin(
         [
-            {"well": p.well, "norm_fam": p.norm_fam, "norm_allele2": p.norm_allele2}
+            {
+                "well": p.well,
+                "norm_fam": p.norm_fam,
+                "norm_allele2": p.norm_allele2,
+                # Keep the displayed coordinates for the operator-defined NTC
+                # quadrant while shift_to_origin adjusts only the ratio inputs.
+                "plot_fam": p.norm_fam,
+                "plot_allele2": p.norm_allele2,
+            }
             for p in points
             if p.well not in omitted
         ],

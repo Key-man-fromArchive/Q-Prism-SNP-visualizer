@@ -151,12 +151,15 @@ export function SettingsTab() {
           clusterAlgorithm === "threshold"
             ? {
                 ntc_threshold: ntcThreshold,
+                ntc_fam_max: useDataStore.getState().ntcCorner?.fam ?? null,
+                ntc_allele2_max: useDataStore.getState().ntcCorner?.allele2 ?? null,
                 allele1_ratio_max: allele1RatioMax,
                 allele2_ratio_min: allele2RatioMin,
               }
             : null,
         n_clusters: nClusters,
         background: backgroundMode,
+        use_rox: useRox,
       });
       setClusterAssignments(result.assignments);
       window.dispatchEvent(new CustomEvent("asg-result-dirty"));
@@ -167,7 +170,7 @@ export function SettingsTab() {
     } finally {
       setClusterLoading(false);
     }
-  }, [sessionId, clusterAlgorithm, currentCycle, ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters, backgroundMode, setClusterAssignments]);
+  }, [sessionId, clusterAlgorithm, currentCycle, ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters, backgroundMode, useRox, setClusterAssignments]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 sm:px-6">

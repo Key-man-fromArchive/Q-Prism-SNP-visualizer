@@ -53,9 +53,9 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   );
 
   // Drag selection state
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
-  const [dragRect, setDragRect] = useState<DragRect | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const dragRectRef = useRef<DragRect | null>(null);
+  const dragOverlayRef = useRef<HTMLDivElement>(null);
   const dragAdditiveRef = useRef(false);
   const didDragRef = useRef(false);
   const dragThreshold = 5;
@@ -163,39 +163,51 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   };
 
   // Handle drag start
-  const handleMouseDown = (event: React.MouseEvent) => {
-    if (event.button !== 0 || !(event.target as HTMLElement).closest('#plate-grid')) return;
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
     dragAdditiveRef.current = event.ctrlKey || event.metaKey;
     didDragRef.current = false;
-    setDragStart({ x: event.clientX, y: event.clientY });
+    dragStartRef.current = { x: event.clientX, y: event.clientY };
+    dragRectRef.current = null;
+    event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   // Handle drag move
-  const handleMouseMove = (event: React.MouseEvent) => {
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const dragStart = dragStartRef.current;
     if (!dragStart) return;
 
     const deltaX = Math.abs(event.clientX - dragStart.x);
     const deltaY = Math.abs(event.clientY - dragStart.y);
 
     // Start dragging if moved beyond threshold
-    if (!isDragging && (deltaX > dragThreshold || deltaY > dragThreshold)) {
-      setIsDragging(true);
+    if (!didDragRef.current && (deltaX > dragThreshold || deltaY > dragThreshold)) {
       didDragRef.current = true;
     }
 
-    if (isDragging) {
+    if (didDragRef.current) {
       const left = Math.min(dragStart.x, event.clientX);
       const top = Math.min(dragStart.y, event.clientY);
       const width = Math.abs(event.clientX - dragStart.x);
       const height = Math.abs(event.clientY - dragStart.y);
 
-      setDragRect({ left, top, width, height });
+      const next = { left, top, width, height };
+      dragRectRef.current = next;
+      const overlay = dragOverlayRef.current;
+      if (overlay) {
+        overlay.style.display = 'block';
+        overlay.style.left = `${left}px`;
+        overlay.style.top = `${top}px`;
+        overlay.style.width = `${width}px`;
+        overlay.style.height = `${height}px`;
+      }
     }
   };
 
   // Handle drag end
-  const handleMouseUp = () => {
-    if (isDragging && dragRect && gridRef.current) {
+  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const dragRect = dragRectRef.current;
+    if (didDragRef.current && dragRect && gridRef.current) {
       // Find wells within selection rectangle
       const wellElements = gridRef.current.querySelectorAll('.plate-well[data-well]');
       const selectedWellIds: string[] = [];
@@ -227,25 +239,13 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
       }
     }
 
-    // Reset drag state
-    setIsDragging(false);
-    setDragStart(null);
-    setDragRect(null);
-  };
-
-  // Global mouse up handler
-  useEffect(() => {
-    const handleGlobalMouseUp = () => {
-      setIsDragging(false);
-      setDragStart(null);
-      setDragRect(null);
-    };
-
-    if (isDragging) {
-      window.addEventListener('mouseup', handleGlobalMouseUp);
-      return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+    dragStartRef.current = null;
+    dragRectRef.current = null;
+    if (dragOverlayRef.current) dragOverlayRef.current.style.display = 'none';
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
     }
-  }, [isDragging]);
+  };
 
   // ── Keyboard grid navigation (roving tabindex, PRD FR-X-3) ─────────────────
   const wellBtnRefs = useRef<Map<string, HTMLButtonElement | null>>(new Map());
@@ -320,9 +320,10 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
     <div
       className="panel plate-panel"
       ref={panelRef}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
     >
       <h3 className="text-sm font-semibold mb-3 text-text">{t.plateView} ({plateRows.length}×{plateCols.length})</h3>
 
@@ -366,7 +367,13 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
             type="button"
             tabIndex={-1}
             aria-label={t.toggleColumnAria(col)}
-            onClick={() => toggleColumn(cIdx)}
+            onClick={() => {
+              if (didDragRef.current) {
+                didDragRef.current = false;
+                return;
+              }
+              toggleColumn(cIdx);
+            }}
             className="plate-label text-center text-text-muted font-medium py-1 bg-transparent border-none cursor-pointer hover:text-primary"
             style={{ fontSize: isLargePlate ? '0.6rem' : '0.75rem' }}
           >
@@ -382,7 +389,13 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
               type="button"
               tabIndex={-1}
               aria-label={t.toggleRowAria(row)}
-              onClick={() => toggleRow(rIdx)}
+              onClick={() => {
+                if (didDragRef.current) {
+                  didDragRef.current = false;
+                  return;
+                }
+                toggleRow(rIdx);
+              }}
               className="plate-label text-center text-text-muted font-medium px-2 bg-transparent border-none cursor-pointer hover:text-primary"
               style={{ fontSize: isLargePlate ? '0.6rem' : '0.75rem' }}
             >
@@ -395,6 +408,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
               const wellData = wellMap.get(wellId);
               const isSelected = selectedWell === wellId;
               const isMultiSelected = selectedWells.includes(wellId);
+              const isAnySelected = isSelected || isMultiSelected;
               const hasData = !!wellData;
               const isEmpty = !hasData;
               // Has data but excluded from plots (omitted, group-filtered, or hidden Empty)
@@ -433,8 +447,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
                     ${isEmpty ? 'empty bg-bg opacity-40' : ''}
                     ${isExcluded ? 'opacity-40' : ''}
                     ${isOutOfScope ? 'opacity-20' : ''}
-                    ${isSelected ? 'selected ring-2 ring-primary ring-offset-1' : ''}
-                    ${isMultiSelected && !isSelected ? 'ring-1 ring-primary/50' : ''}
+                    ${isAnySelected ? 'selected relative z-10 scale-110 ring-[3px] ring-amber-400 ring-offset-2 shadow-md' : ''}
                   `}
                   style={{
                     backgroundColor: wellColor || undefined,
@@ -451,7 +464,16 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
                       ? `${wellId}: ${wellData.sample_name || 'No sample'}${isExcluded ? ' (excluded)' : ''}${isOutOfScope ? ' (outside marker)' : ''}`
                       : wellId
                   }
-                />
+                >
+                  {isAnySelected && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-400 text-[9px] font-black leading-none text-black shadow"
+                    >
+                      ✓
+                    </span>
+                  )}
+                </button>
               );
             })}
           </Fragment>
@@ -460,23 +482,19 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
       </div>
 
       {/* Drag selection rectangle */}
-      {isDragging && dragRect && (
-        <div
-          className="drag-selection-rect"
-          style={{
-            position: 'fixed',
-            left: `${dragRect.left}px`,
-            top: `${dragRect.top}px`,
-            width: `${dragRect.width}px`,
-            height: `${dragRect.height}px`,
-            border: '2px solid var(--color-primary)',
-            background: 'color-mix(in srgb, var(--color-primary) 12%, transparent)',
-            pointerEvents: 'none',
-            zIndex: 50,
-            borderRadius: '4px'
-          }}
-        />
-      )}
+      <div
+        ref={dragOverlayRef}
+        className="drag-selection-rect"
+        style={{
+          display: 'none',
+          position: 'fixed',
+          border: '2px solid #f59e0b',
+          background: 'rgba(245, 158, 11, 0.16)',
+          pointerEvents: 'none',
+          zIndex: 50,
+          borderRadius: '4px'
+        }}
+      />
     </div>
   );
 }

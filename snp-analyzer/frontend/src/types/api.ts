@@ -290,6 +290,8 @@ export type ClusteringAlgorithm = typeof ClusteringAlgorithm[keyof typeof Cluste
 
 export type ThresholdConfig = {
   ntc_threshold: number;
+  ntc_fam_max?: number | null;
+  ntc_allele2_max?: number | null;
   allele1_ratio_max: number;
   allele2_ratio_min: number;
   // Polyploid: K-1 descending fam-fraction cuts between the observed dosage
@@ -309,6 +311,7 @@ export type ClusteringRequest = {
   // Must match what the plot is showing, or the calls come from different
   // numbers than the operator is looking at. null => 'none' (raw).
   background?: BackgroundMode | null;
+  use_rox?: boolean;
 };
 
 export type ClusteringResult = {

@@ -182,6 +182,11 @@ class ClusteringAlgorithm(str, Enum):
 
 class ThresholdConfig(BaseModel):
     ntc_threshold: float = 0.1
+    # Optional operator-defined lower-left NTC quadrant, expressed in the raw
+    # normalized values shown on the scatter plot.  Both channel values must be
+    # at or below their maxima for an untyped well to be called NTC.
+    ntc_fam_max: float | None = Field(default=None, ge=0)
+    ntc_allele2_max: float | None = Field(default=None, ge=0)
     allele1_ratio_max: float = 0.4
     allele2_ratio_min: float = 0.6
     # Polyploid: K-1 descending fam-fraction cuts between the observed dosage
@@ -323,6 +328,8 @@ class ClusteringRequest(BaseModel):
     # user is looking at, or the calls would be computed on different numbers
     # than the plot shows. None => "none" (raw), the default everywhere.
     background: Literal["none", "pre_read", "channel_min"] | None = None
+    # Must match the scatter coordinates used to place manual thresholds.
+    use_rox: bool = True
 
 
 class ClusteringResult(BaseModel):

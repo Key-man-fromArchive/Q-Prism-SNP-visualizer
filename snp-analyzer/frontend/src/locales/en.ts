@@ -53,6 +53,11 @@ const en = {
   showSelectedScatterWells: 'Show selected only',
   showAllScatterWells: 'Show all wells',
   clearWellSelection: 'Clear',
+  manualGroupLabel: (n: number) => `Group ${n}`,
+  manualGroupAdd: 'Add group',
+  manualGroupNamePlaceholder: 'Group name',
+  manualGroupSelectFirst: 'Select wells first',
+  manualGroupSaveFailed: 'Could not save the well group.',
 
   // Header
   appTitle: 'ASG-PCR SNP Discrimination Analyzer',

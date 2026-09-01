@@ -83,6 +83,29 @@ def test_low_signal_but_clear_ratio_het_is_called_het():
     assert conf["LOWHET"] > 0.2  # clearly a het, not a boundary no-call
 
 
+def test_manual_ntc_quadrant_can_capture_elevated_balanced_signal():
+    """An operator-defined lower-left quadrant is authoritative for NTC.
+
+    Elevated no-template wells can sit above the relative-total auto cutoff and
+    have a balanced ratio, which otherwise makes them look heterozygous.  The
+    manual corner uses the plotted channel values independently: both must be
+    at or below their configured maxima.
+    """
+    pts = _points()
+    pts.append({"well": "HIGH_NTC", "norm_fam": 0.16, "norm_allele2": 0.16})
+    pts.append({"well": "X_ONLY_HIGH", "norm_fam": 0.21, "norm_allele2": 0.10})
+
+    assign, conf = cluster_auto(
+        pts,
+        ntc_fam_max=0.18,
+        ntc_allele2_max=0.18,
+    )
+
+    assert assign["HIGH_NTC"] == "NTC"
+    assert conf["HIGH_NTC"] == 1.0
+    assert assign["X_ONLY_HIGH"] != "NTC"
+
+
 def test_monomorphic_plate_is_not_split_into_false_genotypes():
     """A plate with a single genotype (all Allele 1) must not be split by
     KMeans noise into invented Het/Allele 2 calls."""

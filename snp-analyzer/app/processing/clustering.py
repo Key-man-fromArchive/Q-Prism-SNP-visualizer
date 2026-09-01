@@ -64,6 +64,30 @@ _SMALL_REGION_CONFIDENCE = _CALL_MIN_POSTERIOR
 _NTC_CLEAR_GAP = 10.0
 
 
+def _manual_ntc_mask(points: list[dict], fam_max: float, allele2_max: float):
+    """Return the explicit lower-left quadrant mask in plotted coordinates.
+
+    Router-created point dictionaries retain ``plot_*`` values before their
+    ratio coordinates are shifted to the NTC origin.  Direct processing callers
+    and older cached inputs fall back to ``norm_*`` for compatibility.
+    """
+    import numpy as np
+
+    fam = np.array([p.get("plot_fam", p["norm_fam"]) for p in points], dtype=float)
+    allele2 = np.array(
+        [p.get("plot_allele2", p["norm_allele2"]) for p in points], dtype=float
+    )
+    return (fam <= fam_max) & (allele2 <= allele2_max)
+
+
+def _is_manual_ntc(point: dict, config: ThresholdConfig) -> bool:
+    if config.ntc_fam_max is None or config.ntc_allele2_max is None:
+        return False
+    fam = point.get("plot_fam", point["norm_fam"])
+    allele2 = point.get("plot_allele2", point["norm_allele2"])
+    return fam <= config.ntc_fam_max and allele2 <= config.ntc_allele2_max
+
+
 def cluster_threshold(
     points: list[dict],
     config: ThresholdConfig | None = None,
@@ -83,7 +107,10 @@ def cluster_threshold(
     assignments: dict[str, str] = {}
     for p in points:
         total = p["norm_fam"] + p["norm_allele2"]
-        if total < config.ntc_threshold:
+        has_manual_ntc = (
+            config.ntc_fam_max is not None and config.ntc_allele2_max is not None
+        )
+        if _is_manual_ntc(p, config) or (not has_manual_ntc and total < config.ntc_threshold):
             assignments[p["well"]] = WellType.NTC.value
             continue
         ratio = p["norm_fam"] / total
@@ -123,7 +150,10 @@ def boundary_confidences(
     confidences: dict[str, float] = {}
     for p in points:
         total = p["norm_fam"] + p["norm_allele2"]
-        if total < config.ntc_threshold:
+        has_manual_ntc = (
+            config.ntc_fam_max is not None and config.ntc_allele2_max is not None
+        )
+        if _is_manual_ntc(p, config) or (not has_manual_ntc and total < config.ntc_threshold):
             continue
         ratio = p["norm_fam"] / total if total > 0 else 0.5
         ratio = min(max(ratio, 0.0), 1.0)
@@ -141,12 +171,14 @@ def boundary_confidences(
 def cluster_auto(
     points: list[dict],
     ntc_threshold: float = 0.1,
+    ntc_fam_max: float | None = None,
+    ntc_allele2_max: float | None = None,
     control_wells: dict[str, str] | None = None,
     ploidy: int = DEFAULT_PLOIDY,
     warnings: list[str] | None = None,
     anchor_state: dict | None = None,
 ) -> tuple[dict[str, str], dict[str, float]]:
-    """Model-based, ploidy-aware genotype clustering, fully scale-invariant.
+    """Model-based, ploidy-aware genotype clustering with an optional manual NTC gate.
 
     Generalizes to any ploidy P (2=diploid .. 8): a locus resolves into up to
     ``P + 1`` allele-dosage classes along the fam-fraction axis. The genotyping
@@ -163,10 +195,12 @@ def cluster_auto(
     (1 - nearest/second-nearest distance in fam-fraction space). A well is
     Undetermined (no-call) when that margin drops below ``1 - _AMBIG_RATIO``.
 
-    Genotype is the fam-fraction (angle), not the signal magnitude, and the ROX
-    scale varies between kits — so this never hard-filters on an absolute value.
+    Genotype is the fam-fraction (angle), not the signal magnitude. Automatic
+    decisions remain scale-invariant; an explicit operator NTC quadrant is the
+    intentional exception and uses the values shown on the scatter axes.
 
-    1. NTC: total signal below a fraction of the plate's median total.
+    1. NTC: manual two-channel quadrant when supplied, otherwise total signal
+       below a fraction of the plate's median total.
     2. Fit an arcsine-sqrt-ratio Gaussian mixture (tied variance), K present
        dosage classes chosen by BIC over 1..P+1. K=1 => monomorphic plate.
     3. Map each cluster to an allele dosage by a monotonic best-fit of the
@@ -177,8 +211,9 @@ def cluster_auto(
        clusters — are Undetermined. Low-signal wells are NOT penalised for
        magnitude, only for ambiguous ratio.
 
-    ``ntc_threshold`` is accepted for API compatibility but no longer used as an
-    absolute cutoff (NTC is now purely relative).
+    When both ``ntc_fam_max`` and ``ntc_allele2_max`` are supplied, the
+    operator-defined lower-left scatter quadrant replaces the relative NTC
+    detector. ``ntc_threshold`` remains accepted for API compatibility.
 
     ``warnings``, if given a list, is appended to IN PLACE with non-fatal
     diagnostic codes ("low_n", "relative_ntc", "anchor_conflict" -- see the
@@ -263,7 +298,11 @@ def cluster_auto(
     #    fam-fraction ratio.
     positive = total[total > 0]
     median_total = float(np.median(positive)) if positive.size else 0.0
-    ntc_mask = total < _NTC_SIGNAL_FRAC * median_total
+    manual_ntc = ntc_fam_max is not None and ntc_allele2_max is not None
+    if manual_ntc:
+        ntc_mask = _manual_ntc_mask(work, ntc_fam_max, ntc_allele2_max)
+    else:
+        ntc_mask = total < _NTC_SIGNAL_FRAC * median_total
 
     # C4 (conservative, warning-only): the mask above is a pure signal-level
     # cutoff -- it says nothing about whether the flagged wells are actually a
@@ -273,7 +312,7 @@ def cluster_auto(
     # anything closer is ambiguous, so it keeps the "NTC" label (never invent a
     # new one) but is flagged and denied a blind maximum-confidence call.
     ntc_confidence = 1.0
-    if bool(np.any(ntc_mask)):
+    if not manual_ntc and bool(np.any(ntc_mask)):
         ntc_max_total = float(np.max(total[ntc_mask]))
         gap_ratio = (median_total / ntc_max_total) if ntc_max_total > 0 else float("inf")
         if gap_ratio < _NTC_CLEAR_GAP:

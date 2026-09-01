@@ -130,3 +130,38 @@ def test_an_unknown_mode_is_rejected_at_the_edge(client):
     _register(client, "end", _endpoint_plate())
     r = client.client.get("/api/data/end/scatter?background=first_cycle")
     assert r.status_code == 422  # the Literal never reaches apply_background
+
+
+def test_clustering_uses_the_same_rox_coordinates_as_the_scatter(client):
+    data = [
+        WellCycleData(well="A1", cycle=1, fam=100.0, allele2=100.0, rox=100.0),
+        *[
+            WellCycleData(
+                well=f"A{i}", cycle=1, fam=300.0 + i * 100, allele2=300.0 + i * 100, rox=100.0
+            )
+            for i in range(2, 6)
+        ],
+    ]
+    unified = UnifiedData(
+        instrument="QuantStudio", allele2_dye="VIC", wells=[p.well for p in data],
+        cycles=[1], data=data, has_rox=True, background_mode="none",
+    )
+    _register(client, "rox", unified)
+
+    response = client.client.post(
+        "/api/data/rox/cluster",
+        json={
+            "algorithm": "auto",
+            "cycle": 1,
+            "use_rox": False,
+            "threshold_config": {
+                "ntc_fam_max": 150.0,
+                "ntc_allele2_max": 150.0,
+            },
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assignments = response.json()["assignments"]
+    assert assignments["A1"] == "NTC"
+    assert all(assignments[f"A{i}"] != "NTC" for i in range(2, 6))
