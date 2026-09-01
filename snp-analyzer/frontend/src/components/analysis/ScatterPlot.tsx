@@ -376,8 +376,9 @@ export function ScatterPlot() {
       plot_bgcolor: colors.plot_bgcolor,
       font: { color: colors.fontColor },
       hovermode: "closest",
-      // Disable box-select while editing boundary lines so drags move the rays.
-      dragmode: linesActive ? false : "select",
+      // Keep well box-selection available while boundary editing is enabled.
+      // The capture handler below intercepts only drags that start near a ray.
+      dragmode: "select",
       shapes,
       margin: { t: 10, r: 10, b: 60, l: 70 },
       legend: { orientation: "h", y: -0.2 },
@@ -671,7 +672,7 @@ export function ScatterPlot() {
       if (best >= 0 && bd < NEAR) {
         dragIndexRef.current = best;
         e.preventDefault();
-        e.stopPropagation();
+        e.stopImmediatePropagation();
       }
     };
 

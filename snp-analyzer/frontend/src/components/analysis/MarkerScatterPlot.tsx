@@ -454,7 +454,7 @@ export function MarkerScatterPlot({
       if (best >= 0 && bd < NEAR) {
         dragIndexRef.current = best;
         e.preventDefault();
-        e.stopPropagation();
+        e.stopImmediatePropagation();
       }
     };
 
