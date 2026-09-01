@@ -347,7 +347,7 @@ export function ScatterPlot() {
         y0: 0,
         x1: effectiveNtcCorner.fam,
         y1: axisMaxY,
-        line: { color: "#f59e0b", width: 2, dash: "dash" },
+        line: { color: "#f59e0b", width: 1, dash: "dash" },
       },
       {
         type: "line",
@@ -355,7 +355,7 @@ export function ScatterPlot() {
         y0: effectiveNtcCorner.allele2,
         x1: axisMaxX,
         y1: effectiveNtcCorner.allele2,
-        line: { color: "#f59e0b", width: 2, dash: "dash" },
+        line: { color: "#f59e0b", width: 1, dash: "dash" },
       }
     );
 

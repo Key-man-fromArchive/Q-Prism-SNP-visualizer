@@ -281,7 +281,7 @@ export function MarkerScatterPlot({
         y0: 0,
         x1: effectiveNtc.corner.x,
         y1: axisMaxY,
-        line: { color: "#f59e0b", width: 2, dash: "dash" },
+        line: { color: "#f59e0b", width: 1, dash: "dash" },
       },
       {
         type: "line",
@@ -289,7 +289,7 @@ export function MarkerScatterPlot({
         y0: effectiveNtc.corner.y,
         x1: axisMaxX,
         y1: effectiveNtc.corner.y,
-        line: { color: "#f59e0b", width: 2, dash: "dash" },
+        line: { color: "#f59e0b", width: 1, dash: "dash" },
       }
     );
 
