@@ -8,6 +8,7 @@ import { useWellFilter } from "@/hooks/use-well-filter";
 import { useI18n } from "@/hooks/use-i18n";
 import { StatusState } from "@/components/shared/ui";
 import type { ScatterPoint } from "@/types/api";
+import { useIsDarkMode } from "@/hooks/use-dark-mode";
 
 const LABEL_MAP: Record<string, string> = {
   "Allele 1 Homo": "A1",
@@ -45,6 +46,7 @@ type ResultsTableProps = { ploidyOverride?: number };
 
 export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
   const { t } = useI18n();
+  const dark = useIsDarkMode();
   const scatterPoints = useDataStore((s) => s.scatterPoints);
   const selectWell = useSelectionStore((s) => s.selectWell);
   const showAutoCluster = useSettingsStore((s) => s.showAutoCluster);
@@ -127,7 +129,7 @@ export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
                 showAutoCluster,
                 showManualTypes
               );
-              const info = type ? wellInfo(type, ploidy) : UNASSIGNED_TYPE;
+              const info = type ? wellInfo(type, ploidy, dark) : UNASSIGNED_TYPE;
               const label = type ? LABEL_MAP[type] ?? genotypeShortLabel(type, ploidy) : "";
               const bgColor = type ? info.color : "transparent";
               const textColor = type && !isLightColor(info.color) ? "#ffffff" : "#1a1a2e";

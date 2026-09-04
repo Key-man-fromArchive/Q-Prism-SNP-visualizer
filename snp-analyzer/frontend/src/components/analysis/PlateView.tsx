@@ -13,6 +13,7 @@ import { useWellFilter } from '@/hooks/use-well-filter';
 import { useI18n } from '@/hooks/use-i18n';
 import { StatusState } from '@/components/shared/ui';
 import type { PlateWell } from '@/types/api';
+import { useIsDarkMode } from "@/hooks/use-dark-mode";
 
 interface DragRect {
   left: number;
@@ -28,6 +29,7 @@ type PlateViewProps = {
 
 export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   const { t } = useI18n();
+  const dark = useIsDarkMode();
   const panelRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -129,7 +131,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
       (dosageOfLabel(effectiveType, ploidy) !== null ||
         effectiveType in WELL_TYPE_INFO)
     ) {
-      return wellInfo(effectiveType, ploidy).color;
+      return wellInfo(effectiveType, ploidy, dark).color;
     }
 
     // Fall back to ratio gradient

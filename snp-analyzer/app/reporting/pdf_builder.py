@@ -24,6 +24,7 @@ def build_report(
     plate_wells: list[dict],
     ct_results: dict | None = None,
     filename: str = "",
+    ploidy: int = 2,
 ) -> bytes:
     """Build a complete PDF report.
 
@@ -72,13 +73,13 @@ def build_report(
 
     # Scatter plot
     elements.append(Paragraph("Allele Discrimination Plot", h2_style))
-    scatter_png = render_scatter_png(scatter_points, allele2_dye)
+    scatter_png = render_scatter_png(scatter_points, allele2_dye, ploidy=ploidy)
     scatter_img = Image(io.BytesIO(scatter_png), width=160*mm, height=120*mm)
     elements.append(scatter_img)
 
     # Plate view
     elements.append(Paragraph("Plate View", h2_style))
-    plate_png = render_plate_png(plate_wells)
+    plate_png = render_plate_png(plate_wells, ploidy=ploidy)
     plate_img = Image(io.BytesIO(plate_png), width=170*mm, height=100*mm)
     elements.append(plate_img)
 

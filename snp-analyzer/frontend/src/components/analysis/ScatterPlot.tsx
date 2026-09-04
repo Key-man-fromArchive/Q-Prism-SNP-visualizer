@@ -12,6 +12,7 @@ import { plotlyColors } from "@/lib/plotly-theme";
 import { axisRangeLayout, dataBounds, visibleBounds } from "@/lib/scatter-axes";
 import { useWellFilter } from "@/hooks/use-well-filter";
 import { useI18n } from "@/hooks/use-i18n";
+import { useIsDarkMode } from "@/hooks/use-dark-mode";
 import { StatusState } from "@/components/shared/ui";
 import { ScatterViewControls } from "./ScatterViewControls";
 import type { ScatterPoint } from "@/types/api";
@@ -35,6 +36,9 @@ function effectiveType(
 
 export function ScatterPlot() {
   const { t } = useI18n();
+  // The dosage palette has its own dark steps, so a theme change has to rebuild
+  // the traces -- the chrome-only relayout below cannot repaint markers.
+  const dark = useIsDarkMode();
   const plotRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
 
@@ -274,14 +278,14 @@ export function ScatterPlot() {
     // then unassigned. WELL_TYPE_INFO keeps only the fixed control types here;
     // the diploid genotype trio comes from genotypeClasses so ploidy drives it.
     const diploidGeno = new Set(["Allele 1 Homo", "Allele 2 Homo", "Heterozygous"]);
-    const genoKeys = genotypeClasses(ploidy).map((c) => c.key);
+    const genoKeys = genotypeClasses(ploidy, dark).map((c) => c.key);
     const controlKeys = Object.keys(WELL_TYPE_INFO).filter((k) => !diploidGeno.has(k));
     const typeOrder = [...genoKeys, ...controlKeys, "Unassigned"];
     for (const typeKey of typeOrder) {
       const points = typeGroups.get(typeKey);
       if (!points || points.length === 0) continue;
 
-      const info = wellInfo(typeKey, ploidy);
+      const info = wellInfo(typeKey, ploidy, dark);
 
       traces.push({
         x: points.map((p) => p.norm_fam),
@@ -515,6 +519,7 @@ export function ScatterPlot() {
     lockAspect,
     editing,
     normalizationApplied,
+    dark,
   ]);
 
   // Declaring the assay's dosage ceiling. Re-clusters in AUTO mode with the

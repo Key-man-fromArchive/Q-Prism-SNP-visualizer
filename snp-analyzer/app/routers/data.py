@@ -344,6 +344,9 @@ async def export_pdf(
         plate_wells=plate_wells,
         ct_results=ct_results,
         filename=filename,
+        # Without this the report coloured and named a diploid trio whatever
+        # the plate's ploidy, so every polyploid dosage class came out grey.
+        ploidy=unified.ploidy,
     )
 
     return Response(

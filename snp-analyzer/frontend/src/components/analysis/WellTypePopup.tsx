@@ -6,6 +6,7 @@ import { WELL_TYPE_INFO } from '@/lib/constants';
 import { genotypeClasses } from '@/lib/genotype';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useI18n } from '@/hooks/use-i18n';
+import { useIsDarkMode } from "@/hooks/use-dark-mode";
 
 type WellTypePopupProps = {
   wells: string[];
@@ -16,6 +17,7 @@ type WellTypePopupProps = {
 
 export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePopupProps) {
   const { t } = useI18n();
+  const dark = useIsDarkMode();
   const ref = useRef<HTMLDivElement>(null);
   const ploidy = useSettingsStore((s) => s.ploidy);
 
@@ -85,7 +87,7 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
 
       {[
         // Dosage genotype classes for the current ploidy (highest dosage first)
-        ...genotypeClasses(ploidy).map((c) => ({ type: c.key, label: c.label, color: c.color })),
+        ...genotypeClasses(ploidy, dark).map((c) => ({ type: c.key, label: c.label, color: c.color })),
         // Fixed control / non-genotype types
         ...['NTC', 'Unknown', 'Positive Control', 'Undetermined'].map((type) => ({
           type,

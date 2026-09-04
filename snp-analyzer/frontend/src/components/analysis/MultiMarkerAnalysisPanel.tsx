@@ -28,6 +28,7 @@ import { WellSelectionToolbar } from "./WellSelectionToolbar";
 import { WellDetailPanel } from "./WellDetailPanel";
 import { ResultsTable } from "./ResultsTable";
 import { AmplificationOverlay } from "./AmplificationOverlay";
+import { useIsDarkMode } from "@/hooks/use-dark-mode";
 
 const SIDEBAR_THRESHOLD = 4; // >=4 markers -> sidebar; <=3 -> dropdown (Q8)
 
@@ -50,6 +51,7 @@ type MultiMarkerAnalysisPanelProps = {
 
 export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelProps) {
   const { t } = useI18n();
+  const dark = useIsDarkMode();
   const sessionId = useSessionStore((s) => s.sessionId);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const isPlaying = useSelectionStore((s) => s.isPlaying);
@@ -454,7 +456,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
               >
                 {countsEntries.map(([key, n]) => {
                   const label = countKeyToLabel(key, selectedMarker.ploidy);
-                  const info = wellInfo(label, selectedMarker.ploidy);
+                  const info = wellInfo(label, selectedMarker.ploidy, dark);
                   const short = genotypeShortLabel(label, selectedMarker.ploidy);
                   return (
                     <div

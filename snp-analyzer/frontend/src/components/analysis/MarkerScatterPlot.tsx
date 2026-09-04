@@ -18,6 +18,7 @@ import { completeThresholdConfig } from "@/lib/threshold-config";
 import { useDataStore, ZERO_ORIGIN } from "@/stores/data-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useIsDarkMode } from "@/hooks/use-dark-mode";
 import { ScatterViewControls } from "./ScatterViewControls";
 import type {
   ChannelLabels,
@@ -61,6 +62,9 @@ export function MarkerScatterPlot({
   roleLabels,
   onBoundariesPersisted,
 }: MarkerScatterPlotProps) {
+  // Dosage colours have their own dark steps, so the traces are rebuilt on a
+  // theme change rather than only recoloured in the layout.
+  const dark = useIsDarkMode();
   const origin = ratioOrigin ?? ZERO_ORIGIN;
   const originRef = useRef(origin);
   useEffect(() => {
@@ -280,7 +284,7 @@ export function MarkerScatterPlot({
     const traces: Record<string, unknown>[] = [];
     for (const typeKey of order) {
       const pts = typeGroups.get(typeKey)!;
-      const info = wellInfo(typeKey, ploidy);
+      const info = wellInfo(typeKey, ploidy, dark);
       traces.push({
         x: pts.map((p) => p.norm_fam),
         y: pts.map((p) => p.norm_allele2),
@@ -494,6 +498,7 @@ export function MarkerScatterPlot({
     xMax,
     yMin,
     yMax,
+    dark,
   ]);
 
   // Drag a radial boundary line; persists to the marker's threshold_config on
