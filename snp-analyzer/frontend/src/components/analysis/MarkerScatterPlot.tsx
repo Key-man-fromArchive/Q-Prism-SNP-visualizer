@@ -14,6 +14,7 @@ import { plotlyColors } from "@/lib/plotly-theme";
 import { channelLabels } from "@/lib/channel-labels";
 import { axisRangeLayout, dataBounds, visibleBounds } from "@/lib/scatter-axes";
 import { updateMarker } from "@/lib/api";
+import { completeThresholdConfig } from "@/lib/threshold-config";
 import { useDataStore, ZERO_ORIGIN } from "@/stores/data-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -200,19 +201,16 @@ export function MarkerScatterPlot({
         const ntc = ntcRef.current;
         const current = marker.threshold_config;
         await updateMarker(sessionId, marker.id, {
-          threshold_config: {
-            ntc_threshold: current?.ntc_threshold ?? 0.1,
+          threshold_config: completeThresholdConfig(current, {
             ntc_fam_max: ntc.enabled ? ntc.corner.x : null,
             ntc_allele2_max: ntc.enabled ? ntc.corner.y : null,
-            allele1_ratio_max: current?.allele1_ratio_max ?? 0.4,
-            allele2_ratio_min: current?.allele2_ratio_min ?? 0.6,
             // Moving only the NTC corner must not accidentally freeze the
             // current AUTO-generated genotype rays into a strict manual
             // boundary override. Preserve manual cuts only if they already
             // existed; a radial-line drag remains the action that enables them.
             boundaries: ntcOnly ? current?.boundaries ?? null : editRef.current,
             offset: offsetRef.current,
-          },
+          }),
         });
         await onBoundariesPersisted();
       } catch (err) {
@@ -222,29 +220,22 @@ export function MarkerScatterPlot({
     [sessionId, marker.id, marker.threshold_config, onBoundariesPersisted]
   );
 
-  // Moving the observed-dosage window. Committed exactly like the NTC corner:
-  // boundaries are preserved only if they were already a manual override, so
-  // answering "these are dosages 3-5" never costs the automatic fit.
-  const handleDosageWindowChange = useCallback(
-    (offset: number | null) => {
+  // Declaring the assay's dosage ceiling. Committed exactly like the NTC
+  // corner: boundaries are preserved only if they were already a manual
+  // override, so saying "this assay tops out at 3" never costs the fit.
+  const handleDosageMaxApply = useCallback(
+    (dosageMax: number | null) => {
       const current = marker.threshold_config;
       void (async () => {
         try {
           await updateMarker(sessionId, marker.id, {
-            threshold_config: {
-              ntc_threshold: current?.ntc_threshold ?? 0.1,
-              ntc_fam_max: current?.ntc_fam_max ?? null,
-              ntc_allele2_max: current?.ntc_allele2_max ?? null,
-              allele1_ratio_max: current?.allele1_ratio_max ?? 0.4,
-              allele2_ratio_min: current?.allele2_ratio_min ?? 0.6,
-              boundaries: current?.boundaries ?? null,
-              offset: offset ?? 0,
-              offset_locked: offset !== null,
-            },
+            threshold_config: completeThresholdConfig(current, {
+              dosage_max: dosageMax,
+            }),
           });
           await onBoundariesPersisted();
         } catch (err) {
-          console.error("Failed to persist dosage window:", err);
+          console.error("Failed to persist dosage ceiling:", err);
         }
       })();
     },
@@ -666,14 +657,14 @@ export function MarkerScatterPlot({
         onNtcCornerChange={handleNtcCornerChange}
         normalizationApplied={normalizationApplied}
         roxOutlierWells={roxOutlierWells}
-        dosageWindow={{
+        dosageCeiling={{
           ploidy,
-          offset: region?.offset ?? 0,
+          applied: region?.dosage_max ?? marker.threshold_config?.dosage_max ?? null,
+          observedFrom: region?.offset ?? 0,
           // K observed classes = K-1 internal cuts + 1.
-          classes: (region?.boundaries?.length ?? editBoundaries.length) + 1,
+          observedClasses: (region?.boundaries?.length ?? editBoundaries.length) + 1,
           uncertain: region?.offset_uncertain ?? false,
-          locked: marker.threshold_config?.offset_locked ?? false,
-          onChange: handleDosageWindowChange,
+          onApply: handleDosageMaxApply,
         }}
       />
       <div

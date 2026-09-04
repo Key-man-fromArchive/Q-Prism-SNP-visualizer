@@ -157,7 +157,7 @@ def _cluster_point_dicts(
             "offset": config.offset,
             "offset_uncertain": False,
             "low_separation": False,
-            "offset_locked": bool(config.offset_locked),
+            "dosage_max": config.dosage_max,
         }
         return assignments, confidences, window, None
 
@@ -171,15 +171,13 @@ def _cluster_point_dicts(
             ploidy=ploidy,
             warnings=warnings,
             anchor_state=anchor_state,
-            # An operator-anchored dosage window applies to the AUTO calls too.
-            # Previously ``offset`` only had an effect on the B3 branch above,
-            # so the only way to correct a wrong window position was to also
-            # freeze the radial boundaries -- discarding the fit in order to
-            # relabel it. A polyploid marker usually resolves part of its
-            # ladder and where that part sits is often not identifiable from
-            # fluorescence, so this correction has to be available without
-            # giving up automatic clustering.
-            offset_override=config.offset if config.offset_locked else None,
+            # The operator's declared dosage ceiling constrains the AUTO fit --
+            # it caps the class count and bounds the dosage window. Declaring
+            # it up front is what makes this a constraint instead of a
+            # correction: a polyploid assay's reachable range is a property of
+            # the assay, not something to be guessed from each plate and then
+            # nudged.
+            dosage_max=config.dosage_max,
         )
     elif algorithm == ClusteringAlgorithm.THRESHOLD:
         fixed_controls = {
@@ -199,12 +197,15 @@ def _cluster_point_dicts(
     # genotype_window to report it as such instead of re-deriving its own
     # (potentially different) offset guess from the sample ratios alone.
     window = genotype_window(
-        point_dicts, assignments, ploidy, anchor_resolved=anchor_state.get("resolved", False)
+        point_dicts,
+        assignments,
+        ploidy,
+        anchor_resolved=anchor_state.get("resolved", False),
+        dosage_max=config.dosage_max,
     )
-    # Echo the lock back so a reload can restore it: without this the client
-    # sees the operator's window position but not the fact that it is theirs,
-    # and the next re-cluster silently reverts to the estimator's guess.
-    window["offset_locked"] = bool(config.offset_locked)
+    # Echo the ceiling that was applied, so the client shows what the calls
+    # were actually made under rather than what it last sent.
+    window["dosage_max"] = config.dosage_max
     return assignments, confidences, window, (warnings or None)
 
 
@@ -342,7 +343,7 @@ def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringR
                 boundaries=window["boundaries"],
                 offset=window["offset"],
                 offset_uncertain=window["offset_uncertain"],
-                offset_locked=window["offset_locked"],
+                dosage_max=window["dosage_max"],
                 low_separation=window["low_separation"],
                 genotype_counts=count_genotypes(assignments, reg.ploidy),
                 warnings=warnings,
@@ -474,7 +475,7 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
             boundaries=window["boundaries"],
             offset=window["offset"],
             offset_uncertain=window["offset_uncertain"],
-            offset_locked=window["offset_locked"],
+            dosage_max=window["dosage_max"],
             low_separation=window["low_separation"],
             warnings=warnings,
         )

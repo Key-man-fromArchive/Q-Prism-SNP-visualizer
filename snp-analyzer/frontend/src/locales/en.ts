@@ -702,16 +702,21 @@ const en = {
   analysisWarningAnchorConflict: 'Control wells disagree with the fitted dosage ladder.',
   analysisWarningsTitle: 'Analysis warnings',
 
+  // The assay's dosage ceiling, declared by the operator rather than inferred.
+  // A hexaploid marker commonly tops out at dosage 3, so its classes are
+  // 0,1,2,3 out of 0..6 — a property of the assay, not of the plate.
+  dosageMaxLabel: 'Highest dosage this assay produces',
+  wsMarkerDosageMaxFull: (ploidy: number) => `Full ladder (0–${ploidy})`,
+  wsMarkerDosageMaxOption: (max: number) => `0–${max}`,
+  dosageMaxReset: 'Full ladder',
+  dosageMaxApplied: (max: number) => `capped at ${max}`,
+  dosageMaxUndeclared: (ploidy: number) => `full ladder (0–${ploidy})`,
+  dosageWindowObserved: (lo: number, hi: number) =>
+    lo === hi ? `observed: dosage ${lo}` : `observed: dosages ${lo}–${hi}`,
+
   // Observed dosage window (polyploid). Which absolute dosages the classes on
   // screen are: a hexaploid marker commonly resolves 0,1,2,3 only, and
   // fluorescence often cannot tell 0,1,2,3 from 3,4,5,6.
-  dosageWindowLabel: 'Observed dosages',
-  dosageWindowLocked: 'set by you',
-  dosageWindowRange: (lo: number, hi: number) => (lo === hi ? `${lo}` : `${lo}–${hi}`),
-  dosageWindowOfPloidy: (ploidy: number) => `of 0–${ploidy}`,
-  dosageWindowDown: 'Shift observed dosages down',
-  dosageWindowUp: 'Shift observed dosages up',
-  dosageWindowReset: 'Auto',
   dosageWindowUncertainHint:
     'No class sits on either axis, so these dosages could sit anywhere on the ladder — the fluorescence cannot tell. Shift the window if you know where it belongs; the clusters themselves do not change.',
 };

@@ -702,14 +702,18 @@ const ko: Translations = {
   analysisWarningAnchorConflict: '대조군 웰이 적합된 dosage 사다리와 어긋납니다.',
   analysisWarningsTitle: '분석 경고',
 
+  // assay가 낼 수 있는 최대 dosage — 추정이 아니라 사용자가 선언.
+  // 6배체 마커가 dosage 3까지만 나오는 건 플레이트가 아니라 assay의 성질입니다.
+  dosageMaxLabel: '이 assay의 최대 dosage',
+  wsMarkerDosageMaxFull: (ploidy: number) => `전체 사다리 (0–${ploidy})`,
+  wsMarkerDosageMaxOption: (max: number) => `0–${max}`,
+  dosageMaxReset: '전체 사다리',
+  dosageMaxApplied: (max: number) => `최대 ${max}로 제한`,
+  dosageMaxUndeclared: (ploidy: number) => `전체 사다리 (0–${ploidy})`,
+  dosageWindowObserved: (lo: number, hi: number) =>
+    lo === hi ? `관측: dosage ${lo}` : `관측: dosage ${lo}–${hi}`,
+
   // 관측된 dosage window (배수체)
-  dosageWindowLabel: '관측 dosage',
-  dosageWindowLocked: '직접 지정',
-  dosageWindowRange: (lo: number, hi: number) => (lo === hi ? `${lo}` : `${lo}–${hi}`),
-  dosageWindowOfPloidy: (ploidy: number) => `/ 0–${ploidy}`,
-  dosageWindowDown: '관측 dosage 아래로 이동',
-  dosageWindowUp: '관측 dosage 위로 이동',
-  dosageWindowReset: '자동',
   dosageWindowUncertainHint:
     '어느 클래스도 축에 붙어 있지 않아, 이 dosage들이 사다리 위 어디에 놓이는지 형광만으로는 알 수 없습니다. 위치를 아신다면 window를 이동하세요 — 클러스터 자체는 바뀌지 않습니다.',
 };

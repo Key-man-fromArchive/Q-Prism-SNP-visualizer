@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.models import ThresholdConfig, WellType
 from app.processing.genotype_vocab import (
     DEFAULT_PLOIDY,
+    dosage_by_ratio,
     genotype_label,
     label_by_ratio,
     validate_ploidy,
@@ -201,7 +202,7 @@ def cluster_auto(
     ploidy: int = DEFAULT_PLOIDY,
     warnings: list[str] | None = None,
     anchor_state: dict | None = None,
-    offset_override: int | None = None,
+    dosage_max: int | None = None,
 ) -> tuple[dict[str, str], dict[str, float]]:
     """Model-based, ploidy-aware genotype clustering with an optional manual NTC gate.
 
@@ -231,10 +232,13 @@ def cluster_auto(
     3. Map each cluster to an allele dosage by a monotonic best-fit of the
        cluster ratios to the ideal ``d/P`` positions (rank-preserving, so skew
        cannot reorder dosages), then label via the genotype vocabulary.
-       ``offset_override`` slides that window so its lowest class is the given
-       dosage -- the operator answering the question fluorescence usually
-       cannot (a hexaploid's four classes fit 0,1,2,3 and 3,4,5,6 alike). See
-       ``_anchor_window_at``.
+       ``dosage_max`` is the operator's declaration of the highest dosage this
+       assay can produce, and it CONSTRAINS this step rather than nudging it:
+       the class count K is capped at ``dosage_max + 1`` and the window may not
+       run past ``dosage_max``. A hexaploid marker commonly tops out at dosage
+       3, and both halves matter -- without the cap BIC is free to split four
+       real classes into seven, and without the ceiling the four get stretched
+       across the whole 0..6 ladder.
     4. Confidence in ratio space: assign each well to the nearest genotype
        ratio-centre; wells in the gap between two genotypes — or in singleton
        clusters — are Undetermined. Low-signal wells are NOT penalised for
@@ -367,6 +371,10 @@ def cluster_auto(
             confidences[w] = ntc_confidence
 
     sig_idx = [i for i in range(len(wells)) if not ntc_mask[i]]
+    # The operator's declared ceiling, clamped into the ladder. Used by every
+    # dosage decision below, including the small-region fallback -- a three-well
+    # region must not be handed a dosage this assay cannot produce.
+    ceiling = ploidy if dosage_max is None else max(0, min(dosage_max, ploidy))
 
     # Too few signal wells to cluster reliably — call by absolute ratio.
     if len(sig_idx) < 4:
@@ -376,7 +384,8 @@ def cluster_auto(
         if sig_idx and warnings is not None:
             warnings.append("low_n")
         for i in sig_idx:
-            assignments[wells[i]] = label_by_ratio(ratio[i], ploidy)
+            dosage = min(dosage_by_ratio(ratio[i], ploidy), ceiling)
+            assignments[wells[i]] = genotype_label(dosage, ploidy)
             confidences[wells[i]] = _SMALL_REGION_CONFIDENCE
         return assignments, confidences
 
@@ -389,7 +398,9 @@ def cluster_auto(
     rt = np.arcsin(np.sqrt(np.clip(ratio[sig_idx], 0.0, 1.0)))
     X = rt.reshape(-1, 1)
     n_unique = len(np.unique(np.round(rt, 9)))
-    k_max = min(ploidy + 1, n_unique)
+    # A declared ceiling limits how many classes can exist at all, so BIC is
+    # not offered the option of inventing more of them.
+    k_max = min(ceiling + 1, n_unique)
 
     best_gmm = None
     best_bic = None
@@ -502,15 +513,19 @@ def cluster_auto(
     if dosages is not None:
         if anchor_state is not None:
             anchor_state["resolved"] = True
+        if dosage_max is not None:
+            # An allele-1 control anchors the scale at dosage ``ploidy``, which
+            # this assay cannot reach if the operator declared a lower ceiling.
+            # Slide the anchored window down to fit rather than clamping each
+            # class onto the ceiling, which would collapse distinct classes.
+            overshoot = dosages[-1] - ceiling
+            if overshoot > 0:
+                shift = min(overshoot, dosages[0])
+                dosages = [d - shift for d in dosages]
     else:
-        dosages = _assign_dosages([cluster_ratio[lab] for lab in order], ploidy)
-    if offset_override is not None:
-        dosages = _anchor_window_at(dosages, offset_override, ploidy)
-        if anchor_state is not None:
-            # The offset is now the operator's, so genotype_window must report
-            # it back rather than re-guessing from the ratios (which is what
-            # produced the guess being corrected).
-            anchor_state["resolved"] = True
+        dosages = _assign_dosages(
+            [cluster_ratio[lab] for lab in order], ploidy, dosage_max
+        )
     label_map = {lab: genotype_label(d, ploidy) for lab, d in zip(order, dosages)}
 
     # 4. Call + confidence from the fitted mixture, evaluated in the SAME
@@ -575,6 +590,7 @@ def genotype_window(
     assignments: dict[str, str],
     ploidy: int = DEFAULT_PLOIDY,
     anchor_resolved: bool = False,
+    dosage_max: int | None = None,
 ) -> dict:
     """Describe the OBSERVED dosage window for the draggable-line UI.
 
@@ -618,8 +634,11 @@ def genotype_window(
         # marker, when no boundaries were configured) -- not just "truly no calls
         # yet" -- so callers that unconditionally read every key (_run_regions)
         # must never KeyError here.
+        # Seed the ladder the operator declared, not the organism's full one:
+        # a hexaploid marker capped at dosage 3 gets three cuts over 0..3, not
+        # six over 0..6, so the draggable lines start where the data can be.
         return {
-            "boundaries": default_ratio_cuts(ploidy),
+            "boundaries": default_ratio_cuts(ploidy, dosage_max),
             "offset": 0,
             "offset_uncertain": True,
             "low_separation": False,
@@ -640,7 +659,9 @@ def genotype_window(
     else:
         # Offset + uncertainty from the same window estimator the auto labeller
         # uses, so the drag-tool seed stays consistent with the auto calls.
-        offset, _step, uncertain = estimate_window([centre[d] for d in present], ploidy)
+        offset, _step, uncertain = estimate_window(
+            [centre[d] for d in present], ploidy, dosage_max
+        )
 
     # Internal cuts across the observed window [offset, top], high-r first
     # (empirical midpoint where both flanking classes are present, else ideal).
@@ -690,7 +711,11 @@ def _window_low_separation(ratio_by_dosage: dict[int, list[float]], present: lis
     return False
 
 
-def estimate_window(sorted_ratios: list[float], ploidy: int) -> tuple[int, int, bool]:
+def estimate_window(
+    sorted_ratios: list[float],
+    ploidy: int,
+    dosage_max: int | None = None,
+) -> tuple[int, int, bool]:
     """Estimate the observed dosage window from cluster ratios (sorted ascending).
 
     Returns ``(offset, step, uncertain)`` where the K clusters map to dosages
@@ -699,9 +724,19 @@ def estimate_window(sorted_ratios: list[float], ploidy: int) -> tuple[int, int, 
         (``round(gap * P)``, >=1): 1 = a contiguous window, 2 = every other dosage.
       - ``offset`` is the arithmetic-progression start that best fits the ratios
         to the ideals ``d/P`` (least squares) — a fit, not just the lowest dosage.
-      - ``uncertain`` is True when NO cluster hugs an axis extreme (r~0 = dosage 0,
-        r~1 = dosage P), so the absolute position of the window is a guess the
-        fluorescence cannot anchor (the sweetpotato "0,1,2 vs 4,5,6" ambiguity).
+      - ``uncertain`` is True when NO cluster hugs an END OF THE WINDOW, so the
+        absolute position is a guess the fluorescence cannot anchor (the
+        sweetpotato "0,1,2 vs 4,5,6" ambiguity).
+
+    ``dosage_max`` is the highest dosage this assay can produce, declared by the
+    operator (see ``ThresholdConfig.dosage_max``). It is a real constraint, not
+    a hint: the window may not run past it, so the search is over
+    ``0..dosage_max`` instead of ``0..ploidy``. Field fact behind it — a
+    hexaploid marker commonly tops out at dosage 3, and stretching four
+    clusters across the full 0..6 ladder mislabels every one of them. It also
+    tightens ``uncertain``: with a ceiling declared, a class sitting at the TOP
+    of the window is anchored just as much as one on the allele-2 axis, so the
+    operator is not asked to confirm a position the declaration already fixed.
 
     This preserves rank order and replaces the old d/P-snapping DP; it handles
     non-contiguous windows via ``step`` and gives a defensible offset + honesty
@@ -709,18 +744,19 @@ def estimate_window(sorted_ratios: list[float], ploidy: int) -> tuple[int, int, 
     k = len(sorted_ratios)
     if k == 0:
         return 0, 1, True
+    ceiling = ploidy if dosage_max is None else max(0, min(dosage_max, ploidy))
     edge = 0.5 / ploidy
     low_anchor = sorted_ratios[0] < edge
-    high_anchor = sorted_ratios[-1] > 1.0 - edge
+    high_anchor = sorted_ratios[-1] > (ceiling / ploidy) - edge
 
     if k == 1:
-        offset = max(0, min(ploidy, round(sorted_ratios[0] * ploidy)))
+        offset = max(0, min(ceiling, round(sorted_ratios[0] * ploidy)))
         return offset, 1, not (low_anchor or high_anchor)
 
     gaps = sorted(sorted_ratios[i + 1] - sorted_ratios[i] for i in range(k - 1))
     med_gap = gaps[len(gaps) // 2]
     step = max(1, round(med_gap * ploidy))
-    step = min(step, max(1, ploidy // (k - 1)))  # keep the window inside 0..P
+    step = min(step, max(1, ceiling // (k - 1)))  # keep the window inside 0..ceiling
 
     # Fit the offset in the arcsine-sqrt space the mixture is fitted in (variance-
     # stabilized), so the least-squares match is consistent with where clusters
@@ -731,7 +767,7 @@ def estimate_window(sorted_ratios: list[float], ploidy: int) -> tuple[int, int, 
         return math.asin(math.sqrt(min(max(x, 0.0), 1.0)))
 
     obs = [_t(r) for r in sorted_ratios]
-    max_offset = ploidy - (k - 1) * step
+    max_offset = max(0, ceiling - (k - 1) * step)
     best_off, best_cost = 0, float("inf")
     for off in range(0, max_offset + 1):
         cost = sum((obs[i] - _t((off + i * step) / ploidy)) ** 2 for i in range(k))
@@ -740,36 +776,15 @@ def estimate_window(sorted_ratios: list[float], ploidy: int) -> tuple[int, int, 
     return best_off, step, not (low_anchor or high_anchor)
 
 
-def _assign_dosages(sorted_ratios: list[float], ploidy: int) -> list[int]:
+def _assign_dosages(
+    sorted_ratios: list[float],
+    ploidy: int,
+    dosage_max: int | None = None,
+) -> list[int]:
     """Strictly-increasing allele dosage per cluster ratio (sorted ascending),
     from the estimated observed window (see estimate_window)."""
-    offset, step, _ = estimate_window(sorted_ratios, ploidy)
+    offset, step, _ = estimate_window(sorted_ratios, ploidy, dosage_max)
     return [offset + i * step for i in range(len(sorted_ratios))]
-
-
-def _anchor_window_at(dosages: list[int], offset: int, ploidy: int) -> list[int]:
-    """Slide a fitted dosage window so its lowest class is ``offset``.
-
-    Only the window's absolute POSITION moves; the spacing between classes and
-    their order are what the fit determined and are left alone. Position is the
-    one part of the answer fluorescence frequently cannot supply: a hexaploid
-    marker that resolves four classes fits dosages 0,1,2,3 and 3,4,5,6 equally
-    well, and ``estimate_window`` reports that as ``offset_uncertain``. An
-    operator who knows which it is can say so here without discarding the fit
-    that found the clusters -- previously the only way to correct the labels
-    was to freeze the radial boundaries into a manual override.
-
-    Applied after either dosage path (estimator or allele-control anchors), so
-    an explicit operator window wins over both. Shifted as a whole and clamped
-    to keep the top class inside 0..P, so a request that would push the window
-    off the ladder lands flush against the end instead of being dropped.
-    """
-    if not dosages:
-        return dosages
-    span = dosages[-1] - dosages[0]
-    target = max(0, min(offset, ploidy - span))
-    delta = target - dosages[0]
-    return [d + delta for d in dosages]
 
 
 def _resolve_anchor_dosages(

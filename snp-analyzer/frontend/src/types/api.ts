@@ -303,11 +303,15 @@ export type ThresholdConfig = {
   boundaries?: number[] | null;
   // Dosage of the lowest observed class (places the window within 0..ploidy).
   offset?: number | null;
-  // `offset` is the operator's decision, so the AUTO caller honours it instead
-  // of re-deriving its own guess. A separate flag rather than "offset != 0",
-  // because 0 is the most common correct answer for a partial window (a
-  // hexaploid marker commonly resolves dosages 0,1,2,3 only).
-  offset_locked?: boolean | null;
+  // Highest allele dosage this ASSAY can produce, declared by the operator.
+  // null/undefined = not declared, fall back to the organism's ploidy.
+  //
+  // A polyploid marker usually resolves only part of its ladder — a hexaploid
+  // assay commonly tops out at dosage 3, so its classes are 0,1,2,3 out of
+  // 0..6 — and that is a property of the assay the operator knows in advance.
+  // Declared up front it CONSTRAINS the fit: the class count is capped at
+  // dosage_max + 1 and the dosage window may not run past it.
+  dosage_max?: number | null;
 };
 
 export type ClusteringRequest = {
@@ -331,8 +335,8 @@ export type ClusteringResult = {
   boundaries?: number[] | null; // K-1 internal radial-line positions (descending fam-fraction)
   offset?: number;              // dosage of the lowest observed class
   offset_uncertain?: boolean;   // true when the offset is a low-confidence guess
-  /** True when `offset` is the operator's own window anchor, not the guess. */
-  offset_locked?: boolean;
+  /** The operator-declared dosage ceiling the calls were made under. */
+  dosage_max?: number | null;
   low_separation?: boolean;     // true when adjacent dosage classes overlap (poorly resolved)
   // Multi-marker (P4): per-marker results. Absent for a single-marker (whole
   // plate) run; `assignments` above is then the flat merge across regions.
@@ -513,7 +517,8 @@ export type RegionResult = {
   boundaries?: number[] | null;
   offset: number;
   offset_uncertain: boolean;
-  offset_locked?: boolean;
+  /** The operator-declared dosage ceiling in force for this marker. */
+  dosage_max?: number | null;
   low_separation: boolean;
   genotype_counts?: Record<string, number> | null;
   warnings?: string[] | null;

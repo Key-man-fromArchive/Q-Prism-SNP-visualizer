@@ -199,20 +199,18 @@ class ThresholdConfig(BaseModel):
     # Dosage of the lowest observed class — places the K observed zones within the
     # full 0..ploidy ladder (see genotype_window / the offset control).
     offset: int = 0
-    # ``offset`` is the OPERATOR's decision, not the estimator's guess, and the
-    # auto caller must honor it instead of re-deriving its own.
+    # Highest allele dosage this ASSAY can produce, declared by the operator.
+    # None = not declared; fall back to the organism's ploidy.
     #
-    # Needed because a polyploid marker usually resolves only part of its
-    # ladder, and where that part sits is frequently not identifiable from
-    # fluorescence: a hexaploid assay commonly tops out at dosage 3, so the
-    # four observed classes are 0,1,2,3 -- but 3,4,5,6 fits the same ratios
-    # just as well, and ``estimate_window`` says so by returning
-    # ``offset_uncertain``. Without this flag the only way to correct that
-    # guess was to also freeze the radial boundaries into a manual override,
-    # which throws away the fit in order to fix its labelling. A separate
-    # boolean (rather than "offset != 0") is required because 0 is itself the
-    # most common correct answer.
-    offset_locked: bool = False
+    # A polyploid marker usually resolves only part of its ladder: a hexaploid
+    # assay commonly tops out at dosage 3, so the classes are 0,1,2,3 out of
+    # 0..6. That is a property of the assay, which the operator knows and
+    # fluorescence often cannot recover -- 0,1,2,3 and 3,4,5,6 fit the same
+    # four clusters. Declared up front it is a real CONSTRAINT rather than a
+    # correction after the fact: the class-count search is capped at
+    # ``dosage_max + 1`` (so the fit cannot split four real classes into seven)
+    # and the dosage window may not run past it.
+    dosage_max: int | None = Field(default=None, ge=0, le=8)
 
 
 class MarkerRegion(BaseModel):
@@ -319,10 +317,9 @@ class RegionResult(BaseModel):
     boundaries: list[float] | None = None
     offset: int = 0
     offset_uncertain: bool = False
-    # True when ``offset`` is the operator's own window anchor rather than the
-    # estimator's guess, so a reload can restore the lock instead of quietly
-    # reverting to the guess on the next re-cluster.
-    offset_locked: bool = False
+    # The operator-declared dosage ceiling in force for this marker, echoed so
+    # the UI can show what it applied (see ThresholdConfig.dosage_max).
+    dosage_max: int | None = None
     low_separation: bool = False
     genotype_counts: dict[str, int] | None = None
     # Phase 1 diagnostics: non-fatal quality flags for this marker's calls (e.g.
@@ -365,9 +362,9 @@ class ClusteringResult(BaseModel):
     boundaries: list[float] | None = None
     offset: int = 0
     offset_uncertain: bool = False
-    # True when ``offset`` is the operator's own window anchor (see
-    # ThresholdConfig.offset_locked), not the estimator's guess.
-    offset_locked: bool = False
+    # The operator-declared dosage ceiling in force (see
+    # ThresholdConfig.dosage_max), echoed back for display.
+    dosage_max: int | None = None
     # True when adjacent dosage classes overlap (poorly resolved — high ploidy).
     low_separation: bool = False
     # Multi-marker: per-marker results. None for a single-marker (whole-plate)

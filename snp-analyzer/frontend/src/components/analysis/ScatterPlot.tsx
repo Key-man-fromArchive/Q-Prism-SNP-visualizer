@@ -89,8 +89,8 @@ export function ScatterPlot() {
   const offset = useDataStore((s) => s.offset);
   const setOffset = useDataStore((s) => s.setOffset);
   const offsetUncertain = useDataStore((s) => s.offsetUncertain);
-  const offsetLocked = useDataStore((s) => s.offsetLocked);
-  const setOffsetLocked = useDataStore((s) => s.setOffsetLocked);
+  const dosageMax = useDataStore((s) => s.dosageMax);
+  const setDosageMax = useDataStore((s) => s.setDosageMax);
   const ntcCorner = useDataStore((s) => s.ntcCorner);
   const setNtcCorner = useDataStore((s) => s.setNtcCorner);
   const { isWellVisible } = useWellFilter();
@@ -517,15 +517,13 @@ export function ScatterPlot() {
     normalizationApplied,
   ]);
 
-  // Moving the observed-dosage window. Re-clusters in AUTO mode with the
-  // operator's anchor rather than switching to a threshold override: the fit
-  // that found the clusters is good, only its absolute position was a guess.
-  const handleDosageWindowChange = useCallback(
+  // Declaring the assay's dosage ceiling. Re-clusters in AUTO mode with the
+  // ceiling as a constraint rather than switching to a threshold override:
+  // the mixture fit is what finds the clusters, and the declaration only tells
+  // it how many there can be and how high they can go.
+  const handleDosageMaxApply = useCallback(
     (next: number | null) => {
-      const locked = next !== null;
-      const value = next ?? 0;
-      setOffset(value);
-      setOffsetLocked(locked);
+      setDosageMax(next);
       if (!sessionId) return;
       void (async () => {
         try {
@@ -541,8 +539,8 @@ export function ScatterPlot() {
               // Deliberately NOT the current cuts: passing boundaries here
               // would take the threshold branch and freeze the auto rays.
               boundaries: null,
-              offset: value,
-              offset_locked: locked,
+              offset: 0,
+              dosage_max: next,
             },
             n_clusters: useSettingsStore.getState().nClusters,
             ploidy,
@@ -551,16 +549,17 @@ export function ScatterPlot() {
           });
           const store = useDataStore.getState();
           store.setClusterAssignments(result.assignments);
-          store.setOffset(result.offset ?? value);
+          store.setBoundaries(result.boundaries ?? null);
+          store.setOffset(result.offset ?? 0);
           store.setOffsetUncertain(result.offset_uncertain ?? false);
-          store.setOffsetLocked(result.offset_locked ?? locked);
+          store.setDosageMax(result.dosage_max ?? next);
           window.dispatchEvent(new CustomEvent("welltypes-changed"));
         } catch (error) {
-          console.error("Failed to persist dosage window:", error);
+          console.error("Failed to persist dosage ceiling:", error);
         }
       })();
     },
-    [sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setOffset, setOffsetLocked]
+    [sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setDosageMax]
   );
 
   // Highlight every selected well. Multi-selection is the normal plate-review
@@ -917,13 +916,13 @@ export function ScatterPlot() {
         onNtcCornerChange={setNtcCorner}
         normalizationApplied={normalizationApplied}
         roxOutlierWells={roxOutlierWells}
-        dosageWindow={{
+        dosageCeiling={{
           ploidy,
-          offset,
-          classes: (boundaries?.length ?? ploidy) + 1,
+          applied: dosageMax,
+          observedFrom: offset,
+          observedClasses: (boundaries?.length ?? ploidy) + 1,
           uncertain: offsetUncertain,
-          locked: offsetLocked,
-          onChange: handleDosageWindowChange,
+          onApply: handleDosageMaxApply,
         }}
       />
       {/* Where a fam-fraction of 0.5 sits on THIS plate. Named, because the

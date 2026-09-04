@@ -46,7 +46,7 @@ export function AnalysisTab() {
   const setBoundaries = useDataStore((s) => s.setBoundaries);
   const setOffset = useDataStore((s) => s.setOffset);
   const setOffsetUncertain = useDataStore((s) => s.setOffsetUncertain);
-  const setOffsetLocked = useDataStore((s) => s.setOffsetLocked);
+  const setDosageMax = useDataStore((s) => s.setDosageMax);
   const setLowSeparation = useDataStore((s) => s.setLowSeparation);
   const lowSeparation = useDataStore((s) => s.lowSeparation);
   const ntcThreshold = useSettingsStore((s) => s.ntcThreshold);
@@ -196,7 +196,7 @@ export function AnalysisTab() {
       setBoundaries(result.boundaries ?? null);
       setOffset(result.offset ?? 0);
       setOffsetUncertain(result.offset_uncertain ?? false);
-      setOffsetLocked(result.offset_locked ?? false);
+      setDosageMax(result.dosage_max ?? null);
       setLowSeparation(result.low_separation ?? false);
       setAnalysisWarnings(result.warnings ?? []);
       setAnalysis(suggestion);
@@ -243,7 +243,7 @@ export function AnalysisTab() {
           setBoundaries(existing.boundaries ?? null);
           setOffset(existing.offset ?? 0);
           setOffsetUncertain(existing.offset_uncertain ?? false);
-          setOffsetLocked(existing.offset_locked ?? false);
+          setDosageMax(existing.dosage_max ?? null);
           setLowSeparation(existing.low_separation ?? false);
           setAnalysisWarnings(existing.warnings ?? []);
           if (existing.ploidy) setPloidy(existing.ploidy);

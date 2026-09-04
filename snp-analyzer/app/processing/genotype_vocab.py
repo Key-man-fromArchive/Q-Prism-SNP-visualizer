@@ -77,12 +77,23 @@ def genotyped_types(ploidy: int = DEFAULT_PLOIDY) -> frozenset[str]:
     return frozenset(genotype_labels(ploidy))
 
 
-def default_ratio_cuts(ploidy: int = DEFAULT_PLOIDY) -> list[float]:
+def default_ratio_cuts(
+    ploidy: int = DEFAULT_PLOIDY,
+    dosage_max: int | None = None,
+) -> list[float]:
     """Descending fam-fraction boundaries between adjacent dosages, at the
     midpoints ``(d + 0.5) / P``. Equal-spacing FIRST APPROXIMATION only; the
-    model-based caller (Phase 1+) refines cut positions from the data."""
+    model-based caller (Phase 1+) refines cut positions from the data.
+
+    ``dosage_max`` caps the ladder at the highest dosage the assay can produce
+    (see ``ThresholdConfig.dosage_max``). Note the cuts stay at ``(d+0.5)/P`` --
+    the RATIO scale is set by the organism's ploidy, not by the cap -- so a
+    hexaploid capped at dosage 3 gets three cuts spanning 0..0.583, which is
+    where its data actually lies, instead of six spanning the full axis.
+    """
     validate_ploidy(ploidy)
-    return [(d + 0.5) / ploidy for d in range(ploidy - 1, -1, -1)]
+    top = ploidy if dosage_max is None else max(0, min(dosage_max, ploidy))
+    return [(d + 0.5) / ploidy for d in range(top - 1, -1, -1)]
 
 
 def dosage_by_ratio(

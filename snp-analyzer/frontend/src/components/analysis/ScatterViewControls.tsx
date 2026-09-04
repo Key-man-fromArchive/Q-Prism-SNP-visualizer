@@ -8,7 +8,8 @@
 // per-marker MarkerScatterPlot — render this, so the two plots offer the same
 // controls; the NTC corner arrives by prop because the plate keeps it in the
 // data store while a marker keeps it in its own threshold_config.
-import { AlertTriangle, ChevronLeft, ChevronRight, Crosshair, MousePointer2, RotateCcw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AlertTriangle, Crosshair, MousePointer2, RotateCcw } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSettingsStore, type AxisMode } from "@/stores/settings-store";
 import { normalizationLabel } from "@/lib/channel-labels";
@@ -17,29 +18,31 @@ import type { ChannelLabels } from "@/types/api";
 
 export type ScatterCorner = { fam: number; allele2: number };
 
-/** Which absolute dosages the OBSERVED classes are.
+/** The highest allele dosage this assay can produce, declared by the operator.
  *
  *  A polyploid marker usually resolves only part of its ladder — a hexaploid
- *  assay commonly tops out at dosage 3, so the classes present are 0,1,2,3 out
- *  of 0..6 — and where that part sits is frequently not identifiable from
- *  fluorescence at all: 0,1,2,3 and 3,4,5,6 fit the same four clusters. The
- *  backend says so via `uncertain`; this is where the operator answers.
+ *  assay commonly tops out at dosage 3, so its classes are 0,1,2,3 out of
+ *  0..6 — and that ceiling is a property of the assay, known before any plate
+ *  is read. Declaring it up front constrains the fit (the class count cannot
+ *  exceed dosage_max + 1, and the dosage window cannot run past it) instead of
+ *  leaving the position to be guessed per plate and then corrected.
  *
- *  It deliberately does NOT live behind the boundary-line tool. Before, moving
- *  the window meant dragging a radial line, which froze the auto-generated
- *  rays into a manual override — discarding the fit in order to relabel it. */
-export type DosageWindow = {
+ *  `applied` is the ceiling the backend actually used, `observed*` describe the
+ *  window it ended up reporting, so the control can show what the calls were
+ *  made under rather than what was last typed. Committed on Apply, never on
+ *  every keystroke — a re-cluster per dropdown change is a request storm. */
+export type DosageCeiling = {
   ploidy: number;
-  /** Dosage of the lowest observed class. */
-  offset: number;
-  /** Number of observed classes (K), so the window is offset..offset+K-1. */
-  classes: number;
-  /** The backend could not anchor the position from the data. */
+  /** Ceiling in force, or null when undeclared (the full ladder). */
+  applied: number | null;
+  /** Lowest observed dosage. */
+  observedFrom: number;
+  /** Number of observed classes, so the window is observedFrom..+classes-1. */
+  observedClasses: number;
+  /** The backend could not anchor the window position from the data. */
   uncertain: boolean;
-  /** The current offset is the operator's, not the estimate. */
-  locked: boolean;
-  /** A dosage to anchor the lowest class at, or null to hand it back to auto. */
-  onChange: (offset: number | null) => void;
+  /** Declare a ceiling, or null to hand it back to the full ladder. */
+  onApply: (dosageMax: number | null) => void;
 };
 
 export type ScatterViewControlsProps = {
@@ -60,8 +63,8 @@ export type ScatterViewControlsProps = {
    *  only ever be a no-op, so it says so instead of pretending. */
   hasNormalizationChannel?: boolean;
   /** Absent for a diploid marker, where the three classes ARE the ladder and
-   *  there is no window to place. */
-  dosageWindow?: DosageWindow | null;
+   *  there is nothing to declare. */
+  dosageCeiling?: DosageCeiling | null;
 };
 
 const AXIS_MODES: AxisMode[] = ["zero", "auto", "manual"];
@@ -75,7 +78,7 @@ export function ScatterViewControls({
   normalizationApplied,
   roxOutlierWells = [],
   hasNormalizationChannel = true,
-  dosageWindow = null,
+  dosageCeiling = null,
 }: ScatterViewControlsProps) {
   const { t } = useI18n();
   const axisMode = useSettingsStore((s) => s.axisMode);
@@ -91,6 +94,18 @@ export function ScatterViewControls({
   const yMin = useSettingsStore((s) => s.yMin);
   const yMax = useSettingsStore((s) => s.yMax);
   const setAxisRange = useSettingsStore((s) => s.setAxisRange);
+
+  // The dropdown is a DRAFT until Apply -- the operator asked for an explicit
+  // commit, and re-clustering on every dropdown change would fire a request
+  // per keystroke. Re-seeded whenever the ceiling in force changes (applied
+  // here, applied in the marker form, or a different marker selected).
+  const ceilingInForce = dosageCeiling
+    ? String(dosageCeiling.applied ?? dosageCeiling.ploidy)
+    : "";
+  const [draftCeiling, setDraftCeiling] = useState(ceilingInForce);
+  useEffect(() => {
+    setDraftCeiling(ceilingInForce);
+  }, [ceilingInForce]);
 
   const manual = axisMode === "manual";
   const step = Math.max(Math.abs(dataBounds.xMax) / 100, 0.0001);
@@ -246,66 +261,47 @@ export function ScatterViewControls({
         </div>
       </div>
 
-      {/* Which absolute dosages the observed classes are */}
-      {dosageWindow && dosageWindow.ploidy > 2 && (
-        <div className="flex flex-col gap-1" data-testid="dosage-window">
+      {/* The assay's dosage ceiling, declared rather than inferred */}
+      {dosageCeiling && dosageCeiling.ploidy > 2 && (
+        <div className="flex flex-col gap-1" data-testid="dosage-ceiling">
           <span className="text-xs font-medium text-text-muted">
-            {t.dosageWindowLabel}
-            {dosageWindow.locked && (
-              <span className="ml-1 opacity-70">({t.dosageWindowLocked})</span>
-            )}
+            {t.dosageMaxLabel}
           </span>
           <div className="flex items-center gap-1">
+            <select
+              data-testid="dosage-max-select"
+              value={draftCeiling}
+              onChange={(event) => setDraftCeiling(event.target.value)}
+              className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text"
+            >
+              {/* Dosage 0 would mean the assay can only ever produce one
+                  class, which is not a ceiling anyone sets deliberately. */}
+              {Array.from({ length: dosageCeiling.ploidy }, (_, i) => i + 1).map((d) => (
+                <option key={d} value={String(d)}>
+                  {d}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
-              data-testid="dosage-window-down"
-              aria-label={t.dosageWindowDown}
-              disabled={dosageWindow.offset <= 0}
-              onClick={() => dosageWindow.onChange(dosageWindow.offset - 1)}
-              className="rounded-md border border-border bg-surface px-1.5 py-1 text-text hover:border-primary disabled:opacity-40"
+              data-testid="dosage-max-apply"
+              disabled={draftCeiling === String(dosageCeiling.applied ?? dosageCeiling.ploidy)}
+              onClick={() => dosageCeiling.onApply(Number(draftCeiling))}
+              className="rounded-md border border-primary bg-primary px-2 py-1 text-xs font-semibold text-white disabled:opacity-40"
             >
-              <ChevronLeft size={13} aria-hidden="true" />
-            </button>
-            <span className="inline-flex items-baseline gap-1 rounded-md bg-surface px-2 py-1">
-              <span
-                data-testid="dosage-window-range"
-                className="min-w-[2rem] text-center text-xs font-semibold tabular-nums text-text"
-              >
-                {t.dosageWindowRange(
-                  dosageWindow.offset,
-                  dosageWindow.offset + Math.max(dosageWindow.classes - 1, 0)
-                )}
-              </span>
-              <span
-                data-testid="dosage-window-ploidy"
-                className="text-xs text-text-muted"
-              >
-                {t.dosageWindowOfPloidy(dosageWindow.ploidy)}
-              </span>
-            </span>
-            <button
-              type="button"
-              data-testid="dosage-window-up"
-              aria-label={t.dosageWindowUp}
-              disabled={
-                dosageWindow.offset + Math.max(dosageWindow.classes - 1, 0) >= dosageWindow.ploidy
-              }
-              onClick={() => dosageWindow.onChange(dosageWindow.offset + 1)}
-              className="rounded-md border border-border bg-surface px-1.5 py-1 text-text hover:border-primary disabled:opacity-40"
-            >
-              <ChevronRight size={13} aria-hidden="true" />
+              {t.apply}
             </button>
             <button
               type="button"
-              data-testid="dosage-window-reset"
-              disabled={!dosageWindow.locked}
-              onClick={() => dosageWindow.onChange(null)}
-              title={t.dosageWindowReset}
+              data-testid="dosage-max-reset"
+              disabled={dosageCeiling.applied === null}
+              onClick={() => dosageCeiling.onApply(null)}
+              title={t.dosageMaxReset}
               className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary disabled:opacity-40"
             >
-              <RotateCcw size={12} aria-hidden="true" /> {t.dosageWindowReset}
+              <RotateCcw size={12} aria-hidden="true" /> {t.dosageMaxReset}
             </button>
-            {dosageWindow.uncertain && !dosageWindow.locked && (
+            {dosageCeiling.uncertain && (
               <span
                 data-testid="dosage-window-uncertain"
                 title={t.dosageWindowUncertainHint}
@@ -315,6 +311,18 @@ export function ScatterViewControls({
               </span>
             )}
           </div>
+          {/* What the calls on screen were actually made under, so a stale
+              draft in the dropdown can never be mistaken for the result. */}
+          <span data-testid="dosage-window-observed" className="text-xs text-text-muted">
+            {t.dosageWindowObserved(
+              dosageCeiling.observedFrom,
+              dosageCeiling.observedFrom + Math.max(dosageCeiling.observedClasses - 1, 0)
+            )}
+            {" · "}
+            {dosageCeiling.applied === null
+              ? t.dosageMaxUndeclared(dosageCeiling.ploidy)
+              : t.dosageMaxApplied(dosageCeiling.applied)}
+          </span>
         </div>
       )}
 

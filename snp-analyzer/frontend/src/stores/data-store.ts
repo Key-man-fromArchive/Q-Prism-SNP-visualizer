@@ -25,13 +25,11 @@ interface DataState {
   boundaries: number[] | null; // K-1 internal radial-line positions (descending fam-fraction)
   offset: number;              // dosage of the lowest observed class (window position in 0..ploidy)
   offsetUncertain: boolean;    // true when auto could not anchor the offset
-  /** True when `offset` is the operator's own window anchor rather than the
-   *  estimator's guess. A polyploid marker usually resolves only part of its
-   *  ladder and where that part sits is often not identifiable from
-   *  fluorescence (a hexaploid's four classes fit dosages 0,1,2,3 and 3,4,5,6
-   *  alike), so the correction has to be expressible — and distinguishable
-   *  from the guess, since 0 is itself the most common right answer. */
-  offsetLocked: boolean;
+  /** Highest allele dosage this assay can produce, as declared by the
+   *  operator; null when undeclared. A hexaploid marker commonly tops out at
+   *  dosage 3, and saying so up front constrains the fit rather than
+   *  correcting it afterwards. */
+  dosageMax: number | null;
   lowSeparation: boolean;      // true when adjacent dosage classes overlap (poorly resolved)
   ntcCorner: { fam: number; allele2: number } | null;
   // Actions
@@ -48,7 +46,7 @@ interface DataState {
   setBoundaries: (boundaries: number[] | null) => void;
   setOffset: (offset: number) => void;
   setOffsetUncertain: (v: boolean) => void;
-  setOffsetLocked: (v: boolean) => void;
+  setDosageMax: (v: number | null) => void;
   setLowSeparation: (v: boolean) => void;
   setNtcCorner: (corner: { fam: number; allele2: number } | null) => void;
   clearData: () => void;
@@ -67,7 +65,7 @@ export const useDataStore = create<DataState>((set) => ({
   boundaries: null,
   offset: 0,
   offsetUncertain: false,
-  offsetLocked: false,
+  dosageMax: null,
   lowSeparation: false,
   ntcCorner: null,
 
@@ -97,7 +95,7 @@ export const useDataStore = create<DataState>((set) => ({
   setBoundaries: (boundaries) => set({ boundaries }),
   setOffset: (offset) => set({ offset }),
   setOffsetUncertain: (v) => set({ offsetUncertain: v }),
-  setOffsetLocked: (v) => set({ offsetLocked: v }),
+  setDosageMax: (v) => set({ dosageMax: v }),
   setLowSeparation: (v) => set({ lowSeparation: v }),
   setNtcCorner: (ntcCorner) => set({ ntcCorner }),
   clearData: () =>
@@ -114,7 +112,7 @@ export const useDataStore = create<DataState>((set) => ({
       boundaries: null,
       offset: 0,
       offsetUncertain: false,
-      offsetLocked: false,
+      dosageMax: null,
       lowSeparation: false,
       ntcCorner: null,
     }),
