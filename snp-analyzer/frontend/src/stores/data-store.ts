@@ -13,6 +13,13 @@ interface DataState {
    *  Supplied by the backend alongside the (raw) points, so the plot labels
    *  wells by exactly the geometry the backend clustered against. */
   ratioOrigin: RatioOrigin;
+  /** Whether the loaded points really were divided by the passive reference.
+   *  Read off the response, never off the `useRox` toggle — a run with no
+   *  reference comes back raw either way, and the axes must say so. */
+  normalizationApplied: boolean;
+  /** Wells whose passive reference is too far from the plate median to trust;
+   *  excluded from the ratio-origin estimate by the backend. */
+  roxOutlierWells: string[];
   clusterAssignments: Record<string, string>;
   wellTypeAssignments: Record<string, string>;
   boundaries: number[] | null; // K-1 internal radial-line positions (descending fam-fraction)
@@ -25,7 +32,8 @@ interface DataState {
     points: ScatterPoint[],
     allele2Dye: string,
     channelLabels?: ChannelLabels | null,
-    ratioOrigin?: RatioOrigin | null
+    ratioOrigin?: RatioOrigin | null,
+    normalization?: { applied?: boolean; roxOutlierWells?: string[] }
   ) => void;
   setPlateData: (wells: PlateWell[]) => void;
   setClusterAssignments: (assignments: Record<string, string>) => void;
@@ -44,6 +52,8 @@ export const useDataStore = create<DataState>((set) => ({
   allele2Dye: '',
   channelLabels: null,
   ratioOrigin: ZERO_ORIGIN,
+  normalizationApplied: false,
+  roxOutlierWells: [],
   clusterAssignments: {},
   wellTypeAssignments: {},
   boundaries: null,
@@ -52,12 +62,14 @@ export const useDataStore = create<DataState>((set) => ({
   lowSeparation: false,
   ntcCorner: null,
 
-  setScatterData: (points, allele2Dye, channelLabels, ratioOrigin) =>
+  setScatterData: (points, allele2Dye, channelLabels, ratioOrigin, normalization) =>
     set({
       scatterPoints: points,
       allele2Dye,
       channelLabels: channelLabels ?? null,
       ratioOrigin: ratioOrigin ?? ZERO_ORIGIN,
+      normalizationApplied: normalization?.applied ?? false,
+      roxOutlierWells: normalization?.roxOutlierWells ?? [],
     }),
   setPlateData: (wells) => set({ plateWells: wells }),
   setClusterAssignments: (assignments) =>
@@ -85,6 +97,8 @@ export const useDataStore = create<DataState>((set) => ({
       allele2Dye: '',
       channelLabels: null,
       ratioOrigin: ZERO_ORIGIN,
+      normalizationApplied: false,
+      roxOutlierWells: [],
       clusterAssignments: {},
       wellTypeAssignments: {},
       boundaries: null,

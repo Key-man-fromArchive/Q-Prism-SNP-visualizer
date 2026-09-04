@@ -674,6 +674,33 @@ const ko: Translations = {
     '이 어세이는 카탈로그에 연결되어 있지 않거나, 연결된 카탈로그 항목이 독립 근거로 검증되지 않았거나 상대증폭 검증이 완료되지 않았습니다. 절대 dosage 판정은 잠정값입니다.',
   wsAnalysisDosageTrustValidatedHint:
     '이 어세이는 독립 근거로 검증되고 증폭/비율 매핑까지 확인된 카탈로그 항목에 연결되어 있습니다.',
+
+  // 산점도 뷰 컨트롤 (축 범위 / 드래그 도구 / NTC 사분면 / 정규화)
+  scatterToolLabel: '드래그 동작',
+  scatterToolSelect: '웰 선택',
+  scatterToolEdit: '임계값 편집',
+  axisRangeLabel: '축 범위',
+  axisModeZero: '0부터',
+  axisModeAuto: '데이터에 맞춤',
+  axisModeManual: '직접 지정',
+  axisFitToData: '데이터에 맞추기',
+  axisLockAspect: 'x/y 배율 동일',
+  ntcQuadrantLabel: 'NTC 사분면',
+  ntcQuadrantInferred: '자동',
+  ntcQuadrantReset: '자동',
+  normalizeByReference: '기준 채널로 나누기',
+  normalizationOn: (channel: string) => `${channel} 기준으로 정규화됨`,
+  normalizationOffRaw: '원시 RFU',
+  roxOutlierWells: (n: number) => `기준 채널 이상 웰 ${n}개`,
+  ratioOriginSourceNtc: '비율 원점: 플레이트의 NTC 웰',
+  ratioOriginSourcePlateFloor: '비율 원점: 추정된 플레이트 바닥값 (NTC 웰 미지정)',
+  ratioOriginSourcePlateMin: '비율 원점: 플레이트 최솟값 (바닥값 추정에 필요한 웰 수 부족)',
+  ratioOriginSourceZero: '비율 원점: (0, 0)',
+  analysisWarningRelativeNtc:
+    '저신호 웰을 NTC가 아니라 Undetermined로 두었습니다. 샘플과의 분리 폭이 충분하지 않거나(또는 플레이트의 너무 많은 부분을 차지해) 무주형 대조군으로 볼 근거가 없습니다. 실제 NTC 웰을 지정하면 비율 원점이 바로잡힙니다.',
+  analysisWarningLowN: '클러스터를 적합할 웰이 부족합니다 — 판정은 잠정적입니다.',
+  analysisWarningAnchorConflict: '대조군 웰이 적합된 dosage 사다리와 어긋납니다.',
+  analysisWarningsTitle: '분석 경고',
 };
 
 export default ko;

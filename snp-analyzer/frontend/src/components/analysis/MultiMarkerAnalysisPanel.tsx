@@ -20,6 +20,7 @@ import type { MarkerCatalogEntry, MarkerRegion, RegionResult } from "@/types/api
 import { genotypeShortLabel, wellInfo } from "@/lib/genotype";
 import { MARKER_PALETTE } from "@/lib/constants";
 import { dosageTrustForMarker } from "@/lib/marker-catalog";
+import { analysisWarningTexts } from "@/lib/analysis-warnings";
 import { MarkerScatterPlot } from "./MarkerScatterPlot";
 import { CycleControl } from "./CycleControl";
 import { PlateView } from "./PlateView";
@@ -133,7 +134,10 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
         res.points,
         res.allele2_dye,
         res.channel_labels,
-        res.ratio_origin ?? ZERO_ORIGIN
+        res.ratio_origin ?? ZERO_ORIGIN,
+        // Whether the reporters really were divided by the passive reference.
+        // The plot titles its axes off this, not off the `use_rox` request.
+        { applied: res.normalization_applied, roxOutlierWells: res.rox_outlier_wells }
       );
     } catch (err) {
       console.error("Failed to fetch scatter data:", err);
@@ -426,7 +430,8 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                   className="mt-2 px-3 py-2 rounded-md text-xs text-warning"
                   style={{ background: "rgba(217,119,6,0.12)" }}
                 >
-                  <b>{t.wsAnalysisWarningsTitle}:</b> {selectedRegion.warnings.join(", ")}
+                  <b>{t.wsAnalysisWarningsTitle}:</b>{" "}
+                  {analysisWarningTexts(selectedRegion.warnings, t).join(" ")}
                 </div>
               )}
             </div>

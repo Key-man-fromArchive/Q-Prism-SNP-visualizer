@@ -12,9 +12,12 @@ import Plotly from "plotly.js-dist-min";
 import { dosageOfLabel, defaultRatioCuts, wellInfo } from "@/lib/genotype";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { channelLabels } from "@/lib/channel-labels";
+import { axisRangeLayout, dataBounds, visibleBounds } from "@/lib/scatter-axes";
 import { updateMarker } from "@/lib/api";
-import { ZERO_ORIGIN } from "@/stores/data-store";
+import { useDataStore, ZERO_ORIGIN } from "@/stores/data-store";
 import { useSelectionStore } from "@/stores/selection-store";
+import { useSettingsStore } from "@/stores/settings-store";
+import { ScatterViewControls } from "./ScatterViewControls";
 import type {
   ChannelLabels,
   MarkerRegion,
@@ -69,17 +72,31 @@ export function MarkerScatterPlot({
   const focusSelectedWells = useSelectionStore((s) => s.focusSelectedWells);
   const selectWell = useSelectionStore((s) => s.selectWell);
   const selectWells = useSelectionStore((s) => s.selectWells);
+  const addWells = useSelectionStore((s) => s.addWells);
+  const toggleWell = useSelectionStore((s) => s.toggleWell);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
   const selectedWellSet = useMemo(() => new Set(selectedWells), [selectedWells]);
+  const focusActive = focusSelectedWells && selectedWells.length > 0;
+  const axisMode = useSettingsStore((s) => s.axisMode);
+  const lockAspect = useSettingsStore((s) => s.lockAspect);
+  const xMin = useSettingsStore((s) => s.xMin);
+  const xMax = useSettingsStore((s) => s.xMax);
+  const yMin = useSettingsStore((s) => s.yMin);
+  const yMax = useSettingsStore((s) => s.yMax);
+  // A drag either selects wells or moves a threshold; both at once made the
+  // plot unselectable wherever a threshold happened to lie. See ScatterTool.
+  const editing = useSettingsStore((s) => s.scatterTool) === "edit";
+  const normalizationApplied = useDataStore((s) => s.normalizationApplied);
+  const roxOutlierWells = useDataStore((s) => s.roxOutlierWells);
 
   const ploidy = marker.ploidy;
   const wellSet = useMemo(() => new Set(marker.wells), [marker.wells]);
   const scopedPoints = useMemo(() => {
     const markerPoints = points.filter((p) => wellSet.has(p.well));
-    return focusSelectedWells
+    return focusActive
       ? markerPoints.filter((p) => selectedWellSet.has(p.well))
       : markerPoints;
-  }, [points, wellSet, focusSelectedWells, selectedWellSet]);
+  }, [points, wellSet, focusActive, selectedWellSet]);
   const assignmentFor = useCallback(
     (well: string): string | null => region?.assignments?.[well] ?? null,
     [region]
@@ -112,6 +129,8 @@ export function MarkerScatterPlot({
     if (savedX != null && savedY != null) return { x: savedX, y: savedY };
 
     const markerPoints = points.filter((p) => wellSet.has(p.well));
+    // Only wells whose CURRENT call is NTC anchor the quadrant, so relabelling
+    // a well away from NTC moves the corner instead of stranding it.
     const ntcPoints = markerPoints.filter((p) => assignmentFor(p.well) === "NTC");
     const maxX = Math.max(1, ...markerPoints.map((p) => p.norm_fam));
     const maxY = Math.max(1, ...markerPoints.map((p) => p.norm_allele2));
@@ -157,6 +176,63 @@ export function MarkerScatterPlot({
   useEffect(() => {
     ntcRef.current = effectiveNtc;
   }, [effectiveNtc]);
+
+  // Plotly's selection event carries no modifier state, so it is read off the
+  // mousedown that started the drag.
+  const additiveRef = useRef(false);
+  useEffect(() => {
+    const gd = plotRef.current;
+    if (!gd) return;
+    const onDown = (event: MouseEvent) => {
+      additiveRef.current = event.ctrlKey || event.metaKey || event.shiftKey;
+    };
+    gd.addEventListener("mousedown", onDown);
+    return () => gd.removeEventListener("mousedown", onDown);
+  }, []);
+
+  // Writing the marker's thresholds back. Hoisted out of the drag effect
+  // because the numeric NTC inputs below commit exactly the same way a drag
+  // does -- the corner must not be reachable only by dragging a marker that
+  // sits inside the data cloud.
+  const persistThresholds = useCallback(
+    async (ntcOnly: boolean) => {
+      try {
+        const ntc = ntcRef.current;
+        const current = marker.threshold_config;
+        await updateMarker(sessionId, marker.id, {
+          threshold_config: {
+            ntc_threshold: current?.ntc_threshold ?? 0.1,
+            ntc_fam_max: ntc.enabled ? ntc.corner.x : null,
+            ntc_allele2_max: ntc.enabled ? ntc.corner.y : null,
+            allele1_ratio_max: current?.allele1_ratio_max ?? 0.4,
+            allele2_ratio_min: current?.allele2_ratio_min ?? 0.6,
+            // Moving only the NTC corner must not accidentally freeze the
+            // current AUTO-generated genotype rays into a strict manual
+            // boundary override. Preserve manual cuts only if they already
+            // existed; a radial-line drag remains the action that enables them.
+            boundaries: ntcOnly ? current?.boundaries ?? null : editRef.current,
+            offset: offsetRef.current,
+          },
+        });
+        await onBoundariesPersisted();
+      } catch (err) {
+        console.error("Failed to persist marker boundaries:", err);
+      }
+    },
+    [sessionId, marker.id, marker.threshold_config, onBoundariesPersisted]
+  );
+
+  const handleNtcCornerChange = useCallback(
+    (corner: { fam: number; allele2: number } | null) => {
+      const next = corner
+        ? { key: ntcKey, corner: { x: corner.fam, y: corner.allele2 }, enabled: true }
+        : { key: ntcKey, corner: ntcSeed, enabled: false };
+      ntcRef.current = next;
+      setNtcEdit(next);
+      void persistThresholds(true);
+    },
+    [ntcKey, ntcSeed, persistThresholds]
+  );
 
   useEffect(() => {
     if (!plotRef.current) return;
@@ -254,21 +330,23 @@ export function MarkerScatterPlot({
         layer: "above",
       };
     });
-    const axisMaxX = Math.max(
-      effectiveNtc.corner.x * 1.1,
-      ...scopedPoints.map((p) => p.norm_fam * 1.05),
-      1
-    );
-    const axisMaxY = Math.max(
-      effectiveNtc.corner.y * 1.1,
-      ...scopedPoints.map((p) => p.norm_allele2 * 1.05),
-      1
+    // Drawn from the VISIBLE lower-left corner rather than (0, 0): on raw
+    // endpoint RFU the numeric origin is off-canvas under a tight autorange,
+    // which left most of the quadrant invisible and its draggable corner
+    // marker sitting unexplained in the middle of the data.
+    const bounds = visibleBounds(
+      axisMode,
+      dataBounds(
+        scopedPoints.map((p) => ({ fam: p.norm_fam, allele2: p.norm_allele2 })),
+        { fam: effectiveNtc.corner.x, allele2: effectiveNtc.corner.y }
+      ),
+      { xMin, xMax, yMin, yMax }
     );
     shapes.push(
       {
         type: "rect",
-        x0: 0,
-        y0: 0,
+        x0: bounds.xMin,
+        y0: bounds.yMin,
         x1: effectiveNtc.corner.x,
         y1: effectiveNtc.corner.y,
         fillcolor: "rgba(245, 158, 11, 0.13)",
@@ -278,41 +356,47 @@ export function MarkerScatterPlot({
       {
         type: "line",
         x0: effectiveNtc.corner.x,
-        y0: 0,
+        y0: bounds.yMin,
         x1: effectiveNtc.corner.x,
-        y1: axisMaxY,
+        y1: bounds.yMax,
         line: { color: "#f59e0b", width: 1, dash: "dash" },
       },
       {
         type: "line",
-        x0: 0,
+        x0: bounds.xMin,
         y0: effectiveNtc.corner.y,
-        x1: axisMaxX,
+        x1: bounds.xMax,
         y1: effectiveNtc.corner.y,
         line: { color: "#f59e0b", width: 1, dash: "dash" },
       }
     );
 
     const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
+    const suffix = normalizationApplied && labels.normalization ? ` / ${labels.normalization}` : "";
+    const axes = axisRangeLayout(axisMode, lockAspect, bounds);
     const layout: Record<string, unknown> = {
       xaxis: {
-        title: { text: labels.fam, font: { size: 12, color: colors.fontColor } },
+        title: { text: `${labels.fam}${suffix}`, font: { size: 12, color: colors.fontColor } },
         gridcolor: colors.gridColor,
         zerolinecolor: colors.lineColor,
-        autorange: true,
+        ...axes.xaxis,
       },
       yaxis: {
-        title: { text: labels.allele2, font: { size: 12, color: colors.fontColor } },
+        title: { text: `${labels.allele2}${suffix}`, font: { size: 12, color: colors.fontColor } },
         gridcolor: colors.gridColor,
         zerolinecolor: colors.lineColor,
-        autorange: true,
+        ...axes.yaxis,
       },
       paper_bgcolor: colors.paper_bgcolor,
       plot_bgcolor: colors.plot_bgcolor,
       font: { color: colors.fontColor },
       hovermode: "closest",
-      dragmode: "select",
-      uirevision: `marker-${marker.id}`,
+      dragmode: editing ? "zoom" : "select",
+      // The axis mode is part of what the plot IS, so it must survive the
+      // uirevision that otherwise preserves the user's pan/zoom across
+      // re-renders -- without it, switching mode would leave the old range in
+      // place until the marker changed.
+      uirevision: `marker-${marker.id}-${axisMode}-${lockAspect ? "aspect" : "free"}`,
       shapes,
       margin: { t: 10, r: 10, b: 46, l: 56 },
       legend: { orientation: "h", y: -0.2 },
@@ -321,26 +405,47 @@ export function MarkerScatterPlot({
     const config = {
       responsive: true,
       displayModeBar: true,
-      modeBarButtonsToRemove: ["toImage", "sendDataToCloud", "zoom2d", "pan2d"],
+      // zoom2d/pan2d stay: picking one well out of a dense cluster needs a
+      // zoom first, whichever tool a drag is bound to.
+      modeBarButtonsToRemove: ["toImage", "sendDataToCloud"],
     };
 
     if (!initialized.current) {
       Plotly.newPlot(plotRef.current, traces, layout, config).then(() => {
         initialized.current = true;
         const gd = plotRef.current as PlotlyGraphDiv & {
-          on?: (name: string, handler: (data?: { points?: Array<{ customdata?: string }> }) => void) => void;
+          on?: (
+            name: string,
+            handler: (data?: {
+              points?: Array<{ customdata?: string }>;
+              // Plotly hands the originating DOM event to click handlers; the
+              // selection modifiers are read from it.
+              event?: MouseEvent;
+            }) => void
+          ) => void;
         };
         if (!gd || !gd.on || eventsBound.current) return;
         eventsBound.current = true;
+        // ctrl/meta toggles, shift unions, plain replaces -- the same
+        // modifiers PlateView already honors. One box at a time cannot express
+        // a scattered set of wells, so a new box used to erase the last one.
         gd.on("plotly_click", (data) => {
           const well = data?.points?.[0]?.customdata;
-          if (well) selectWell(well, "scatter");
+          if (!well) return;
+          const event = data.event;
+          if (event?.ctrlKey || event?.metaKey) toggleWell(well);
+          else if (event?.shiftKey) addWells([well]);
+          else selectWell(well, "scatter");
         });
         gd.on("plotly_selected", (data) => {
           const wells = data?.points?.map((p) => p.customdata).filter((w): w is string => !!w) ?? [];
-          if (wells.length > 0) selectWells(wells);
+          if (wells.length === 0) return;
+          if (additiveRef.current) addWells(wells);
+          else selectWells(wells);
         });
-        gd.on("plotly_deselect", () => clearSelection());
+        gd.on("plotly_deselect", () => {
+          if (!additiveRef.current) clearSelection();
+        });
       });
     } else {
       Plotly.react(plotRef.current, traces, layout, config);
@@ -358,7 +463,17 @@ export function MarkerScatterPlot({
     effectiveNtc,
     selectWell,
     selectWells,
+    addWells,
+    toggleWell,
     clearSelection,
+    axisMode,
+    lockAspect,
+    editing,
+    normalizationApplied,
+    xMin,
+    xMax,
+    yMin,
+    yMax,
   ]);
 
   // Drag a radial boundary line; persists to the marker's threshold_config on
@@ -367,7 +482,9 @@ export function MarkerScatterPlot({
   // the backend treats a marker's threshold_config.boundaries as authoritative).
   useEffect(() => {
     const gd = plotRef.current as PlotlyGraphDiv | null;
-    if (!gd) return;
+    // Select mode installs nothing, so Plotly sees every mousedown and a
+    // selection box can start anywhere on the canvas.
+    if (!gd || !editing) return;
 
     const clientToData = (clientX: number, clientY: number): { x: number; y: number } | null => {
       const fl = gd._fullLayout;
@@ -393,31 +510,6 @@ export function MarkerScatterPlot({
       const total = fx + fy;
       if (total <= 0) return null;
       return Math.max(0, Math.min(1, fx / total));
-    };
-
-    const persist = async (ntcOnly: boolean) => {
-      try {
-        const ntc = ntcRef.current;
-        const current = marker.threshold_config;
-        await updateMarker(sessionId, marker.id, {
-          threshold_config: {
-            ntc_threshold: current?.ntc_threshold ?? 0.1,
-            ntc_fam_max: ntc.enabled ? ntc.corner.x : null,
-            ntc_allele2_max: ntc.enabled ? ntc.corner.y : null,
-            allele1_ratio_max: current?.allele1_ratio_max ?? 0.4,
-            allele2_ratio_min: current?.allele2_ratio_min ?? 0.6,
-            // Moving only the NTC corner must not accidentally freeze the
-            // current AUTO-generated genotype rays into a strict manual
-            // boundary override. Preserve manual cuts only if they already
-            // existed; a radial-line drag remains the action that enables them.
-            boundaries: ntcOnly ? current?.boundaries ?? null : editRef.current,
-            offset: offsetRef.current,
-          },
-        });
-        await onBoundariesPersisted();
-      } catch (err) {
-        console.error("Failed to persist marker boundaries:", err);
-      }
     };
 
     const NEAR = 0.04;
@@ -502,7 +594,7 @@ export function MarkerScatterPlot({
       dragNtcRef.current = false;
       dragIndexRef.current = null;
       if (ntcOnly) setNtcEdit(ntcRef.current);
-      void persist(ntcOnly);
+      void persistThresholds(ntcOnly);
     };
 
     gd.addEventListener("mousedown", onDown, true);
@@ -513,7 +605,7 @@ export function MarkerScatterPlot({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [sessionId, marker.id, marker.threshold_config, boundaryKey, ntcKey, onBoundariesPersisted]);
+  }, [editing, boundaryKey, ntcKey, persistThresholds]);
 
   useEffect(() => {
     const plot = plotRef.current;
@@ -526,12 +618,32 @@ export function MarkerScatterPlot({
     };
   }, []);
 
+  const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
+
   return (
-    <div
-      data-testid="marker-scatter"
-      data-visible-wells={scopedPoints.length}
-      ref={plotRef}
-      style={{ width: "100%", height: "440px" }}
-    />
+    <div>
+      <ScatterViewControls
+        dataBounds={dataBounds(
+          scopedPoints.map((p) => ({ fam: p.norm_fam, allele2: p.norm_allele2 })),
+          { fam: effectiveNtc.corner.x, allele2: effectiveNtc.corner.y }
+        )}
+        labels={labels}
+        ntcCorner={
+          effectiveNtc.enabled
+            ? { fam: effectiveNtc.corner.x, allele2: effectiveNtc.corner.y }
+            : null
+        }
+        effectiveNtcCorner={{ fam: effectiveNtc.corner.x, allele2: effectiveNtc.corner.y }}
+        onNtcCornerChange={handleNtcCornerChange}
+        normalizationApplied={normalizationApplied}
+        roxOutlierWells={roxOutlierWells}
+      />
+      <div
+        data-testid="marker-scatter"
+        data-visible-wells={scopedPoints.length}
+        ref={plotRef}
+        style={{ width: "100%", height: "440px" }}
+      />
+    </div>
   );
 }

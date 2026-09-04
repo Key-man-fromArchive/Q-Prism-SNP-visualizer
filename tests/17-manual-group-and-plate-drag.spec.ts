@@ -15,6 +15,12 @@ test('dragging from plate whitespace selects visible wells and assigns Group 1',
 
   const panel = page.locator('.plate-panel');
   const grid = page.locator('#plate-grid');
+  // Let the initial analysis land before measuring anything: it can add an
+  // analysis-warning callout above the grid, and every coordinate below is
+  // read from getBoundingClientRect, so a later reflow invalidates them.
+  await expect(grid).toBeVisible();
+  await page.waitForTimeout(1200);
+  await grid.scrollIntoViewIfNeeded();
   const panelBox = await panel.boundingBox();
   const a1Box = await page.locator('.plate-well[data-well="A1"]').boundingBox();
   const b3Box = await page.locator('.plate-well[data-well="B3"]').boundingBox();
@@ -52,7 +58,21 @@ test('dragging from plate whitespace selects visible wells and assigns Group 1',
   expect(savedPayload.name).toBe('Group 1');
   expect(savedPayload.wells.length).toBeGreaterThan(1);
 
+  // Moving the NTC corner is now an explicit mode. A drag used to mean BOTH
+  // "select wells" and "move the nearest threshold" at once, and the threshold
+  // handler won -- it swallowed any mousedown within 18px of this corner
+  // marker before Plotly saw it, and that marker sits inside the data cloud on
+  // a raw endpoint plate. Selecting had to be the default; editing asks.
   const scatter = page.locator('#scatter-plot');
+  await page.getByTestId('scatter-tool-edit').click();
+  // The corner's screen position is read from getBoundingClientRect below, so
+  // the plot has to actually be in the viewport -- the axis/threshold controls
+  // above it push it past the fold on a 720px-tall window.
+  await scatter.scrollIntoViewIfNeeded();
+  // Switching the drag tool re-renders the plot, and the corner is inferred
+  // from the current calls -- so let both settle before reading a position we
+  // are about to press the mouse down on.
+  await page.waitForTimeout(800);
   const ntcCorner = await scatter.evaluate((node) => {
     const gd = node as HTMLDivElement & {
       data?: Array<{ name?: string; x?: number[]; y?: number[] }>;
@@ -121,6 +141,11 @@ test('dragging the NTC corner saves a two-channel threshold without freezing gen
 
   const plot = page.getByTestId('marker-scatter');
   await expect(plot).toBeVisible();
+  // See the note in the first test: threshold edits are a mode now, so that a
+  // selection box can be started anywhere on the canvas.
+  await page.getByTestId('scatter-tool-edit').click();
+  await plot.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(800);
   const corner = await plot.evaluate((node) => {
     const gd = node as HTMLDivElement & {
       data?: Array<{ name?: string; x?: number[]; y?: number[] }>;

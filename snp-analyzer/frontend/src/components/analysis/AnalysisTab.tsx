@@ -24,6 +24,8 @@ import { AmplificationOverlay } from "./AmplificationOverlay";
 import { WellTypePopup } from "./WellTypePopup";
 import { GroupManager } from "./GroupManager";
 import { WellSelectionToolbar } from "./WellSelectionToolbar";
+import { Callout } from "@/components/shared/ui";
+import { analysisWarningTexts } from "@/lib/analysis-warnings";
 
 export function AnalysisTab() {
   const { t } = useI18n();
@@ -61,6 +63,10 @@ export function AnalysisTab() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<CycleSuggestion | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  // Diagnostics the run reported about itself. The whole-plate view previously
+  // dropped these on the floor, so a plate whose low-signal wells were
+  // deliberately left uncalled looked identical to a clean one.
+  const [analysisWarnings, setAnalysisWarnings] = useState<string[]>([]);
   const autoRanSession = useRef<string | null>(null);
 
   const stageLabel = (w: string) =>
@@ -193,6 +199,7 @@ export function AnalysisTab() {
       setOffset(result.offset ?? 0);
       setOffsetUncertain(result.offset_uncertain ?? false);
       setLowSeparation(result.low_separation ?? false);
+      setAnalysisWarnings(result.warnings ?? []);
       setAnalysis(suggestion);
       // Force scatter/plate to re-fetch so points pick up auto_cluster calls.
       window.dispatchEvent(new CustomEvent("welltypes-changed"));
@@ -273,6 +280,7 @@ export function AnalysisTab() {
           setOffset(existing.offset ?? 0);
           setOffsetUncertain(existing.offset_uncertain ?? false);
           setLowSeparation(existing.low_separation ?? false);
+          setAnalysisWarnings(existing.warnings ?? []);
           if (existing.ploidy) setPloidy(existing.ploidy);
           return;
         }
@@ -469,6 +477,21 @@ export function AnalysisTab() {
             </label>
           )}
         </div>
+      )}
+
+      {analysisWarnings.length > 0 && (
+        <Callout
+          tone="warning"
+          className="mx-4 mt-4 sm:mx-6"
+          data-testid="analysis-warnings"
+        >
+          <b>{t.analysisWarningsTitle}:</b>
+          <ul className="mt-1 list-disc pl-4">
+            {analysisWarningTexts(analysisWarnings, t).map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+        </Callout>
       )}
 
       <div className="px-4 pt-4 sm:px-6">

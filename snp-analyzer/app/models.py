@@ -42,9 +42,12 @@ class RatioOrigin(BaseModel):
 
     ``source`` says where it came from, so a view can state it rather than
     implying an authority the number does not have:
-      - ``ntc``       — median of the plate's no-template wells (preferred)
-      - ``plate_min`` — per-channel plate-wide minimum (no NTC well known)
-      - ``zero``      — no points at all; ratios measured from (0, 0)
+      - ``ntc``         — median of the plate's no-template wells (preferred)
+      - ``plate_floor`` — per-channel low quantile of the plate, over wells
+                          with a sane passive reference (no NTC well known)
+      - ``plate_min``   — per-channel plate-wide minimum; only for a plate too
+                          small for a quantile to mean anything
+      - ``zero``        — no points at all; ratios measured from (0, 0)
     """
     fam: float = 0.0
     allele2: float = 0.0

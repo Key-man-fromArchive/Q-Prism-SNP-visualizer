@@ -9,9 +9,9 @@ from app.models import UnifiedData
 from app.processing.background import BackgroundMode
 from app.processing.genotype_vocab import label_by_ratio
 from app.processing.normalize import normalize_for_cycle
-from app.processing.ratio_origin import compute_ratio_origin, shift_points_to_origin
+from app.processing.ratio_origin import shift_points_to_origin
 from app.routers.upload import sessions
-from app.routers.clustering import cluster_store, welltype_store, ntc_wells_for
+from app.routers.clustering import cluster_store, welltype_store, ratio_origin_for
 from app.auth import CurrentUser, check_session_access
 
 router = APIRouter()
@@ -245,7 +245,7 @@ async def qc_metrics(
     # contamination and reads as perfectly clean. The signal-level control
     # checks below therefore stay on ``points``.
     called = shift_points_to_origin(
-        points, compute_ratio_origin(points, ntc_wells_for(sid, unified))
+        points, ratio_origin_for(sid, unified, points)
     )
 
     cluster_assignments: dict[str, str] = {}

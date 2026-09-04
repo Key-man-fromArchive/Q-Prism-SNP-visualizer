@@ -203,7 +203,10 @@ export type BackgroundMode = 'none' | 'pre_read' | 'channel_min';
 export type RatioOrigin = {
   fam: number;
   allele2: number;
-  source: 'ntc' | 'plate_min' | 'zero';
+  /** `plate_floor` is a low quantile over wells with a sane passive reference
+   *  — the fallback when no NTC well is known. `plate_min` is the same idea on
+   *  a well set too small for a quantile to mean anything. */
+  source: 'ntc' | 'plate_floor' | 'plate_min' | 'zero';
 };
 
 export type ScatterPoint = {
@@ -542,6 +545,13 @@ export type ScatterResponse = RoleLabelMetadata & {
   /** Points are raw; this is the origin their ratios are measured from. */
   ratio_origin?: RatioOrigin;
   background_mode?: BackgroundMode;
+  /** Whether the values really were divided by the passive reference. NOT the
+   *  same as the `use_rox` request: a run with no reference comes back raw
+   *  either way, and an axis titled "FAM / ROX" over raw RFU is misleading. */
+  normalization_applied?: boolean;
+  /** Wells whose passive reference is too far from the plate median to divide
+   *  by; excluded from the ratio-origin estimate. */
+  rox_outlier_wells?: string[];
   points: ScatterPoint[];
 };
 
@@ -550,6 +560,8 @@ export type PlateResponse = RoleLabelMetadata & {
   allele2_dye: string;
   ratio_origin?: RatioOrigin;
   background_mode?: BackgroundMode;
+  normalization_applied?: boolean;
+  rox_outlier_wells?: string[];
   wells: PlateWell[];
 };
 

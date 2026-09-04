@@ -111,3 +111,56 @@ def test_legacy_list_signature_still_uses_rox_when_enabled():
 
     assert points[0].norm_fam == pytest.approx(4.0)
     assert points[0].norm_allele2 == pytest.approx(2.0)
+
+
+# ---------------------------------------------------------------------------
+# Reporting the decision, not the request
+# ---------------------------------------------------------------------------
+
+def test_normalization_applies_reports_the_decision_not_the_request():
+    """Asking for normalization is not getting it. Views labelled their axes
+    "FAM / ROX" straight off the request flag, so a run with no passive
+    reference showed raw RFU under a normalized axis title."""
+    from app.processing.normalize import normalization_applies
+
+    readings = [
+        WellCycleData(well="A1", cycle=1, fam=120.0, allele2=96.0, rox=60.0),
+        WellCycleData(well="A2", cycle=1, fam=100.0, allele2=90.0, rox=60.0),
+    ]
+
+    with_reference = UnifiedData(
+        instrument="CFX Opus (raw)", allele2_dye="HEX", wells=["A1", "A2"],
+        cycles=[1], data=readings, has_rox=True,
+    )
+    assert normalization_applies(with_reference, use_rox=True) is True
+    assert normalization_applies(with_reference, use_rox=False) is False
+
+    without_reference = with_reference.model_copy(update={"has_rox": False})
+    assert normalization_applies(without_reference, use_rox=True) is False
+
+    explicitly_raw = with_reference.model_copy(update={"normalization_mode": "none"})
+    assert normalization_applies(explicitly_raw, use_rox=True) is False
+
+
+def test_scatter_reports_normalization_state_and_reference_outliers():
+    """The scatter payload has to carry both, because the client cannot derive
+    either one from the points."""
+    from app.processing.normalize import normalization_applies
+    from app.processing.ratio_origin import rox_outlier_wells
+
+    readings = []
+    for i in range(12):
+        readings.append(
+            WellCycleData(
+                well=f"A{i + 1}", cycle=1, fam=9000.0 + i * 50, allele2=2500.0,
+                rox=8000.0 if i == 3 else 4263.0,
+            )
+        )
+    unified = UnifiedData(
+        instrument="CFX Opus (raw)", allele2_dye="HEX",
+        wells=[r.well for r in readings], cycles=[1], data=readings, has_rox=True,
+    )
+
+    points = normalize_for_cycle(unified, 1, use_rox=True)
+    assert normalization_applies(unified, use_rox=True) is True
+    assert rox_outlier_wells(points) == {"A4"}

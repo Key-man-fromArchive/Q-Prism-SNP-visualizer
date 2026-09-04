@@ -56,12 +56,36 @@ _SMALL_REGION_CONFIDENCE = _CALL_MIN_POSTERIOR
 # Phase 1 diagnostics (C4): the relative-NTC detector (_NTC_SIGNAL_FRAC below)
 # is a signal-level cutoff, not a test of whether that low-signal group is
 # actually separated from the real samples by a wide margin. This is the
-# minimum gap -- median plate signal vs. the auto-flagged NTC wells' own
-# signal -- that counts as a genuine "no-template" gap (one order of
-# magnitude). Below this, the wells are still labeled NTC (never invent a new
-# label -- see module docstring in tests/test_c4_relative_ntc.py) but flagged
-# with the "relative_ntc" warning and a confidence < 1.0.
+# minimum gap -- median plate signal vs. the flagged wells' own signal -- that
+# counts as a genuine "no-template" gap (one order of magnitude).
+#
+# What happens below that gap changed after a real plate
+# (``1-2_admin_2026-09-03 16-14-11_783BR20183.pcrd``) came through: 25 of 96
+# wells were auto-labelled NTC at a gap of 5.3, and the operator relabelled
+# every one of them Undetermined by hand. C4 originally kept the "NTC" label
+# there and only lowered the confidence, on the reasoning that a detector
+# should never invent a label. But "NTC" is not a signal level -- it is a claim
+# about what was pipetted into the well, which a signal-level cutoff has no
+# access to. What such a cutoff can conclude is "no signal", and for a sample
+# well with no signal the label already in the vocabulary is UNDETERMINED (a
+# no-call). So below the clear gap the wells are called Undetermined, not NTC:
+# no label is invented, and no plate-setup claim is fabricated either. A well
+# the operator or the instrument DECLARED as NTC never reaches this code --
+# ``control_wells`` is honored verbatim before the cutoff runs.
 _NTC_CLEAR_GAP = 10.0
+
+# ... and even at a clear gap, a plate where this much of the well complement
+# reads as no-signal is a plate that mostly failed, not a plate with that many
+# no-template controls. Inferring NTC across a quarter of the wells is a
+# stronger claim than the evidence supports, so past this fraction the label
+# stays Undetermined regardless of the gap.
+_NTC_MAX_PLATE_FRACTION = 0.15
+
+# The fraction above is only evidence on a well set big enough for a fraction
+# to mean something. A 9-well marker region with 3 NTC wells is at 33% and is
+# entirely normal; a 96-well plate at 26% is not. Below this count the
+# fraction test is skipped and the gap alone decides.
+_NTC_MIN_WELLS_FOR_FRACTION = 24
 
 
 def _manual_ntc_mask(points: list[dict], fam_max: float, allele2_max: float):
@@ -304,25 +328,37 @@ def cluster_auto(
     else:
         ntc_mask = total < _NTC_SIGNAL_FRAC * median_total
 
-    # C4 (conservative, warning-only): the mask above is a pure signal-level
-    # cutoff -- it says nothing about whether the flagged wells are actually a
-    # genuine no-template gap, or just the low end of a narrow, low-dynamic-
-    # range marker. Compare the flagged wells' OWN signal to the plate median
-    # they were cut from: a real NTC is orders of magnitude below the samples;
-    # anything closer is ambiguous, so it keeps the "NTC" label (never invent a
-    # new one) but is flagged and denied a blind maximum-confidence call.
+    # C4: the mask above is a pure signal-level cutoff -- it says nothing about
+    # whether the flagged wells are actually a genuine no-template gap, or just
+    # the low end of a narrow, low-dynamic-range marker (or a plate where a
+    # quarter of the wells simply failed). Compare the flagged wells' OWN
+    # signal to the plate median they were cut from: a real NTC is orders of
+    # magnitude below the samples. Anything closer -- or too much of the plate
+    # at once -- is only evidence of NO SIGNAL, which is Undetermined, not a
+    # no-template control. See _NTC_CLEAR_GAP for why this is not "NTC with a
+    # lower confidence".
+    ntc_label = WellType.NTC.value
     ntc_confidence = 1.0
     if not manual_ntc and bool(np.any(ntc_mask)):
         ntc_max_total = float(np.max(total[ntc_mask]))
         gap_ratio = (median_total / ntc_max_total) if ntc_max_total > 0 else float("inf")
-        if gap_ratio < _NTC_CLEAR_GAP:
+        too_much_of_the_plate = (
+            len(wells) >= _NTC_MIN_WELLS_FOR_FRACTION
+            and float(np.count_nonzero(ntc_mask)) / len(wells) > _NTC_MAX_PLATE_FRACTION
+        )
+        if gap_ratio < _NTC_CLEAR_GAP or too_much_of_the_plate:
             if warnings is not None:
                 warnings.append("relative_ntc")
+            ntc_label = WellType.UNDETERMINED.value
+            # A no-call carries no positive claim, so it reports the strength of
+            # the only thing that WAS measured: how far below the plate these
+            # wells sit. A clear gap that failed only the plate-fraction test
+            # still reads as a confident "no signal".
             ntc_confidence = max(0.0, min(0.99, gap_ratio / _NTC_CLEAR_GAP))
 
     for w, is_ntc in zip(wells, ntc_mask):
         if is_ntc:
-            assignments[w] = WellType.NTC.value
+            assignments[w] = ntc_label
             confidences[w] = ntc_confidence
 
     sig_idx = [i for i in range(len(wells)) if not ntc_mask[i]]

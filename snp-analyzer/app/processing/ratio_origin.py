@@ -24,11 +24,41 @@ The plate's own no-template wells mark the true origin, so that is what the
 ratio is measured from. This shifts the CALLING geometry only. Displayed
 values, exported values and stored values stay raw — see
 ``app/processing/background.py`` for why they must.
+
+With no NTC well known, the origin has to be estimated from the plate itself,
+and the estimator has to survive a single bad well. The per-channel MINIMUM
+does not: on a 96-well CFX plate
+(``1-2_admin_2026-09-03 16-14-11_783BR20183.pcrd``) it landed on H1, itself a
+failed well, and the resulting shift dropped a quarter of the plate below the
+relative no-signal cutoff. Under passive-reference normalization it was worse
+— one well whose ROX read 1.73x the plate median became the minimum in BOTH
+channels, so that single well defined the origin and the no-signal count
+swung from 25 wells to 1 purely on the normalization toggle. A low QUANTILE
+over wells with a sane passive reference is the same estimate with none of
+that leverage, and it is reported as ``plate_floor`` so a view can say what it
+is rather than imply an NTC it never saw.
 """
 
 from statistics import median
 
 from app.models import RatioOrigin
+
+# Per-channel quantile standing in for the plate's no-signal floor when no NTC
+# well is known. Low enough to sit under the dimmest real sample, high enough
+# that no single well decides it.
+_ORIGIN_QUANTILE = 0.05
+
+# Below this many wells a 5th percentile is interpolated between two or three
+# readings and means nothing more than the minimum does — so it stays the
+# minimum, and stays labelled as the weaker claim it has always been.
+_MIN_WELLS_FOR_QUANTILE = 8
+
+# A passive-reference read this far from the plate median is a physically
+# abnormal well (bubble, volume error, dispensing miss), not a dim sample.
+# Such a well is excluded from the floor estimate in BOTH modes: normalized,
+# its inflated reference divides its reporters down into the floor; raw, its
+# reporters are suspect for the same underlying reason.
+_ROX_SANE_RANGE = (1 / 1.5, 1.5)
 
 
 def compute_ratio_origin(points, ntc_wells) -> RatioOrigin:
@@ -36,9 +66,9 @@ def compute_ratio_origin(points, ntc_wells) -> RatioOrigin:
 
     Prefers the median of the plate's no-template wells — median, not mean, so
     one contaminated NTC cannot drag the origin. With no NTC well known, falls
-    back to the per-channel plate-wide minimum, which is a weaker claim (the
-    dimmest sample is not necessarily background) and is reported as such via
-    ``source`` rather than passed off as an NTC origin.
+    back to a per-channel low quantile of the plate, which is a weaker claim
+    (the dimmest wells are not necessarily background) and is reported as such
+    via ``source`` rather than passed off as an NTC origin.
     """
     if not points:
         return RatioOrigin()
@@ -51,11 +81,65 @@ def compute_ratio_origin(points, ntc_wells) -> RatioOrigin:
             source="ntc",
         )
 
+    candidates = _floor_candidates(points)
+    if len(candidates) >= _MIN_WELLS_FOR_QUANTILE:
+        return RatioOrigin(
+            fam=_quantile([p.norm_fam for p in candidates], _ORIGIN_QUANTILE),
+            allele2=_quantile([p.norm_allele2 for p in candidates], _ORIGIN_QUANTILE),
+            source="plate_floor",
+        )
+
     return RatioOrigin(
-        fam=min(p.norm_fam for p in points),
-        allele2=min(p.norm_allele2 for p in points),
+        fam=min(p.norm_fam for p in candidates),
+        allele2=min(p.norm_allele2 for p in candidates),
         source="plate_min",
     )
+
+
+def rox_outlier_wells(points) -> set[str]:
+    """Wells whose passive reference is too far from the plate median to trust.
+
+    Reported separately from the origin so QC can name them: on the plate this
+    guard was written for, A11's reference read 7380 against a plate median of
+    4263 (1.73x), and normalizing by it pushed that one well below every other
+    well in both channels.
+    """
+    refs = [(p.well, p.raw_rox) for p in points if p.raw_rox]
+    if len(refs) < _MIN_WELLS_FOR_QUANTILE:
+        return set()
+    plate = median(value for _, value in refs)
+    if plate <= 0:
+        return set()
+    low, high = _ROX_SANE_RANGE
+    return {well for well, value in refs if not low <= value / plate <= high}
+
+
+def _floor_candidates(points) -> list:
+    """``points`` minus the passive-reference outliers, when enough remain.
+
+    Dropping the outliers must never shrink the plate below the point where a
+    quantile is meaningful — a run where most references are odd is a run whose
+    references carry no information, so all wells are kept and the estimate
+    degrades to what it was before rather than to a handful of wells.
+    """
+    outliers = rox_outlier_wells(points)
+    if not outliers:
+        return list(points)
+    kept = [p for p in points if p.well not in outliers]
+    return kept if len(kept) >= _MIN_WELLS_FOR_QUANTILE else list(points)
+
+
+def _quantile(values: list[float], q: float) -> float:
+    """Linear-interpolated quantile (``statistics.quantiles`` needs n >= 2 and
+    only exposes cut points, not an arbitrary q)."""
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    pos = q * (len(ordered) - 1)
+    lower = int(pos)
+    if lower + 1 >= len(ordered):
+        return ordered[-1]
+    return ordered[lower] + (pos - lower) * (ordered[lower + 1] - ordered[lower])
 
 
 def shift_to_origin(point_dicts: list[dict], origin: RatioOrigin) -> list[dict]:
