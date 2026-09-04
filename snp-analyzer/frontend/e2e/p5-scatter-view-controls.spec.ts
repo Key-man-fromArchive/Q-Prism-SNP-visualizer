@@ -125,3 +125,65 @@ test("box-selecting the scatter selects wells", async ({ page }) => {
     timeout: 15_000,
   });
 });
+
+// ---------------------------------------------------------------------------
+// Observed dosage window (polyploid)
+// ---------------------------------------------------------------------------
+//
+// A hexaploid assay commonly resolves only dosages 0,1,2,3 out of 0..6, and
+// fluorescence often cannot tell that window from 3,4,5,6. Correcting it used
+// to require dragging a radial boundary line, which froze the auto-generated
+// rays into a manual override -- discarding the fit in order to relabel it.
+
+test.describe("observed dosage window", () => {
+  test("a diploid marker has no window to place", async ({ page }) => {
+    // The three diploid classes ARE the ladder, so there is nothing to shift.
+    await expect(page.getByTestId("dosage-window")).toHaveCount(0);
+  });
+});
+
+test.describe("observed dosage window (6x)", () => {
+  test.beforeEach(async ({ page }) => {
+    await loadExample(page, 6);
+    await expect(page.getByTestId("scatter-view-controls")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("dosage-window")).toBeVisible({ timeout: 20_000 });
+  });
+
+  test("the window states which absolute dosages are on screen", async ({ page }) => {
+    await expect(page.getByTestId("dosage-window-range")).toContainText(/\d/);
+    // Untouched, so there is nothing to hand back to auto yet.
+    await expect(page.getByTestId("dosage-window-reset")).toBeDisabled();
+  });
+
+  test("shifting the window is a lock the operator can release", async ({ page }) => {
+    const range = page.getByTestId("dosage-window-range");
+    const before = (await range.textContent())?.trim();
+
+    await page.getByTestId("dosage-window-up").click();
+    await expect(page.getByTestId("dosage-window-reset")).toBeEnabled({ timeout: 20_000 });
+    await expect(range).not.toHaveText(before ?? "", { timeout: 20_000 });
+
+    await page.getByTestId("dosage-window-reset").click();
+    await expect(page.getByTestId("dosage-window-reset")).toBeDisabled({ timeout: 20_000 });
+  });
+
+  test("the window cannot be shifted off the ladder", async ({ page }) => {
+    // Walk it to the top; the up control has to stop rather than let the
+    // highest observed class exceed the ploidy.
+    for (let i = 0; i < 8; i++) {
+      const up = page.getByTestId("dosage-window-up");
+      if (await up.isDisabled()) break;
+      await up.click();
+      await page.waitForTimeout(300);
+    }
+    await expect(page.getByTestId("dosage-window-up")).toBeDisabled();
+
+    // The range element carries ONLY the window, so the ploidy hint beside it
+    // cannot satisfy this assertion by accident.
+    const range = (await page.getByTestId("dosage-window-range").textContent())?.trim() ?? "";
+    const high = Number(range.split("–").pop());
+    expect(Number.isFinite(high)).toBe(true);
+    expect(high).toBeLessThanOrEqual(6);
+    await expect(page.getByTestId("dosage-window-ploidy")).toContainText("0–6");
+  });
+});

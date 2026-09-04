@@ -701,6 +701,19 @@ const en = {
   analysisWarningLowN: 'Too few wells to fit clusters — calls are provisional.',
   analysisWarningAnchorConflict: 'Control wells disagree with the fitted dosage ladder.',
   analysisWarningsTitle: 'Analysis warnings',
+
+  // Observed dosage window (polyploid). Which absolute dosages the classes on
+  // screen are: a hexaploid marker commonly resolves 0,1,2,3 only, and
+  // fluorescence often cannot tell 0,1,2,3 from 3,4,5,6.
+  dosageWindowLabel: 'Observed dosages',
+  dosageWindowLocked: 'set by you',
+  dosageWindowRange: (lo: number, hi: number) => (lo === hi ? `${lo}` : `${lo}–${hi}`),
+  dosageWindowOfPloidy: (ploidy: number) => `of 0–${ploidy}`,
+  dosageWindowDown: 'Shift observed dosages down',
+  dosageWindowUp: 'Shift observed dosages up',
+  dosageWindowReset: 'Auto',
+  dosageWindowUncertainHint:
+    'No class sits on either axis, so these dosages could sit anywhere on the ladder — the fluorescence cannot tell. Shift the window if you know where it belongs; the clusters themselves do not change.',
 };
 
 export type Translations = {

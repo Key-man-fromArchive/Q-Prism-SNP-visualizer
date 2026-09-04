@@ -88,6 +88,9 @@ export function ScatterPlot() {
   const setBoundaries = useDataStore((s) => s.setBoundaries);
   const offset = useDataStore((s) => s.offset);
   const setOffset = useDataStore((s) => s.setOffset);
+  const offsetUncertain = useDataStore((s) => s.offsetUncertain);
+  const offsetLocked = useDataStore((s) => s.offsetLocked);
+  const setOffsetLocked = useDataStore((s) => s.setOffsetLocked);
   const ntcCorner = useDataStore((s) => s.ntcCorner);
   const setNtcCorner = useDataStore((s) => s.setNtcCorner);
   const { isWellVisible } = useWellFilter();
@@ -514,6 +517,52 @@ export function ScatterPlot() {
     normalizationApplied,
   ]);
 
+  // Moving the observed-dosage window. Re-clusters in AUTO mode with the
+  // operator's anchor rather than switching to a threshold override: the fit
+  // that found the clusters is good, only its absolute position was a guess.
+  const handleDosageWindowChange = useCallback(
+    (next: number | null) => {
+      const locked = next !== null;
+      const value = next ?? 0;
+      setOffset(value);
+      setOffsetLocked(locked);
+      if (!sessionId) return;
+      void (async () => {
+        try {
+          const result = await runClustering(sessionId, {
+            algorithm: "auto",
+            cycle: currentCycle ?? 0,
+            threshold_config: {
+              ntc_threshold: ntcThreshold,
+              ntc_fam_max: useDataStore.getState().ntcCorner?.fam ?? null,
+              ntc_allele2_max: useDataStore.getState().ntcCorner?.allele2 ?? null,
+              allele1_ratio_max: 0.4,
+              allele2_ratio_min: 0.6,
+              // Deliberately NOT the current cuts: passing boundaries here
+              // would take the threshold branch and freeze the auto rays.
+              boundaries: null,
+              offset: value,
+              offset_locked: locked,
+            },
+            n_clusters: useSettingsStore.getState().nClusters,
+            ploidy,
+            background: backgroundMode,
+            use_rox: useRox,
+          });
+          const store = useDataStore.getState();
+          store.setClusterAssignments(result.assignments);
+          store.setOffset(result.offset ?? value);
+          store.setOffsetUncertain(result.offset_uncertain ?? false);
+          store.setOffsetLocked(result.offset_locked ?? locked);
+          window.dispatchEvent(new CustomEvent("welltypes-changed"));
+        } catch (error) {
+          console.error("Failed to persist dosage window:", error);
+        }
+      })();
+    },
+    [sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setOffset, setOffsetLocked]
+  );
+
   // Highlight every selected well. Multi-selection is the normal plate-review
   // workflow, not merely an intermediate state before assigning a well type.
   useEffect(() => {
@@ -868,6 +917,14 @@ export function ScatterPlot() {
         onNtcCornerChange={setNtcCorner}
         normalizationApplied={normalizationApplied}
         roxOutlierWells={roxOutlierWells}
+        dosageWindow={{
+          ploidy,
+          offset,
+          classes: (boundaries?.length ?? ploidy) + 1,
+          uncertain: offsetUncertain,
+          locked: offsetLocked,
+          onChange: handleDosageWindowChange,
+        }}
       />
       {/* Where a fam-fraction of 0.5 sits on THIS plate. Named, because the
           fallback estimate is a much weaker claim than the plate's own NTC

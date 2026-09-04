@@ -303,6 +303,11 @@ export type ThresholdConfig = {
   boundaries?: number[] | null;
   // Dosage of the lowest observed class (places the window within 0..ploidy).
   offset?: number | null;
+  // `offset` is the operator's decision, so the AUTO caller honours it instead
+  // of re-deriving its own guess. A separate flag rather than "offset != 0",
+  // because 0 is the most common correct answer for a partial window (a
+  // hexaploid marker commonly resolves dosages 0,1,2,3 only).
+  offset_locked?: boolean | null;
 };
 
 export type ClusteringRequest = {
@@ -326,6 +331,8 @@ export type ClusteringResult = {
   boundaries?: number[] | null; // K-1 internal radial-line positions (descending fam-fraction)
   offset?: number;              // dosage of the lowest observed class
   offset_uncertain?: boolean;   // true when the offset is a low-confidence guess
+  /** True when `offset` is the operator's own window anchor, not the guess. */
+  offset_locked?: boolean;
   low_separation?: boolean;     // true when adjacent dosage classes overlap (poorly resolved)
   // Multi-marker (P4): per-marker results. Absent for a single-marker (whole
   // plate) run; `assignments` above is then the flat merge across regions.
@@ -506,6 +513,7 @@ export type RegionResult = {
   boundaries?: number[] | null;
   offset: number;
   offset_uncertain: boolean;
+  offset_locked?: boolean;
   low_separation: boolean;
   genotype_counts?: Record<string, number> | null;
   warnings?: string[] | null;

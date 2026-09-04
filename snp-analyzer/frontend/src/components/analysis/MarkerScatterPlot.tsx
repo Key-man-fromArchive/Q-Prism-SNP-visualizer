@@ -222,6 +222,35 @@ export function MarkerScatterPlot({
     [sessionId, marker.id, marker.threshold_config, onBoundariesPersisted]
   );
 
+  // Moving the observed-dosage window. Committed exactly like the NTC corner:
+  // boundaries are preserved only if they were already a manual override, so
+  // answering "these are dosages 3-5" never costs the automatic fit.
+  const handleDosageWindowChange = useCallback(
+    (offset: number | null) => {
+      const current = marker.threshold_config;
+      void (async () => {
+        try {
+          await updateMarker(sessionId, marker.id, {
+            threshold_config: {
+              ntc_threshold: current?.ntc_threshold ?? 0.1,
+              ntc_fam_max: current?.ntc_fam_max ?? null,
+              ntc_allele2_max: current?.ntc_allele2_max ?? null,
+              allele1_ratio_max: current?.allele1_ratio_max ?? 0.4,
+              allele2_ratio_min: current?.allele2_ratio_min ?? 0.6,
+              boundaries: current?.boundaries ?? null,
+              offset: offset ?? 0,
+              offset_locked: offset !== null,
+            },
+          });
+          await onBoundariesPersisted();
+        } catch (err) {
+          console.error("Failed to persist dosage window:", err);
+        }
+      })();
+    },
+    [sessionId, marker.id, marker.threshold_config, onBoundariesPersisted]
+  );
+
   const handleNtcCornerChange = useCallback(
     (corner: { fam: number; allele2: number } | null) => {
       const next = corner
@@ -637,6 +666,15 @@ export function MarkerScatterPlot({
         onNtcCornerChange={handleNtcCornerChange}
         normalizationApplied={normalizationApplied}
         roxOutlierWells={roxOutlierWells}
+        dosageWindow={{
+          ploidy,
+          offset: region?.offset ?? 0,
+          // K observed classes = K-1 internal cuts + 1.
+          classes: (region?.boundaries?.length ?? editBoundaries.length) + 1,
+          uncertain: region?.offset_uncertain ?? false,
+          locked: marker.threshold_config?.offset_locked ?? false,
+          onChange: handleDosageWindowChange,
+        }}
       />
       <div
         data-testid="marker-scatter"

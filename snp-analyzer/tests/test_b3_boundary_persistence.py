@@ -142,7 +142,10 @@ def test_no_boundaries_marker_auto_window_unchanged():
 
     assert assignments == expected_assignments
     assert confidences == expected_conf
-    assert window == expected_window
+    # The router additionally echoes whether the window position is the
+    # operator's own (ThresholdConfig.offset_locked); everything genotype_window
+    # itself decides must still match exactly.
+    assert window == {**expected_window, "offset_locked": False}
     assert warnings == (expected_warnings or None)
 
 

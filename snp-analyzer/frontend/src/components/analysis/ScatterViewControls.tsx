@@ -8,7 +8,7 @@
 // per-marker MarkerScatterPlot — render this, so the two plots offer the same
 // controls; the NTC corner arrives by prop because the plate keeps it in the
 // data store while a marker keeps it in its own threshold_config.
-import { Crosshair, MousePointer2, RotateCcw } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Crosshair, MousePointer2, RotateCcw } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSettingsStore, type AxisMode } from "@/stores/settings-store";
 import { normalizationLabel } from "@/lib/channel-labels";
@@ -16,6 +16,31 @@ import { roundBound, type AxisBounds } from "@/lib/scatter-axes";
 import type { ChannelLabels } from "@/types/api";
 
 export type ScatterCorner = { fam: number; allele2: number };
+
+/** Which absolute dosages the OBSERVED classes are.
+ *
+ *  A polyploid marker usually resolves only part of its ladder — a hexaploid
+ *  assay commonly tops out at dosage 3, so the classes present are 0,1,2,3 out
+ *  of 0..6 — and where that part sits is frequently not identifiable from
+ *  fluorescence at all: 0,1,2,3 and 3,4,5,6 fit the same four clusters. The
+ *  backend says so via `uncertain`; this is where the operator answers.
+ *
+ *  It deliberately does NOT live behind the boundary-line tool. Before, moving
+ *  the window meant dragging a radial line, which froze the auto-generated
+ *  rays into a manual override — discarding the fit in order to relabel it. */
+export type DosageWindow = {
+  ploidy: number;
+  /** Dosage of the lowest observed class. */
+  offset: number;
+  /** Number of observed classes (K), so the window is offset..offset+K-1. */
+  classes: number;
+  /** The backend could not anchor the position from the data. */
+  uncertain: boolean;
+  /** The current offset is the operator's, not the estimate. */
+  locked: boolean;
+  /** A dosage to anchor the lowest class at, or null to hand it back to auto. */
+  onChange: (offset: number | null) => void;
+};
 
 export type ScatterViewControlsProps = {
   /** Where the data lies, for "fit to data" and for seeding manual bounds. */
@@ -34,6 +59,9 @@ export type ScatterViewControlsProps = {
   /** The run carries a passive reference at all. Without one the toggle can
    *  only ever be a no-op, so it says so instead of pretending. */
   hasNormalizationChannel?: boolean;
+  /** Absent for a diploid marker, where the three classes ARE the ladder and
+   *  there is no window to place. */
+  dosageWindow?: DosageWindow | null;
 };
 
 const AXIS_MODES: AxisMode[] = ["zero", "auto", "manual"];
@@ -47,6 +75,7 @@ export function ScatterViewControls({
   normalizationApplied,
   roxOutlierWells = [],
   hasNormalizationChannel = true,
+  dosageWindow = null,
 }: ScatterViewControlsProps) {
   const { t } = useI18n();
   const axisMode = useSettingsStore((s) => s.axisMode);
@@ -216,6 +245,78 @@ export function ScatterViewControls({
           </button>
         </div>
       </div>
+
+      {/* Which absolute dosages the observed classes are */}
+      {dosageWindow && dosageWindow.ploidy > 2 && (
+        <div className="flex flex-col gap-1" data-testid="dosage-window">
+          <span className="text-xs font-medium text-text-muted">
+            {t.dosageWindowLabel}
+            {dosageWindow.locked && (
+              <span className="ml-1 opacity-70">({t.dosageWindowLocked})</span>
+            )}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              data-testid="dosage-window-down"
+              aria-label={t.dosageWindowDown}
+              disabled={dosageWindow.offset <= 0}
+              onClick={() => dosageWindow.onChange(dosageWindow.offset - 1)}
+              className="rounded-md border border-border bg-surface px-1.5 py-1 text-text hover:border-primary disabled:opacity-40"
+            >
+              <ChevronLeft size={13} aria-hidden="true" />
+            </button>
+            <span className="inline-flex items-baseline gap-1 rounded-md bg-surface px-2 py-1">
+              <span
+                data-testid="dosage-window-range"
+                className="min-w-[2rem] text-center text-xs font-semibold tabular-nums text-text"
+              >
+                {t.dosageWindowRange(
+                  dosageWindow.offset,
+                  dosageWindow.offset + Math.max(dosageWindow.classes - 1, 0)
+                )}
+              </span>
+              <span
+                data-testid="dosage-window-ploidy"
+                className="text-xs text-text-muted"
+              >
+                {t.dosageWindowOfPloidy(dosageWindow.ploidy)}
+              </span>
+            </span>
+            <button
+              type="button"
+              data-testid="dosage-window-up"
+              aria-label={t.dosageWindowUp}
+              disabled={
+                dosageWindow.offset + Math.max(dosageWindow.classes - 1, 0) >= dosageWindow.ploidy
+              }
+              onClick={() => dosageWindow.onChange(dosageWindow.offset + 1)}
+              className="rounded-md border border-border bg-surface px-1.5 py-1 text-text hover:border-primary disabled:opacity-40"
+            >
+              <ChevronRight size={13} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              data-testid="dosage-window-reset"
+              disabled={!dosageWindow.locked}
+              onClick={() => dosageWindow.onChange(null)}
+              title={t.dosageWindowReset}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary disabled:opacity-40"
+            >
+              <RotateCcw size={12} aria-hidden="true" /> {t.dosageWindowReset}
+            </button>
+            {dosageWindow.uncertain && !dosageWindow.locked && (
+              <span
+                data-testid="dosage-window-uncertain"
+                title={t.dosageWindowUncertainHint}
+                className="text-warning"
+              >
+                <AlertTriangle size={14} aria-hidden="true" />
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Normalization: the toggle, and what the plotted numbers actually are */}
       <div className="flex flex-col gap-1">

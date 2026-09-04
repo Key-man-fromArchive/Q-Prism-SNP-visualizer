@@ -201,6 +201,7 @@ def cluster_auto(
     ploidy: int = DEFAULT_PLOIDY,
     warnings: list[str] | None = None,
     anchor_state: dict | None = None,
+    offset_override: int | None = None,
 ) -> tuple[dict[str, str], dict[str, float]]:
     """Model-based, ploidy-aware genotype clustering with an optional manual NTC gate.
 
@@ -230,6 +231,10 @@ def cluster_auto(
     3. Map each cluster to an allele dosage by a monotonic best-fit of the
        cluster ratios to the ideal ``d/P`` positions (rank-preserving, so skew
        cannot reorder dosages), then label via the genotype vocabulary.
+       ``offset_override`` slides that window so its lowest class is the given
+       dosage -- the operator answering the question fluorescence usually
+       cannot (a hexaploid's four classes fit 0,1,2,3 and 3,4,5,6 alike). See
+       ``_anchor_window_at``.
     4. Confidence in ratio space: assign each well to the nearest genotype
        ratio-centre; wells in the gap between two genotypes — or in singleton
        clusters — are Undetermined. Low-signal wells are NOT penalised for
@@ -499,6 +504,13 @@ def cluster_auto(
             anchor_state["resolved"] = True
     else:
         dosages = _assign_dosages([cluster_ratio[lab] for lab in order], ploidy)
+    if offset_override is not None:
+        dosages = _anchor_window_at(dosages, offset_override, ploidy)
+        if anchor_state is not None:
+            # The offset is now the operator's, so genotype_window must report
+            # it back rather than re-guessing from the ratios (which is what
+            # produced the guess being corrected).
+            anchor_state["resolved"] = True
     label_map = {lab: genotype_label(d, ploidy) for lab, d in zip(order, dosages)}
 
     # 4. Call + confidence from the fitted mixture, evaluated in the SAME
@@ -733,6 +745,31 @@ def _assign_dosages(sorted_ratios: list[float], ploidy: int) -> list[int]:
     from the estimated observed window (see estimate_window)."""
     offset, step, _ = estimate_window(sorted_ratios, ploidy)
     return [offset + i * step for i in range(len(sorted_ratios))]
+
+
+def _anchor_window_at(dosages: list[int], offset: int, ploidy: int) -> list[int]:
+    """Slide a fitted dosage window so its lowest class is ``offset``.
+
+    Only the window's absolute POSITION moves; the spacing between classes and
+    their order are what the fit determined and are left alone. Position is the
+    one part of the answer fluorescence frequently cannot supply: a hexaploid
+    marker that resolves four classes fits dosages 0,1,2,3 and 3,4,5,6 equally
+    well, and ``estimate_window`` reports that as ``offset_uncertain``. An
+    operator who knows which it is can say so here without discarding the fit
+    that found the clusters -- previously the only way to correct the labels
+    was to freeze the radial boundaries into a manual override.
+
+    Applied after either dosage path (estimator or allele-control anchors), so
+    an explicit operator window wins over both. Shifted as a whole and clamped
+    to keep the top class inside 0..P, so a request that would push the window
+    off the ladder lands flush against the end instead of being dropped.
+    """
+    if not dosages:
+        return dosages
+    span = dosages[-1] - dosages[0]
+    target = max(0, min(offset, ploidy - span))
+    delta = target - dosages[0]
+    return [d + delta for d in dosages]
 
 
 def _resolve_anchor_dosages(

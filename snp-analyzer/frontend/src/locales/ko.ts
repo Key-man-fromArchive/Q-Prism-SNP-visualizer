@@ -701,6 +701,17 @@ const ko: Translations = {
   analysisWarningLowN: '클러스터를 적합할 웰이 부족합니다 — 판정은 잠정적입니다.',
   analysisWarningAnchorConflict: '대조군 웰이 적합된 dosage 사다리와 어긋납니다.',
   analysisWarningsTitle: '분석 경고',
+
+  // 관측된 dosage window (배수체)
+  dosageWindowLabel: '관측 dosage',
+  dosageWindowLocked: '직접 지정',
+  dosageWindowRange: (lo: number, hi: number) => (lo === hi ? `${lo}` : `${lo}–${hi}`),
+  dosageWindowOfPloidy: (ploidy: number) => `/ 0–${ploidy}`,
+  dosageWindowDown: '관측 dosage 아래로 이동',
+  dosageWindowUp: '관측 dosage 위로 이동',
+  dosageWindowReset: '자동',
+  dosageWindowUncertainHint:
+    '어느 클래스도 축에 붙어 있지 않아, 이 dosage들이 사다리 위 어디에 놓이는지 형광만으로는 알 수 없습니다. 위치를 아신다면 window를 이동하세요 — 클러스터 자체는 바뀌지 않습니다.',
 };
 
 export default ko;

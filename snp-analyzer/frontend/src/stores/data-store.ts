@@ -25,6 +25,13 @@ interface DataState {
   boundaries: number[] | null; // K-1 internal radial-line positions (descending fam-fraction)
   offset: number;              // dosage of the lowest observed class (window position in 0..ploidy)
   offsetUncertain: boolean;    // true when auto could not anchor the offset
+  /** True when `offset` is the operator's own window anchor rather than the
+   *  estimator's guess. A polyploid marker usually resolves only part of its
+   *  ladder and where that part sits is often not identifiable from
+   *  fluorescence (a hexaploid's four classes fit dosages 0,1,2,3 and 3,4,5,6
+   *  alike), so the correction has to be expressible — and distinguishable
+   *  from the guess, since 0 is itself the most common right answer. */
+  offsetLocked: boolean;
   lowSeparation: boolean;      // true when adjacent dosage classes overlap (poorly resolved)
   ntcCorner: { fam: number; allele2: number } | null;
   // Actions
@@ -41,6 +48,7 @@ interface DataState {
   setBoundaries: (boundaries: number[] | null) => void;
   setOffset: (offset: number) => void;
   setOffsetUncertain: (v: boolean) => void;
+  setOffsetLocked: (v: boolean) => void;
   setLowSeparation: (v: boolean) => void;
   setNtcCorner: (corner: { fam: number; allele2: number } | null) => void;
   clearData: () => void;
@@ -59,6 +67,7 @@ export const useDataStore = create<DataState>((set) => ({
   boundaries: null,
   offset: 0,
   offsetUncertain: false,
+  offsetLocked: false,
   lowSeparation: false,
   ntcCorner: null,
 
@@ -88,6 +97,7 @@ export const useDataStore = create<DataState>((set) => ({
   setBoundaries: (boundaries) => set({ boundaries }),
   setOffset: (offset) => set({ offset }),
   setOffsetUncertain: (v) => set({ offsetUncertain: v }),
+  setOffsetLocked: (v) => set({ offsetLocked: v }),
   setLowSeparation: (v) => set({ lowSeparation: v }),
   setNtcCorner: (ntcCorner) => set({ ntcCorner }),
   clearData: () =>
@@ -104,6 +114,7 @@ export const useDataStore = create<DataState>((set) => ({
       boundaries: null,
       offset: 0,
       offsetUncertain: false,
+      offsetLocked: false,
       lowSeparation: false,
       ntcCorner: null,
     }),
