@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { AlertTriangle, ChevronLeft, ChevronRight, Ruler, Target } from "lucide-react";
+import { AlertTriangle, Ruler, Target } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
@@ -24,6 +24,8 @@ import { AmplificationOverlay } from "./AmplificationOverlay";
 import { WellTypePopup } from "./WellTypePopup";
 import { GroupManager } from "./GroupManager";
 import { WellSelectionToolbar } from "./WellSelectionToolbar";
+import { Callout } from "@/components/shared/ui";
+import { analysisWarningTexts } from "@/lib/analysis-warnings";
 
 export function AnalysisTab() {
   const { t } = useI18n();
@@ -44,10 +46,8 @@ export function AnalysisTab() {
   const setBoundaries = useDataStore((s) => s.setBoundaries);
   const setOffset = useDataStore((s) => s.setOffset);
   const setOffsetUncertain = useDataStore((s) => s.setOffsetUncertain);
+  const setDosageMax = useDataStore((s) => s.setDosageMax);
   const setLowSeparation = useDataStore((s) => s.setLowSeparation);
-  const boundaries = useDataStore((s) => s.boundaries);
-  const offset = useDataStore((s) => s.offset);
-  const offsetUncertain = useDataStore((s) => s.offsetUncertain);
   const lowSeparation = useDataStore((s) => s.lowSeparation);
   const ntcThreshold = useSettingsStore((s) => s.ntcThreshold);
   const allele1RatioMax = useSettingsStore((s) => s.allele1RatioMax);
@@ -61,6 +61,10 @@ export function AnalysisTab() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<CycleSuggestion | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  // Diagnostics the run reported about itself. The whole-plate view previously
+  // dropped these on the floor, so a plate whose low-signal wells were
+  // deliberately left uncalled looked identical to a clean one.
+  const [analysisWarnings, setAnalysisWarnings] = useState<string[]>([]);
   const autoRanSession = useRef<string | null>(null);
 
   const stageLabel = (w: string) =>
@@ -192,7 +196,9 @@ export function AnalysisTab() {
       setBoundaries(result.boundaries ?? null);
       setOffset(result.offset ?? 0);
       setOffsetUncertain(result.offset_uncertain ?? false);
+      setDosageMax(result.dosage_max ?? null);
       setLowSeparation(result.low_separation ?? false);
+      setAnalysisWarnings(result.warnings ?? []);
       setAnalysis(suggestion);
       // Force scatter/plate to re-fetch so points pick up auto_cluster calls.
       window.dispatchEvent(new CustomEvent("welltypes-changed"));
@@ -213,41 +219,6 @@ export function AnalysisTab() {
     t,
   ]);
 
-  // Shift the observed-dosage window offset (which absolute dosages the observed
-  // classes are). Re-labels via a threshold clustering with the current cuts +
-  // new offset; ploidy is the fixed organism ploidy, never the line count.
-  const shiftOffset = useCallback(
-    async (delta: number) => {
-      const st = useDataStore.getState();
-      const bnd = st.boundaries;
-      const newOffset = st.offset + delta;
-      setOffset(newOffset);
-      if (!sessionId || !bnd) return;
-      try {
-        await apiRunClustering(sessionId, {
-          algorithm: "threshold",
-          cycle: currentCycle ?? 0,
-          threshold_config: {
-            ntc_threshold: ntcThreshold,
-            ntc_fam_max: st.ntcCorner?.fam ?? null,
-            ntc_allele2_max: st.ntcCorner?.allele2 ?? null,
-            allele1_ratio_max: 0.4,
-            allele2_ratio_min: 0.6,
-            boundaries: bnd,
-            offset: newOffset,
-          },
-          n_clusters: nClusters,
-          ploidy: useSettingsStore.getState().ploidy,
-          background: useSettingsStore.getState().backgroundMode,
-          use_rox: useSettingsStore.getState().useRox,
-        });
-        window.dispatchEvent(new CustomEvent("welltypes-changed"));
-      } catch (err) {
-        console.error("Offset shift failed:", err);
-      }
-    },
-    [sessionId, currentCycle, ntcThreshold, nClusters, setOffset]
-  );
 
   // Run the analysis automatically the first time a session's data is ready, so
   // the allele-discrimination plot opens already grouped instead of a raw mess.
@@ -272,7 +243,9 @@ export function AnalysisTab() {
           setBoundaries(existing.boundaries ?? null);
           setOffset(existing.offset ?? 0);
           setOffsetUncertain(existing.offset_uncertain ?? false);
+          setDosageMax(existing.dosage_max ?? null);
           setLowSeparation(existing.low_separation ?? false);
+          setAnalysisWarnings(existing.warnings ?? []);
           if (existing.ploidy) setPloidy(existing.ploidy);
           return;
         }
@@ -375,34 +348,6 @@ export function AnalysisTab() {
         >
           <Ruler size={14} aria-hidden="true" /> {t.boundaryLines}
         </button>
-        {/* Observed-window offset: which absolute dosages the observed classes are */}
-        {showManualTypes && showBoundaryLines && boundaries && (
-          <span className="flex items-center gap-1 text-xs text-text-muted" title={t.offsetHint}>
-            {t.offsetLabel}
-            <button
-              onClick={() => shiftOffset(-1)}
-              disabled={offset <= 0}
-              aria-label={t.offsetLabel}
-              className="px-1.5 py-0.5 rounded border border-border cursor-pointer disabled:opacity-40"
-            >
-              <ChevronLeft size={14} aria-hidden="true" />
-            </button>
-            <span className="tabular-nums font-medium text-text">{offset}</span>
-            <button
-              onClick={() => shiftOffset(1)}
-              disabled={offset >= ploidy - boundaries.length}
-              aria-label={t.offsetLabel}
-              className="px-1.5 py-0.5 rounded border border-border cursor-pointer disabled:opacity-40"
-            >
-              <ChevronRight size={14} aria-hidden="true" />
-            </button>
-            {offsetUncertain && (
-              <span className="text-warning" title={t.offsetUncertainHint}>
-                <AlertTriangle size={13} aria-hidden="true" />
-              </span>
-            )}
-          </span>
-        )}
         <button
           onClick={handleAnalyze}
           disabled={analyzing || !sessionId}
@@ -469,6 +414,21 @@ export function AnalysisTab() {
             </label>
           )}
         </div>
+      )}
+
+      {analysisWarnings.length > 0 && (
+        <Callout
+          tone="warning"
+          className="mx-4 mt-4 sm:mx-6"
+          data-testid="analysis-warnings"
+        >
+          <b>{t.analysisWarningsTitle}:</b>
+          <ul className="mt-1 list-disc pl-4">
+            {analysisWarningTexts(analysisWarnings, t).map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+        </Callout>
       )}
 
       <div className="px-4 pt-4 sm:px-6">

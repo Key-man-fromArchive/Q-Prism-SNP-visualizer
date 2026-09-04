@@ -9,9 +9,12 @@ import { channelLabels, normalizationLabel, normalizedLabel } from "@/lib/channe
 import { WELL_TYPE_INFO } from "@/lib/constants";
 import { genotypeClasses, wellInfo, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
 import { plotlyColors } from "@/lib/plotly-theme";
+import { axisRangeLayout, dataBounds, visibleBounds } from "@/lib/scatter-axes";
 import { useWellFilter } from "@/hooks/use-well-filter";
 import { useI18n } from "@/hooks/use-i18n";
+import { useIsDarkMode } from "@/hooks/use-dark-mode";
 import { StatusState } from "@/components/shared/ui";
+import { ScatterViewControls } from "./ScatterViewControls";
 import type { ScatterPoint } from "@/types/api";
 
 type PlotlyAxis = { _length?: number; _offset?: number; range?: [number, number] };
@@ -33,12 +36,17 @@ function effectiveType(
 
 export function ScatterPlot() {
   const { t } = useI18n();
+  // The dosage palette has its own dark steps, so a theme change has to rebuild
+  // the traces -- the chrome-only relayout below cannot repaint markers.
+  const dark = useIsDarkMode();
   const plotRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
 
   const sessionId = useSessionStore((s) => s.sessionId);
   const useRox = useSettingsStore((s) => s.useRox);
-  const fixAxis = useSettingsStore((s) => s.fixAxis);
+  const axisMode = useSettingsStore((s) => s.axisMode);
+  const lockAspect = useSettingsStore((s) => s.lockAspect);
+  const scatterTool = useSettingsStore((s) => s.scatterTool);
   const xMin = useSettingsStore((s) => s.xMin);
   const xMax = useSettingsStore((s) => s.xMax);
   const yMin = useSettingsStore((s) => s.yMin);
@@ -52,16 +60,27 @@ export function ScatterPlot() {
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const selectWell = useSelectionStore((s) => s.selectWell);
   const selectWells = useSelectionStore((s) => s.selectWells);
+  const addWells = useSelectionStore((s) => s.addWells);
+  const toggleWell = useSelectionStore((s) => s.toggleWell);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
   const selectedWells = useSelectionStore((s) => s.selectedWells);
   const focusSelectedWells = useSelectionStore((s) => s.focusSelectedWells);
   const selectedWellSet = useMemo(() => new Set(selectedWells), [selectedWells]);
+  // "Selected only" is a view preference and outlives a cleared selection, so
+  // it must not be able to empty the plot on its own.
+  const focusActive = focusSelectedWells && selectedWells.length > 0;
   const scatterPoints = useDataStore((s) => s.scatterPoints);
   const allele2Dye = useDataStore((s) => s.allele2Dye);
   const roleLabels = useDataStore((s) => s.channelLabels);
   const clusterAssignments = useDataStore((s) => s.clusterAssignments);
   const wellTypeAssignments = useDataStore((s) => s.wellTypeAssignments);
   const ratioOrigin = useDataStore((s) => s.ratioOrigin);
+  // Whether the plotted values really were divided by the passive reference.
+  // The axis titles, the hover text and the decimal count all follow THIS, not
+  // the `useRox` request: a run with no reference comes back raw either way,
+  // and titling the axis "FAM / ROX" over raw RFU misreports the data.
+  const normalizationApplied = useDataStore((s) => s.normalizationApplied);
+  const roxOutlierWells = useDataStore((s) => s.roxOutlierWells);
   // The drag handlers are registered once per tool-open, so they read the
   // origin through a ref rather than re-binding every time it changes.
   const originRef = useRef(ratioOrigin);
@@ -73,13 +92,20 @@ export function ScatterPlot() {
   const setBoundaries = useDataStore((s) => s.setBoundaries);
   const offset = useDataStore((s) => s.offset);
   const setOffset = useDataStore((s) => s.setOffset);
+  const offsetUncertain = useDataStore((s) => s.offsetUncertain);
+  const dosageMax = useDataStore((s) => s.dosageMax);
+  const setDosageMax = useDataStore((s) => s.setDosageMax);
   const ntcCorner = useDataStore((s) => s.ntcCorner);
   const setNtcCorner = useDataStore((s) => s.setNtcCorner);
   const { isWellVisible } = useWellFilter();
 
   const inferredNtcCorner = useMemo(() => {
+    // EFFECTIVE type, manual over auto -- not "manual OR auto is NTC". A well
+    // the operator has relabelled away from NTC must stop anchoring the
+    // quadrant, otherwise the corner stays stranded on the wells the auto
+    // detector got wrong and never recovers without a drag.
     const ntcs = scatterPoints.filter(
-      (point) => point.manual_type === "NTC" || point.auto_cluster === "NTC"
+      (point) => (point.manual_type ?? point.auto_cluster) === "NTC"
     );
     const maxX = Math.max(1, ...scatterPoints.map((point) => point.norm_fam));
     const maxY = Math.max(1, ...scatterPoints.map((point) => point.norm_allele2));
@@ -105,6 +131,11 @@ export function ScatterPlot() {
   // equals the ploidy (P lines -> P+1 dosage wedges); adding/deleting a line
   // changes the ploidy in lockstep so selector, lines and classes stay in sync.
   const linesActive = showManualTypes && showBoundaryLines;
+  // Rendering the rays and being able to drag them are different things: a ray
+  // grab tests |cut - ratio| < 0.04 over the WHOLE canvas, which is an angular
+  // wedge rather than a line, so leaving it armed made large parts of the plot
+  // unselectable. See ScatterTool in the settings store.
+  const editing = scatterTool === "edit";
   const [editBoundaries, setEditBoundaries] = useState<number[] | null>(null);
   const editRef = useRef<number[] | null>(null);
   const dragIndexRef = useRef<number | null>(null);
@@ -121,6 +152,20 @@ export function ScatterPlot() {
     setEditBoundaries(seed);
     editRef.current = seed;
   }, [linesActive, boundaries, ploidy]);
+
+  // Plotly's `plotly_selected` payload carries no modifier state, so the
+  // modifiers are read off the mousedown that began the drag. (`plotly_click`
+  // does hand over the original event; this covers the box/lasso case.)
+  const additiveRef = useRef(false);
+  useEffect(() => {
+    const gd = plotRef.current;
+    if (!gd) return;
+    const onDown = (event: MouseEvent) => {
+      additiveRef.current = event.ctrlKey || event.metaKey || event.shiftKey;
+    };
+    gd.addEventListener("mousedown", onDown);
+    return () => gd.removeEventListener("mousedown", onDown);
+  }, []);
 
   // Re-fetch trigger (incremented when well types change)
   const [refetchTrigger, setRefetchTrigger] = useState(0);
@@ -148,7 +193,10 @@ export function ScatterPlot() {
     setFetchError(null);
     try {
       const res = await getScatter(sessionId, currentCycle, useRox, backgroundMode);
-      setScatterData(res.points, res.allele2_dye, res.channel_labels, res.ratio_origin);
+      setScatterData(res.points, res.allele2_dye, res.channel_labels, res.ratio_origin, {
+        applied: res.normalization_applied,
+        roxOutlierWells: res.rox_outlier_wells,
+      });
       setStatus("ready");
     } catch (err) {
       console.error("Failed to fetch scatter data:", err);
@@ -172,7 +220,7 @@ export function ScatterPlot() {
       (p) =>
         p.manual_type !== "Omit" &&
         isWellVisible(p.well) &&
-        (!focusSelectedWells || selectedWellSet.has(p.well))
+        (!focusActive || selectedWellSet.has(p.well))
     );
 
     // In boundary mode the wedges between the radial lines define the genotype
@@ -207,7 +255,7 @@ export function ScatterPlot() {
     }
 
     const colors = plotlyColors();
-    const decimals = useRox ? 4 : 1;
+    const decimals = normalizationApplied ? 4 : 1;
     const traces: any[] = [];
     const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
 
@@ -230,14 +278,14 @@ export function ScatterPlot() {
     // then unassigned. WELL_TYPE_INFO keeps only the fixed control types here;
     // the diploid genotype trio comes from genotypeClasses so ploidy drives it.
     const diploidGeno = new Set(["Allele 1 Homo", "Allele 2 Homo", "Heterozygous"]);
-    const genoKeys = genotypeClasses(ploidy).map((c) => c.key);
+    const genoKeys = genotypeClasses(ploidy, dark).map((c) => c.key);
     const controlKeys = Object.keys(WELL_TYPE_INFO).filter((k) => !diploidGeno.has(k));
     const typeOrder = [...genoKeys, ...controlKeys, "Unassigned"];
     for (const typeKey of typeOrder) {
       const points = typeGroups.get(typeKey);
       if (!points || points.length === 0) continue;
 
-      const info = wellInfo(typeKey, ploidy);
+      const info = wellInfo(typeKey, ploidy, dark);
 
       traces.push({
         x: points.map((p) => p.norm_fam),
@@ -247,12 +295,12 @@ export function ScatterPlot() {
         name: typeLabels[typeKey] || info.label,
         customdata: points.map((p) => p.well),
         text: points.map((p) => {
-          const normSuffix = useRox ? ` / ${normalizationLabel(labels)}` : "";
+          const normSuffix = normalizationApplied ? ` / ${normalizationLabel(labels)}` : "";
           return (
             `<b>${p.well}</b>${p.sample_name ? " (" + p.sample_name + ")" : ""}<br>` +
             `${labels.fam}${normSuffix}: ${p.norm_fam.toFixed(decimals)}<br>` +
             `${labels.allele2}${normSuffix}: ${p.norm_allele2.toFixed(decimals)}` +
-            (useRox
+            (normalizationApplied
               ? `<br>Raw ${labels.fam}: ${p.raw_fam.toFixed(1)}<br>Raw ${labels.allele2}: ${p.raw_allele2.toFixed(1)}`
               : "") +
             (p.raw_rox != null ? `<br>${normalizationLabel(labels)}: ${p.raw_rox.toFixed(1)}` : "") +
@@ -291,8 +339,12 @@ export function ScatterPlot() {
       },
     });
 
-    const xLabel = useRox ? normalizedLabel(labels.fam, labels, true) : `${labels.fam} (raw RFU)`;
-    const yLabel = useRox ? normalizedLabel(labels.allele2, labels, true) : `${labels.allele2} (raw RFU)`;
+    const xLabel = normalizationApplied
+      ? normalizedLabel(labels.fam, labels, true)
+      : `${labels.fam} (raw RFU)`;
+    const yLabel = normalizationApplied
+      ? normalizedLabel(labels.allele2, labels, true)
+      : `${labels.allele2} (raw RFU)`;
 
     const axisTitleFont = { size: 14, color: colors.fontColor };
 
@@ -320,21 +372,24 @@ export function ScatterPlot() {
           };
         })
       : [];
-    const axisMaxX = Math.max(
-      effectiveNtcCorner.fam * 1.1,
-      ...visiblePoints.map((point) => point.norm_fam * 1.05),
-      1
-    );
-    const axisMaxY = Math.max(
-      effectiveNtcCorner.allele2 * 1.1,
-      ...visiblePoints.map((point) => point.norm_allele2 * 1.05),
-      1
+    // The NTC quadrant is drawn from the VISIBLE lower-left corner, not from
+    // (0, 0). Anchored at the numeric origin it was almost entirely off-canvas
+    // whenever the axes were tightly autoranged (raw endpoint RFU starts near
+    // 3800/2330), which is what made the quadrant unreadable and its corner
+    // marker look like a stray point in the middle of the cloud.
+    const bounds = visibleBounds(
+      axisMode,
+      dataBounds(
+        visiblePoints.map((point) => ({ fam: point.norm_fam, allele2: point.norm_allele2 })),
+        effectiveNtcCorner
+      ),
+      { xMin, xMax, yMin, yMax }
     );
     shapes.push(
       {
         type: "rect",
-        x0: 0,
-        y0: 0,
+        x0: bounds.xMin,
+        y0: bounds.yMin,
         x1: effectiveNtcCorner.fam,
         y1: effectiveNtcCorner.allele2,
         fillcolor: "rgba(245, 158, 11, 0.13)",
@@ -344,41 +399,43 @@ export function ScatterPlot() {
       {
         type: "line",
         x0: effectiveNtcCorner.fam,
-        y0: 0,
+        y0: bounds.yMin,
         x1: effectiveNtcCorner.fam,
-        y1: axisMaxY,
+        y1: bounds.yMax,
         line: { color: "#f59e0b", width: 1, dash: "dash" },
       },
       {
         type: "line",
-        x0: 0,
+        x0: bounds.xMin,
         y0: effectiveNtcCorner.allele2,
-        x1: axisMaxX,
+        x1: bounds.xMax,
         y1: effectiveNtcCorner.allele2,
         line: { color: "#f59e0b", width: 1, dash: "dash" },
       }
     );
 
+    const axes = axisRangeLayout(axisMode, lockAspect, bounds);
     const layout: any = {
       xaxis: {
         title: { text: xLabel, font: axisTitleFont, standoff: 10 },
         gridcolor: colors.gridColor,
         zerolinecolor: colors.lineColor,
-        ...(fixAxis ? { range: [xMin, xMax] } : { autorange: true }),
+        ...axes.xaxis,
       },
       yaxis: {
         title: { text: yLabel, font: axisTitleFont, standoff: 10 },
         gridcolor: colors.gridColor,
         zerolinecolor: colors.lineColor,
-        ...(fixAxis ? { range: [yMin, yMax] } : { autorange: true }),
+        ...axes.yaxis,
       },
       paper_bgcolor: colors.paper_bgcolor,
       plot_bgcolor: colors.plot_bgcolor,
       font: { color: colors.fontColor },
       hovermode: "closest",
-      // Keep well box-selection available while boundary editing is enabled.
-      // The capture handler below intercepts only drags that start near a ray.
-      dragmode: "select",
+      // Box-select while selecting, zoom while editing thresholds -- and the
+      // modebar below keeps both reachable either way, because picking one
+      // well out of a dense cluster needs a zoom first.
+      dragmode: editing ? "zoom" : "select",
       shapes,
       margin: { t: 10, r: 10, b: 60, l: 70 },
       legend: { orientation: "h", y: -0.2 },
@@ -387,7 +444,9 @@ export function ScatterPlot() {
     const config = {
       responsive: true,
       displayModeBar: true,
-      modeBarButtonsToRemove: ["toImage", "sendDataToCloud", "zoom2d", "pan2d"],
+      // zoom2d/pan2d are kept: with the clusters this squashed, selecting an
+      // individual well is impossible without being able to zoom in first.
+      modeBarButtonsToRemove: ["toImage", "sendDataToCloud"],
     };
 
     if (!initialized.current) {
@@ -396,24 +455,32 @@ export function ScatterPlot() {
         const el = plotRef.current as any;
         if (!el) return;
 
+        // Selection modifiers, matching PlateView: ctrl/meta toggles one well
+        // or unions a box into the current selection, shift unions, and a
+        // plain drag replaces. The scatter can only box ONE rectangle at a
+        // time and the wells an operator needs are rarely a rectangle, so
+        // without this every new box threw the previous one away.
         el.on("plotly_click", (data: any) => {
-          if (data.points?.length > 0) {
-            const well = data.points[0].customdata;
-            if (well) selectWell(well, "scatter");
-          }
+          const well = data?.points?.[0]?.customdata;
+          if (!well) return;
+          const event: MouseEvent | undefined = data.event;
+          if (event?.ctrlKey || event?.metaKey) toggleWell(well);
+          else if (event?.shiftKey) addWells([well]);
+          else selectWell(well, "scatter");
         });
 
         el.on("plotly_selected", (data: any) => {
-          if (data?.points?.length > 0) {
-            const wells = data.points
-              .map((p: any) => p.customdata)
-              .filter(Boolean);
-            if (wells.length > 0) selectWells(wells);
-          }
+          if (!data?.points?.length) return;
+          const wells = data.points.map((p: any) => p.customdata).filter(Boolean);
+          if (wells.length === 0) return;
+          if (additiveRef.current) addWells(wells);
+          else selectWells(wells);
         });
 
         el.on("plotly_deselect", () => {
-          clearSelection();
+          // A modifier-held click is an add/remove gesture, not "throw it all
+          // away" -- Plotly fires deselect for both.
+          if (!additiveRef.current) clearSelection();
         });
       });
     } else {
@@ -424,7 +491,6 @@ export function ScatterPlot() {
     allele2Dye,
     roleLabels,
     useRox,
-    fixAxis,
     xMin,
     xMax,
     yMin,
@@ -439,15 +505,67 @@ export function ScatterPlot() {
     offset,
     ratioOrigin,
     isWellVisible,
-    focusSelectedWells,
+    focusActive,
     selectedWellSet,
     selectWell,
     selectWells,
+    addWells,
+    toggleWell,
     clearSelection,
     t,
     effectiveNtcCorner,
     ntcCorner,
+    axisMode,
+    lockAspect,
+    editing,
+    normalizationApplied,
+    dark,
   ]);
+
+  // Declaring the assay's dosage ceiling. Re-clusters in AUTO mode with the
+  // ceiling as a constraint rather than switching to a threshold override:
+  // the mixture fit is what finds the clusters, and the declaration only tells
+  // it how many there can be and how high they can go.
+  const handleDosageMaxApply = useCallback(
+    (next: number | null) => {
+      setDosageMax(next);
+      if (!sessionId) return;
+      void (async () => {
+        try {
+          const result = await runClustering(sessionId, {
+            algorithm: "auto",
+            cycle: currentCycle ?? 0,
+            threshold_config: {
+              ntc_threshold: ntcThreshold,
+              ntc_fam_max: useDataStore.getState().ntcCorner?.fam ?? null,
+              ntc_allele2_max: useDataStore.getState().ntcCorner?.allele2 ?? null,
+              allele1_ratio_max: 0.4,
+              allele2_ratio_min: 0.6,
+              // Deliberately NOT the current cuts: passing boundaries here
+              // would take the threshold branch and freeze the auto rays.
+              boundaries: null,
+              offset: 0,
+              dosage_max: next,
+            },
+            n_clusters: useSettingsStore.getState().nClusters,
+            ploidy,
+            background: backgroundMode,
+            use_rox: useRox,
+          });
+          const store = useDataStore.getState();
+          store.setClusterAssignments(result.assignments);
+          store.setBoundaries(result.boundaries ?? null);
+          store.setOffset(result.offset ?? 0);
+          store.setOffsetUncertain(result.offset_uncertain ?? false);
+          store.setDosageMax(result.dosage_max ?? next);
+          window.dispatchEvent(new CustomEvent("welltypes-changed"));
+        } catch (error) {
+          console.error("Failed to persist dosage ceiling:", error);
+        }
+      })();
+    },
+    [sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setDosageMax]
+  );
 
   // Highlight every selected well. Multi-selection is the normal plate-review
   // workflow, not merely an intermediate state before assigning a well type.
@@ -499,7 +617,10 @@ export function ScatterPlot() {
   // render path); commit once on release and re-run the current analysis mode.
   useEffect(() => {
     const gd = plotRef.current as PlotlyGraphDiv | null;
-    if (!gd) return;
+    // In select mode nothing of ours is installed, so Plotly receives every
+    // mousedown and a selection box can be started anywhere -- including on
+    // top of the amber corner marker, which sits inside the data cloud.
+    if (!gd || !editing) return;
     let dragging = false;
 
     const clientToData = (clientX: number, clientY: number) => {
@@ -596,7 +717,7 @@ export function ScatterPlot() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, linesActive, setNtcCorner]);
+  }, [sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, linesActive, editing, setNtcCorner]);
 
   // Drag / add / delete the radial boundary lines (manual mode). A drag moves
   // the nearest ray; a double-click on a ray deletes it (ploidy-1), elsewhere
@@ -604,7 +725,7 @@ export function ScatterPlot() {
   // cuts so the calls flow to every view.
   useEffect(() => {
     const gd: any = plotRef.current;
-    if (!gd || !linesActive) return;
+    if (!gd || !linesActive || !editing) return;
 
     const clientToRatio = (clientX: number, clientY: number): number | null => {
       const fl = gd._fullLayout;
@@ -740,7 +861,7 @@ export function ScatterPlot() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [linesActive, sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setBoundaries, setOffset]);
+  }, [linesActive, editing, sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setBoundaries, setOffset]);
 
   // Cleanup
   useEffect(() => {
@@ -770,14 +891,57 @@ export function ScatterPlot() {
       <StatusState variant="empty" message={t.scatterEmpty} />
     ) : null;
 
+  const controlLabels = channelLabels(
+    { channel_labels: roleLabels ?? undefined },
+    allele2Dye
+  );
+  const controlBounds = dataBounds(
+    scatterPoints
+      .filter((p) => p.manual_type !== "Omit" && isWellVisible(p.well))
+      .map((p) => ({ fam: p.norm_fam, allele2: p.norm_allele2 })),
+    effectiveNtcCorner
+  );
+  const originNote =
+    ratioOrigin.source === "ntc"
+      ? t.ratioOriginSourceNtc
+      : ratioOrigin.source === "plate_floor"
+      ? t.ratioOriginSourcePlateFloor
+      : ratioOrigin.source === "plate_min"
+      ? t.ratioOriginSourcePlateMin
+      : t.ratioOriginSourceZero;
+
   return (
     <div className="panel scatter-panel">
       <h3 className="text-sm font-semibold mb-2 text-text">{t.alleleDiscrimination}</h3>
+      <ScatterViewControls
+        dataBounds={controlBounds}
+        labels={controlLabels}
+        ntcCorner={ntcCorner}
+        effectiveNtcCorner={effectiveNtcCorner}
+        onNtcCornerChange={setNtcCorner}
+        normalizationApplied={normalizationApplied}
+        roxOutlierWells={roxOutlierWells}
+        dosageCeiling={{
+          ploidy,
+          applied: dosageMax,
+          observedFrom: offset,
+          observedClasses: (boundaries?.length ?? ploidy) + 1,
+          uncertain: offsetUncertain,
+          onApply: handleDosageMaxApply,
+        }}
+      />
+      {/* Where a fam-fraction of 0.5 sits on THIS plate. Named, because the
+          fallback estimate is a much weaker claim than the plate's own NTC
+          wells and the operator can replace it by marking them. */}
+      <p data-testid="ratio-origin-note" className="mt-1 mb-2 text-xs text-text-muted">
+        {originNote} — {controlLabels.fam} {ratioOrigin.fam.toFixed(normalizationApplied ? 4 : 1)},{" "}
+        {controlLabels.allele2} {ratioOrigin.allele2.toFixed(normalizationApplied ? 4 : 1)}
+      </p>
       <div className="relative" style={{ height: "560px" }}>
         <div
           id="scatter-plot"
           data-visible-wells={
-            focusSelectedWells
+            focusActive
               ? scatterPoints.filter((p) => selectedWellSet.has(p.well)).length
               : scatterPoints.length
           }

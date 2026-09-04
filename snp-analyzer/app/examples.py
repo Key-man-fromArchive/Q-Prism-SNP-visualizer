@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 
-from app.models import UnifiedData, WellCycleData
+from app.models import UnifiedData, WellCycleData, WellType
 from app.processing.genotype_vocab import MAX_PLOIDY, MIN_PLOIDY, validate_ploidy
 
 # Mild FAM-side amplification bias so clusters sit off the exact d/P grid
@@ -84,6 +84,14 @@ def build_example(ploidy: int) -> UnifiedData:
 
     data: list[WellCycleData] = []
     sample_names: dict[str, str] = {}
+    # A real instrument file declares its own plate setup, and the analysis
+    # relies on that: declared NTC wells give the ratio origin its strongest
+    # source, and declared empty wells are kept out of both the origin estimate
+    # and the genotype fit. Naming them only in ``sample_names`` left this demo
+    # plate looking like 96 unknown samples, 56 of which happened to read near
+    # zero -- which is how the plate's no-signal floor ended up estimated from
+    # the unused wells instead of from the assay.
+    well_types: dict[str, str] = {}
 
     idx = 0
     for d in range(ploidy, -1, -1):  # high dosage (FAM-dominant) first
@@ -102,11 +110,17 @@ def build_example(ploidy: int) -> UnifiedData:
                 allele2 = max((1 - base) * scale + n_a2 + 0.02, 0.01)
                 data.append(WellCycleData(well=well, cycle=cyc, fam=fam, allele2=allele2, rox=1.0))
 
-    # NTC = a small round cloud near the origin (below the relative NTC cutoff).
+    # NTC = a small round cloud near the origin. Two orders of magnitude below
+    # the ~1.0 signal scale, which is where a real no-template well sits: at
+    # only ~10x down the auto-detector cannot tell a no-template control from a
+    # plate whose wells simply failed, and correctly declines to call it one
+    # (see _NTC_CLEAR_GAP in app/processing/clustering.py). The demo plate is
+    # meant to show a clean, unambiguous plate, so it is scaled like one.
     for k, well in enumerate(ntc_wells):
         sample_names[well] = "NTC"
-        nf = 0.03 + _hash01(1000 + k, 3.3) * 0.03
-        na = 0.03 + _hash01(1000 + k, 7.7) * 0.03
+        well_types[well] = WellType.NTC.value
+        nf = 0.003 + _hash01(1000 + k, 3.3) * 0.003
+        na = 0.003 + _hash01(1000 + k, 7.7) * 0.003
         for cyc in _CYCLES:
             data.append(WellCycleData(well=well, cycle=cyc, fam=nf, allele2=na, rox=1.0))
 
@@ -124,8 +138,9 @@ def build_example(ploidy: int) -> UnifiedData:
         # rest of the physical plate that this demo assay doesn't use, not a
         # control a caller would want folded into a whole-plate NTC count.
         sample_names[well] = "Empty"
-        nf = 0.02 + _hash01(2000 + k, 4.4) * 0.02
-        na = 0.02 + _hash01(2000 + k, 8.8) * 0.02
+        well_types[well] = WellType.EMPTY.value
+        nf = 0.002 + _hash01(2000 + k, 4.4) * 0.002
+        na = 0.002 + _hash01(2000 + k, 8.8) * 0.002
         for cyc in _CYCLES:
             data.append(WellCycleData(well=well, cycle=cyc, fam=nf, allele2=na, rox=1.0))
 
@@ -138,6 +153,8 @@ def build_example(ploidy: int) -> UnifiedData:
         data=data,
         has_rox=True,
         sample_names=sample_names,
+        imported_well_types=well_types,
+        ntc_wells=sorted(ntc_wells),
         ploidy=ploidy,
     )
 

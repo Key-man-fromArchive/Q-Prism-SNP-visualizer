@@ -203,7 +203,10 @@ export type BackgroundMode = 'none' | 'pre_read' | 'channel_min';
 export type RatioOrigin = {
   fam: number;
   allele2: number;
-  source: 'ntc' | 'plate_min' | 'zero';
+  /** `plate_floor` is a low quantile over wells with a sane passive reference
+   *  — the fallback when no NTC well is known. `plate_min` is the same idea on
+   *  a well set too small for a quantile to mean anything. */
+  source: 'ntc' | 'plate_floor' | 'plate_min' | 'zero';
 };
 
 export type ScatterPoint = {
@@ -300,6 +303,15 @@ export type ThresholdConfig = {
   boundaries?: number[] | null;
   // Dosage of the lowest observed class (places the window within 0..ploidy).
   offset?: number | null;
+  // Highest allele dosage this ASSAY can produce, declared by the operator.
+  // null/undefined = not declared, fall back to the organism's ploidy.
+  //
+  // A polyploid marker usually resolves only part of its ladder — a hexaploid
+  // assay commonly tops out at dosage 3, so its classes are 0,1,2,3 out of
+  // 0..6 — and that is a property of the assay the operator knows in advance.
+  // Declared up front it CONSTRAINS the fit: the class count is capped at
+  // dosage_max + 1 and the dosage window may not run past it.
+  dosage_max?: number | null;
 };
 
 export type ClusteringRequest = {
@@ -323,6 +335,8 @@ export type ClusteringResult = {
   boundaries?: number[] | null; // K-1 internal radial-line positions (descending fam-fraction)
   offset?: number;              // dosage of the lowest observed class
   offset_uncertain?: boolean;   // true when the offset is a low-confidence guess
+  /** The operator-declared dosage ceiling the calls were made under. */
+  dosage_max?: number | null;
   low_separation?: boolean;     // true when adjacent dosage classes overlap (poorly resolved)
   // Multi-marker (P4): per-marker results. Absent for a single-marker (whole
   // plate) run; `assignments` above is then the flat merge across regions.
@@ -503,6 +517,8 @@ export type RegionResult = {
   boundaries?: number[] | null;
   offset: number;
   offset_uncertain: boolean;
+  /** The operator-declared dosage ceiling in force for this marker. */
+  dosage_max?: number | null;
   low_separation: boolean;
   genotype_counts?: Record<string, number> | null;
   warnings?: string[] | null;
@@ -542,6 +558,13 @@ export type ScatterResponse = RoleLabelMetadata & {
   /** Points are raw; this is the origin their ratios are measured from. */
   ratio_origin?: RatioOrigin;
   background_mode?: BackgroundMode;
+  /** Whether the values really were divided by the passive reference. NOT the
+   *  same as the `use_rox` request: a run with no reference comes back raw
+   *  either way, and an axis titled "FAM / ROX" over raw RFU is misleading. */
+  normalization_applied?: boolean;
+  /** Wells whose passive reference is too far from the plate median to divide
+   *  by; excluded from the ratio-origin estimate. */
+  rox_outlier_wells?: string[];
   points: ScatterPoint[];
 };
 
@@ -550,6 +573,8 @@ export type PlateResponse = RoleLabelMetadata & {
   allele2_dye: string;
   ratio_origin?: RatioOrigin;
   background_mode?: BackgroundMode;
+  normalization_applied?: boolean;
+  rox_outlier_wells?: string[];
   wells: PlateWell[];
 };
 

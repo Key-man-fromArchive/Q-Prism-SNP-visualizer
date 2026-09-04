@@ -42,9 +42,12 @@ class RatioOrigin(BaseModel):
 
     ``source`` says where it came from, so a view can state it rather than
     implying an authority the number does not have:
-      - ``ntc``       — median of the plate's no-template wells (preferred)
-      - ``plate_min`` — per-channel plate-wide minimum (no NTC well known)
-      - ``zero``      — no points at all; ratios measured from (0, 0)
+      - ``ntc``         — median of the plate's no-template wells (preferred)
+      - ``plate_floor`` — per-channel low quantile of the plate, over wells
+                          with a sane passive reference (no NTC well known)
+      - ``plate_min``   — per-channel plate-wide minimum; only for a plate too
+                          small for a quantile to mean anything
+      - ``zero``        — no points at all; ratios measured from (0, 0)
     """
     fam: float = 0.0
     allele2: float = 0.0
@@ -196,6 +199,18 @@ class ThresholdConfig(BaseModel):
     # Dosage of the lowest observed class — places the K observed zones within the
     # full 0..ploidy ladder (see genotype_window / the offset control).
     offset: int = 0
+    # Highest allele dosage this ASSAY can produce, declared by the operator.
+    # None = not declared; fall back to the organism's ploidy.
+    #
+    # A polyploid marker usually resolves only part of its ladder: a hexaploid
+    # assay commonly tops out at dosage 3, so the classes are 0,1,2,3 out of
+    # 0..6. That is a property of the assay, which the operator knows and
+    # fluorescence often cannot recover -- 0,1,2,3 and 3,4,5,6 fit the same
+    # four clusters. Declared up front it is a real CONSTRAINT rather than a
+    # correction after the fact: the class-count search is capped at
+    # ``dosage_max + 1`` (so the fit cannot split four real classes into seven)
+    # and the dosage window may not run past it.
+    dosage_max: int | None = Field(default=None, ge=0, le=8)
 
 
 class MarkerRegion(BaseModel):
@@ -302,6 +317,9 @@ class RegionResult(BaseModel):
     boundaries: list[float] | None = None
     offset: int = 0
     offset_uncertain: bool = False
+    # The operator-declared dosage ceiling in force for this marker, echoed so
+    # the UI can show what it applied (see ThresholdConfig.dosage_max).
+    dosage_max: int | None = None
     low_separation: bool = False
     genotype_counts: dict[str, int] | None = None
     # Phase 1 diagnostics: non-fatal quality flags for this marker's calls (e.g.
@@ -344,6 +362,9 @@ class ClusteringResult(BaseModel):
     boundaries: list[float] | None = None
     offset: int = 0
     offset_uncertain: bool = False
+    # The operator-declared dosage ceiling in force (see
+    # ThresholdConfig.dosage_max), echoed back for display.
+    dosage_max: int | None = None
     # True when adjacent dosage classes overlap (poorly resolved — high ploidy).
     low_separation: bool = False
     # Multi-marker: per-marker results. None for a single-marker (whole-plate)

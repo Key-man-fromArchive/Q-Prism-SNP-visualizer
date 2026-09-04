@@ -10,9 +10,9 @@ from app.models import UnifiedData
 from app.processing.genotype_vocab import DEFAULT_PLOIDY, label_by_ratio
 from app.processing.background import BackgroundMode
 from app.processing.normalize import normalize_for_cycle
-from app.processing.ratio_origin import compute_ratio_origin, shift_points_to_origin
+from app.processing.ratio_origin import shift_points_to_origin
 from app.routers.upload import sessions
-from app.routers.clustering import cluster_store, welltype_store, ntc_wells_for
+from app.routers.clustering import cluster_store, welltype_store, ratio_origin_for
 from app.auth import CurrentUser, check_session_access
 
 router = APIRouter()
@@ -93,7 +93,7 @@ async def export_csv(
     called = {
         p.well: p
         for p in shift_points_to_origin(
-            points, compute_ratio_origin(points, ntc_wells_for(sid, unified))
+            points, ratio_origin_for(sid, unified, points)
         )
     }
 
@@ -206,7 +206,7 @@ async def export_xlsx(
     called = {
         p.well: p
         for p in shift_points_to_origin(
-            points, compute_ratio_origin(points, ntc_wells_for(sid, unified))
+            points, ratio_origin_for(sid, unified, points)
         )
     }
     cluster_assignments = cluster_store[sid].assignments if sid in cluster_store else {}

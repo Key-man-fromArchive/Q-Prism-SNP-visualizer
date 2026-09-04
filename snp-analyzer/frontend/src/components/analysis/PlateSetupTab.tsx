@@ -24,6 +24,7 @@ import {
 import type { MarkerRegion, SavedLayout, LayoutApplyConflict, MarkerCatalogEntry } from "@/types/api";
 import { WellType } from "@/types/api";
 import { MARKER_PALETTE } from "@/lib/constants";
+import { withDosageMax } from "@/lib/threshold-config";
 import { extractLayoutConflict, extractLayoutMissingWellsMessage } from "@/lib/layout-conflict";
 
 const ROW_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -81,6 +82,11 @@ export function PlateSetupTab() {
   const [formName, setFormName] = useState("");
   const [formColor, setFormColor] = useState<string>(MARKER_PALETTE[0]);
   const [formPloidy, setFormPloidy] = useState<number>(2);
+  // Highest dosage this assay can produce. Declared here, with the ploidy,
+  // because it is a property of the ASSAY and the operator knows it before any
+  // plate is read -- a hexaploid marker commonly tops out at dosage 3, and the
+  // caller uses that as a constraint rather than guessing it per plate.
+  const [formDosageMax, setFormDosageMax] = useState<number | null>(null);
   // Attach-to-catalog (feat/marker-catalog): pick an existing catalog assay
   // to prefill name/ploidy/color from when creating/editing a marker.
   const [catalogEntries, setCatalogEntries] = useState<MarkerCatalogEntry[]>([]);
@@ -354,6 +360,9 @@ export function PlateSetupTab() {
     setFormName("");
     setFormColor(nextColor(markers));
     setFormPloidy(markers[markers.length - 1]?.ploidy ?? 2);
+    setFormDosageMax(
+      markers[markers.length - 1]?.threshold_config?.dosage_max ?? null
+    );
     setFormCatalogId("");
   }
 
@@ -364,6 +373,7 @@ export function PlateSetupTab() {
     setFormName(m.name);
     setFormColor(m.color ?? MARKER_PALETTE[0]);
     setFormPloidy(m.ploidy);
+    setFormDosageMax(m.threshold_config?.dosage_max ?? null);
     setFormCatalogId(m.catalog_id ?? "");
   }
 
@@ -420,6 +430,10 @@ export function PlateSetupTab() {
         ploidy: formPloidy,
         color: formColor,
         catalog_id: catalogId,
+        // Only carried when actually declared: an undeclared ceiling must stay
+        // absent so the caller falls back to the organism's full ladder rather
+        // than being handed a ploidy-shaped default it cannot tell apart.
+        threshold_config: withDosageMax(null, formDosageMax),
       };
       setMarkers((prev) => [...prev, created]);
       setPickMarkerId(id);
@@ -432,7 +446,14 @@ export function PlateSetupTab() {
       const existing = markers.find((m) => m.id === editingId);
       const next = markers.map((m) =>
         m.id === editingId
-          ? { ...m, name, color: formColor, ploidy: formPloidy, catalog_id: catalogId }
+          ? {
+              ...m,
+              name,
+              color: formColor,
+              ploidy: formPloidy,
+              catalog_id: catalogId,
+              threshold_config: withDosageMax(m.threshold_config, formDosageMax),
+            }
           : m
       );
       setMarkers(next);
@@ -806,6 +827,32 @@ export function PlateSetupTab() {
                   </option>
                 ))}
               </select>
+
+              {/* A polyploid assay usually cannot reach its organism's top
+                  dosage. Saying so here means the caller never has to guess it
+                  from a plate, and cannot split more classes than exist. */}
+              {formPloidy > 2 && (
+                <>
+                  <p className="text-xs font-bold text-text-muted mt-2.5 mb-1.5">
+                    {t.dosageMaxLabel}
+                  </p>
+                  <select
+                    data-testid="marker-dosage-max-select"
+                    value={formDosageMax === null ? "" : String(formDosageMax)}
+                    onChange={(e) =>
+                      setFormDosageMax(e.target.value === "" ? null : Number(e.target.value))
+                    }
+                    className="w-full border border-border rounded-md px-2 py-1.5 text-sm bg-surface text-text"
+                  >
+                    <option value="">{t.wsMarkerDosageMaxFull(formPloidy)}</option>
+                    {Array.from({ length: formPloidy }, (_, i) => i + 1).map((d) => (
+                      <option key={d} value={d}>
+                        {t.wsMarkerDosageMaxOption(d)}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
 
               <div className="flex gap-1.5 mt-2.5">
                 <button

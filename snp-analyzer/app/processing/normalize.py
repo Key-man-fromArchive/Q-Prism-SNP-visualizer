@@ -45,6 +45,24 @@ def normalize(
     return results
 
 
+def normalization_applies(
+    data: UnifiedData | list[WellCycleData],
+    has_rox: bool | None = None,
+    use_rox: bool = True,
+) -> bool:
+    """Whether ``normalize`` would actually divide by the passive reference.
+
+    Asking for normalization is not the same as getting it: a run with no
+    passive reference, or one whose parser recorded ``normalization_mode
+    "none"``, is returned raw no matter what the caller requests. Views used to
+    label their axes "FAM / ROX" straight off the request flag, which quietly
+    mislabels raw RFU as normalized. This reports the decision itself so a view
+    can state what the numbers ARE.
+    """
+    _, applied = _normalization_context(data, has_rox, use_rox)
+    return applied
+
+
 def normalize_for_cycle(
     data: UnifiedData | list[WellCycleData],
     cycle: int,

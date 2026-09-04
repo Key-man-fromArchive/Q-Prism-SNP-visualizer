@@ -104,20 +104,23 @@ export default function App() {
   // Track whether ROX was auto-set for THIS session (prevents overriding manual toggles)
   const roxAutoSetForSession = useRef<string | null>(null);
 
-  // Auto-set ROX based on instrument ONLY on session change
+  // Default the normalization toggle from whether the run HAS a passive
+  // reference -- never from the instrument name.
+  //
+  // This used to read `instrument.includes("quantstudio")` and force the
+  // toggle OFF for every other instrument. A CFX Opus run
+  // (1-2_admin_2026-09-03 16-14-11_783BR20183.pcrd) carries a perfectly good
+  // ROX channel (has_rox true, CV ~3-8% across the plate) and was switched
+  // back to raw on every session load, silently discarding whatever the
+  // operator had set in the Settings tab. Whether a run can be normalized is
+  // a property of its data, which `has_rox` already answers; the parsers set
+  // it, and `normalize()` refuses to divide without it either way.
   useEffect(() => {
     if (!sessionInfo || !sessionId) return;
     if (roxAutoSetForSession.current === sessionId) return;
 
     roxAutoSetForSession.current = sessionId;
-    const instrument = (sessionInfo.instrument || "").toLowerCase();
-    const isQuantStudio = instrument.includes("quantstudio");
-
-    if (isQuantStudio && sessionInfo.has_rox) {
-      setUseRox(true);
-    } else if (!isQuantStudio) {
-      setUseRox(false);
-    }
+    setUseRox(Boolean(sessionInfo.has_rox));
   }, [sessionId, sessionInfo, setUseRox]);
 
   // Keyboard shortcut callbacks

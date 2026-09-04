@@ -672,6 +672,53 @@ const en = {
     'This assay has no catalog link, or its catalog entry has not been validated against an independent ground truth AND had its relative amplification verified. Absolute dosage calls remain provisional.',
   wsAnalysisDosageTrustValidatedHint:
     'This assay is linked to a catalog entry whose dosage calls were checked against ground truth and whose amplification/ratio mapping was verified.',
+
+  // Scatter view controls (axis range / drag tool / NTC quadrant / normalization).
+  // These live next to the plot rather than in the Settings tab: every one of
+  // them is a decision made while looking at the plot.
+  scatterToolLabel: 'Drag does',
+  scatterToolSelect: 'Select wells',
+  scatterToolEdit: 'Edit thresholds',
+  axisRangeLabel: 'Axis range',
+  axisModeZero: 'From 0',
+  axisModeAuto: 'Fit data',
+  axisModeManual: 'Manual',
+  axisFitToData: 'Fit to data',
+  axisLockAspect: 'Equal x/y scale',
+  ntcQuadrantLabel: 'NTC quadrant',
+  ntcQuadrantInferred: 'auto',
+  ntcQuadrantReset: 'Auto',
+  normalizeByReference: 'Divide by reference',
+  normalizationOn: (channel: string) => `Normalized by ${channel}`,
+  normalizationOffRaw: 'Raw RFU',
+  roxOutlierWells: (n: number) => `${n} well${n === 1 ? '' : 's'} with an off-scale reference`,
+  ratioOriginSourceNtc: "Ratio origin: the plate's NTC wells",
+  ratioOriginSourcePlateFloor: 'Ratio origin: estimated plate floor (no NTC well marked)',
+  ratioOriginSourcePlateMin: 'Ratio origin: plate minimum (too few wells to estimate a floor)',
+  ratioOriginSourceZero: 'Ratio origin: (0, 0)',
+  analysisWarningRelativeNtc:
+    'Low-signal wells were left as Undetermined, not NTC: they are not clearly separated enough from the samples (or cover too much of the plate) to be no-template controls. Mark the real NTC wells to fix the ratio origin.',
+  analysisWarningLowN: 'Too few wells to fit clusters — calls are provisional.',
+  analysisWarningAnchorConflict: 'Control wells disagree with the fitted dosage ladder.',
+  analysisWarningsTitle: 'Analysis warnings',
+
+  // The assay's dosage ceiling, declared by the operator rather than inferred.
+  // A hexaploid marker commonly tops out at dosage 3, so its classes are
+  // 0,1,2,3 out of 0..6 — a property of the assay, not of the plate.
+  dosageMaxLabel: 'Highest dosage this assay produces',
+  wsMarkerDosageMaxFull: (ploidy: number) => `Full ladder (0–${ploidy})`,
+  wsMarkerDosageMaxOption: (max: number) => `0–${max}`,
+  dosageMaxReset: 'Full ladder',
+  dosageMaxApplied: (max: number) => `capped at ${max}`,
+  dosageMaxUndeclared: (ploidy: number) => `full ladder (0–${ploidy})`,
+  dosageWindowObserved: (lo: number, hi: number) =>
+    lo === hi ? `observed: dosage ${lo}` : `observed: dosages ${lo}–${hi}`,
+
+  // Observed dosage window (polyploid). Which absolute dosages the classes on
+  // screen are: a hexaploid marker commonly resolves 0,1,2,3 only, and
+  // fluorescence often cannot tell 0,1,2,3 from 3,4,5,6.
+  dosageWindowUncertainHint:
+    'No class sits on either axis, so these dosages could sit anywhere on the ladder — the fluorescence cannot tell. Shift the window if you know where it belongs; the clusters themselves do not change.',
 };
 
 export type Translations = {

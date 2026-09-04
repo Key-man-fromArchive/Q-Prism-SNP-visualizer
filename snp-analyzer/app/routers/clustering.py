@@ -90,6 +90,31 @@ def ntc_wells_for(sid: str, unified) -> set[str]:
     }
 
 
+def ratio_origin_for(sid: str, unified, points):
+    """The one ratio origin for this session's cycle, for every caller.
+
+    Both the plot and the clustering measure ratios from this, so they have to
+    agree -- a scatter drawing its boundary rays from one origin while the
+    calls were made against another is a plot that visibly contradicts its own
+    colours.
+
+    Wells the plate setup declares EMPTY are excluded: an empty well holds no
+    reaction mix, so it reads BELOW the wells that do, and it is not evidence
+    about where this assay's no-signal floor sits. On a partially-filled plate
+    -- the 96-well demo plates use 36-64 wells and leave the rest empty -- an
+    estimate taken over every well lands on the empty ones instead of on the
+    assay, and every ratio measured from it is wrong. An OMITTED well is a
+    different claim (that reading is bad, not "background is elsewhere") and
+    still informs the origin.
+    """
+    well_types = effective_well_types_for(sid, unified)
+    filled = [
+        p for p in points
+        if well_types.get(p.well) != WellType.EMPTY.value
+    ]
+    return compute_ratio_origin(filled or points, ntc_wells_for(sid, unified))
+
+
 def _cluster_point_dicts(
     point_dicts, control_wells, algorithm, threshold_config, n_clusters, ploidy
 ):
@@ -132,6 +157,7 @@ def _cluster_point_dicts(
             "offset": config.offset,
             "offset_uncertain": False,
             "low_separation": False,
+            "dosage_max": config.dosage_max,
         }
         return assignments, confidences, window, None
 
@@ -145,6 +171,13 @@ def _cluster_point_dicts(
             ploidy=ploidy,
             warnings=warnings,
             anchor_state=anchor_state,
+            # The operator's declared dosage ceiling constrains the AUTO fit --
+            # it caps the class count and bounds the dosage window. Declaring
+            # it up front is what makes this a constraint instead of a
+            # correction: a polyploid assay's reachable range is a property of
+            # the assay, not something to be guessed from each plate and then
+            # nudged.
+            dosage_max=config.dosage_max,
         )
     elif algorithm == ClusteringAlgorithm.THRESHOLD:
         fixed_controls = {
@@ -164,8 +197,15 @@ def _cluster_point_dicts(
     # genotype_window to report it as such instead of re-deriving its own
     # (potentially different) offset guess from the sample ratios alone.
     window = genotype_window(
-        point_dicts, assignments, ploidy, anchor_resolved=anchor_state.get("resolved", False)
+        point_dicts,
+        assignments,
+        ploidy,
+        anchor_resolved=anchor_state.get("resolved", False),
+        dosage_max=config.dosage_max,
     )
+    # Echo the ceiling that was applied, so the client shows what the calls
+    # were actually made under rather than what it last sent.
+    window["dosage_max"] = config.dosage_max
     return assignments, confidences, window, (warnings or None)
 
 
@@ -303,6 +343,7 @@ def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringR
                 boundaries=window["boundaries"],
                 offset=window["offset"],
                 offset_uncertain=window["offset_uncertain"],
+                dosage_max=window["dosage_max"],
                 low_separation=window["low_separation"],
                 genotype_counts=count_genotypes(assignments, reg.ploidy),
                 warnings=warnings,
@@ -340,21 +381,25 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
     points = normalize_for_cycle(
         unified, cycle, use_rox=req.use_rox, background=req.background
     )
-    # Wells manually marked as "Omit" have data but should not skew clustering
-    # (bad/spiked readings would drag kmeans centroids or threshold ratios).
+    # Wells marked "Omit" have data but should not skew clustering (bad/spiked
+    # readings would drag kmeans centroids or threshold ratios). Wells marked
+    # "Empty" hold no reaction at all: there is no genotype in them to call,
+    # and -- unlike an omitted well -- their optical read is not this assay's
+    # background either, because a well with no reaction mix in it reads lower
+    # than one that has some. Left in, a plate whose unused wells outnumber its
+    # samples has its no-signal floor estimated from the empty wells rather
+    # than from the assay, which moves the origin and therefore every ratio.
     effective_well_types = effective_well_types_for(sid, unified)
-    omitted = {
+    excluded = {
         well
         for well, wtype in effective_well_types.items()
-        if wtype == WellType.OMIT.value
+        if wtype in (WellType.OMIT.value, WellType.EMPTY.value)
     }
     # Every call below this line is a ratio, so it needs an origin that means
     # "no signal". Raw endpoint RFU does not put that at (0, 0) -- see
-    # app/processing/ratio_origin.py. The origin is taken from ALL of the
-    # cycle's points (an omitted well is excluded from the fit, but omitting a
-    # well is not a statement about where background sits), then applied to
-    # the clustering input only. The plot keeps the raw values.
-    origin = compute_ratio_origin(points, ntc_wells_for(sid, unified))
+    # app/processing/ratio_origin.py and ratio_origin_for above. Applied to the
+    # clustering input only; the plot keeps the raw values.
+    origin = ratio_origin_for(sid, unified, points)
     point_dicts = shift_to_origin(
         [
             {
@@ -367,7 +412,7 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
                 "plot_allele2": p.norm_allele2,
             }
             for p in points
-            if p.well not in omitted
+            if p.well not in excluded
         ],
         origin,
     )
@@ -430,6 +475,7 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
             boundaries=window["boundaries"],
             offset=window["offset"],
             offset_uncertain=window["offset_uncertain"],
+            dosage_max=window["dosage_max"],
             low_separation=window["low_separation"],
             warnings=warnings,
         )

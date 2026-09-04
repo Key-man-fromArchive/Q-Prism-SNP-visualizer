@@ -142,7 +142,10 @@ def test_no_boundaries_marker_auto_window_unchanged():
 
     assert assignments == expected_assignments
     assert confidences == expected_conf
-    assert window == expected_window
+    # The router additionally echoes the operator-declared dosage ceiling that
+    # was applied (ThresholdConfig.dosage_max); everything genotype_window
+    # itself decides must still match exactly.
+    assert window == {**expected_window, "dosage_max": None}
     assert warnings == (expected_warnings or None)
 
 

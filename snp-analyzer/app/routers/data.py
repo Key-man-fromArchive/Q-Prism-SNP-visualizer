@@ -8,11 +8,11 @@ from app.models import (
     UnifiedData,
 )
 from app.processing.background import BackgroundMode
-from app.processing.normalize import normalize_for_cycle, normalize
-from app.processing.ratio_origin import compute_ratio_origin
+from app.processing.normalize import normalize_for_cycle, normalize, normalization_applies
+from app.processing.ratio_origin import rox_outlier_wells
 from app.role_labels import build_role_label_metadata
 from app.routers.upload import sessions
-from app.routers.clustering import cluster_store, welltype_store, ntc_wells_for
+from app.routers.clustering import cluster_store, welltype_store, ratio_origin_for
 from app.auth import CurrentUser, check_session_access
 
 router = APIRouter()
@@ -67,8 +67,9 @@ async def scatter_data(
 
     # Where a fam-fraction of 0.5 actually is on THIS plate. The points below
     # are raw; the client needs the same origin the backend clustered against
-    # to draw the boundary rays and label by ratio consistently.
-    ratio_origin = compute_ratio_origin(points, ntc_wells_for(sid, unified))
+    # to draw the boundary rays and label by ratio consistently -- which is
+    # why this goes through the same helper the clustering endpoint uses.
+    ratio_origin = ratio_origin_for(sid, unified, points)
 
     cluster_assignments = {}
     confidences = {}
@@ -82,6 +83,15 @@ async def scatter_data(
         "allele2_dye": unified.allele2_dye,
         "background_mode": background,
         "ratio_origin": ratio_origin.model_dump(),
+        # What the numbers below ARE, not what the request asked for: a run
+        # with no passive reference comes back raw however ``use_rox`` is set,
+        # and an axis labelled "FAM / ROX" over raw RFU is a lie the client
+        # cannot detect on its own.
+        "normalization_applied": normalization_applies(unified, use_rox=use_rox),
+        # Wells whose passive reference is too far from the plate median to
+        # divide by. They are excluded from the ratio-origin estimate (see
+        # app/processing/ratio_origin.py) and named here so QC can show them.
+        "rox_outlier_wells": sorted(rox_outlier_wells(points)),
         **build_role_label_metadata(unified),
         "points": [
             ScatterPoint(
@@ -116,7 +126,7 @@ async def plate_data(
         cycle = max(unified.cycles)
 
     points = normalize_for_cycle(unified, cycle, use_rox=use_rox, background=background)
-    ratio_origin = compute_ratio_origin(points, ntc_wells_for(sid, unified))
+    ratio_origin = ratio_origin_for(sid, unified, points)
 
     cluster_assignments_plate = {}
     confidences_plate = {}
@@ -155,6 +165,8 @@ async def plate_data(
         "allele2_dye": unified.allele2_dye,
         "background_mode": background,
         "ratio_origin": ratio_origin.model_dump(),
+        "normalization_applied": normalization_applies(unified, use_rox=use_rox),
+        "rox_outlier_wells": sorted(rox_outlier_wells(points)),
         **build_role_label_metadata(unified),
         "wells": wells,
     }
@@ -332,6 +344,9 @@ async def export_pdf(
         plate_wells=plate_wells,
         ct_results=ct_results,
         filename=filename,
+        # Without this the report coloured and named a diploid trio whatever
+        # the plate's ploidy, so every polyploid dosage class came out grey.
+        ploidy=unified.ploidy,
     )
 
     return Response(

@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.models import ThresholdConfig, WellType
 from app.processing.genotype_vocab import (
     DEFAULT_PLOIDY,
+    dosage_by_ratio,
     genotype_label,
     label_by_ratio,
     validate_ploidy,
@@ -56,12 +57,36 @@ _SMALL_REGION_CONFIDENCE = _CALL_MIN_POSTERIOR
 # Phase 1 diagnostics (C4): the relative-NTC detector (_NTC_SIGNAL_FRAC below)
 # is a signal-level cutoff, not a test of whether that low-signal group is
 # actually separated from the real samples by a wide margin. This is the
-# minimum gap -- median plate signal vs. the auto-flagged NTC wells' own
-# signal -- that counts as a genuine "no-template" gap (one order of
-# magnitude). Below this, the wells are still labeled NTC (never invent a new
-# label -- see module docstring in tests/test_c4_relative_ntc.py) but flagged
-# with the "relative_ntc" warning and a confidence < 1.0.
+# minimum gap -- median plate signal vs. the flagged wells' own signal -- that
+# counts as a genuine "no-template" gap (one order of magnitude).
+#
+# What happens below that gap changed after a real plate
+# (``1-2_admin_2026-09-03 16-14-11_783BR20183.pcrd``) came through: 25 of 96
+# wells were auto-labelled NTC at a gap of 5.3, and the operator relabelled
+# every one of them Undetermined by hand. C4 originally kept the "NTC" label
+# there and only lowered the confidence, on the reasoning that a detector
+# should never invent a label. But "NTC" is not a signal level -- it is a claim
+# about what was pipetted into the well, which a signal-level cutoff has no
+# access to. What such a cutoff can conclude is "no signal", and for a sample
+# well with no signal the label already in the vocabulary is UNDETERMINED (a
+# no-call). So below the clear gap the wells are called Undetermined, not NTC:
+# no label is invented, and no plate-setup claim is fabricated either. A well
+# the operator or the instrument DECLARED as NTC never reaches this code --
+# ``control_wells`` is honored verbatim before the cutoff runs.
 _NTC_CLEAR_GAP = 10.0
+
+# ... and even at a clear gap, a plate where this much of the well complement
+# reads as no-signal is a plate that mostly failed, not a plate with that many
+# no-template controls. Inferring NTC across a quarter of the wells is a
+# stronger claim than the evidence supports, so past this fraction the label
+# stays Undetermined regardless of the gap.
+_NTC_MAX_PLATE_FRACTION = 0.15
+
+# The fraction above is only evidence on a well set big enough for a fraction
+# to mean something. A 9-well marker region with 3 NTC wells is at 33% and is
+# entirely normal; a 96-well plate at 26% is not. Below this count the
+# fraction test is skipped and the gap alone decides.
+_NTC_MIN_WELLS_FOR_FRACTION = 24
 
 
 def _manual_ntc_mask(points: list[dict], fam_max: float, allele2_max: float):
@@ -177,6 +202,7 @@ def cluster_auto(
     ploidy: int = DEFAULT_PLOIDY,
     warnings: list[str] | None = None,
     anchor_state: dict | None = None,
+    dosage_max: int | None = None,
 ) -> tuple[dict[str, str], dict[str, float]]:
     """Model-based, ploidy-aware genotype clustering with an optional manual NTC gate.
 
@@ -206,6 +232,13 @@ def cluster_auto(
     3. Map each cluster to an allele dosage by a monotonic best-fit of the
        cluster ratios to the ideal ``d/P`` positions (rank-preserving, so skew
        cannot reorder dosages), then label via the genotype vocabulary.
+       ``dosage_max`` is the operator's declaration of the highest dosage this
+       assay can produce, and it CONSTRAINS this step rather than nudging it:
+       the class count K is capped at ``dosage_max + 1`` and the window may not
+       run past ``dosage_max``. A hexaploid marker commonly tops out at dosage
+       3, and both halves matter -- without the cap BIC is free to split four
+       real classes into seven, and without the ceiling the four get stretched
+       across the whole 0..6 ladder.
     4. Confidence in ratio space: assign each well to the nearest genotype
        ratio-centre; wells in the gap between two genotypes — or in singleton
        clusters — are Undetermined. Low-signal wells are NOT penalised for
@@ -304,28 +337,44 @@ def cluster_auto(
     else:
         ntc_mask = total < _NTC_SIGNAL_FRAC * median_total
 
-    # C4 (conservative, warning-only): the mask above is a pure signal-level
-    # cutoff -- it says nothing about whether the flagged wells are actually a
-    # genuine no-template gap, or just the low end of a narrow, low-dynamic-
-    # range marker. Compare the flagged wells' OWN signal to the plate median
-    # they were cut from: a real NTC is orders of magnitude below the samples;
-    # anything closer is ambiguous, so it keeps the "NTC" label (never invent a
-    # new one) but is flagged and denied a blind maximum-confidence call.
+    # C4: the mask above is a pure signal-level cutoff -- it says nothing about
+    # whether the flagged wells are actually a genuine no-template gap, or just
+    # the low end of a narrow, low-dynamic-range marker (or a plate where a
+    # quarter of the wells simply failed). Compare the flagged wells' OWN
+    # signal to the plate median they were cut from: a real NTC is orders of
+    # magnitude below the samples. Anything closer -- or too much of the plate
+    # at once -- is only evidence of NO SIGNAL, which is Undetermined, not a
+    # no-template control. See _NTC_CLEAR_GAP for why this is not "NTC with a
+    # lower confidence".
+    ntc_label = WellType.NTC.value
     ntc_confidence = 1.0
     if not manual_ntc and bool(np.any(ntc_mask)):
         ntc_max_total = float(np.max(total[ntc_mask]))
         gap_ratio = (median_total / ntc_max_total) if ntc_max_total > 0 else float("inf")
-        if gap_ratio < _NTC_CLEAR_GAP:
+        too_much_of_the_plate = (
+            len(wells) >= _NTC_MIN_WELLS_FOR_FRACTION
+            and float(np.count_nonzero(ntc_mask)) / len(wells) > _NTC_MAX_PLATE_FRACTION
+        )
+        if gap_ratio < _NTC_CLEAR_GAP or too_much_of_the_plate:
             if warnings is not None:
                 warnings.append("relative_ntc")
+            ntc_label = WellType.UNDETERMINED.value
+            # A no-call carries no positive claim, so it reports the strength of
+            # the only thing that WAS measured: how far below the plate these
+            # wells sit. A clear gap that failed only the plate-fraction test
+            # still reads as a confident "no signal".
             ntc_confidence = max(0.0, min(0.99, gap_ratio / _NTC_CLEAR_GAP))
 
     for w, is_ntc in zip(wells, ntc_mask):
         if is_ntc:
-            assignments[w] = WellType.NTC.value
+            assignments[w] = ntc_label
             confidences[w] = ntc_confidence
 
     sig_idx = [i for i in range(len(wells)) if not ntc_mask[i]]
+    # The operator's declared ceiling, clamped into the ladder. Used by every
+    # dosage decision below, including the small-region fallback -- a three-well
+    # region must not be handed a dosage this assay cannot produce.
+    ceiling = ploidy if dosage_max is None else max(0, min(dosage_max, ploidy))
 
     # Too few signal wells to cluster reliably — call by absolute ratio.
     if len(sig_idx) < 4:
@@ -335,7 +384,8 @@ def cluster_auto(
         if sig_idx and warnings is not None:
             warnings.append("low_n")
         for i in sig_idx:
-            assignments[wells[i]] = label_by_ratio(ratio[i], ploidy)
+            dosage = min(dosage_by_ratio(ratio[i], ploidy), ceiling)
+            assignments[wells[i]] = genotype_label(dosage, ploidy)
             confidences[wells[i]] = _SMALL_REGION_CONFIDENCE
         return assignments, confidences
 
@@ -348,7 +398,9 @@ def cluster_auto(
     rt = np.arcsin(np.sqrt(np.clip(ratio[sig_idx], 0.0, 1.0)))
     X = rt.reshape(-1, 1)
     n_unique = len(np.unique(np.round(rt, 9)))
-    k_max = min(ploidy + 1, n_unique)
+    # A declared ceiling limits how many classes can exist at all, so BIC is
+    # not offered the option of inventing more of them.
+    k_max = min(ceiling + 1, n_unique)
 
     best_gmm = None
     best_bic = None
@@ -461,8 +513,19 @@ def cluster_auto(
     if dosages is not None:
         if anchor_state is not None:
             anchor_state["resolved"] = True
+        if dosage_max is not None:
+            # An allele-1 control anchors the scale at dosage ``ploidy``, which
+            # this assay cannot reach if the operator declared a lower ceiling.
+            # Slide the anchored window down to fit rather than clamping each
+            # class onto the ceiling, which would collapse distinct classes.
+            overshoot = dosages[-1] - ceiling
+            if overshoot > 0:
+                shift = min(overshoot, dosages[0])
+                dosages = [d - shift for d in dosages]
     else:
-        dosages = _assign_dosages([cluster_ratio[lab] for lab in order], ploidy)
+        dosages = _assign_dosages(
+            [cluster_ratio[lab] for lab in order], ploidy, dosage_max
+        )
     label_map = {lab: genotype_label(d, ploidy) for lab, d in zip(order, dosages)}
 
     # 4. Call + confidence from the fitted mixture, evaluated in the SAME
@@ -527,6 +590,7 @@ def genotype_window(
     assignments: dict[str, str],
     ploidy: int = DEFAULT_PLOIDY,
     anchor_resolved: bool = False,
+    dosage_max: int | None = None,
 ) -> dict:
     """Describe the OBSERVED dosage window for the draggable-line UI.
 
@@ -570,8 +634,11 @@ def genotype_window(
         # marker, when no boundaries were configured) -- not just "truly no calls
         # yet" -- so callers that unconditionally read every key (_run_regions)
         # must never KeyError here.
+        # Seed the ladder the operator declared, not the organism's full one:
+        # a hexaploid marker capped at dosage 3 gets three cuts over 0..3, not
+        # six over 0..6, so the draggable lines start where the data can be.
         return {
-            "boundaries": default_ratio_cuts(ploidy),
+            "boundaries": default_ratio_cuts(ploidy, dosage_max),
             "offset": 0,
             "offset_uncertain": True,
             "low_separation": False,
@@ -592,7 +659,9 @@ def genotype_window(
     else:
         # Offset + uncertainty from the same window estimator the auto labeller
         # uses, so the drag-tool seed stays consistent with the auto calls.
-        offset, _step, uncertain = estimate_window([centre[d] for d in present], ploidy)
+        offset, _step, uncertain = estimate_window(
+            [centre[d] for d in present], ploidy, dosage_max
+        )
 
     # Internal cuts across the observed window [offset, top], high-r first
     # (empirical midpoint where both flanking classes are present, else ideal).
@@ -642,7 +711,11 @@ def _window_low_separation(ratio_by_dosage: dict[int, list[float]], present: lis
     return False
 
 
-def estimate_window(sorted_ratios: list[float], ploidy: int) -> tuple[int, int, bool]:
+def estimate_window(
+    sorted_ratios: list[float],
+    ploidy: int,
+    dosage_max: int | None = None,
+) -> tuple[int, int, bool]:
     """Estimate the observed dosage window from cluster ratios (sorted ascending).
 
     Returns ``(offset, step, uncertain)`` where the K clusters map to dosages
@@ -651,9 +724,19 @@ def estimate_window(sorted_ratios: list[float], ploidy: int) -> tuple[int, int, 
         (``round(gap * P)``, >=1): 1 = a contiguous window, 2 = every other dosage.
       - ``offset`` is the arithmetic-progression start that best fits the ratios
         to the ideals ``d/P`` (least squares) — a fit, not just the lowest dosage.
-      - ``uncertain`` is True when NO cluster hugs an axis extreme (r~0 = dosage 0,
-        r~1 = dosage P), so the absolute position of the window is a guess the
-        fluorescence cannot anchor (the sweetpotato "0,1,2 vs 4,5,6" ambiguity).
+      - ``uncertain`` is True when NO cluster hugs an END OF THE WINDOW, so the
+        absolute position is a guess the fluorescence cannot anchor (the
+        sweetpotato "0,1,2 vs 4,5,6" ambiguity).
+
+    ``dosage_max`` is the highest dosage this assay can produce, declared by the
+    operator (see ``ThresholdConfig.dosage_max``). It is a real constraint, not
+    a hint: the window may not run past it, so the search is over
+    ``0..dosage_max`` instead of ``0..ploidy``. Field fact behind it — a
+    hexaploid marker commonly tops out at dosage 3, and stretching four
+    clusters across the full 0..6 ladder mislabels every one of them. It also
+    tightens ``uncertain``: with a ceiling declared, a class sitting at the TOP
+    of the window is anchored just as much as one on the allele-2 axis, so the
+    operator is not asked to confirm a position the declaration already fixed.
 
     This preserves rank order and replaces the old d/P-snapping DP; it handles
     non-contiguous windows via ``step`` and gives a defensible offset + honesty
@@ -661,18 +744,19 @@ def estimate_window(sorted_ratios: list[float], ploidy: int) -> tuple[int, int, 
     k = len(sorted_ratios)
     if k == 0:
         return 0, 1, True
+    ceiling = ploidy if dosage_max is None else max(0, min(dosage_max, ploidy))
     edge = 0.5 / ploidy
     low_anchor = sorted_ratios[0] < edge
-    high_anchor = sorted_ratios[-1] > 1.0 - edge
+    high_anchor = sorted_ratios[-1] > (ceiling / ploidy) - edge
 
     if k == 1:
-        offset = max(0, min(ploidy, round(sorted_ratios[0] * ploidy)))
+        offset = max(0, min(ceiling, round(sorted_ratios[0] * ploidy)))
         return offset, 1, not (low_anchor or high_anchor)
 
     gaps = sorted(sorted_ratios[i + 1] - sorted_ratios[i] for i in range(k - 1))
     med_gap = gaps[len(gaps) // 2]
     step = max(1, round(med_gap * ploidy))
-    step = min(step, max(1, ploidy // (k - 1)))  # keep the window inside 0..P
+    step = min(step, max(1, ceiling // (k - 1)))  # keep the window inside 0..ceiling
 
     # Fit the offset in the arcsine-sqrt space the mixture is fitted in (variance-
     # stabilized), so the least-squares match is consistent with where clusters
@@ -683,7 +767,7 @@ def estimate_window(sorted_ratios: list[float], ploidy: int) -> tuple[int, int, 
         return math.asin(math.sqrt(min(max(x, 0.0), 1.0)))
 
     obs = [_t(r) for r in sorted_ratios]
-    max_offset = ploidy - (k - 1) * step
+    max_offset = max(0, ceiling - (k - 1) * step)
     best_off, best_cost = 0, float("inf")
     for off in range(0, max_offset + 1):
         cost = sum((obs[i] - _t((off + i * step) / ploidy)) ** 2 for i in range(k))
@@ -692,10 +776,14 @@ def estimate_window(sorted_ratios: list[float], ploidy: int) -> tuple[int, int, 
     return best_off, step, not (low_anchor or high_anchor)
 
 
-def _assign_dosages(sorted_ratios: list[float], ploidy: int) -> list[int]:
+def _assign_dosages(
+    sorted_ratios: list[float],
+    ploidy: int,
+    dosage_max: int | None = None,
+) -> list[int]:
     """Strictly-increasing allele dosage per cluster ratio (sorted ascending),
     from the estimated observed window (see estimate_window)."""
-    offset, step, _ = estimate_window(sorted_ratios, ploidy)
+    offset, step, _ = estimate_window(sorted_ratios, ploidy, dosage_max)
     return [offset + i * step for i in range(len(sorted_ratios))]
 
 

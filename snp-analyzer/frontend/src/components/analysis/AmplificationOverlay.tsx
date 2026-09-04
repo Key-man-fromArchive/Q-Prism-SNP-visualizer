@@ -8,11 +8,13 @@ import { channelLabels } from "@/lib/channel-labels";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { wellInfo } from "@/lib/genotype";
 import { useI18n } from "@/hooks/use-i18n";
+import { useIsDarkMode } from "@/hooks/use-dark-mode";
 
 type AmplificationOverlayProps = { ploidyOverride?: number };
 
 export function AmplificationOverlay({ ploidyOverride }: AmplificationOverlayProps = {}) {
   const { t } = useI18n();
+  const dark = useIsDarkMode();
   const plotRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [channel, setChannel] = useState<"fam" | "allele2">("fam");
@@ -57,7 +59,7 @@ export function AmplificationOverlay({ ploidyOverride }: AmplificationOverlayPro
         for (const curve of curves) {
           // Use effective_type if available (it may be on the response)
           const gt = (curve as any).effective_type || "Unknown";
-          const color = wellInfo(gt, ploidy).color;
+          const color = wellInfo(gt, ploidy, dark).color;
           const showLegend = !legendAdded.has(gt);
           if (showLegend) legendAdded.add(gt);
 
@@ -104,7 +106,7 @@ export function AmplificationOverlay({ ploidyOverride }: AmplificationOverlayPro
     return () => {
       cancelled = true;
     };
-  }, [visible, channel, sessionId, useRox, backgroundMode, allele2Dye, roleLabels, ploidy]);
+  }, [visible, channel, sessionId, useRox, backgroundMode, allele2Dye, roleLabels, ploidy, dark]);
 
   // Cleanup on unmount
   useEffect(() => {

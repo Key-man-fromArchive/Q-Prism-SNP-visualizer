@@ -20,6 +20,7 @@ import type { MarkerCatalogEntry, MarkerRegion, RegionResult } from "@/types/api
 import { genotypeShortLabel, wellInfo } from "@/lib/genotype";
 import { MARKER_PALETTE } from "@/lib/constants";
 import { dosageTrustForMarker } from "@/lib/marker-catalog";
+import { analysisWarningTexts } from "@/lib/analysis-warnings";
 import { MarkerScatterPlot } from "./MarkerScatterPlot";
 import { CycleControl } from "./CycleControl";
 import { PlateView } from "./PlateView";
@@ -27,6 +28,7 @@ import { WellSelectionToolbar } from "./WellSelectionToolbar";
 import { WellDetailPanel } from "./WellDetailPanel";
 import { ResultsTable } from "./ResultsTable";
 import { AmplificationOverlay } from "./AmplificationOverlay";
+import { useIsDarkMode } from "@/hooks/use-dark-mode";
 
 const SIDEBAR_THRESHOLD = 4; // >=4 markers -> sidebar; <=3 -> dropdown (Q8)
 
@@ -49,6 +51,7 @@ type MultiMarkerAnalysisPanelProps = {
 
 export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelProps) {
   const { t } = useI18n();
+  const dark = useIsDarkMode();
   const sessionId = useSessionStore((s) => s.sessionId);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const isPlaying = useSelectionStore((s) => s.isPlaying);
@@ -133,7 +136,10 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
         res.points,
         res.allele2_dye,
         res.channel_labels,
-        res.ratio_origin ?? ZERO_ORIGIN
+        res.ratio_origin ?? ZERO_ORIGIN,
+        // Whether the reporters really were divided by the passive reference.
+        // The plot titles its axes off this, not off the `use_rox` request.
+        { applied: res.normalization_applied, roxOutlierWells: res.rox_outlier_wells }
       );
     } catch (err) {
       console.error("Failed to fetch scatter data:", err);
@@ -426,7 +432,8 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                   className="mt-2 px-3 py-2 rounded-md text-xs text-warning"
                   style={{ background: "rgba(217,119,6,0.12)" }}
                 >
-                  <b>{t.wsAnalysisWarningsTitle}:</b> {selectedRegion.warnings.join(", ")}
+                  <b>{t.wsAnalysisWarningsTitle}:</b>{" "}
+                  {analysisWarningTexts(selectedRegion.warnings, t).join(" ")}
                 </div>
               )}
             </div>
@@ -449,7 +456,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
               >
                 {countsEntries.map(([key, n]) => {
                   const label = countKeyToLabel(key, selectedMarker.ploidy);
-                  const info = wellInfo(label, selectedMarker.ploidy);
+                  const info = wellInfo(label, selectedMarker.ploidy, dark);
                   const short = genotypeShortLabel(label, selectedMarker.ploidy);
                   return (
                     <div
