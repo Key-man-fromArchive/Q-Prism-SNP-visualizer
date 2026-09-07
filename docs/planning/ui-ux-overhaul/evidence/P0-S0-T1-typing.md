@@ -67,3 +67,64 @@ components or changed-line coverage. Types erase at runtime. Full task/Phase
 coverage and browser regression remain integration-gate responsibilities. No
 generated static build, dependency files, other agent edits, or canonical task
 statuses belong to this slice's commit.
+
+## Independent gate correction — execution coverage and complexity
+
+The gate correctly rejected helper-only coverage as insufficient for newly
+introduced component execution paths. Added tests now open the amplification
+overlay and assert Plotly axis objects, plot and unmount comparisons, handle
+session-list rejection, read the **actual downloaded CSV Blob** including totals,
+and reject delayed protocol/statistics requests after changing EN→KO. The latter
+assert current-language errors and exactly one request, not a locale-driven
+refetch. A numeric HWE response exercises the narrowed rendering path.
+
+Extracted `apply-preset.ts`: validation precedes every setter; unavailable
+backgrounds are skipped; zero/false and absent values retain their prior meanings.
+Four helper tests cover full/empty/unavailable/unsupported cases. The existing
+preset component tests remain green. This is a behavior-preserving refactor plus
+coverage repair; no new product defect was introduced or claimed as RED.
+
+Fresh commands after all source corrections:
+
+```bash
+UX_COVERAGE_DIR=/tmp/qprism-p0-typing-gate npm run test:coverage
+npm run lint
+./node_modules/.bin/tsc -b --pretty false
+./node_modules/.bin/eslint src/components/settings/apply-preset.ts --rule 'complexity: [error, 10]'
+```
+
+Results: **103 passed / 19 files**, coverage run 2.68s; lint and compiler exit 0.
+Full-worktree coverage is **25.93% statements (1368/5275), 25.38% lines
+(1130/4451)**, not a claim that legacy code meets 70%. The earlier build result
+above predates this helper refactor; final production build belongs to integration.
+Existing Compare UI hides the error when fewer than two sessions are available;
+its rejection test asserts handling, not a new visible error affordance (UX-05).
+
+### Added executable line mapping
+
+Compared `git diff 80c2c8a --unified=0 -- snp-analyzer/frontend/src` with fresh
+`/tmp/qprism-p0-typing-gate/lcov.info` SF/DA entries. New untracked helper files
+were evaluated in full. Each listed line has a positive DA count:
+
+| File under src/components | New executable lines | Covered |
+| --- | --- | --- |
+| analysis/AmplificationOverlay.tsx | 84,114,116 | 3/3 |
+| analysis/WellDetailPanel.tsx | 20–26,103 | 8/8 |
+| batch/BatchTab.tsx | 132,133,310–312 | 5/5 |
+| compare/CompareTab.tsx | 31,41,75,118,147,150 | 6/6 |
+| protocol/ProtocolTab.tsx | 42,55 | 2/2 |
+| statistics/StatisticsTab.tsx | 16,31,90,91 | 4/4 |
+| settings/SettingsTab.tsx | 18,19,23,28,84,88 | 6/6 |
+| settings/apply-preset.ts | 10–14,18–21,28–32,34–37 | 18/18 |
+| batch/project-summary.ts | 7 | 1/1 |
+
+Erased-only type annotations excluded: Overlay 53,62; detail 73,88; Batch 329;
+Compare 81,99,141; Protocol 75; API types/signatures. Hook dependency-array-only
+edits have no separate added DA statement; they are not falsely counted as
+covered source lines. All mapped new logic in each file exceeds 70% independently.
+
+ESLint's actual complexity reporter (`complexity: [warn, 0]`) measures:
+`applyPreset=8`, `applyPlotSettings=6`, `applyThresholdSettings=5`,
+`handleApplyPreset=4`, `PresetError=2`. SettingsTab root returns to **11**, exactly
+its original baseline, by isolating the new error rendering decision; unchanged
+legacy root complexity is not disguised as a newly passing ≤10 function.

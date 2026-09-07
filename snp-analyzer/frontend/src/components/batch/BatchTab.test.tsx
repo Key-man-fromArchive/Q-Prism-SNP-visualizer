@@ -26,3 +26,32 @@ it('renders the actual server counts in the project plate row', async () => {
   const cells = within(row!).getAllByRole('cell').map((cell) => cell.textContent);
   expect(cells.slice(4, 9)).toEqual(['12', '7', '8', '2', '1']);
 });
+
+it('downloads the same nonzero counts and totals in the actual CSV blob', async () => {
+  useLanguageStore.setState({ language: 'en' });
+  let captured: Blob | undefined;
+  vi.stubGlobal('URL', class extends URL {
+    static createObjectURL = vi.fn((blob: Blob) => { captured = blob; return 'blob:synthetic'; });
+    static revokeObjectURL = vi.fn();
+  });
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  try {
+    render(<BatchTab />);
+    await screen.findByText('Synthetic project');
+    fireEvent.click(screen.getByRole('button', { name: 'View' }));
+    await screen.findByText('Synthetic');
+    fireEvent.click(screen.getByRole('button', { name: /CSV/i }));
+    expect(captured).toBeInstanceOf(Blob);
+    const csv = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.readAsText(captured!);
+    });
+    expect(csv).toContain('synthetic,synthetic.csv,Synthetic,30,12,7,8,2,1,90.0');
+    expect(csv).toContain('TOTAL,,,30,12,7,8,2,1,90.0');
+    expect(click).toHaveBeenCalledOnce();
+  } finally {
+    click.mockRestore();
+    vi.unstubAllGlobals();
+  }
+});
