@@ -222,7 +222,9 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P1-R3-T2: PDF·XLSX 일치·연결 소비자 호환
 
-- Status: IN_PROGRESS
+- Status: DONE
+- Commit: ccc590fcd31f81417ee947b40f35a30ab44f8ad7
+- Evidence: [P1-R3-T2](ui-ux-overhaul/evidence/P1-R3-T2.md). 최종 BE 710 passed + 2 subtests, 독립 집중 80 passed, 신규 모듈 98.5% 이상·변경 실행 줄 93.3% 이상.
 - 담당: backend-specialist
 - Depends On: [P1-R3-T1]
 - Write Scope: BE/app/routers/data.py·export.py·asg.py, BE/app/asg_result.py, BE/app/reporting/* (한글 TrueType 글꼴·라이선스·출처 포함), BE/requirements-dev.txt의 PDF 렌더 검증 도구, BE/tests/test_export_snapshot_reports.py·test_asg_result_save.py 및 기존 PDF/XLSX/ASG 출력 테스트의 계약·setup 갱신
@@ -230,11 +232,11 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - 구현: ASG 등 결과 소비자의 추가 필드/오류를 점검하고 필요한 adapter만 적용한다. 스코프·저장 상태 정책은 보존한다.
 - 검증: 실제 CSV/PDF/XLSX의 공통 웰·판정·수치·metadata 비교. PDF metadata만이 아니라 렌더에 전달된 수치도 검증. 기존 보고서/ASG 회귀.
 - 검증 준비: pypdfium2는 검증된 wheel 버전을 개발 의존성에만 고정하고 audit한다. 한글 TrueType 글꼴은 원본·재배포 라이선스·upstream commit/SHA-256을 함께 보관하고 PDF에 포함한다. 호스트 전용 글꼴 경로나 뷰어의 CJK 대체 글꼴을 배포 검증으로 간주하지 않는다. 긴 한글 이름·모든 페이지의 렌더링과 텍스트를 확인한다.
-- [ ] AC: 형식별 묵시적 사이클 대체가 없고 정상/legacy/stale·소비자 호환성이 확인됨.
+- [x] AC: 형식별 묵시적 사이클 대체가 없고 정상/legacy/stale·소비자 호환성이 확인됨.
 
 ### P1-S0-T1: 프론트 API·분석/탐색 상태 기반
 
-- Status: TODO
+- Status: IN_PROGRESS
 - 담당: frontend-specialist
 - Depends On: [P1-R3-T2]
 - Write Scope: SRC/types/api.ts, SRC/lib/api.ts, 신규 SRC/stores/analysis-store.ts·navigation-store.ts, SRC/lib/analysis-context.ts 및 단위 테스트

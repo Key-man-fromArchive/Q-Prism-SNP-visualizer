@@ -78,6 +78,10 @@ Well role and marker membership are independent: outside-marker rows retain mean
 
 CSV text protection covers formula prefixes, control characters, full-width variants and proper delimiter/quote encoding, but is not a universal guarantee across spreadsheet applications or subsequent save/reopen operations. Document the selected prefix policy and its data-encoding trade-off; preserve typed string cells in XLSX. See [OWASP CSV Injection guidance](https://owasp.org/www-community/attacks/CSV_Injection).
 
+PDF/XLSX figures use captured measured coordinates and per-marker ploidy, with explicit raw/reference-normalized basis labels. PDF retains a complete physical plate view, its marker/ploidy-aware legend, and full-curve Ct calculated separately with captured `use_rox` and no selected-cycle background correction. Blank Ct values are unavailable/undetermined, not zero. Korean report text uses the repository-bundled, licensed TrueType font rather than host fonts.
+
+XLSX retains its optional Marker-column prefix and legacy report Called policy: exclude Unknown, Undetermined and NTC, plus the new Unassigned label; Empty/Omit keep their historical inclusion. This report policy is disclosed rather than silently harmonized with another QC metric. Context JSON is stored in numbered chunks that concatenate losslessly; individual text/caption values beyond Excel's 32,767-character cell limit return HTTP 400 instead of truncating. Plot failures do not return a successful partial report.
+
 ## 4. QC and recommendation
 
 Keep `ntc_check.ok` and `wells`. Add `status: ok | warning | no_ntc | insufficient`; each well gains `flagged: boolean | null` and `reason: none | signal_above_threshold | missing_signal | missing_reference | insufficient_points`. `flagged=null` means evaluation unavailable. Use current threshold logic: any flagged true gives warning; otherwise any unevaluable NTC gives insufficient; zero NTC gives no_ntc; only all evaluable unflagged gives ok. A legacy `ok=true` with no wells is not proof of clean controls.
