@@ -344,7 +344,9 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P3-S2-T1: 공유 수동 편집 명령·undo/redo
 
-- Status: TODO
+- Status: DONE
+- Commit: 21594a50ddc544c3656f0a18f4e03978a3f09fd6
+- Evidence: [P3-S2-T1](ui-ux-overhaul/evidence/P3-S2-T1.md). BE 740개+2 subtests, FE 403개, ROOT23 2개, lint·typecheck·build, 추가/신규 실행 라인 100%·새 논리 CC 10 이하, 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P3-S1-T1]
 - Write Scope: 신규 SRC/stores/undo-store.ts, 수동 웰 타입 변경 hooks/호출부·단축키, 관련 tests, tests/23-undo.spec.ts
@@ -352,7 +354,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - 구현: 예상 revision 충돌은 히스토리를 무효화하고 오류를 표시한다. 실패는 기존 포인터/값 유지. 세션 전환·새로고침·로그아웃 초기화. 마커/축/분석 결과는 이력 대상에서 제외한다.
 - 구현: undo/redo도 입력 revision을 갱신하며 단일 stale/다중 자동 분석 정책을 동일하게 적용한다.
 - 검증: 서로 다른 컴포넌트에서 편집 후 undo, 다중 웰 원자 복원, 50개 경계, 실패/409, Ctrl+Z/redo와 텍스트 입력의 격리.
-- [ ] AC: UX-10과 UX-03의 undo/redo 조건을 실제 서버 상태까지 확인함.
+- [x] AC: UX-10과 UX-03의 undo/redo 조건을 실제 서버 상태까지 확인함.
 
 ### P3-S3-T1: 프리셋·최근 세션·배치 업로드 실패 복구
 
