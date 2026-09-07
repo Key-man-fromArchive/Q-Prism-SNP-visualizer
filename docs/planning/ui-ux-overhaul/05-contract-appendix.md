@@ -8,6 +8,8 @@ This is the P1 implementation contract, not a claim that these fields already ex
 
 `ClusteringResult.analysis_context` is nullable. A missing/null context means `legacy_unknown`; never infer it from current settings. Existing assignments remain readable. Add `context_status: verified | legacy_unknown` to result responses, and `input_revision` (current server input version) to result/session-info responses. Context stores its own captured input revision, so stale results remain distinguishable and inspectable.
 
+Result/session-info responses also expose `analysis_status: idle | computing | completed | failed` and `analysis_pending: boolean`. These describe the latest accepted request, independently of the retained completed result. An obsolete request cannot overwrite this status when it finishes. Missing context remains unknown even when a legacy completed result is available.
+
 | Context field | Type and meaning |
 | --- | --- |
 | schema_version | integer, initially 1 |
@@ -71,6 +73,10 @@ Once validation accepts an export, deep-copy input coordinates, context, assignm
 Keep `ntc_check.ok` and `wells`. Add `status: ok | warning | no_ntc | insufficient`; each well gains `flagged: boolean | null` and `reason: none | signal_above_threshold | missing_signal | missing_reference | insufficient_points`. `flagged=null` means evaluation unavailable. Use current threshold logic: any flagged true gives warning; otherwise any unevaluable NTC gives insufficient; zero NTC gives no_ntc; only all evaluable unflagged gives ok. A legacy `ok=true` with no wells is not proof of clean controls.
 
 Label plate NTC with `scope: plate` and its actual requested cycle/use_rox/normalization_applied/background. Judgment QC carries `result_revision`, captured `input_revision`, current input revision and analysis_context. `authoritative=markers` exposes existing per-marker metrics and hides meaningless pooled separation in clients. With no selected marker show marker summaries. Never compute stored-assignment separation from different view coordinates.
+
+QC adds `judgment_status: verified | stale | legacy_unknown | missing` and `judgment_reason: none | input_changed | context_missing | no_completed_result`, alongside `analysis_status`/`analysis_pending`. Stale verified results retain metrics computed from captured conditions/types/regions, not current manual edits. Contextless results may retain readable assignment counts, but separation is null because its coordinate conditions are unknown. Missing results must not describe ratio-based provisional calls as completed judgment. Current plate NTC remains separately evaluable in both cases.
+
+Enumerate declared effective NTC wells before joining readings: an unavailable reading remains in `wells` with nullable `signal`, `flagged=null` and its reason, never an invented zero. `missing_reference` refers to the usable plate signal reference; absent ROX alone does not invalidate existing raw fallback. Preserve the upper-middle plate median and existing contamination threshold. Onset status annotates actual evaluation; fewer than nine readings cannot support the existing derivative detector even if the outer window check passes.
 
 Cycle recommendation retains `ntc_onset_cycle` and adds `ntc_onset_status: detected | not_detected | not_evaluated` and `ntc_onset_reason: none | no_ntc | missing_signal | insufficient_points`. Detected requires a cycle; not_detected means evaluation actually ran; not_evaluated is not a clean QC result. QC thresholds and onset detection remain distinct. Request generation/session identity prevents late QC overwrites.
 

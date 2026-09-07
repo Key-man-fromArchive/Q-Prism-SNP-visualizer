@@ -183,21 +183,23 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P1-R1-T3: 결과 원자 게시·동시성 제어
 
-- Status: IN_PROGRESS
+- Status: DONE
+- Commit: 43a013be8639b90baee6fbff62f4d70f47c05046
+- Evidence: [P1-R1-T3](ui-ux-overhaul/evidence/P1-R1-T3.md). 독립 BE 571 passed + 2 subtests, 변경 실행 줄 97.98–100%, 새 논리 복잡도 최대 10.
 - 담당: backend-specialist
 - Depends On: [P1-R1-T2]
-- Write Scope: BE/app/routers/clustering.py, BE/app/processing/analysis_state.py, BE/app/models.py·db.py, BE/tests/test_analysis_revision_races.py
+- Write Scope: BE/app/routers/clustering.py 및 sample.py의 세션 상태/삭제 연결, BE/app/processing/analysis_state.py, BE/app/models.py·db.py, BE/tests/test_analysis_revision_races.py
 - 구현: 계산 시작 입력/parameters를 고정하고 완료 시 input revision·요청 순서를 검증해 게시한다. DB와 cluster_store가 다른 버전을 가리키지 않게 한다.
 - 구현: 계산 중 mutation·늦은 완료·저장 실패·조회 상태를 다룬다. 현재 동기/비동기·프로세스 범위에 맞는 lock/CAS를 기록하고 최신 결과 한 건만 유지한다.
 - 검증: A/B 역순 완료, 계산 중 marker/welltype 변경, 저장 실패, 독립 세션 동시 처리.
-- [ ] AC: 오래된 계산이 최신 결과를 덮어쓰지 않고 context가 실제 계산 입력과 일치함.
+- [x] AC: 오래된 계산이 최신 결과를 덮어쓰지 않고 context가 실제 계산 입력과 일치함.
 
 ### P1-R2-T1: NTC·마커별 QC·상승 평가 계약
 
-- Status: TODO
+- Status: IN_PROGRESS
 - 담당: backend-specialist
 - Depends On: [P1-R1-T3]
-- Write Scope: BE/app/routers/qc.py·data.py, BE/app/processing/ntc_detection.py, BE/app/models.py, BE/tests/test_qc_status_contract.py
+- Write Scope: BE/app/routers/qc.py·data.py, BE/app/processing/ntc_detection.py, BE/app/models.py, BE/tests/test_qc_status_contract.py 및 기존 test_a2_region_passthrough.py·test_marker_contract.py·control/cycle 테스트의 QC 계약 setup·회귀 보강
 - 구현: 기존 ok/wells 유지, status·flagged/reason 추가. NTC 없음/평가불가/부분평가/오염을 구분하고 상승 감지 evaluation 상태를 별도로 반환한다. 임계값은 변경하지 않는다.
 - 구현: authoritative/markers와 판정 기반 지표의 버전/조건, 현재 보기 NTC 조건을 구분한다. legacy/stale를 정상 최신 QC로 포장하지 않는다.
 - 검증: 정상/오염 혼합·0개·불충분·구응답, 두 배수성 QC, 20/40사이클, no-onset/not-evaluated, 기존 control QC·cycle suggestion 회귀.
@@ -208,7 +210,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - Status: TODO
 - 담당: backend-specialist
 - Depends On: [P1-R2-T1]
-- Write Scope: 신규 BE/app/reporting/result_snapshot.py, BE/app/routers/export.py, BE/app/processing/analysis_state.py, BE/tests/test_export_snapshot_csv.py
+- Write Scope: 신규 BE/app/reporting/result_snapshot.py, BE/app/routers/export.py, BE/app/processing/analysis_state.py, BE/tests/test_export_snapshot_csv.py 및 기존 CSV/마커 출력 테스트의 계약·setup 갱신
 - 구현: result_revision 지정/생략, input revision/legacy 검증, 409를 공통 snapshot 서비스로 구현한다. 수락 이후 판정·신뢰도·manual 유형·표시 metadata·계산 조건을 고정한다.
 - 구현: 전체 실행 CSV의 마커 열·기존 데이터 열을 유지하고 조건 metadata 열을 추가한다. 임의 cycle/ROX/background와 저장 조건 불일치는 명시 오류로 전환한다.
 - 검증: 20/40·ROX/background만 차이, legacy/missing/stale, 결과 교체·수락 후 mutation·권한.
@@ -219,7 +221,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - Status: TODO
 - 담당: backend-specialist
 - Depends On: [P1-R3-T1]
-- Write Scope: BE/app/routers/data.py·export.py·asg.py, BE/app/asg_result.py, BE/app/reporting/*, BE/tests/test_export_snapshot_reports.py·test_asg_result_save.py
+- Write Scope: BE/app/routers/data.py·export.py·asg.py, BE/app/asg_result.py, BE/app/reporting/*, BE/tests/test_export_snapshot_reports.py·test_asg_result_save.py 및 기존 PDF/XLSX/ASG 출력 테스트의 계약·setup 갱신
 - 구현: PDF max(cycles)·XLSX 독자 조건 선택을 공통 snapshot으로 연결한다. 그림·판정·신뢰도는 같은 결과, Ct 등 전체 곡선 값은 별도 계산 범위를 명시한다.
 - 구현: ASG 등 결과 소비자의 추가 필드/오류를 점검하고 필요한 adapter만 적용한다. 스코프·저장 상태 정책은 보존한다.
 - 검증: 실제 CSV/PDF/XLSX의 공통 웰·판정·수치·metadata 비교. PDF metadata만이 아니라 렌더에 전달된 수치도 검증. 기존 보고서/ASG 회귀.
@@ -505,4 +507,4 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 4. 각 작업은 승인된 scope에서 RED → GREEN → REFACTOR → 검증 → 로컬 commit → 증거 보고 순으로 진행한다. 게이트 실패 시 후속 작업을 시작하지 않는다.
 5. 재개 시 계획 hash·branch/commit·상태·증거를 대조한다. 문서의 TODO를 추측으로 DONE 처리하거나 이전 작업서의 상태를 재사용하지 않는다.
 
-현재 상태: **2026-09-07 7/33 완료, P1 결과 게시·동시성 구현 중**. P0 독립 게이트 통과·로컬 통합 후 P1-R1-T1/T2도 독립 검증했다. 사용자가 lint·도구·런타임/인증 의존성 보완과 완료까지 자율 진행을 승인했다. 로컬 Phase 통합·자동 진행하며 원격 push·배포·외부 알림은 제외한다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.
+현재 상태: **2026-09-07 8/33 완료, P1 QC·상승 평가 구현 중**. P0 독립 게이트 통과·로컬 통합 후 P1-R1-T1/T2/T3도 독립 검증했다. 사용자가 lint·도구·런타임/인증 의존성 보완과 완료까지 자율 진행을 승인했다. 로컬 Phase 통합·자동 진행하며 원격 push·배포·외부 알림은 제외한다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.
