@@ -196,18 +196,20 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P1-R2-T1: NTC·마커별 QC·상승 평가 계약
 
-- Status: IN_PROGRESS
+- Status: DONE
+- Commit: 9c15ff968c5026a41d6e322665e0bccc35767b93 (초기 d514a94 이후 imported Unknown 보완)
+- Evidence: [P1-R2-T1](ui-ux-overhaul/evidence/P1-R2-T1.md). 최종 BE 619 passed + 2 subtests, 독립 집중 89 passed, 변경 실행 줄 100%, 새 논리 복잡도 최대 10.
 - 담당: backend-specialist
 - Depends On: [P1-R1-T3]
-- Write Scope: BE/app/routers/qc.py·data.py, BE/app/processing/ntc_detection.py, BE/app/models.py, BE/tests/test_qc_status_contract.py 및 기존 test_a2_region_passthrough.py·test_marker_contract.py·control/cycle 테스트의 QC 계약 setup·회귀 보강
+- Write Scope: BE/app/routers/qc.py·data.py, BE/app/processing/ntc_detection.py, BE/app/models.py, BE/tests/test_qc_status_contract.py 및 기존 test_a2_region_passthrough.py·test_marker_contract.py·control/cycle 테스트의 QC 계약 setup·회귀 보강. 장비의 일반 시료 Unknown과 명시적 수동 Unknown을 구분하기 위한 clustering.py의 captured manual_well_types 및 관련 test_analysis_revision_races.py 보완 포함.
 - 구현: 기존 ok/wells 유지, status·flagged/reason 추가. NTC 없음/평가불가/부분평가/오염을 구분하고 상승 감지 evaluation 상태를 별도로 반환한다. 임계값은 변경하지 않는다.
 - 구현: authoritative/markers와 판정 기반 지표의 버전/조건, 현재 보기 NTC 조건을 구분한다. legacy/stale를 정상 최신 QC로 포장하지 않는다.
 - 검증: 정상/오염 혼합·0개·불충분·구응답, 두 배수성 QC, 20/40사이클, no-onset/not-evaluated, 기존 control QC·cycle suggestion 회귀.
-- [ ] AC: 모든 NTC와 flagged 웰이 구분되고 마커별 권위값·조건이 명확함.
+- [x] AC: 모든 NTC와 flagged 웰이 구분되고 마커별 권위값·조건이 명확함.
 
 ### P1-R3-T1: 출력 스냅샷 계약·CSV
 
-- Status: TODO
+- Status: IN_PROGRESS
 - 담당: backend-specialist
 - Depends On: [P1-R2-T1]
 - Write Scope: 신규 BE/app/reporting/result_snapshot.py, BE/app/routers/export.py, BE/app/processing/analysis_state.py, BE/tests/test_export_snapshot_csv.py 및 기존 CSV/마커 출력 테스트의 계약·setup 갱신
@@ -507,4 +509,4 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 4. 각 작업은 승인된 scope에서 RED → GREEN → REFACTOR → 검증 → 로컬 commit → 증거 보고 순으로 진행한다. 게이트 실패 시 후속 작업을 시작하지 않는다.
 5. 재개 시 계획 hash·branch/commit·상태·증거를 대조한다. 문서의 TODO를 추측으로 DONE 처리하거나 이전 작업서의 상태를 재사용하지 않는다.
 
-현재 상태: **2026-09-07 8/33 완료, P1 QC·상승 평가 구현 중**. P0 독립 게이트 통과·로컬 통합 후 P1-R1-T1/T2/T3도 독립 검증했다. 사용자가 lint·도구·런타임/인증 의존성 보완과 완료까지 자율 진행을 승인했다. 로컬 Phase 통합·자동 진행하며 원격 push·배포·외부 알림은 제외한다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.
+현재 상태: **2026-09-07 9/33 완료, P1 출력 스냅샷·CSV 구현 중**. P0 독립 게이트 통과·로컬 통합 후 P1-R1-T1/T2/T3 및 P1-R2-T1도 독립 검증했다. 사용자가 lint·도구·런타임/인증 의존성 보완과 완료까지 자율 진행을 승인했다. 로컬 Phase 통합·자동 진행하며 원격 push·배포·외부 알림은 제외한다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.
