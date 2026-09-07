@@ -2,7 +2,7 @@
 
 - Contract ID: qprism-ux-followup-20260907-v1
 - 작성일: 2026-09-07
-- 상태: IN PROGRESS — 2026-09-07 사용자 승인으로 lint·도구·런타임/인증 의존성 선행 보완 재개. P1 미착수.
+- 상태: IN PROGRESS — P0 독립 게이트 통과·로컬 통합 완료(0bd5090). P1 분석 조건 저장 계약 구현 중.
 - 기준: [UI/UX 후속 개선 기획서 v0.2](ui-ux-overhaul/04-review-followup-prd.md)
 - 실행 기준 파일: docs/planning/06-tasks.md
 - 이전 계약: [qPCR Import Expansion 원문 보관](archive/06-tasks-qpcr-import-expansion.md). 보관본의 작업은 이번 실행 대상이 아니다.
@@ -156,23 +156,26 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P1-R1-T1: 분석 컨텍스트 모델·DB 왕복 저장
 
-- Status: TODO
+- Status: DONE
+- Commit: b7c6e8752aa57de2fb5b9ae44b37e512f60ffee8
+- Evidence: [P1-R1-T1](ui-ux-overhaul/evidence/P1-R1-T1.md). 독립 최종 BE 530 passed + 2 subtests, 변경 실행 줄 100%, mypy/Ruff 통과.
 - 담당: database-specialist
 - Depends On: [P0-S0-V]
-- Write Scope: BE/app/models.py·db.py·main.py, BE/tests/test_analysis_context_persistence.py
+- Write Scope: BE/app/models.py·db.py·main.py, BE/tests/test_analysis_context_persistence.py 및 BE/tests/test_marker_catalog.py의 migration 버전 호환 assertion·중복 테스트명 정정
 - 구현: context 전체 필드·schema/result/input revision·UTC 완료 시각·마커별 실제 parameters를 모델링하고 결과와 함께 원자 저장한다. 구버전은 추정 없이 legacy_unknown으로 읽는다.
 - 구현: SQLite/JSON 호환 migration과 시작 복원을 연결한다. 기존 결과 삭제나 임의 backfill 금지.
 - 검증: 새 결과 왕복·구버전 JSON/행·재시작·rollback, 기존 persistence 회귀.
-- [ ] AC: 조건이 손실 없이 복원되고 기존 DB가 데이터 손실 없이 열림.
+- [x] AC: 조건이 손실 없이 복원되고 기존 DB가 데이터 손실 없이 열림.
 
 ### P1-R1-T2: 입력 revision·변경 명령 일원화
 
-- Status: TODO
+- Status: IN_PROGRESS
 - 담당: backend-specialist
 - Depends On: [P1-R1-T1]
-- Write Scope: BE/app/routers/clustering.py·layouts.py·sample.py·marker_catalog.py, BE/app/db.py, 신규 BE/app/processing/analysis_state.py, BE/tests/test_analysis_input_revision.py
+- Write Scope: BE/app/routers/clustering.py·layouts.py·sample.py·marker_catalog.py, BE/app/models.py·db.py, 신규 BE/app/processing/analysis_state.py, BE/tests/test_analysis_input_revision.py 및 기존 mutation/marker 계약 회귀 테스트
 - 구현: welltype set/clear/bulk, ploidy, marker create/update/delete, layout apply 등 모든 판정 입력 변경을 조사해 변경/revision 증가를 같은 transaction·직렬화 경계에 연결한다.
 - 구현: mutation 응답 input_revision, undo용 선택적 expected revision·409를 추가한다. 보기·언어·축 변경은 제외하고 stale 결과 정책을 보존한다.
+- 접점 확인: 공용 mutation body는 models.py에 있고 session 삭제/정보는 sample.py에 있다. 요청에 포함된 ploidy 변경도 숨은 입력 변경으로 조사한다. 세션 삭제는 결과/마커/진행 요청 상태를 함께 정리하고, 마커 변경 시 결과 삭제를 요구하던 기존 테스트는 새 retained-stale 계약의 명시적 기대값으로 갱신한다.
 - 검증: 경로별 증가, 실패/no-op, 권한, stale expected revision, layout/bulk 누락 검사.
 - [ ] AC: API 직접 변경도 결과를 무효화하고 실패 mutation은 버전을 전진시키지 않음.
 
@@ -500,4 +503,4 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 4. 각 작업은 승인된 scope에서 RED → GREEN → REFACTOR → 검증 → 로컬 commit → 증거 보고 순으로 진행한다. 게이트 실패 시 후속 작업을 시작하지 않는다.
 5. 재개 시 계획 hash·branch/commit·상태·증거를 대조한다. 문서의 TODO를 추측으로 DONE 처리하거나 이전 작업서의 상태를 재사용하지 않는다.
 
-현재 상태: **2026-09-07 P0 5/33 완료, 독립 게이트 PASS**. 사용자가 lint·도구·런타임/인증 의존성 보완과 완료까지 자율 진행을 승인했다. 로컬 Phase 통합 후 P1부터 자동 진행하며 원격 push·배포·외부 알림은 제외한다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.
+현재 상태: **2026-09-07 6/33 완료, P1 입력 revision 구현 중**. P0 독립 게이트 통과·로컬 통합 후 P1-R1-T1도 독립 검증했다. 사용자가 lint·도구·런타임/인증 의존성 보완과 완료까지 자율 진행을 승인했다. 로컬 Phase 통합·자동 진행하며 원격 push·배포·외부 알림은 제외한다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.

@@ -8,7 +8,7 @@ User approved baseline lint, testing-tool/runtime/auth dependency remediation an
 
 ## Current P0 resolution — 2026-09-07
 
-P0 completed 5/33 tasks; independent gate PASS at 079d23ce449b14a6e8789813f93d40a3fb6bc93d. Backend 502 tests + 2 subtests, frontend 105 tests, lint/type/build, changed-code coverage/complexity and dependency audits passed. Runtime/auth repair: 009a762; frontend final delivery: e9c9b1d (including 723b551/a11ece17). Existing legacy full-app coverage and large-function baselines are explicitly separate in the gate evidence. No waiver was used. Integrate P0 locally before starting P1; P1–P5 are not completed. Original AGENTS.md is unchanged.
+P0 completed 5/33 tasks; independent gate PASS at 079d23ce449b14a6e8789813f93d40a3fb6bc93d. Backend 502 tests + 2 subtests, frontend 105 tests, lint/type/build, changed-code coverage/complexity and dependency audits passed. Runtime/auth repair: 009a762; frontend final delivery: e9c9b1d (including 723b551/a11ece17). Existing legacy full-app coverage and large-function baselines are explicitly separate in the gate evidence. No waiver was used. P0 integrated into local main at 0bd509059ea62395b791c823a54d9a06c790b7e6; P1-R1-T1 now runs in worktree/ux-followup-p1. P1–P5 are not completed. Original AGENTS.md is unchanged.
 
 ## Historical 2026-09-07 — UI/UX P0 blocked checkpoint
 
