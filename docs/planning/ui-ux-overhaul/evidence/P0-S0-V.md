@@ -1,5 +1,115 @@
 # P0-S0-V — Preflight and ICV gate
 
+## Current resumed decision — PASS, 2026-09-07
+
+Reviewed final delivery `e9c9b1d5fdb4f608d424a66cca4f0bd078a36a56`, including
+backend `009a762`, typing repairs `b969b5d`/`723b551`, and frontend lifecycle
+repairs `651fbc4`/`a11ece1`. All four prerequisite tasks have committed delivery
+and are DONE in the orchestrator-owned task book. P0 may be integrated locally
+and P1 may start after that integration; this is not approval of P1–P5 features,
+remote push, deployment, or external notifications.
+
+The earlier BLOCKED outcome below remains an accurate historical record. User
+approval expanded prerequisite remediation scope; failures were fixed and
+retested, not waived. Verification → evaluation → code review → security →
+frontend evidence review found no remaining important P0 issue. A preliminary
+aggregate frontend coverage result was rejected because AnalysisTab individually
+had 0/3 new executable lines covered. The final component regression now covers
+all three, including valid assignment and invalid-input rejection.
+
+### Independently checked evidence
+
+| Check | Result |
+| --- | --- |
+| Backend complete suite, unchanged since backend repair | 502 passed, 2 subtests passed; 54.97s, exit 0 |
+| Backend full coverage | 4,678/6,844 = 68.35%; reported baseline, not a whole-project 70% pass |
+| Changed auth.py | 114/151 = 75.50%; all changed executable lines covered; complexity 8 |
+| Synthetic fixtures | 25 passed; 35/35 lines, 100%; complexity maximum 9; Ruff/mypy pass |
+| Final frontend instrumented complete suite | 105 passed, 20 files; 4.48s, exit 0 |
+| Final frontend full coverage | Lines 1,217/4,451 = 27.34%; statements 28.18%, branches 26.06%, functions 26.94% |
+| Frontend lint and TypeScript | Both exit 0 after final assignment-test commit |
+| Production build | Exit 0, 1,813 modules, 33.89s; subsequent commit adds tests/evidence only |
+| Python audit | No known vulnerabilities; no exemptions; pip check previously verified clean, requirements unchanged |
+| npm full and production audits | Both independently return 0 advisories in every severity category |
+| DAG/ICV | 33 unique IDs; every dependency exists and precedes consumer; all Write Scopes present |
+
+The new-module and per-modified-file gate is separate from full legacy totals.
+Raw new-side diff/LCOV intersections versus `80c2c8a` are **139/147 (94.56%)**:
+
+| Production file (under frontend/src) | Covered / added instrumentable lines |
+| --- | --- |
+| components/analysis/AmplificationOverlay.tsx | 5/5 |
+| components/analysis/AnalysisTab.tsx | 3/3 |
+| components/analysis/ScatterPlot.tsx | 46/54 |
+| components/analysis/WellDetailPanel.tsx | 10/10 |
+| components/batch/BatchTab.tsx | 6/6 |
+| components/batch/project-summary.ts | 1/1 |
+| components/compare/CompareTab.tsx | 9/9 |
+| components/layout/Header.tsx | 11/11 |
+| components/protocol/ProtocolTab.tsx | 3/3 |
+| components/quality/QualityTab.tsx | 6/6 |
+| components/settings/SettingsTab.tsx | 6/6 |
+| components/settings/apply-preset.ts | 18/18 |
+| components/statistics/StatisticsTab.tsx | 4/4 |
+| lib/plot-coordinates.ts | 10/10 |
+| lib/well-type-input.ts | 1/1 |
+
+This raw proxy also captures existing statements with erased type-only edits.
+Manual classification excludes Overlay 53/62, detail 73/88, Batch 329, Compare
+81/99/141, Protocol 75; their runtime-only counts remain respectively 3/3, 8/8,
+5/5, 6/6, 2/2. Scatter type-only declarations/callback annotations are at
+277/379/436/462/481/490/592/746; even conservatively removing all eight covered
+entries leaves **38/46 = 82.61%**, above the per-file gate. No uncovered runtime
+line was discarded. CycleControl dependency-only edits and upload/API type-only
+edits have no added executable DA denominator; runtime behavior is checked by
+playback, upload baseline, and consumer tests, not an invented empty coverage pass.
+New helpers each have 100% line coverage. Browser evidence does not substitute
+for these unit coverage measurements.
+
+### Complexity and review disposition
+
+Measured ESLint complexity for new logical units: axisPosition 8, clientPoint 3,
+textCustomdata 2, parseWellType 1, applyPreset 8, plot settings 6, threshold
+settings 5, ASG presentation hook 4, boundary hook 2, scatter-status hook 4;
+the extracted preset callback and narrowed coordinate callback also satisfy 10.
+Existing unchanged decision graphs remain separately visible: Header 27,
+ScatterPlot root 19, its click callback 11, SettingsTab root 11; other legacy
+large render/analysis functions retain their baseline values. Running complexity
+10 over whole legacy files still reports these; this report does not mislabel
+that command as globally passing. New decisions were extracted into bounded,
+tested units, not suppressed with lint exceptions or timers.
+
+Reviewed actual settled image `/tmp/qprism-p0-ui-analysis-settled.png`: genotype
+colors agree across scatter, plate and result rows. Specialist's post-repair
+Playwright run reports 14 passing existing auth/scatter tests in 49.3s and
+settled trace counts 12/12/12/4 with no uncaught browser errors; this reviewer
+inspected image/evidence, not a second browser run. The early transitional image
+is not used as scientific proof. Quality failure rendering is separately
+recorded in P0-S0-T1. Known header QC mismatch, tall layout and later UX contracts
+remain P1–P5 scope. Large bundle and existing dependency/short development-key
+warnings remain visible; no policy weakening or blanket security claim.
+
+PRD hash remains `973f3ebcb3ed18abdadfc9930939e0a313298cfdf863e126383b0845d012aad4`.
+Appendix remains prospective: nullable legacy context, mutation inventory,
+snapshot/CAS publication, error envelope, ownership and restoration agree with
+PRD. No consumer is assumed to have future result-context fields already.
+
+Reproduction: from frontend, run `UX_COVERAGE_DIR=/tmp/qprism-p0-independent-final
+npm run test:coverage`, `npm run lint`, `./node_modules/.bin/tsc -b --pretty false`,
+`npm run build`, `npm audit --json`, and `npm audit --omit=dev --json` separately.
+Parse added new-side ranges from `git diff 80c2c8a --unified=0` and intersect with
+LCOV SF/DA records, then explicitly classify erased type changes as above.
+Use ESLint's `complexity: [warn, 0]` to read actual function scores and compare
+baseline source with `git show 80c2c8a:<path>`, not only overall command exit.
+Backend commands remain those recorded below, with isolated DB_PATH and
+COVERAGE_FILE. Final independent artifacts:
+`/tmp/qprism-p0-independent-final/`, `/tmp/qprism-p0-resume-gate-be.json`,
+`/tmp/qprism-p0-resume-gate-audit.json`, and
+`/tmp/qprism-p0-independent-npm-{audit,prod-audit}.json`.
+No operational database, port 8002, host interpreter, or private data was used.
+
+## Historical blocked decision — retained verbatim below
+
 Date: 2026-09-07. Contract: `qprism-ux-followup-20260907-v1`.
 Decision: **BLOCKED — do not merge P0 or start P1**. Recording this decision
 does not mark the gate task DONE or waive any requirement.
