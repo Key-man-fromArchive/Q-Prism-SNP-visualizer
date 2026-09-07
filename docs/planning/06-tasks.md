@@ -422,14 +422,16 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P4-S2-T1: 품질 경고에서 웰·마커로 이동
 
-- Status: TODO
+- Status: DONE
+- Commit: 2ab2b2d720c208e7ce2f640d2e3b41004af74268
+- Evidence: [P4-S2-T1](ui-ux-overhaul/evidence/P4-S2-T1.md). FE 536개, ROOT25·관련 회귀, lint·typecheck·build, 변경 coverage 최저 94.6%·새 CC 10 이하·기존 root 증가 없음, 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P4-S1-T1]
 - Write Scope: SRC/components/의 QualityPanel·마커 선택·웰 상세/필터·PlateSetup 진입, navigation-store, tests/25-secondary-flows.spec.ts
 - 구현: 경고 웰 클릭 시 해당 마커/웰 상세로 이동하고 필터에 가린 웰을 임시 노출한다. 사용자 필터의 영구 변경을 피하고 임시 상태를 표시/해제한다.
 - 구현: 미할당 웰은 플레이트 설정으로 연결한다. 곡선 품질과 유전형 QC를 다른 지표로 표시하고 범위/버전을 유지한다.
 - 검증: 다른 마커·숨겨진 웰·미할당 웰·연속 이동·뒤로가기 및 키보드 조작.
-- [ ] AC: UX-09 품질 탐색이 사용자가 찾을 수 있는 실제 웰/화면에 도달함.
+- [x] AC: UX-09 품질 탐색이 사용자가 찾을 수 있는 실제 웰/화면에 도달함.
 
 ### P4-S3-T1: 차트 의미·대비·핵심 문구
 
