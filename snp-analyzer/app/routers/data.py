@@ -40,7 +40,9 @@ def _get_session(sid: str) -> UnifiedData:
 async def suggest_cycle(sid: str, current_user: CurrentUser):
     """Suggest the best analysis cycle (max separation before NTC rises)."""
     check_session_access(sid, current_user)
-    unified = _get_session(sid)
+    from app.processing.analysis_state import input_lock
+    with input_lock:
+        unified = _get_session(sid).model_copy(deep=True)
     from app.processing.ntc_detection import compute_cycle_suggestion
 
     return compute_cycle_suggestion(unified)

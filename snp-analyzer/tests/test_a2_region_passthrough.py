@@ -119,11 +119,15 @@ def client(tmp_path):
     async def override():
         return TokenData(user_id="u", username="u", role="user")
     app.dependency_overrides[get_current_user] = override
-    upload.sessions.clear(); clustering.welltype_store.clear(); clustering.cluster_store.clear()
+    upload.sessions.clear()
+    clustering.welltype_store.clear()
+    clustering.cluster_store.clear()
     with TestClient(app) as c:
         yield SimpleNamespace(client=c, upload=upload, clustering=clustering, db=db)
     app.dependency_overrides.pop(get_current_user, None)
-    upload.sessions.clear(); clustering.welltype_store.clear(); clustering.cluster_store.clear()
+    upload.sessions.clear()
+    clustering.welltype_store.clear()
+    clustering.cluster_store.clear()
     if db._conn is not None:
         db._conn.close()
     db._conn = None
@@ -292,6 +296,19 @@ def test_qc_single_marker_golden_path_unchanged(client):
 def test_qc_multi_marker_reports_per_marker_cluster_separation(client):
     _register(client, "s2", _unified_multi_marker())
     client.clustering.cluster_store["s2"] = _multi_marker_cluster_result()
+
+    # Golden numeric result has known cycle/raw conditions, not legacy provenance.
+    from app.models import ClusteringRequest, MarkerRegion
+    result = client.clustering.cluster_store["s2"]
+    request = ClusteringRequest(cycle=1, use_rox=False, regions=[
+        MarkerRegion(id=r.id, name=r.name, wells=r.wells, ploidy=r.ploidy)
+        for r in result.regions
+    ])
+    ticket, snapshot = client.clustering._capture_analysis("s2", request)
+    _, origin, excluded = client.clustering._snapshot_points(snapshot)
+    client.clustering._attach_context(snapshot, result, origin, excluded)
+    from app.processing.analysis_state import fail_analysis
+    fail_analysis(ticket)
 
     resp = client.client.get("/api/data/s2/qc?cycle=1&use_rox=false")
     assert resp.status_code == 200, resp.text
