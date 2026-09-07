@@ -14,6 +14,21 @@ import { AddToProjectButton } from "@/components/analysis/AddToProjectButton";
 import { Button, IconButton, Menu, type MenuItem } from "@/components/shared/ui";
 import { logout, saveAsgResult } from "@/lib/api";
 
+function useAsgSavePresentation(sessionId: string | null, currentCycle: number, useRox: boolean) {
+  const [asgSaveState, setAsgSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [asgAnalysisId, setAsgAnalysisId] = useState<string | null>(null);
+  const [asgSaveError, setAsgSaveError] = useState<string | null>(null);
+  const [saveInputs, setSaveInputs] = useState({ sessionId, currentCycle, useRox });
+  // Reset render-owned state before children commit a new result identity.
+  if (saveInputs.sessionId !== sessionId || saveInputs.currentCycle !== currentCycle || saveInputs.useRox !== useRox) {
+    setSaveInputs({ sessionId, currentCycle, useRox });
+    setAsgSaveState("idle");
+    setAsgAnalysisId(null);
+    setAsgSaveError(null);
+  }
+  return { asgSaveState, setAsgSaveState, asgAnalysisId, setAsgAnalysisId, asgSaveError, setAsgSaveError };
+}
+
 export function Header() {
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const sessionId = useSessionStore((s) => s.sessionId);
@@ -31,22 +46,11 @@ export function Header() {
   const linkedContext = useAuthStore((s) => s.linkedContext);
   const canSaveToAsg = Boolean(linkedContext?.scope?.includes("snp:save_result"));
   const clearAuth = useAuthStore((s) => s.clearAuth);
-  const [asgSaveState, setAsgSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [asgAnalysisId, setAsgAnalysisId] = useState<string | null>(null);
-  const [asgSaveError, setAsgSaveError] = useState<string | null>(null);
+  const { asgSaveState, setAsgSaveState, asgAnalysisId, setAsgAnalysisId, asgSaveError, setAsgSaveError } = useAsgSavePresentation(sessionId, currentCycle, useRox);
   const asgSaveTitle = asgSaveError || asgAnalysisId || (
     canSaveToAsg ? "Save result to ASG Designer" : "Open from an ASG marker, design result, or order item to save"
   );
   const asgResultRevision = useRef(0);
-  const [saveInputs, setSaveInputs] = useState({ sessionId, currentCycle, useRox });
-
-  // Reset render-owned state when its identity changes, before children commit.
-  if (saveInputs.sessionId !== sessionId || saveInputs.currentCycle !== currentCycle || saveInputs.useRox !== useRox) {
-    setSaveInputs({ sessionId, currentCycle, useRox });
-    setAsgSaveState("idle");
-    setAsgAnalysisId(null);
-    setAsgSaveError(null);
-  }
 
   useEffect(() => {
     asgResultRevision.current += 1;
@@ -88,7 +92,7 @@ export function Header() {
     setAsgSaveState("idle");
     setAsgAnalysisId(null);
     setAsgSaveError(null);
-  }, []);
+  }, [setAsgSaveState, setAsgAnalysisId, setAsgSaveError]);
 
   useEffect(() => {
     window.addEventListener("welltypes-changed", markAsgResultDirty);

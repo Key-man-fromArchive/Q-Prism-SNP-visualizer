@@ -26,7 +26,7 @@ import { GroupManager } from "./GroupManager";
 import { WellSelectionToolbar } from "./WellSelectionToolbar";
 import { Callout } from "@/components/shared/ui";
 import { analysisWarningTexts } from "@/lib/analysis-warnings";
-import { WellType } from "@/types/api";
+import { parseWellType } from "@/lib/well-type-input";
 
 export function AnalysisTab() {
   const { t } = useI18n();
@@ -107,7 +107,7 @@ export function AnalysisTab() {
   const handleAssignType = useCallback(
     async (wellType: string) => {
       if (!sessionId || popupWells.length === 0) return;
-      const assignment = Object.values(WellType).find((value) => value === wellType);
+      const assignment = parseWellType(wellType);
       if (!assignment) return;
       try {
         await setWellTypes(sessionId, { wells: popupWells, well_type: assignment });

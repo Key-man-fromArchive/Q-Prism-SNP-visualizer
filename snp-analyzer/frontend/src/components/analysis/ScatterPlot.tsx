@@ -17,12 +17,34 @@ import { useIsDarkMode } from "@/hooks/use-dark-mode";
 import { StatusState } from "@/components/shared/ui";
 import { ScatterViewControls } from "./ScatterViewControls";
 import type { ScatterPoint } from "@/types/api";
+import { clientPoint, textCustomdata, type PlotlyAxis } from "@/lib/plot-coordinates";
 
-type PlotlyAxis = { _length?: number; _offset?: number; range?: [number, number] };
 type PlotlyGraphDiv = HTMLDivElement & {
   _fullLayout?: { xaxis?: PlotlyAxis; yaxis?: PlotlyAxis };
   data?: Array<Record<string, unknown>>;
 };
+
+function useBoundaryDraft(seed: number[] | null) {
+  const [previousSeed, setPreviousSeed] = useState(seed);
+  const [draft, setDraft] = useState(seed);
+  if (previousSeed !== seed) {
+    setPreviousSeed(seed);
+    setDraft(seed);
+  }
+  return [draft, setDraft] as const;
+}
+
+function useScatterStatus(key: string, sessionId: string | null) {
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [lastFetch, setLastFetch] = useState({ key, sessionId });
+  if (lastFetch.key !== key) {
+    setLastFetch({ key, sessionId });
+    setStatus(status === "ready" && lastFetch.sessionId === sessionId ? "ready" : "loading");
+    setFetchError(null);
+  }
+  return { status, setStatus, fetchError, setFetchError };
+}
 
 function effectiveType(
   autoCluster: string | null,
@@ -140,12 +162,7 @@ export function ScatterPlot() {
   const seedBoundaries = useMemo(() => linesActive
     ? (boundaries?.length ? [...boundaries] : defaultRatioCuts(ploidy))
     : null, [linesActive, boundaries, ploidy]);
-  const [boundarySeed, setBoundarySeed] = useState(seedBoundaries);
-  const [editBoundaries, setEditBoundaries] = useState<number[] | null>(seedBoundaries);
-  if (boundarySeed !== seedBoundaries) {
-    setBoundarySeed(seedBoundaries);
-    setEditBoundaries(seedBoundaries);
-  }
+  const [editBoundaries, setEditBoundaries] = useBoundaryDraft(seedBoundaries);
   const editRef = useRef<number[] | null>(null);
   const dragIndexRef = useRef<number | null>(null);
 
@@ -182,16 +199,9 @@ export function ScatterPlot() {
   // Request lifecycle so the panel shows loading/empty/error instead of a blank
   // 560px void (PRD FR-ST-1/ST-3). `loading` covers both an in-flight fetch and
   // waiting for the cycle to initialise.
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [fetchError, setFetchError] = useState<string | null>(null);
   const fetchKey = JSON.stringify([sessionId, currentCycle, useRox, backgroundMode, refetchTrigger]);
-  const [lastFetch, setLastFetch] = useState({ key: fetchKey, sessionId });
+  const { status, setStatus, fetchError, setFetchError } = useScatterStatus(fetchKey, sessionId);
   const fetchRevision = useRef(0);
-  if (lastFetch.key !== fetchKey) {
-    setLastFetch({ key: fetchKey, sessionId });
-    setStatus(status === "ready" && lastFetch.sessionId === sessionId ? "ready" : "loading");
-    setFetchError(null);
-  }
 
   // Fetch scatter data
   const fetchData = useCallback(() => {
@@ -210,7 +220,7 @@ export function ScatterPlot() {
       setFetchError(err instanceof Error ? err.message : String(err));
       setStatus("error");
     });
-  }, [sessionId, currentCycle, useRox, backgroundMode, setScatterData]);
+  }, [sessionId, currentCycle, useRox, backgroundMode, setScatterData, setStatus, setFetchError]);
 
   useEffect(() => {
     void fetchData();
@@ -469,8 +479,8 @@ export function ScatterPlot() {
         // time and the wells an operator needs are rarely a rectangle, so
         // without this every new box threw the previous one away.
         el.on("plotly_click", (data: PlotMouseEvent) => {
-          const well = data?.points?.[0]?.customdata;
-          if (typeof well !== "string" || !well) return;
+          const well = textCustomdata(data?.points?.[0]?.customdata);
+          if (!well) return;
           const event: MouseEvent | undefined = data.event;
           if (event?.ctrlKey || event?.metaKey) toggleWell(well);
           else if (event?.shiftKey) addWells([well]);
@@ -737,19 +747,11 @@ export function ScatterPlot() {
     if (!gd || !linesActive || !editing) return;
 
     const clientToRatio = (clientX: number, clientY: number): number | null => {
-      const fl = gd._fullLayout;
-      const xa = fl?.xaxis;
-      const ya = fl?.yaxis;
-      if (!xa || !ya || !xa._length || !ya._length || !xa.range || !ya.range) return null;
-      const bb = gd.getBoundingClientRect();
-      const px = clientX - bb.left - (xa._offset ?? 0);
-      const py = clientY - bb.top - (ya._offset ?? 0);
-      if (px < 0 || py < 0 || px > xa._length || py > ya._length) return null;
-      const dx = xa.range[0] + (px / xa._length) * (xa.range[1] - xa.range[0]);
-      const dy = ya.range[1] - (py / ya._length) * (ya.range[1] - ya.range[0]);
+      const point = clientPoint(gd._fullLayout?.xaxis, gd._fullLayout?.yaxis, gd.getBoundingClientRect(), clientX, clientY);
+      if (!point) return null;
       // Same origin the rays are drawn from, so the line follows the cursor.
-      const fx = Math.max(dx - originRef.current.fam, 0);
-      const fy = Math.max(dy - originRef.current.allele2, 0);
+      const fx = Math.max(point.x - originRef.current.fam, 0);
+      const fy = Math.max(point.y - originRef.current.allele2, 0);
       const total = fx + fy;
       if (total <= 0) return null;
       return Math.max(0, Math.min(1, fx / total));
@@ -870,7 +872,7 @@ export function ScatterPlot() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [linesActive, editing, sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setBoundaries, setOffset]);
+  }, [linesActive, editing, sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setBoundaries, setOffset, setEditBoundaries]);
 
   // Cleanup
   useEffect(() => {
