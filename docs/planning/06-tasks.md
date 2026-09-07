@@ -2,7 +2,7 @@
 
 - Contract ID: qprism-ux-followup-20260907-v1
 - 작성일: 2026-09-07
-- 상태: READY FOR PREFLIGHT — 모든 작업 미착수. 구현·테스트 통과를 의미하지 않음.
+- 상태: BLOCKED AT P0 GATE — 준비 작업 2개 완료, 기존 lint/의존성 보안 문제의 보완 범위 결정 필요. P1 미착수.
 - 기준: [UI/UX 후속 개선 기획서 v0.2](ui-ux-overhaul/04-review-followup-prd.md)
 - 실행 기준 파일: docs/planning/06-tasks.md
 - 이전 계약: [qPCR Import Expansion 원문 보관](archive/06-tasks-qpcr-import-expansion.md). 보관본의 작업은 이번 실행 대상이 아니다.
@@ -89,29 +89,36 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P0-T0.1: 기준 커밋·계약·검증 환경 확정
 
-- Status: TODO
+- Status: DONE
+- Commit: 9f519ae86cc430c819ee49dbb2bf7b2913a0aefa
+- Evidence: [P0-T0.1](ui-ux-overhaul/evidence/P0-T0.1.md). 기준선 기록 완료이며 품질 게이트 통과는 아님.
 - 담당: test-specialist
 - Depends On: []
 - Write Scope: docs/planning/ui-ux-overhaul/05-contract-appendix.md, BE/requirements-dev.txt, FE/package.json·lockfile·vitest.config.ts, tests/helpers.ts, 테스트/coverage 설정
 - 구현: 코드·문서 커밋/해시와 기존 기준선을 기록한다. appendix에 revision 증가 대상·생성, stale/legacy 오류, 상태 소유권, 응답 필드·호환 정책을 backend 관점으로 명세한다. 제품 모델/DB 변경은 하지 않는다.
 - 구현: pytest-cov, Vitest와 버전이 맞는 coverage provider, PDF/XLSX 내용 검사 도구와 대상 manifest를 준비한다. 기존 전체/변경 모듈 지표를 분리하고 격리 환경·로그인 helper를 정리한다.
 - 검증: BE-ALL, FE-ALL, FE-CHECK, 기존 E2E 목록/기준선, COVERAGE. 환경 실패와 제품 결함 구분.
-- [ ] AC: 올바른 소스/계획을 읽는 격리 환경과 계약 appendix가 준비되고 baseline 실패가 숨겨지지 않음.
+- [x] AC: 올바른 소스/계획을 읽는 격리 환경과 계약 appendix가 준비되고 baseline 실패가 숨겨지지 않음.
 
 ### P0-T0.2: 결정적 판정·QC·보고서 fixture
 
-- Status: TODO
+- Status: DONE
+- Commit: 77010b0d9956fba11e3547bf21935c953b50b4ca (초기 d6345b6 이후 복잡도 수정)
+- Evidence: [P0-T0.2](ui-ux-overhaul/evidence/P0-T0.2.md). 합성 fixture 검증 25개 통과, 생성기 coverage 100%, 최대 복잡도 9.
 - 담당: test-specialist
 - Depends On: []
 - Write Scope: BE/tests/fixtures/ux_followup/, BE/tests/fixtures_ux_followup.py, BE/tests/test_ux_fixtures.py
 - 구현: 기존 fixture를 재사용해 값이 다른 20/40사이클·96/384웰·읽기 구간·서로 다른 배수성 마커·ROX 없음/해제·NTC 정상/오염/미존재/불충분을 정의한다. 비공개 파일을 사용하지 않는다.
 - 구현: raw/normalized·background별 기대 수치, context 없는 저장 결과, 지연/실패 사례를 포함한다. 새 API는 구현하지 않는다.
 - 검증: BE-TEST(test_ux_fixtures.py), 결정성·범위·크기·출처 검사.
-- [ ] AC: 각 실패 시나리오에 이름과 기대 결과가 있고 반복 생성 입력이 동일함.
+- [x] AC: 각 실패 시나리오에 이름과 기대 결과가 있고 반복 생성 입력이 동일함.
 
 ### P0-S0-V: Preflight·ICV 게이트
 
-- Status: TODO
+- Status: BLOCKED
+- Gate Commit: bc8fc0db8e36872aa297f3ddaca28f21df3e1087
+- Evidence: [P0-S0-V](ui-ux-overhaul/evidence/P0-S0-V.md)
+- Blocker: 기존 lint 32 errors 및 미해결 의존성 audit. 보안 게이트의 예외 없는 통과에는 테스트 도구 메이저 업그레이드·런타임 의존성/인증 라이브러리 보완 범위 결정이 필요하다. 임의 waiver/규칙 비활성화 금지.
 - 담당: test-specialist
 - Depends On: [P0-T0.1, P0-T0.2]
 - Write Scope: docs/planning/ui-ux-overhaul/evidence/P0-S0-V.md
@@ -136,7 +143,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - Status: TODO
 - 담당: backend-specialist
 - Depends On: [P1-R1-T1]
-- Write Scope: BE/app/routers/clustering.py·layouts.py·sample.py, BE/app/db.py, 신규 BE/app/processing/analysis_state.py, BE/tests/test_analysis_input_revision.py
+- Write Scope: BE/app/routers/clustering.py·layouts.py·sample.py·marker_catalog.py, BE/app/db.py, 신규 BE/app/processing/analysis_state.py, BE/tests/test_analysis_input_revision.py
 - 구현: welltype set/clear/bulk, ploidy, marker create/update/delete, layout apply 등 모든 판정 입력 변경을 조사해 변경/revision 증가를 같은 transaction·직렬화 경계에 연결한다.
 - 구현: mutation 응답 input_revision, undo용 선택적 expected revision·409를 추가한다. 보기·언어·축 변경은 제외하고 stale 결과 정책을 보존한다.
 - 검증: 경로별 증가, 실패/no-op, 권한, stale expected revision, layout/bulk 누락 검사.
@@ -466,4 +473,4 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 4. 각 작업은 승인된 scope에서 RED → GREEN → REFACTOR → 검증 → 로컬 commit → 증거 보고 순으로 진행한다. 게이트 실패 시 후속 작업을 시작하지 않는다.
 5. 재개 시 계획 hash·branch/commit·상태·증거를 대조한다. 문서의 TODO를 추측으로 DONE 처리하거나 이전 작업서의 상태를 재사용하지 않는다.
 
-현재 상태: **작업서 작성 완료, 구현/테스트/오케스트레이션 미실행**. 모든 작업은 TODO이며 완료 체크박스는 비워 둔다.
+현재 상태: **2026-09-07 준비 2/31 완료, P0-S0-V BLOCKED, P1–P5 미착수**. 최신 사용자 요청에 따라 검증 통과 후 로컬 Phase 통합·자동 진행을 허용하지만, 기존 lint/의존성 보완은 게이트 증거를 바탕으로 범위 승인을 먼저 받는다. 작업물은 `worktree/ux-followup-p0`에 보존하며 Phase 병합·원격 push·배포·외부 알림은 하지 않았다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.
