@@ -1,7 +1,7 @@
 // @TASK Protocol Tab Component
 // @SPEC Editable PCR protocol table
 
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useEffectEvent, useState } from 'react';
 import { getProtocol, updateProtocol } from '@/lib/api';
 import { useSessionStore } from '@/stores/session-store';
 import { useI18n } from '@/hooks/use-i18n';
@@ -39,6 +39,7 @@ export function ProtocolTab() {
   const [steps, setSteps] = useState<ProtocolStep[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loadErrorMessage = useEffectEvent(() => t.errLoadProtocol);
 
   // Load protocol on mount
   useEffect(() => {
@@ -51,7 +52,7 @@ export function ProtocolTab() {
       })
       .catch((err) => {
         console.error('Failed to load protocol:', err);
-        setError(t.errLoadProtocol);
+        setError(loadErrorMessage());
       })
       .finally(() => setLoading(false));
   }, [sessionId]);
@@ -71,7 +72,7 @@ export function ProtocolTab() {
     }
   };
 
-  const handleStepChange = (index: number, field: keyof ProtocolStep, value: any) => {
+  const handleStepChange = <K extends keyof ProtocolStep,>(index: number, field: K, value: ProtocolStep[K]) => {
     setSteps((prev) =>
       prev.map((s, i) => (i === index ? { ...s, [field]: value } : s))
     );

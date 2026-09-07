@@ -14,11 +14,12 @@ import {
 import type { BackgroundMode, PresetResponse } from "@/types/api";
 
 export function SettingsTab() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [presets, setPresets] = useState<PresetResponse[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState("");
   const [newPresetName, setNewPresetName] = useState("");
   const [clusterLoading, setClusterLoading] = useState(false);
+  const [presetError, setPresetError] = useState<string | null>(null);
 
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const sessionId = useSessionStore((s) => s.sessionId);
@@ -76,6 +77,13 @@ export function SettingsTab() {
     if (!preset) return;
 
     const s = preset.settings;
+    if (s.algorithm !== undefined && s.algorithm !== 'threshold' && s.algorithm !== 'kmeans') {
+      setPresetError(language === 'ko'
+        ? '지원하지 않는 프리셋 알고리즘입니다. 설정을 변경하지 않았습니다.'
+        : 'Unsupported preset algorithm. Settings were not changed.');
+      return;
+    }
+    setPresetError(null);
     if (s.use_rox !== undefined) setUseRox(s.use_rox);
     // A preset may name a mode this run cannot be read with (they are saved
     // per operator, not per run), so honor it only if the run allows it.
@@ -93,7 +101,7 @@ export function SettingsTab() {
     if (s.allele2_ratio_min !== undefined) setAllele2RatioMin(s.allele2_ratio_min);
     if (s.n_clusters !== undefined) setNClusters(s.n_clusters);
   }, [
-    selectedPresetId, presets, backgroundModeOptions,
+    selectedPresetId, presets, backgroundModeOptions, language,
     setUseRox, setBackgroundMode, setFixAxis, setXMin, setXMax, setYMin, setYMax,
     setClusterAlgorithm, setNtcThreshold, setAllele1RatioMax, setAllele2RatioMin, setNClusters,
   ]);
@@ -176,6 +184,7 @@ export function SettingsTab() {
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 sm:px-6">
       {/* Panel 1: Assay Presets */}
       <Card title={t.assayPresets}>
+        {presetError && <p role="alert" className="mb-3 text-sm text-danger">{presetError}</p>}
         <div className="mb-4">
           <div className="flex gap-2 items-center">
             <select

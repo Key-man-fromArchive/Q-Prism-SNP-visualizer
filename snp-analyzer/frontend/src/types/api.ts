@@ -237,6 +237,7 @@ export type PlateWell = {
 
 export type AmplificationCurve = {
   well: string;
+  effective_type?: string;
   cycles: number[];
   norm_fam: number[];
   norm_allele2: number[];
@@ -663,7 +664,13 @@ export type CompareStatsResponse = {
 
 export type StatisticsResponse = {
   allele_frequency: Record<string, number>;
-  hwe: Record<string, any>;
+  hwe: {
+    chi2: number; p_value: number; expected_aa: number;
+    expected_ab: number; expected_bb: number; in_hwe: boolean;
+  } | {
+    chi2: null; p_value: null; expected_aa: null;
+    expected_ab: null; expected_bb: null; in_hwe: null;
+  };
   genotype_distribution: Record<string, number>;
   total_wells: number;
 };
@@ -672,11 +679,24 @@ export type StatisticsResponse = {
 // Presets API
 // ============================================================================
 
+export type PresetSettings = {
+  algorithm?: ClusteringRequest['algorithm'];
+  ntc_threshold?: number;
+  allele1_ratio_max?: number;
+  allele2_ratio_min?: number;
+  n_clusters?: number;
+  use_rox?: boolean;
+  background?: BackgroundMode;
+  fix_axis?: boolean;
+  x_min?: number; x_max?: number;
+  y_min?: number; y_max?: number;
+};
+
 export type PresetResponse = {
   id: string;
   name: string;
   builtin: boolean;
-  settings: Record<string, any>;
+  settings: PresetSettings;
 };
 
 export type PresetsListResponse = {
@@ -720,7 +740,17 @@ export type ProjectResponse = {
 export type ProjectSummaryResponse = {
   project_id: string;
   project_name: string;
-  plates: Array<Record<string, any>>;
+  plates: Array<{
+    session_id: string;
+    instrument: string;
+    num_wells: number;
+    raw_filename: string;
+    genotypes: Record<string, number>;
+    ntc_count: number;
+    unknown_count: number;
+    mean_quality: number;
+    missing?: boolean;
+  }>;
   concordance: {
     concordant_wells: number;
     total_compared: number;

@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import Plotly from "plotly.js-dist-min";
+import type { Data, Layout } from "plotly.js";
 import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useDataStore } from "@/stores/data-store";
@@ -49,7 +50,7 @@ export function AmplificationOverlay({ ploidyOverride }: AmplificationOverlayPro
         if (cancelled || !plotRef.current) return;
 
         const curves = res.curves;
-        const traces: any[] = [];
+        const traces: Data[] = [];
         const legendAdded = new Set<string>();
         const labels = channelLabels(
           res.channel_labels ? res : { channel_labels: roleLabels ?? undefined },
@@ -58,7 +59,7 @@ export function AmplificationOverlay({ ploidyOverride }: AmplificationOverlayPro
 
         for (const curve of curves) {
           // Use effective_type if available (it may be on the response)
-          const gt = (curve as any).effective_type || "Unknown";
+          const gt = curve.effective_type || "Unknown";
           const color = wellInfo(gt, ploidy, dark).color;
           const showLegend = !legendAdded.has(gt);
           if (showLegend) legendAdded.add(gt);
@@ -80,10 +81,10 @@ export function AmplificationOverlay({ ploidyOverride }: AmplificationOverlayPro
         const channelLabel = channel === "fam" ? labels.fam : labels.allele2;
 
         const c = plotlyColors();
-        const layout: any = {
+        const layout: Partial<Layout> = {
           title: { text: `Amplification Overlay — ${channelLabel}`, font: { size: 14, color: c.fontColor } },
-          xaxis: { title: "Cycle", gridcolor: c.gridColor },
-          yaxis: { title: `Norm. ${channelLabel} RFU`, gridcolor: c.gridColor },
+          xaxis: { title: { text: "Cycle" }, gridcolor: c.gridColor },
+          yaxis: { title: { text: `Norm. ${channelLabel} RFU` }, gridcolor: c.gridColor },
           paper_bgcolor: c.paper_bgcolor,
           plot_bgcolor: c.plot_bgcolor,
           font: { color: c.fontColor },
@@ -110,8 +111,9 @@ export function AmplificationOverlay({ ploidyOverride }: AmplificationOverlayPro
 
   // Cleanup on unmount
   useEffect(() => {
+    const plot = plotRef.current;
     return () => {
-      if (plotRef.current) Plotly.purge(plotRef.current);
+      if (plot) Plotly.purge(plot);
     };
   }, []);
 

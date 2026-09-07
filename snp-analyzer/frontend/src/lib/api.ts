@@ -26,6 +26,7 @@ import type {
   StatisticsResponse,
   PresetsListResponse,
   PresetResponse,
+  PresetSettings,
   QualityResponse,
   ProjectListResponse,
   ProjectResponse,
@@ -688,7 +689,7 @@ export async function getPresets(): Promise<PresetsListResponse> {
 
 export async function createPreset(
   name: string,
-  settings: Record<string, any>
+  settings: PresetSettings
 ): Promise<PresetResponse> {
   return apiFetch<PresetResponse>('/api/presets', {
     method: 'POST',
@@ -699,7 +700,7 @@ export async function createPreset(
 
 export async function updatePreset(
   id: string,
-  data: { name?: string; settings?: Record<string, any> }
+  data: { name?: string; settings?: PresetSettings }
 ): Promise<PresetResponse> {
   return apiFetch<PresetResponse>(`/api/presets/${id}`, {
     method: 'PUT',

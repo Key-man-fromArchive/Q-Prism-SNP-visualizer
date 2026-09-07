@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { getStatistics } from '@/lib/api';
@@ -13,6 +13,7 @@ export function StatisticsTab() {
   const [stats, setStats] = useState<StatisticsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loadErrorMessage = useEffectEvent(() => t.errLoadStatistics);
 
   useEffect(() => {
     if (!sessionId) {
@@ -27,7 +28,7 @@ export function StatisticsTab() {
         const data = await getStatistics(sessionId);
         setStats(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : t.errLoadStatistics);
+        setError(err instanceof Error ? err.message : loadErrorMessage());
       } finally {
         setLoading(false);
       }
@@ -86,7 +87,8 @@ export function StatisticsTab() {
   // Allele frequency + HWE are biallelic-diploid statistics; polysomic stats
   // are a later phase, so only surface them for diploid.
   const hasAlleleFreq = ploidy === 2 && stats.allele_frequency.total_genotyped > 0;
-  const hasHWE = ploidy === 2 && stats.hwe.chi2 !== null && stats.hwe.chi2 !== undefined;
+  const hwe = stats.hwe;
+  const hasHWE = ploidy === 2 && hwe.chi2 !== null && hwe.chi2 !== undefined;
 
   return (
     <div className="p-6">
@@ -180,26 +182,26 @@ export function StatisticsTab() {
                   <tr className="border-b border-border">
                     <td className="py-2 px-3 text-text">AA</td>
                     <td className="py-2 px-3 text-text">{stats.allele_frequency.n_aa}</td>
-                    <td className="py-2 px-3 text-text">{stats.hwe.expected_aa.toFixed(2)}</td>
+                    <td className="py-2 px-3 text-text">{hwe.expected_aa.toFixed(2)}</td>
                   </tr>
                   <tr className="border-b border-border">
                     <td className="py-2 px-3 text-text">AB</td>
                     <td className="py-2 px-3 text-text">{stats.allele_frequency.n_ab}</td>
-                    <td className="py-2 px-3 text-text">{stats.hwe.expected_ab.toFixed(2)}</td>
+                    <td className="py-2 px-3 text-text">{hwe.expected_ab.toFixed(2)}</td>
                   </tr>
                   <tr>
                     <td className="py-2 px-3 text-text">BB</td>
                     <td className="py-2 px-3 text-text">{stats.allele_frequency.n_bb}</td>
-                    <td className="py-2 px-3 text-text">{stats.hwe.expected_bb.toFixed(2)}</td>
+                    <td className="py-2 px-3 text-text">{hwe.expected_bb.toFixed(2)}</td>
                   </tr>
                 </tbody>
               </table>
               <div className="bg-bg border border-border rounded p-3">
                 <p className="text-sm text-text mb-1">
-                  χ² = {stats.hwe.chi2.toFixed(4)}
+                  χ² = {hwe.chi2.toFixed(4)}
                 </p>
                 <p className="text-sm text-text mb-2">
-                  p-value = {stats.hwe.p_value.toFixed(4)}
+                  p-value = {hwe.p_value.toFixed(4)}
                 </p>
                 <div
                   className={`px-3 py-2 rounded text-sm font-medium ${

@@ -1,9 +1,10 @@
 // @TASK Compare Runs UI - Overlay scatter plot and correlation statistics
 // @SPEC SNP Discrimination Analyzer - Compare Tab
 
-import { useEffect, useRef, useState, Fragment } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, Fragment } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import Plotly from 'plotly.js-dist-min';
+import type { Data, Layout, Config } from 'plotly.js';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useI18n } from '@/hooks/use-i18n';
 import { getSessions, getCompareScatter, getCompareStats } from '@/lib/api';
@@ -27,6 +28,7 @@ export function CompareTab() {
   const [error, setError] = useState<string>('');
 
   const useRox = useSettingsStore((s) => s.useRox);
+  const loadErrorMessage = useEffectEvent(() => t.errLoadSessions);
 
   // Fetch sessions on mount
   useEffect(() => {
@@ -36,7 +38,7 @@ export function CompareTab() {
         setSessions(data);
       } catch (err) {
         console.error('Failed to load sessions:', err);
-        setError(t.errLoadSessions);
+        setError(loadErrorMessage());
       }
     };
     loadSessions();
@@ -70,12 +72,13 @@ export function CompareTab() {
   // Render scatter plot
   useEffect(() => {
     if (!plotRef.current || !scatterData) return;
+    const plot = plotRef.current;
 
     const { run1, run2 } = scatterData;
     const run1Labels = channelLabels(run1, run1.allele2_dye);
     const run2Labels = channelLabels(run2, run2.allele2_dye);
 
-    const trace1: any = {
+    const trace1: Data = {
       type: 'scattergl',
       mode: 'markers',
       name: `Run A (${run1.instrument})`,
@@ -93,7 +96,7 @@ export function CompareTab() {
       },
     };
 
-    const trace2: any = {
+    const trace2: Data = {
       type: 'scattergl',
       mode: 'markers',
       name: `Run B (${run2.instrument})`,
@@ -112,14 +115,14 @@ export function CompareTab() {
     };
 
     const c = plotlyColors();
-    const layout: any = {
+    const layout: Partial<Layout> = {
       xaxis: {
-        title: run1Labels.fam,
+        title: { text: run1Labels.fam },
         gridcolor: c.gridColor,
         zerolinecolor: c.lineColor,
       },
       yaxis: {
-        title: run1Labels.allele2,
+        title: { text: run1Labels.allele2 },
         gridcolor: c.gridColor,
         zerolinecolor: c.lineColor,
       },
@@ -135,18 +138,16 @@ export function CompareTab() {
       margin: { l: 60, r: 40, t: 40, b: 60 },
     };
 
-    const config: any = {
+    const config: Partial<Config> = {
       responsive: true,
       displayModeBar: true,
       displaylogo: false,
     };
 
-    Plotly.newPlot(plotRef.current, [trace1, trace2], layout, config);
+    Plotly.newPlot(plot, [trace1, trace2], layout, config);
 
     return () => {
-      if (plotRef.current) {
-        Plotly.purge(plotRef.current);
-      }
+      Plotly.purge(plot);
     };
   }, [scatterData]);
 
