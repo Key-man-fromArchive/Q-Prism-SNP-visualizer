@@ -11,7 +11,7 @@ COVERAGE_FILE=/tmp/ux-phase-coverage venv/bin/python -m pytest --tb=short -q --c
 venv/bin/radon cc app -j > /tmp/ux-phase-complexity.json
 ```
 
-In the frontend run `npm ci`, `npm run test:coverage`, `npm run lint`, `npm run build` separately and record exit codes. Vitest 2.1.9 uses matching coverage-v8 2.1.9. Default reports live under ignored node_modules/.cache/ux-coverage so lint never scans generated coverage JavaScript; UX_COVERAGE_DIR may select an external phase-specific directory. pypdf inspects PDF text; openpyxl (existing runtime dependency) reads XLSX; stdlib csv reads CSV. Check actual rows and rounded numerical values, not just successful downloads.
+In the frontend run `npm ci`, `npm run test:coverage`, `npm run lint`, `npm run build` separately and record exit codes. Following P0-S0-T1 security remediation, Vitest 4.1.11 uses matching coverage-v8 4.1.11 (the initial baseline used 2.1.9). Default reports live under ignored node_modules/.cache/ux-coverage so lint never scans generated coverage JavaScript; UX_COVERAGE_DIR may select an external phase-specific directory. pypdf inspects PDF text; openpyxl (existing runtime dependency) reads XLSX; stdlib csv reads CSV. Check actual rows and rounded numerical values, not just successful downloads.
 
 ## Changed-code gate
 
