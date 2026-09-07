@@ -448,13 +448,15 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P4-S4-T1: 로그인·업로드·설정·프로토콜 보조 화면
 
-- Status: TODO
+- Status: DONE
+- Commit: d9b6901ec3cb6b3177b911bc7d7e8a84d1e203f8
+- Evidence: [P4-S4-T1](ui-ux-overhaul/evidence/P4-S4-T1.md). FE 579개, ROOT21·22·23·25 23/23, 390/1024/1440×KO/EN×양 테마, lint·typecheck·build, 변경 coverage 100%·새 CC 10 이하·기존 root 증가 없음, 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P4-S3-T1]
 - Write Scope: SRC/components/의 Login·Upload·Settings·Protocol/Template 관련 화면, 관련 locales/CSS, tests/25-secondary-flows.spec.ts
 - 구현: 390/1024/1440에서 폼·대화상자·오류·진행 상태·긴 항목의 조작성을 보완한다. 인증 모드별 기존 권한/경로를 보존한다.
 - 검증: KO/EN·양 테마, 키보드 제출/취소, 업로드 부분 실패 기록 보존, 설정 변경 후 분석 무효화/복원 회귀.
-- [ ] AC: UX-09 보조 화면 해당 범위의 핵심 행동이 잘리거나 가려지지 않음.
+- [x] AC: UX-09 보조 화면 해당 범위의 핵심 행동이 잘리거나 가려지지 않음.
 
 ### P4-S4-T2: 라이브러리·프로젝트·사용자·참조·비교 화면
 
