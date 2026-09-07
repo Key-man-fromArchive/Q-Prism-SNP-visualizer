@@ -93,6 +93,7 @@ class UnifiedData(BaseModel):
 
 class UploadResponse(BaseModel):
     session_id: str
+    well_ids: list[str] = Field(default_factory=list)
     instrument: str
     allele2_dye: str
     num_wells: int

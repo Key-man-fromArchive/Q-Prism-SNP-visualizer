@@ -2,7 +2,8 @@
 // @SPEC docs/multi-marker-ux-decision.md §0 (2-surface workspace, free navigation)
 // @TEST e2e/p4-s0-single-marker-default.spec.ts, e2e/p4-s1-plate-setup.spec.ts
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import type { MarkerRegion } from '@/types/api';
 import { navigateTabs } from '@/lib/tab-keyboard';
 import { X } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
@@ -14,6 +15,7 @@ import { AnalysisTab } from "./AnalysisTab";
 import { PlateSetupTab } from "./PlateSetupTab";
 import { MultiMarkerAnalysisPanel } from "./MultiMarkerAnalysisPanel";
 import { AnalysisResultStatus } from './AnalysisResultStatus';
+import { PlateScopeSummary } from './PlateScopeSummary';
 
 function WorkspaceTabs() {
   const { t } = useI18n();
@@ -30,6 +32,10 @@ function WorkspaceTabs() {
   </button>);
 }
 function panelClass(active: string, surface: string): string { return active === surface ? '' : 'hidden'; }
+function availableScope(markers: MarkerRegion[], available: boolean) { return available ? markers : null; }
+function MarkerAvailability({ available, children }: { available: boolean; children: ReactNode }) {
+  return available ? children : null;
+}
 
 /**
  * Always-present 2-surface workspace (Plate Setup + Analysis), replacing the
@@ -47,7 +53,7 @@ export function AnalysisWorkspace() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const activeSurface = useNavigationStore(state => state.surface);
   const setActiveSurface = useNavigationStore(state => state.setSurface);
-  const { ready, status, markers, retry } = useAnalysisWorkspace();
+  const { ready, status, markers, markersAvailable, retry } = useAnalysisWorkspace();
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // The session's saved marker (assay) set decides which Analysis surface
@@ -92,8 +98,11 @@ export function AnalysisWorkspace() {
         id="workspace-panel-analysis" role="tabpanel" aria-labelledby="workspace-tab-analysis"
         className={panelClass(activeSurface, 'analysis')}
       >
-        {ready && <AnalysisResultStatus markers={markers} />}
-        {!ready ? <StatusState variant={status === 'error' ? 'error' : 'loading'} message={status === 'error' ? t.analysisLoadFailed : t.loading} action={status === 'error' ? { label: t.retry, onClick: retry } : undefined} /> : markers.length > 0 ? (
+        {ready && <>
+          <AnalysisResultStatus markers={availableScope(markers, markersAvailable)} />
+          <PlateScopeSummary markers={availableScope(markers, markersAvailable)} />
+        </>}
+        {!ready ? <StatusState variant={status === 'error' ? 'error' : 'loading'} message={status === 'error' ? t.analysisLoadFailed : t.loading} action={status === 'error' ? { label: t.retry, onClick: retry } : undefined} /> : <MarkerAvailability available={markersAvailable}>{markers.length > 0 ? (
           <MultiMarkerAnalysisPanel markers={markers} />
         ) : (
           <div data-testid="single-marker-analysis-view">
@@ -129,7 +138,7 @@ export function AnalysisWorkspace() {
             )}
             <AnalysisTab />
           </div>
-        )}
+        )}</MarkerAvailability>}
       </div>
     </div>
   );

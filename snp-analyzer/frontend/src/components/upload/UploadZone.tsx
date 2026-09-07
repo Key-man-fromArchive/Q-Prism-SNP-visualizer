@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useSessionStore } from "@/stores/session-store";
-import { previewImportFile, uploadFile as apiUpload, loadExample as apiLoadExample, getSessions, getSessionInfo } from "@/lib/api";
-import type { SessionListItem } from "@/types/api";
+import { previewImportFile, loadExample as apiLoadExample } from "@/lib/api";
+import { runUploadJobs } from '@/lib/upload-jobs';
+import { validUploadResponse } from '@/lib/upload-response';
+import { useOwnedOperation } from '@/hooks/use-owned-operation';
+import { UploadJobSummary } from './UploadJobSummary';
+import { RecentSessions } from './RecentSessions';
 import { runtimeAssetPath } from "@/lib/runtime-paths";
-import JSZip from "jszip";
+import { runXmlUpload } from '@/lib/xml-upload';
 import { useI18n } from "@/hooks/use-i18n";
 import { ArrowRight, BookOpen, ChevronDown, ChevronUp, CircleHelp, Download, Upload } from "lucide-react";
 import { ImportMappingWizard } from "@/components/upload/ImportMappingWizard";
@@ -43,6 +47,8 @@ type UploadZoneProps = {
 
 export function UploadZone({ onGoToProject }: UploadZoneProps) {
   const { t } = useI18n();
+  const operation = useOwnedOperation();
+  const previewTicket = useRef<ReturnType<typeof operation.begin> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [dragover, setDragover] = useState(false);
@@ -53,7 +59,6 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
   const [previewingImport, setPreviewingImport] = useState(false);
   const [showTemplateHelp, setShowTemplateHelp] = useState(false);
   const [activeTemplateTooltip, setActiveTemplateTooltip] = useState<string | null>(null);
-  const [recentSessions, setRecentSessions] = useState<SessionListItem[]>([]);
 
   const {
     uploadState,
@@ -64,33 +69,6 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
     setUploadError,
   } = useSessionStore();
 
-  // Recent sessions shortcut (PRD FR-UP-3): surface the latest runs so a return
-  // visit reopens one in a click instead of re-uploading.
-  useEffect(() => {
-    let cancelled = false;
-    getSessions()
-      .then((list) => {
-        if (!cancelled) setRecentSessions(list.slice(0, 5));
-      })
-      .catch(() => {
-        /* no recent sessions / not reachable — silently omit the shortcut */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const openSession = useCallback(
-    async (sid: string) => {
-      try {
-        setSession(sid, await getSessionInfo(sid));
-      } catch {
-        /* ignore — a stale/removed session just stays on the upload screen */
-      }
-    },
-    [setSession]
-  );
-
   const clearImportState = useCallback(() => {
     setImportFile(null);
     setImportPreview(null);
@@ -100,6 +78,8 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
 
   const handleImportPreview = useCallback(
     async (file: File) => {
+      const ticket = operation.begin();
+      previewTicket.current = ticket;
       setImportFile(file);
       setImportPreview(null);
       setImportPreviewIssues([]);
@@ -111,6 +91,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
 
       try {
         const response = await previewImportFile(file);
+        if (!operation.current(ticket)) return;
         setUploadProgress(100);
         if (isImportValidationResponse(response)) {
           setImportPreviewIssues(response.issues);
@@ -122,48 +103,40 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         setImportPreview(response);
         setUploadState("success");
         setStatusMessage(t.imwPreviewReady(response.filename || file.name));
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : t.uploadFailed;
+      } catch {
+        if (!operation.current(ticket)) return;
+        const msg = t.uploadFailed;
         setUploadState("error");
         setUploadError(msg);
         setStatusMessage(t.imwGenericError(msg));
       } finally {
-        setPreviewingImport(false);
+        if (operation.current(ticket)) setPreviewingImport(false);
       }
     },
-    [t, setUploadState, setUploadProgress, setUploadError],
+    [t, setUploadState, setUploadProgress, setUploadError, operation],
   );
 
   /** Upload a single file and go to Analysis tab */
   const handleSingleUpload = useCallback(
     async (file: File) => {
       clearImportState();
+      const ticket = operation.begin();
       setUploadState("uploading");
       setUploadProgress(30);
       setUploadError(null);
       setStatusMessage(t.uploading);
 
-      try {
-        setUploadProgress(70);
-        const info = await apiUpload(file);
-        setUploadProgress(100);
-        setStatusMessage(t.parsed(info.instrument, info.num_wells, info.num_cycles));
-        setUploadState("success");
-
-        setTimeout(() => {
-          setSession(info.session_id, info, 'fresh');
-        }, 500);
-      } catch (err) {
-        if (isSpreadsheetImportFallbackFile(file)) {
-          setStatusMessage(t.imwRawFallback(file.name));
-          await handleImportPreview(file);
-          return;
-        }
-        setUploadState("error");
-        const msg = err instanceof Error ? err.message : t.uploadFailed;
-        setUploadError(msg);
-        setStatusMessage(t.imwGenericError(msg));
+      let formatFailure = false;
+      const info = await runUploadJobs([file], () => { formatFailure = true; });
+      if (!operation.current(ticket)) return;
+      if (formatFailure && isSpreadsheetImportFallbackFile(file)) {
+        await handleImportPreview(file);
+        return;
       }
+      setUploadProgress(100);
+      setUploadState(info ? 'success' : 'error');
+      setStatusMessage(info ? t.parsed(info.instrument, info.num_wells, info.num_cycles) : t.jobFinished);
+      if (info) setSession(info.session_id, info, 'fresh');
     },
     [
       t,
@@ -173,6 +146,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       setUploadError,
       clearImportState,
       handleImportPreview,
+      operation,
     ],
   );
 
@@ -180,55 +154,30 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
   const handleBatchUpload = useCallback(
     async (files: File[]) => {
       clearImportState();
+      const ticket = operation.begin();
       setUploadState("uploading");
       setUploadProgress(0);
       setUploadError(null);
 
-      let success = 0;
-      let failed = 0;
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const pct = Math.round(((i) / files.length) * 100);
-        setUploadProgress(pct);
-        setStatusMessage(t.uploadingN(i + 1, files.length, file.name));
-
-        try {
-          await apiUpload(file);
-          success++;
-        } catch {
-          failed++;
-        }
-      }
-
+      await runUploadJobs(files);
+      if (!operation.current(ticket)) return;
       setUploadProgress(100);
-      if (failed === 0) {
-        setStatusMessage(t.allUploaded(success));
-        setUploadState("success");
-      } else {
-        setStatusMessage(t.uploadResult(success, failed));
-        setUploadState(failed === files.length ? "error" : "success");
-        if (failed > 0) setUploadError(t.nFileFailed(failed));
-      }
-
-      // Navigate to Project tab to see all sessions
-      setTimeout(() => {
-        setUploadState("idle");
-        setUploadProgress(0);
-        onGoToProject?.();
-      }, 800);
+      setStatusMessage(t.jobFinished);
+      setUploadState('idle');
     },
-    [t, setUploadState, setUploadProgress, setUploadError, onGoToProject, clearImportState],
+    [t, setUploadState, setUploadProgress, setUploadError, clearImportState, operation],
   );
 
   /** Handle multiple files: XML → zip as one, raw files → batch upload */
   const handleMultipleFiles = useCallback(
     async (files: File[]) => {
+      const ticket = operation.begin();
       const lowerName = (f: File) => f.name.toLowerCase();
       const previewImportFiles = files.filter((f) =>
         PREVIEW_IMPORT_EXTENSIONS.some((ext) => lowerName(f).endsWith(ext)),
       );
       if (previewImportFiles.length > 0) {
-        if (files.length > 1 || previewImportFiles.length > 1) {
+        if (files.length > 1) {
           setUploadState("error");
           setUploadError(t.imwOneFileError);
           setStatusMessage(t.imwOneFileStatus);
@@ -243,47 +192,33 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         RAW_EXTENSIONS.some((ext) => lowerName(f).endsWith(ext)),
       );
 
-      // Build the list of uploads: each raw file is one upload,
-      // all XML files are zipped into one upload
-      const uploadItems: File[] = [...rawFiles];
-
       if (xmlFiles.length > 0) {
         setUploadState("packaging");
         setUploadProgress(10);
         setStatusMessage(t.packagingXML(xmlFiles.length));
 
-        try {
-          const zip = new JSZip();
-          for (const file of xmlFiles) {
-            const data = await file.arrayBuffer();
-            zip.file(file.name, data);
-          }
-          const blob = await zip.generateAsync({ type: "blob" });
-          const zipFile = new File([blob], "cfx_xml_export.zip", {
-            type: "application/zip",
-          });
-          uploadItems.push(zipFile);
-        } catch (err) {
-          setUploadState("error");
-          const msg = err instanceof Error ? err.message : t.packagingFailed;
-          setUploadError(msg);
-          setStatusMessage(t.imwGenericError(msg));
+        const info = await runXmlUpload(xmlFiles);
+        if (!operation.current(ticket)) return;
+        if (rawFiles.length === 0) {
+          setUploadState(info ? 'success' : 'error');
+          setStatusMessage(t.jobFinished);
+          if (info) setSession(info.session_id, info, 'fresh');
           return;
         }
       }
 
-      if (uploadItems.length === 0) {
+      if (rawFiles.length === 0) {
         setUploadState("error");
         setUploadError(t.noSupportedFiles);
         setStatusMessage(`Error: ${t.noSupportedFilesDetail}`);
         return;
       }
 
-      // Single file → go to Analysis; multiple files → batch to Project tab
-      if (uploadItems.length === 1) {
-        await handleSingleUpload(uploadItems[0]);
+      // Mixed/XML or multiple raw results remain in the explicit-navigation summary.
+      if (isSingleRawUpload(rawFiles, xmlFiles)) {
+        await handleSingleUpload(rawFiles[0]);
       } else {
-        await handleBatchUpload(uploadItems);
+        await handleBatchUpload(rawFiles);
       }
     },
     [
@@ -291,14 +226,29 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       handleSingleUpload,
       handleBatchUpload,
       handleImportPreview,
+      operation,
       setUploadState,
       setUploadProgress,
       setUploadError,
+      setSession,
     ],
   );
 
+  const handleDirectory = useCallback(async (entries: FileSystemEntry[], ticket: ReturnType<typeof operation.begin>) => {
+    try {
+      const files = await readDroppedEntries(entries, () => operation.current(ticket));
+      if (operation.current(ticket)) await handleMultipleFiles(files);
+    } catch {
+      if (!operation.current(ticket)) return;
+      setUploadState('error');
+      setUploadError(t.packagingFailed);
+      setStatusMessage(t.packagingFailed);
+    }
+  }, [operation, handleMultipleFiles, setUploadState, setUploadError, t]);
+
   const onDrop = useCallback(
     async (e: React.DragEvent) => {
+      const ticket = operation.begin();
       e.preventDefault();
       setDragover(false);
 
@@ -306,15 +256,10 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
       if (!items || !items.length) return;
 
       // Check for directories
-      const entries: FileSystemEntry[] = [];
-      for (let i = 0; i < items.length; i++) {
-        const entry = items[i].webkitGetAsEntry?.();
-        if (entry) entries.push(entry);
-      }
+      const entries = droppedEntries(items);
 
       if (entries.length > 0 && entries.some((ent) => ent.isDirectory)) {
-        const files = await readDroppedEntries(entries);
-        await handleMultipleFiles(files);
+        await handleDirectory(entries, ticket);
       } else if (e.dataTransfer.files.length > 1) {
         await handleMultipleFiles(Array.from(e.dataTransfer.files));
       } else if (e.dataTransfer.files.length === 1) {
@@ -328,7 +273,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         }
       }
     },
-    [handleSingleUpload, handleMultipleFiles, handleImportPreview],
+    [handleSingleUpload, handleMultipleFiles, handleImportPreview, handleDirectory, operation],
   );
 
   const onFileChange = useCallback(
@@ -369,23 +314,28 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
   // each ploidy without a real file. Opens it like a successful upload.
   const handleLoadExample = useCallback(
     async (ploidy: number) => {
+      const ticket = operation.begin();
       setUploadState("uploading");
       setStatusMessage(t.exampleLoading(ploidy));
       try {
         const info = await apiLoadExample(ploidy);
+        if (!operation.current(ticket)) return;
+        if (!validUploadResponse(info)) throw new Error('Invalid example response');
         setUploadState("success");
         setStatusMessage(t.parsed(info.instrument, info.num_wells, info.num_cycles));
-        setTimeout(() => setSession(info.session_id, info, 'fresh'), 300);
-      } catch (err) {
+        setSession(info.session_id, info, 'fresh');
+      } catch {
+        if (!operation.current(ticket)) return;
         setUploadState("error");
-        setStatusMessage(err instanceof Error ? err.message : t.errLoadExample);
+        setStatusMessage(t.errLoadExample);
       }
     },
-    [setSession, setUploadState, t],
+    [setSession, setUploadState, t, operation],
   );
 
   return (
     <div id="upload-zone" className="max-w-[700px] mx-auto mt-4">
+      <UploadJobSummary onCheckSessions={onGoToProject} />
       <div
         id="drop-area"
         onDragOver={(e) => {
@@ -475,25 +425,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         />
       </div>
 
-      {/* Recent sessions shortcut (FR-UP-3) */}
-      {recentSessions.length > 0 && (
-        <div className="mt-4">
-          <p className="text-xs font-medium text-text-muted mb-1.5">{t.recentSessions}</p>
-          <div className="flex flex-wrap gap-2">
-            {recentSessions.map((s) => (
-              <button
-                key={s.session_id}
-                type="button"
-                onClick={() => openSession(s.session_id)}
-                title={s.raw_filename || s.session_id}
-                className="max-w-[220px] truncate rounded-md border border-border bg-surface px-3 py-1.5 text-xs text-text hover:border-primary hover:text-primary transition-colors cursor-pointer"
-              >
-                {s.raw_filename || s.instrument} · {s.num_wells}{t.wells}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <RecentSessions />
 
       <div className="mt-4 border border-border rounded-lg bg-surface p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -582,6 +514,8 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           previewing={previewingImport}
           onPreviewAgain={() => handleImportPreview(importFile)}
           onCancel={() => {
+            operation.begin();
+            previewTicket.current = null;
             clearImportState();
             setUploadState("idle");
             setUploadProgress(0);
@@ -589,12 +523,17 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
             setStatusMessage(null);
           }}
           onImported={(info) => {
+            const ticket = previewTicket.current;
+            if (!ticket || !operation.current(ticket)) return;
+            if (!validUploadResponse(info)) {
+              setUploadState('error');
+              setStatusMessage(t.recoveryUnknown);
+              return;
+            }
             setUploadProgress(100);
             setUploadState("success");
             setStatusMessage(t.parsed(info.instrument, info.num_wells, info.num_cycles));
-            setTimeout(() => {
-              setSession(info.session_id, info, 'fresh');
-            }, 500);
+            setSession(info.session_id, info, 'fresh');
           }}
         />
       )}
@@ -725,6 +664,19 @@ function isSpreadsheetImportFallbackFile(file: File): boolean {
   return file.name.toLowerCase().endsWith(".xlsx");
 }
 
+function isSingleRawUpload(raw: readonly File[], xml: readonly File[]): boolean {
+  return raw.length === 1 && xml.length === 0;
+}
+
+function droppedEntries(items: DataTransferItemList): FileSystemEntry[] {
+  const entries: FileSystemEntry[] = [];
+  for (const item of Array.from(items)) {
+    const entry = item.webkitGetAsEntry?.();
+    if (entry) entries.push(entry);
+  }
+  return entries;
+}
+
 function isImportValidationResponse(response: ImportPreviewResponse): response is Extract<ImportPreviewResponse, { status: "validation_failed" }> {
   return "status" in response && response.status === "validation_failed";
 }
@@ -732,32 +684,34 @@ function isImportValidationResponse(response: ImportPreviewResponse): response i
 /** Recursively read files from dropped folder entries */
 async function readDroppedEntries(
   entries: FileSystemEntry[],
+  current: () => boolean,
 ): Promise<File[]> {
   const files: File[] = [];
 
   async function readEntry(entry: FileSystemEntry) {
+    if (!current()) return;
     if (entry.isFile) {
       const fileEntry = entry as FileSystemFileEntry;
-      return new Promise<void>((resolve) => {
+      return new Promise<void>((resolve, reject) => {
         fileEntry.file((f) => {
-          files.push(f);
+          if (current()) files.push(f);
           resolve();
-        });
+        }, reject);
       });
     } else if (entry.isDirectory) {
       const dirEntry = entry as FileSystemDirectoryEntry;
       const reader = dirEntry.createReader();
-      const childEntries = await new Promise<FileSystemEntry[]>((resolve) => {
+      const childEntries = await new Promise<FileSystemEntry[]>((resolve, reject) => {
         const all: FileSystemEntry[] = [];
         (function readBatch() {
           reader.readEntries((batch) => {
-            if (batch.length === 0) {
+            if (!current() || batch.length === 0) {
               resolve(all);
               return;
             }
             all.push(...batch);
             readBatch();
-          });
+          }, reject);
         })();
       });
       for (const child of childEntries) {

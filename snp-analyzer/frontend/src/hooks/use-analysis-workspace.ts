@@ -3,6 +3,8 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useNavigationStore } from '@/stores/navigation-store';
+import { completeWorkspaceRestore } from '@/lib/workspace-ready';
+import { restorationError } from '@/lib/workspace-location';
 import { useSettingsStore } from '@/stores/settings-store';
 import { loadAnalysisSession, type ReadyAnalysisSession } from '@/lib/analysis-session';
 import { analyzeCurrent } from '@/lib/analysis-actions';
@@ -25,6 +27,7 @@ export function useAnalysisWorkspace() {
   const entry = useSessionStore(state => state.entryGeneration);
   const owner = useAuthStore(state => state.user?.id);
   const [loaded, setLoaded] = useState<{ entry: number; value: ReadyAnalysisSession } | null>(null);
+  const [markerEntry, setMarkerEntry] = useState<number | null>(null);
   const [retryGeneration, setRetryGeneration] = useState(0);
   const status = useNavigationStore(state => state.status);
   useEffect(() => {
@@ -34,26 +37,29 @@ export function useAnalysisWorkspace() {
     const generation = useNavigationStore.getState().beginRestore(session);
     const load = async () => {
       const value = await loadAnalysisSession();
-      if (cancelled) return;
-      if (!value) { useNavigationStore.getState().fail(generation, 'Unable to load analysis session'); return; }
+      if (cancelled || useSessionStore.getState().entryGeneration !== entry || useAuthStore.getState().user?.id !== owner
+        || useNavigationStore.getState().generation !== generation) return;
+      if (!value) {
+        const reason = restorationError(useAnalysisStore.getState().error);
+        if (reason === 'unauthorized') useAuthStore.getState().clearAuth();
+        else useNavigationStore.getState().fail(generation, reason);
+        return;
+      }
       if (value.hasCompletedResult) useSessionStore.getState().consumeInitialAnalysis();
-      useSettingsStore.getState().setPloidy(value.ploidy);
+      useSessionStore.setState({ sessionInfo: value.info });
       setLoaded({ entry, value });
-      const result = useAnalysisStore.getState().result;
-      const info = value.info;
-      const cycles = [...info.cycles].sort((left, right) => left - right);
-      useNavigationStore.getState().setAvailableCycles(cycles);
-      const preferred = result?.cycle ?? info.suggested_cycle;
-      const cycle = preferred !== null && cycles.includes(preferred) ? preferred : cycles.at(-1) ?? null;
-      const accepted = useNavigationStore.getState().complete(generation, { reasons: [], value: {
-        session, tab: 'analysis', surface: 'analysis', marker: null,
-        cycle,
-      } });
-      if (accepted) analyzeFreshSession(cycle, value);
+      setMarkerEntry(entry);
+      const restored = completeWorkspaceRestore(owner, session, generation, value);
+      if (restored.accepted) analyzeFreshSession(restored.cycle, value);
     };
     void load();
     return () => { cancelled = true; };
   }, [session, owner, entry, retryGeneration]);
+  useEffect(() => {
+    const retry = () => setRetryGeneration(value => value + 1);
+    window.addEventListener('workspace-load-retry', retry);
+    return () => window.removeEventListener('workspace-load-retry', retry);
+  }, []);
   useEffect(() => {
     if (!session || !owner) return;
     let sequence = 0;
@@ -66,17 +72,19 @@ export function useAnalysisWorkspace() {
         if (!isRevision(info.input_revision)) throw new Error('Input revision unavailable');
         if (!useAnalysisStore.getState().updateInputRevision(session, owner, info.input_revision)) return;
         setLoaded(previous => previous ? { entry, value: { ...previous.value, markers: structuredClone(markers) } } : null);
+        setMarkerEntry(entry);
       } catch (error) {
         if (request === sequence && useSessionStore.getState().entryGeneration === entry) useAnalysisStore.getState().failInputRefresh(error);
       }
     };
-    window.addEventListener('markers-changed', refresh);
+    const refreshMarkers = () => { setMarkerEntry(null); void refresh(); };
+    window.addEventListener('markers-changed', refreshMarkers);
     window.addEventListener('welltypes-changed', refresh);
     return () => {
       sequence++;
-      window.removeEventListener('markers-changed', refresh);
+      window.removeEventListener('markers-changed', refreshMarkers);
       window.removeEventListener('welltypes-changed', refresh);
     };
   }, [session, owner, entry]);
-  return { ready: status === 'ready' && loaded?.entry === entry, status, markers: loaded?.value.markers ?? [], retry: () => setRetryGeneration(value => value + 1) };
+  return { ready: status === 'ready' && loaded?.entry === entry, markersAvailable: markerEntry === entry, status, markers: loaded?.value.markers ?? [], retry: () => setRetryGeneration(value => value + 1) };
 }

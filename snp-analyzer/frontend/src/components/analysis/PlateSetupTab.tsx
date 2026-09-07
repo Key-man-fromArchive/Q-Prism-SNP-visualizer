@@ -8,10 +8,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { useDataStore } from "@/stores/data-store";
 import {
-  getMarkers,
   saveMarkers,
-  getWellTypes,
-  setWellTypes as apiSetWellTypes,
   getSamples,
   updateSamples,
   listLayouts,
@@ -23,9 +20,14 @@ import {
 } from "@/lib/api";
 import type { MarkerRegion, SavedLayout, LayoutApplyConflict, MarkerCatalogEntry } from "@/types/api";
 import { WellType } from "@/types/api";
+import { assignManualWells } from "@/lib/manual-commands";
+import { parseWellType } from "@/lib/well-type-input";
+import { useWellTypeAssignments } from "@/hooks/use-well-type-assignments";
 import { MARKER_PALETTE } from "@/lib/constants";
 import { withDosageMax } from "@/lib/threshold-config";
 import { extractLayoutConflict, extractLayoutMissingWellsMessage } from "@/lib/layout-conflict";
+import { PlateScopeSummary } from './PlateScopeSummary';
+import { useMarkerScope } from '@/hooks/use-marker-scope';
 
 const ROW_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const PLOIDY_OPTIONS = [2, 3, 4, 5, 6, 7, 8];
@@ -48,14 +50,13 @@ export function PlateSetupTab() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const wellTypeAssignments = useDataStore((s) => s.wellTypeAssignments);
-  const setWellTypeAssignments = useDataStore((s) => s.setWellTypeAssignments);
 
   // Physical plate layout (96 = 8x12, 384 = 16x24) -- derived from the
   // session's own well count so this surface never has to wait on the
   // Analysis surface's cycle-scoped plate fetch.
   const { plateRows, plateCols } = useMemo(() => {
     const numWells = sessionInfo?.num_wells ?? 96;
-    const isBig = numWells > 96;
+    const isBig = sessionInfo?.well_ids?.some(well => well[0] > 'H' || Number(well.slice(1)) > 12) ?? numWells > 96;
     const rows = isBig ? 16 : 8;
     const cols = isBig ? 24 : 12;
     return {
@@ -67,7 +68,7 @@ export function PlateSetupTab() {
   // Markers are local-first: a newly-created marker with zero wells is only
   // ever kept client-side (the backend rejects an empty-wells marker), and
   // is persisted the moment it receives >=1 well via 배정/unassign.
-  const [markers, setMarkers] = useState<MarkerRegion[]>([]);
+  const { markers, setMarkers, markerStatus } = useMarkerScope();
   const [saveError, setSaveError] = useState<string | null>(null);
   const [sampleNames, setSampleNames] = useState<Record<string, string>>({});
   const [importedSampleNames, setImportedSampleNames] = useState<Record<string, string>>({});
@@ -115,7 +116,6 @@ export function PlateSetupTab() {
   const [prevSessionId, setPrevSessionId] = useState(sessionId);
   if (sessionId !== prevSessionId) {
     setPrevSessionId(sessionId);
-    setMarkers([]);
     setSampleNames({});
     setImportedSampleNames({});
     setImportedWellTypes({});
@@ -126,48 +126,7 @@ export function PlateSetupTab() {
     setSaveError(null);
   }
 
-  // Load the session's persisted marker set.
-  useEffect(() => {
-    if (!sessionId) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await getMarkers(sessionId);
-        if (!cancelled) setMarkers(res.markers);
-      } catch {
-        if (!cancelled) setMarkers([]);
-      }
-    };
-    void load();
-    // A layout can now also be applied to THIS session from the Library
-    // tab's "레이아웃" sub-tab (a component that isn't a child of this one,
-    // unlike the in-context "레이아웃 적용" quick action below) -- refetch
-    // when it announces a change so this surface's marker list/unassigned
-    // banner never goes stale.
-    window.addEventListener("markers-changed", load);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("markers-changed", load);
-    };
-  }, [sessionId]);
-
-  // Keep the well-type store in sync with the backend (shared with
-  // AnalysisTab's own listener -- both read/write the same source of truth).
-  useEffect(() => {
-    if (!sessionId) return;
-    const load = async () => {
-      try {
-        const res = await getWellTypes(sessionId);
-        setWellTypeAssignments(res.assignments || {});
-        setImportedWellTypes(res.imported_assignments || {});
-      } catch {
-        // welltypes endpoint may be empty for a fresh session
-      }
-    };
-    load();
-    window.addEventListener("welltypes-changed", load);
-    return () => window.removeEventListener("welltypes-changed", load);
-  }, [sessionId, setWellTypeAssignments]);
+  useWellTypeAssignments(response => setImportedWellTypes(response.imported_assignments ?? {}));
 
   // Sample names parsed from PCRD/EDS are already mergeable with manual
   // overrides in the backend. Plate Setup is where the operator needs them,
@@ -249,16 +208,6 @@ export function PlateSetupTab() {
     }
     return map;
   }, [markers]);
-
-  const unassignedCount = useMemo(() => {
-    let n = 0;
-    for (const row of plateRows) {
-      for (const col of plateCols) {
-        if (!wellToMarker[`${row}${col}`]) n++;
-      }
-    }
-    return n;
-  }, [plateRows, plateCols, wellToMarker]);
 
   function wellsInRectangle(startWell: string, endWell: string): string[] {
     const startRow = plateRows.indexOf(startWell[0]);
@@ -510,22 +459,10 @@ export function PlateSetupTab() {
 
   async function setWellType(value: string) {
     if (!sessionId || selectedWells.length === 0) return;
-    const prevAssignments = wellTypeAssignments;
-    const optimistic = { ...prevAssignments };
-    selectedWells.forEach((w) => {
-      optimistic[w] = value;
-    });
-    setWellTypeAssignments(optimistic);
-    try {
-      await apiSetWellTypes(sessionId, {
-        wells: selectedWells,
-        well_type: value as WellType,
-      });
-      window.dispatchEvent(new CustomEvent("welltypes-changed"));
-    } catch (err) {
-      setWellTypeAssignments(prevAssignments);
-      setSaveError(err instanceof Error ? err.message : String(err));
-    }
+    const type = parseWellType(value);
+    if (!type) return;
+    setSaveError(null);
+    await assignManualWells([...selectedWells], type);
   }
 
   async function saveSampleName(well: string, name: string) {
@@ -684,17 +621,7 @@ export function PlateSetupTab() {
         </div>
       )}
 
-      {unassignedCount > 0 && (
-        <div
-          data-testid="unassigned-banner"
-          className="flex items-center gap-2 mb-4 px-3 py-2 rounded-md text-sm"
-          style={{ background: "rgba(217,119,6,0.12)", border: "1px solid rgba(217,119,6,0.35)" }}
-        >
-          <span data-testid="unassigned-count" className="font-semibold text-text">
-            {t.wsUnassignedBanner(unassignedCount)}
-          </span>
-        </div>
-      )}
+      <PlateScopeSummary markers={markerStatus === 'ready' ? markers : null} />
 
       <div className="grid gap-4" style={{ gridTemplateColumns: "260px minmax(0,1fr) 280px" }}>
         <div className="flex flex-col gap-4">

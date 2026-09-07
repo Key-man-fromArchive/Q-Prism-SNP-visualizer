@@ -330,7 +330,9 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P3-S1-T1: URL·세션 복원 상태 머신
 
-- Status: TODO
+- Status: DONE
+- Commit: 297e98157d6aafc6ad7ca0742d8e89b990c94837
+- Evidence: [P3-S1-T1](ui-ux-overhaul/evidence/P3-S1-T1.md). FE 381개, ROOT21 3개, lint·typecheck·build, 변경 모듈 coverage 70% 이상·새 함수 CC 10 이하, 실제 DB 재시작 복원과 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P2-S0-V]
 - Write Scope: SRC/App.tsx, navigation-store, Workspace·MultiMarker·CycleControl 및 세션/설정 hooks, tests/21-workspace-restore.spec.ts
@@ -338,11 +340,13 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - 구현: 탐색은 URL > 저장 결과 사이클/기본 마커 > 데이터 기본값, 분석 설정은 사용자·세션별 sessionStorage > 저장 context > 유효 기본값으로 결정한다. 로그아웃 캐시 제거, 다른 세션 데이터 누출 방지.
 - 구현: restoring 중 CycleControl 초기화·App ROX 초기값·다중 자동 분석·URL 쓰기를 차단하고 ready 직후 첫 자동 분석도 생략한다. 불일치는 표시만 한다. 탭/하위 화면/마커 pushState, 사이클 replaceState, popstate는 재생 중지·URL 재기록 금지.
 - 검증: 새로고침/직접 링크/뒤로·앞으로, 잘못된 마커·절대 사이클·윈도, ROX 복원, 401 인증 모드별 동작/403/404/5xx 재시도. DB 재시작 후 복원은 서버 유지 동작과 함께 검사한다.
-- [ ] AC: UX-06 우선순위와 오류 행렬을 통과하고 복원이 새 분석을 암묵적으로 생성하지 않음.
+- [x] AC: UX-06 우선순위와 오류 행렬을 통과하고 복원이 새 분석을 암묵적으로 생성하지 않음.
 
 ### P3-S2-T1: 공유 수동 편집 명령·undo/redo
 
-- Status: TODO
+- Status: DONE
+- Commit: 21594a50ddc544c3656f0a18f4e03978a3f09fd6
+- Evidence: [P3-S2-T1](ui-ux-overhaul/evidence/P3-S2-T1.md). BE 740개+2 subtests, FE 403개, ROOT23 2개, lint·typecheck·build, 추가/신규 실행 라인 100%·새 논리 CC 10 이하, 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P3-S1-T1]
 - Write Scope: 신규 SRC/stores/undo-store.ts, 수동 웰 타입 변경 hooks/호출부·단축키, 관련 tests, tests/23-undo.spec.ts
@@ -350,11 +354,13 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - 구현: 예상 revision 충돌은 히스토리를 무효화하고 오류를 표시한다. 실패는 기존 포인터/값 유지. 세션 전환·새로고침·로그아웃 초기화. 마커/축/분석 결과는 이력 대상에서 제외한다.
 - 구현: undo/redo도 입력 revision을 갱신하며 단일 stale/다중 자동 분석 정책을 동일하게 적용한다.
 - 검증: 서로 다른 컴포넌트에서 편집 후 undo, 다중 웰 원자 복원, 50개 경계, 실패/409, Ctrl+Z/redo와 텍스트 입력의 격리.
-- [ ] AC: UX-10과 UX-03의 undo/redo 조건을 실제 서버 상태까지 확인함.
+- [x] AC: UX-10과 UX-03의 undo/redo 조건을 실제 서버 상태까지 확인함.
 
 ### P3-S3-T1: 프리셋·최근 세션·배치 업로드 실패 복구
 
-- Status: TODO
+- Status: DONE
+- Commit: c8161ba37dede090da061a450067e985888e220e
+- Evidence: [P3-S3-T1](ui-ux-overhaul/evidence/P3-S3-T1.md). FE 452개, ROOT22 3개, lint·typecheck·build·audit, 변경 coverage 기준·새 CC 10 이하, 독립 리뷰 PASS. 기존 공용 preset JSON 제약은 증거에 기록.
 - 담당: frontend-specialist
 - Depends On: [P3-S2-T1]
 - Write Scope: SRC/components/의 프리셋·최근 세션·Upload/Project, 신규 SRC/stores/upload-job-store.ts, 관련 API/hooks/locales, tests/22-error-recovery.spec.ts
@@ -362,26 +368,30 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - 구현: 배치 업로드별 파일명·상태·실패 원인·성공 sessionID를 메모리에 보관해 탭 이동 후에도 보여준다. 부분 실패 시 자동 이동하지 않고 사용자가 프로젝트 이동을 선택하게 한다.
 - 구현: 응답 유실은 성공/실패로 단정하지 않고 unknown과 세션 확인 경로를 제공한다. 새로고침/로그아웃에서 작업 목록 제거; File 바이트 유지·자동 멱등 재업로드는 구현하지 않는다.
 - 검증: 500/네트워크 단절/부분 성공/응답 유실, 재시도 입력 보존, 탭 이동·초기화·다른 사용자 접근 방지.
-- [ ] AC: UX-05 모든 오류가 조용히 무시되지 않고, 중복 업로드를 유도하는 자동 재시도가 없음.
+- [x] AC: UX-05 모든 오류가 조용히 무시되지 않고, 중복 업로드를 유도하는 자동 재시도가 없음.
 
 ### P3-S4-T1: 마커 미설정·제외·Empty/Omit 의미 정리
 
-- Status: TODO
+- Status: DONE
+- Commit: 5681041a06f122d2037c09bea76896187e7aa393
+- Evidence: [P3-S4-T1](ui-ux-overhaul/evidence/P3-S4-T1.md). FE 475개, BE 743개+2 subtests, 브라우저 19개, 변경 FE 실행 줄 55/55, lint·typecheck·build·audit, 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P3-S3-T1]
 - Write Scope: SRC/components/의 PlateSetup·분석 요약/배너, 관련 계산 helpers/locales, FE/e2e/의 기존 관련 spec 및 단위 테스트
 - 구현: 마커 0개는 전체 플레이트 분석 안내로 표시한다. 마커 존재 시 미할당 웰 제외 수를 계산하고 Empty/Omit 상태와 섞지 않는다.
 - 검증: 0/1/다중 마커, 일부 할당, Empty/Omit 혼합 96/384 fixtures의 개수·문구·진입 경로. 기존 마커 설정 E2E 기대값도 정책에 맞춰 갱신한다.
-- [ ] AC: UX-04 통과. 정상 전체 플레이트 분석을 96개 제외로 표시하지 않음.
+- [x] AC: UX-04 통과. 정상 전체 플레이트 분석을 96개 제외로 표시하지 않음.
 
 ### P3-S0-V: 연속성 품질 게이트
 
-- Status: TODO
+- Status: DONE
+- Gate Commit: d288b0b0f7fa97fca31823f66ec6cf6f8fe2936b
+- Evidence: [P3-S0-V](ui-ux-overhaul/evidence/P3-S0-V.md). BE 743개+2 subtests, FE 481개, ROOT18–23 13개, 기존 E2E 52개, 누적 변경 coverage 725/760·모든 모듈 70% 이상, 새 CC 10 이하, 독립 게이트 리뷰 PASS.
 - 담당: test-specialist
 - Depends On: [P3-S4-T1]
 - Write Scope: docs/planning/ui-ux-overhaul/evidence/P3-S0-V.md
 - 검증: BE-ALL, FE-ALL, FE-CHECK, ROOT-E2E 18–23, EXISTING-E2E, COVERAGE, 복원 순서/사용자 격리/오류 복구 리뷰.
-- [ ] AC: UX-04·05·06·10 및 UX-03 전체 통과. DB 유지와 화면 복원의 차이를 증거로 설명함.
+- [x] AC: UX-04·05·06·10 및 UX-03 전체 통과. DB 유지와 화면 복원의 차이를 증거로 설명함.
 
 ## Phase P4 — 반응형 레이아웃·탐색·접근성
 

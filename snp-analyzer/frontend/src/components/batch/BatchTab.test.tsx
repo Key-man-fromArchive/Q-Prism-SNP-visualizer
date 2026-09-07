@@ -2,6 +2,9 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { BatchTab } from './BatchTab';
 import { useLanguageStore } from '@/stores/language-store';
+import { useAuthStore } from '@/stores/auth-store';
+import { useUploadJobStore } from '@/stores/upload-job-store';
+import { getSessions } from '@/lib/api';
 
 vi.mock('@/lib/api', () => ({
   getSessions: vi.fn().mockResolvedValue([]),
@@ -14,6 +17,22 @@ vi.mock('@/lib/api', () => ({
     concordance: { concordant_wells: 0, total_compared: 0, percentage: 0 },
   }),
 }));
+
+it('keeps upload outcomes visible and checks the session list only on the explicit action', async () => {
+  useLanguageStore.setState({ language: 'en' });
+  useAuthStore.setState({ user: { id: 'u', username: 'u', role: 'admin', display_name: null } });
+  const store = useUploadJobStore.getState(); store.reset();
+  const ticket = store.begin('u', ['unknown.eds'])!;
+  store.update(ticket, 0, { stage: 'unknown', reason: 'response_lost' }); store.finish(ticket);
+  try {
+    render(<BatchTab />);
+    await screen.findByText('Synthetic project');
+    expect(screen.getByText('unknown.eds')).toBeVisible();
+    const before = vi.mocked(getSessions).mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Check sessions in Project' }));
+    expect(getSessions).toHaveBeenCalledTimes(before + 1);
+  } finally { store.reset(); }
+});
 
 it('renders the actual server counts in the project plate row', async () => {
   useLanguageStore.setState({ language: 'en' });

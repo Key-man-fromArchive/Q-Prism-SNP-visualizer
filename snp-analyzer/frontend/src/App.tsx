@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSessionStore } from "@/stores/session-store";
-import { useSettingsStore } from "@/stores/settings-store";
+import { undoManual, redoManual } from "@/lib/manual-commands";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useAuthStore } from "@/stores/auth-store";
-import { asgLaunch, asgLaunchCookie, getAuthConfig, getMe } from "@/lib/api";
+import { bootstrapAuth } from '@/lib/auth-bootstrap';
 import { Header } from "@/components/layout/Header";
 import { UploadZone } from "@/components/upload/UploadZone";
 import { TabNavigation } from "@/components/layout/TabNavigation";
@@ -27,8 +27,14 @@ import { useDarkMode } from "@/hooks/use-dark-mode";
 import { useI18n } from "@/hooks/use-i18n";
 import { useKeyboardAssignment } from "@/hooks/use-keyboard-assignment";
 import { KeyboardHelpOverlay } from "@/components/shared/KeyboardHelpOverlay";
+import { useWorkspaceLocation } from '@/hooks/use-workspace-location';
+import { WorkspaceRestoreNotice } from '@/components/shared/WorkspaceRestoreNotice';
 
 const ASG_LAUNCH_TOKEN_STORAGE_KEY = "__asg_launch_token";
+
+function workspaceVisibility(ready: boolean, session: string | null, projectOnly: boolean) {
+  return { upload: ready && !session && !projectOnly, panels: ready && Boolean(session || projectOnly) };
+}
 
 declare global {
   interface Window {
@@ -38,12 +44,12 @@ declare global {
 
 export default function App() {
   const activeTab = useNavigationStore(state => state.tab);
+  const workspaceReady = useNavigationStore(state => state.status === 'ready');
   const setActiveTab = useNavigationStore(state => state.setTab);
   useEffect(connectAnalysisProjection, []);
 
   const sessionId = useSessionStore((s) => s.sessionId);
-  const sessionInfo = useSessionStore((s) => s.sessionInfo);
-  const setUseRox = useSettingsStore((s) => s.setUseRox);
+  useWorkspaceLocation();
   const { toggle: toggleDarkMode } = useDarkMode();
   const { t } = useI18n();
   const { assign, message: keyboardMessage } = useKeyboardAssignment();
@@ -55,76 +61,28 @@ export default function App() {
   const setUser = useAuthStore((s) => s.setUser);
   const setAuthMode = useAuthStore((s) => s.setAuthMode);
   const setLinkedContext = useAuthStore((s) => s.setLinkedContext);
-  const setLoading = useAuthStore((s) => s.setLoading);
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const authMode = useAuthStore((s) => s.authMode);
-  const [launchError, setLaunchError] = useState<string | null>(null);
+  const [launchError, setLaunchError] = useState(false);
   const [asgHomeUrl, setAsgHomeUrl] = useState<string>("/");
 
-  // Check auth or exchange a one-time ASG launch token on mount.
+  const bootstrap = useRef<{ generation: number; promise: ReturnType<typeof bootstrapAuth> } | null>(null);
+  // StrictMode replay shares the exchange; logout/user changes invalidate every subscriber.
   useEffect(() => {
-    const run = async () => {
-      const launchToken = consumeLaunchToken();
-      try {
-        const config = await getAuthConfig();
-        setAuthMode(config.auth_mode);
-        if (config.asg_home_url) setAsgHomeUrl(config.asg_home_url);
+    let cancelled = false;
+    bootstrap.current ??= { generation: useAuthStore.getState().generation, promise: bootstrapAuth(consumeLaunchToken()) };
+    const request = bootstrap.current;
+    void request.promise.then(({ config, login, launchFailed }) => {
+      if (cancelled || useAuthStore.getState().generation !== request.generation) return;
+      setAuthMode(config.auth_mode);
+      if (config.asg_home_url) setAsgHomeUrl(config.asg_home_url);
+      if (login) { setUser(login.user); setLinkedContext(login.linked_context ?? null); }
+      else { clearAuth(); setLaunchError(launchFailed); }
+    });
+    return () => { cancelled = true; };
+  }, [setUser, setAuthMode, setLinkedContext, clearAuth]);
 
-        if (config.auth_mode === "asg_launch" && launchToken) {
-          const res = await asgLaunch(launchToken);
-          setUser(res.user);
-          setLinkedContext(res.linked_context);
-          return;
-        }
-
-        if (config.auth_mode === "asg_launch") {
-          try {
-            const res = await asgLaunchCookie();
-            setUser(res.user);
-            setLinkedContext(res.linked_context);
-            return;
-          } catch {
-            // No pending launch cookie; continue with any existing SNP auth cookie.
-          }
-        }
-
-        const res = await getMe();
-        setUser(res.user);
-        setLinkedContext(res.linked_context ?? null);
-      } catch (err) {
-        clearAuth();
-        if (launchToken) {
-          setLaunchError(err instanceof Error ? err.message : "ASG launch failed");
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    run();
-  }, [setUser, setAuthMode, setLinkedContext, setLoading, clearAuth]);
-
-  // Track whether ROX was auto-set for THIS session (prevents overriding manual toggles)
-  const roxAutoSetForSession = useRef<string | null>(null);
-
-  // Default the normalization toggle from whether the run HAS a passive
-  // reference -- never from the instrument name.
-  //
-  // This used to read `instrument.includes("quantstudio")` and force the
-  // toggle OFF for every other instrument. A CFX Opus run
-  // (1-2_admin_2026-09-03 16-14-11_783BR20183.pcrd) carries a perfectly good
-  // ROX channel (has_rox true, CV ~3-8% across the plate) and was switched
-  // back to raw on every session load, silently discarding whatever the
-  // operator had set in the Settings tab. Whether a run can be normalized is
-  // a property of its data, which `has_rox` already answers; the parsers set
-  // it, and `normalize()` refuses to divide without it either way.
-  useEffect(() => {
-    if (!sessionInfo || !sessionId) return;
-    if (roxAutoSetForSession.current === sessionId) return;
-
-    roxAutoSetForSession.current = sessionId;
-    setUseRox(Boolean(sessionInfo.has_rox));
-  }, [sessionId, sessionInfo, setUseRox]);
+  // ROX defaults are applied with the other restored settings at the ready barrier.
 
   // Keyboard shortcut callbacks
   const shortcuts = useMemo(
@@ -147,6 +105,8 @@ export default function App() {
       exportCSV: () => window.dispatchEvent(new CustomEvent('keyboard-export-csv')),
       toggleDarkMode,
       assignWellType: assign,
+      undo: undoManual,
+      redo: redoManual,
     }),
     [toggleDarkMode, assign]
   );
@@ -171,7 +131,7 @@ export default function App() {
             <h1 className="text-lg font-semibold text-text mb-2">{t.asgLaunchTitle}</h1>
             <p className="text-sm text-text-muted mb-1">{t.asgLaunchMessage}</p>
             <p className="text-xs text-text-muted mb-4">{t.asgLaunchExpiredNote}</p>
-            {launchError && <p className="text-xs text-danger mb-4">{launchError}</p>}
+            {launchError && <p className="text-xs text-danger mb-4">{t.restoreLaunchFailed}</p>}
             <a
               href={asgHomeUrl}
               className="inline-block px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary-hover"
@@ -193,15 +153,17 @@ export default function App() {
       activeTab === "references" ||
       activeTab === "library");
   const isAdmin = user?.role === "admin";
+  const visibility = workspaceVisibility(workspaceReady, sessionId, showProjectOnly);
 
   return (
     <div className="min-h-screen bg-bg">
       <Header />
       <main>
-        {!sessionId && !showProjectOnly && <UploadZone onGoToProject={() => setActiveTab("project")} />}
+        <WorkspaceRestoreNotice />
+        {visibility.upload && <UploadZone onGoToProject={() => setActiveTab("project")} />}
 
         {/* Session-dependent tabs */}
-        <div id="analysis-panel" className={!sessionId && !showProjectOnly ? "hidden" : ""}>
+        <div id="analysis-panel" className={visibility.panels ? "" : "hidden"}>
           <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} hasSession={!!sessionId} isAdmin={isAdmin} />
 
           {/* Keep Analysis mounted across tab switches so the analysed cycle,
@@ -276,9 +238,11 @@ function removeLaunchTokenFromUrl() {
   url.searchParams.delete("token");
   if (url.hash) {
     const hashParams = new URLSearchParams(url.hash.slice(1));
-    hashParams.delete("token");
-    const nextHash = hashParams.toString();
-    url.hash = nextHash ? `#${nextHash}` : "";
+    if (hashParams.has('token')) {
+      hashParams.delete("token");
+      const nextHash = hashParams.toString();
+      url.hash = nextHash ? `#${nextHash}` : "";
+    }
   }
   window.history.replaceState({}, document.title, url.toString());
 }

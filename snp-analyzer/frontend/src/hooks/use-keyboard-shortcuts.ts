@@ -12,12 +12,17 @@ const types: Record<string, WellType> = {
   '1': 'NTC', '2': 'Unknown', '3': 'Positive Control', '4': 'Allele 1 Homo',
   '5': 'Allele 2 Homo', '6': 'Heterozygous', '7': 'Undetermined',
 };
+function primaryModifier(event: KeyboardEvent, mac: boolean): boolean {
+  return mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+}
 function command(event: KeyboardEvent): ShortcutAction | null {
   const mac = navigator.platform.toUpperCase().includes('MAC');
-  const primaryOnly = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-  // Shared undo/CAS is P3-S2: do not consume native undo with local history.
-  if (!primaryOnly || event.shiftKey) return null;
-  return event.key.toLowerCase() === 'e' ? 'exportCSV' : null;
+  if (!primaryModifier(event, mac)) return null;
+  const key = event.key.toLowerCase();
+  if (key === 'z') return event.shiftKey ? 'redo' : 'undo';
+  if (event.shiftKey) return null;
+  if (key === 'y' && !mac) return 'redo';
+  return key === 'e' ? 'exportCSV' : null;
 }
 function actionFor(event: KeyboardEvent): ShortcutAction | null {
   if (event.ctrlKey || event.metaKey) return command(event);

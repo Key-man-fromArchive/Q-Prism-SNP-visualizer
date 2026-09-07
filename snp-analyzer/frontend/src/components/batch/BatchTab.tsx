@@ -1,10 +1,12 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { UploadJobSummary } from '@/components/upload/UploadJobSummary';
+import { SessionEmptyState, SessionRecoveryFeedback } from '@/components/upload/SessionRecoveryFeedback';
+import { useRecentSessions } from '@/hooks/use-recent-sessions';
 import { projectGenotypeCounts } from './project-summary';
 import { ArrowLeft, X } from 'lucide-react';
 import { useI18n } from '@/hooks/use-i18n';
 import { useConfirm } from '@/hooks/use-confirm';
 import {
-  getSessions,
   getProjects,
   createProject,
   getProject,
@@ -12,14 +14,12 @@ import {
   addProjectSession,
   removeProjectSession,
   getProjectSummary,
-  getSessionInfo,
   deleteSession,
   bulkDeleteSessions,
   bulkAddProjectSessions,
   bulkRemoveProjectSessions,
 } from '@/lib/api';
 import type {
-  SessionListItem,
   ProjectListResponse,
   ProjectResponse,
   ProjectSummaryResponse,
@@ -112,7 +112,8 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   const { confirm, confirmDialog } = useConfirm();
   const [view, setView] = useState<View>('list');
   const [projects, setProjects] = useState<ProjectListResponse['projects']>([]);
-  const [sessions, setSessions] = useState<SessionListItem[]>([]);
+  const recovery = useRecentSessions(null, onLoadSession);
+  const { sessions, open: handleLoadSession } = recovery;
   const [currentProject, setCurrentProject] = useState<ProjectResponse | null>(null);
   const [summary, setSummary] = useState<ProjectSummaryResponse | null>(null);
   const [newProjectName, setNewProjectName] = useState('');
@@ -126,10 +127,9 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   const [checkedDetailSessions, setCheckedDetailSessions] = useState<Set<string>>(new Set());
 
   const activeSessionId = useSessionStore((s) => s.sessionId);
-  const setSession = useSessionStore((s) => s.setSession);
   const resetSession = useSessionStore((s) => s.reset);
 
-  const loadInitialData = useEffectEvent(() => { loadProjects(); loadSessions(); });
+  const loadInitialData = useEffectEvent(() => { loadProjects(); });
   useEffect(() => { loadInitialData(); }, []);
 
   const loadProjects = async () => {
@@ -138,8 +138,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   };
 
   const loadSessions = async () => {
-    try { setSessions(await getSessions()); setCheckedSessions(new Set()); }
-    catch (err) { setError(err instanceof Error ? err.message : t.errLoadSessions); }
+    if (await recovery.reload()) setCheckedSessions(new Set());
   };
 
   // ── Project CRUD ───────────────────────────────────────────────────────────
@@ -210,12 +209,6 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
       const [pd, sd] = await Promise.all([getProject(currentProject.id), getProjectSummary(currentProject.id)]);
       setCurrentProject(pd); setSummary(sd);
     } catch (err) { setError(err instanceof Error ? err.message : t.errBulkRemoveSessions); }
-    finally { setLoading(false); }
-  };
-
-  const handleLoadSession = async (sid: string) => {
-    try { setLoading(true); setError(null); setSession(sid, await getSessionInfo(sid)); onLoadSession?.(); }
-    catch (err) { setError(err instanceof Error ? err.message : t.errLoadSession); }
     finally { setLoading(false); }
   };
 
@@ -341,6 +334,8 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   if (view === 'list') {
     return (
       <div className="p-6 flex flex-col gap-6">
+        <UploadJobSummary onCheckSessions={() => void loadSessions()} />
+        <SessionRecoveryFeedback state={recovery} />
         {error && (
           <div className="p-3 bg-danger/10 border border-danger/30 rounded text-danger text-sm">
             {error}
@@ -478,7 +473,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
               </tbody>
             </table>
           ) : (
-            <div className="text-text-muted text-sm text-center py-6">{t.noSessions}</div>
+            <SessionEmptyState status={recovery.status} />
           )}
         </div>
       </div>
@@ -503,6 +498,8 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
 
   return (
     <div className="p-6">
+      <UploadJobSummary onCheckSessions={handleBackToList} />
+      <SessionRecoveryFeedback state={recovery} />
       <div className="panel">
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">

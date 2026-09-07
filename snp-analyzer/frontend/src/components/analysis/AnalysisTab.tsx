@@ -7,7 +7,6 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useDataStore } from "@/stores/data-store";
 import {
   getWellGroups,
-  getWellTypes,
 } from "@/lib/api";
 import { analyzeCurrent, analyzeRecommended } from "@/lib/analysis-actions";
 import { useAnalysisStore } from "@/stores/analysis-store";
@@ -23,6 +22,7 @@ import { WellSelectionToolbar } from "./WellSelectionToolbar";
 import { Callout } from "@/components/shared/ui";
 import { analysisWarningTexts } from "@/lib/analysis-warnings";
 import { parseWellType } from "@/lib/well-type-input";
+import { useWellTypeAssignments } from "@/hooks/use-well-type-assignments";
 import { useCurrentAnalysisRequest } from '@/hooks/use-current-analysis-request';
 import { useKeyboardAssignment } from '@/hooks/use-keyboard-assignment';
 
@@ -38,7 +38,7 @@ export function AnalysisTab() {
   const showEmptyWells = useSettingsStore((s) => s.showEmptyWells);
   const setShowEmptyWells = useSettingsStore((s) => s.setShowEmptyWells);
   const wellTypeAssignments = useDataStore((s) => s.wellTypeAssignments);
-  const setWellTypeAssignments = useDataStore((s) => s.setWellTypeAssignments);
+  useWellTypeAssignments();
 
   // Clustering / analysis
   const currentCycle = useSelectionStore((s) => s.currentCycle);
@@ -124,23 +124,6 @@ export function AnalysisTab() {
       }
     })();
   }, [sessionId, setWellGroups]);
-
-  // Keep the well-type store in sync with the backend so filters that depend
-  // on it (Omit/Empty exclusion in scatter, plate, results) actually work.
-  useEffect(() => {
-    if (!sessionId) return;
-    const load = async () => {
-      try {
-        const res = await getWellTypes(sessionId);
-        setWellTypeAssignments(res.assignments || {});
-      } catch {
-        // welltypes endpoint may be empty for a fresh session
-      }
-    };
-    load();
-    window.addEventListener("welltypes-changed", load);
-    return () => window.removeEventListener("welltypes-changed", load);
-  }, [sessionId, setWellTypeAssignments]);
 
   const currentRequest = useMemo(() => ({
     algorithm: "auto" as const, cycle: currentCycle, n_clusters: nClusters,

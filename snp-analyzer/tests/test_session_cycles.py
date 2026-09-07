@@ -28,3 +28,31 @@ def test_session_cycle_metadata_remains_authorized(data_client: SimpleNamespace)
     response = data_client.client.get("/api/sessions/owned-cycles")
     assert response.status_code == 403
     assert "cycles" not in response.json()
+    assert "well_ids" not in response.json()
+
+
+@pytest.mark.parametrize("wells", [["A1", "H12"], ["A1", "P24"]])
+def test_session_inventory_is_not_cycle_or_signal_filtered(data_client: SimpleNamespace, wells: list[str]) -> None:
+    unified = _plate_unified()
+    unified.wells = wells
+    unified.cycles = [0, 10, 40]
+    unified.data = [unified.data[0].model_copy(update={"well": "A1", "cycle": 0, "fam": 0.0, "allele2": 0.0})]
+    _register(data_client, "inventory", unified)
+    response = data_client.client.get("/api/sessions/inventory")
+    assert response.status_code == 200
+    assert response.json()["well_ids"] == wells
+
+
+def test_import_response_and_persisted_inventory_are_detached(data_client: SimpleNamespace) -> None:
+    from app.services.import_session import create_session_from_import
+
+    unified = _plate_unified()
+    expected = list(unified.wells)
+    data_client.db.get_db().execute("INSERT INTO users(id,username,hashed_password) VALUES ('user-1','synthetic','unusable')")
+    data_client.db.get_db().commit()
+    response = create_session_from_import(unified=unified, filename="synthetic.csv", user_id="user-1", session_store=data_client.upload.sessions)
+    assert response.model_dump()["well_ids"] == expected
+    response.well_ids.clear()
+    assert unified.wells == expected
+    stored = next(item for item in data_client.db.load_all_sessions() if item["session_id"] == response.session_id)
+    assert stored["unified"].wells == expected

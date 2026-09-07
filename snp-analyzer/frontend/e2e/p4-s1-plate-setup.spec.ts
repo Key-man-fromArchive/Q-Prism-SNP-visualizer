@@ -26,6 +26,7 @@ import { loadExample } from "./helpers/load-example";
 async function goToPlateSetup(page: Page) {
   await page.getByTestId("workspace-tab-plate").click();
   await expect(page.getByTestId("workspace-panel-plate")).toBeVisible();
+  await expect(page.getByTestId("workspace-panel-plate").getByTestId("analysis-scope-counts")).toBeVisible();
 }
 
 test.describe("P4-S1: Plate Setup tab", () => {
@@ -113,11 +114,14 @@ test.describe("P4-S1: Plate Setup tab", () => {
 
   test("dragging across wells selects their rectangular block", async ({ page }) => {
     const start = await page.getByTestId("well-A1").boundingBox();
-    const end = await page.getByTestId("well-C3").boundingBox();
-    if (!start || !end) throw new Error("Plate wells must be visible for drag selection");
+    if (!start) throw new Error("Plate wells must be visible for drag selection");
 
     await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
     await page.mouse.down();
+    // Selecting the first well inserts the selection toolbar above the grid.
+    await expect(page.getByTestId('selection-bar')).toBeVisible();
+    const end = await page.getByTestId("well-C3").boundingBox();
+    if (!end) throw new Error("Drag destination must remain visible");
     await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2, { steps: 8 });
     await page.mouse.up();
 
@@ -220,15 +224,42 @@ test.describe("P4-S1: Plate Setup tab", () => {
     await expect(page.getByTestId("well-A1")).toHaveAttribute("data-assigned", "false");
   });
 
-  test("unassigned-wells banner counts remaining unassigned wells (warn, not block)", async ({
+  test("zero markers mean whole-plate analysis without an unassigned exclusion warning", async ({
     page,
   }) => {
-    const banner = page.getByTestId("unassigned-banner");
-    await expect(banner).toBeVisible();
-    await expect(page.getByTestId("unassigned-count")).toContainText(/\d+/);
+    const panel = page.getByTestId("workspace-panel-plate");
+    await expect(panel.getByTestId("unassigned-banner")).toHaveCount(0);
+    await expect(panel.getByTestId("whole-plate-banner")).toContainText("전체 플레이트를 하나의 마커");
+    await expect(panel.getByTestId("analysis-scope-counts")).toContainText("입력 웰: 96");
 
     // Analysis tab must remain reachable — unassigned wells never block work.
     await page.getByTestId("workspace-tab-analysis").click();
     await expect(page.getByTestId("workspace-panel-analysis")).toBeVisible();
+  });
+
+  test('S4 live marker transitions keep role exclusions separate and allow Omit recovery', async ({ page }) => {
+    const sid = new URL(page.url()).searchParams.get('session');
+    expect(sid).toBeTruthy();
+    const panel = page.getByTestId('workspace-panel-plate');
+    const marker = (id: string, wells: string[]) => ({ id, name: id, wells, ploidy: 6, color: '#abcdef' });
+    for (const [markers, count] of [[ [marker('m1', ['A1'])], 95 ], [ [marker('m1', ['A1']), marker('m2', ['A2'])], 94 ]] as const) {
+      expect((await page.request.post(`/api/data/${sid}/markers`, { data: { markers } })).ok()).toBeTruthy();
+      await page.evaluate(() => window.dispatchEvent(new Event('markers-changed')));
+      await expect(panel.getByTestId('unassigned-count')).toContainText(`웰 ${count}개`);
+    }
+    expect((await page.request.post(`/api/data/${sid}/welltypes`, { data: { wells: ['A1'], well_type: 'Omit' } })).ok()).toBeTruthy();
+    await page.evaluate(() => window.dispatchEvent(new Event('welltypes-changed')));
+    await expect(panel.getByTestId('analysis-scope-counts')).toContainText('Omit: 1');
+    await panel.getByTestId('well-A1').focus();
+    await expect(panel.getByTestId('well-A1')).toBeFocused();
+    await panel.getByTestId('well-A1').click();
+    await expect(panel.getByTestId('well-A1')).toHaveAttribute('aria-pressed', 'true');
+    await panel.getByTestId('well-type-sample').click();
+    await expect(panel.getByTestId('analysis-scope-counts')).toContainText('Omit: 0');
+    expect((await page.request.post(`/api/data/${sid}/markers`, { data: { markers: [] } })).ok()).toBeTruthy();
+    await page.evaluate(() => window.dispatchEvent(new Event('markers-changed')));
+    await expect(panel.getByTestId('whole-plate-banner')).toBeVisible();
+    await expect(panel.getByTestId('unassigned-banner')).toHaveCount(0);
+    await page.screenshot({ path: '/tmp/qprism-p3-s4-whole-plate.png', fullPage: true });
   });
 });

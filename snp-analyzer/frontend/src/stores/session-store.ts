@@ -4,8 +4,10 @@ import type { UploadResponse } from '@/types/api';
 import { useAnalysisStore } from './analysis-store';
 import { useNavigationStore } from './navigation-store';
 import { useSelectionStore } from './selection-store';
+import { useUndoStore } from './undo-store';
 
 function invalidateSession() {
+  useUndoStore.getState().reset();
   useAnalysisStore.getState().clear();
   useNavigationStore.getState().clear();
   useSelectionStore.getState().setPlaying(false);
@@ -13,6 +15,7 @@ function invalidateSession() {
 }
 
 interface SessionState {
+  restoreQuery: string | null;
   entryReason: 'fresh' | 'reopen';
   entryGeneration: number;
   initialAnalysisAvailable: boolean;
@@ -23,7 +26,7 @@ interface SessionState {
   uploadProgress: number; // 0-100
   uploadError: string | null;
   // Actions
-  setSession: (id: string, info: UploadResponse, reason?: 'fresh' | 'reopen') => void;
+  setSession: (id: string, info: UploadResponse, reason?: 'fresh' | 'reopen', query?: string | null) => void;
   consumeInitialAnalysis: () => boolean;
   setWellGroups: (groups: Record<string, string[]> | null) => void;
   setUploadState: (state: SessionState['uploadState']) => void;
@@ -33,6 +36,7 @@ interface SessionState {
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
+  restoreQuery: null,
   entryReason: 'reopen', entryGeneration: 0, initialAnalysisAvailable: false,
   sessionId: null,
   sessionInfo: null,
@@ -41,8 +45,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   uploadProgress: 0,
   uploadError: null,
 
-  setSession: (id, info, reason = 'reopen') => {
+  setSession: (id, info, reason = 'reopen', query = null) => {
     invalidateSession();
+    useNavigationStore.getState().beginRestore(id);
     // The background mode is a persisted preference but only some runs can be
     // read with it, and the backend rejects the rest rather than distorting
     // them. Loading a run that does not allow the remembered mode would
@@ -53,7 +58,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (allowed && !allowed.includes(settings.backgroundMode)) {
       settings.setBackgroundMode('none');
     }
-    set({ sessionId: id, sessionInfo: info, wellGroups: info.well_groups, entryReason: reason,
+    set({ restoreQuery: query, sessionId: id, sessionInfo: info, wellGroups: info.well_groups, entryReason: reason,
       entryGeneration: get().entryGeneration + 1, initialAnalysisAvailable: reason === 'fresh' });
   },
   consumeInitialAnalysis: () => {
@@ -69,7 +74,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     invalidateSession();
     set({
       entryReason: 'reopen', initialAnalysisAvailable: false, entryGeneration: get().entryGeneration + 1,
-      sessionId: null,
+      restoreQuery: null, sessionId: null,
       sessionInfo: null,
       wellGroups: null,
       uploadState: 'idle',

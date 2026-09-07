@@ -5,6 +5,31 @@ import { adjacentCycle } from '@/lib/keyboard-routing';
 
 afterEach(() => { cleanup(); document.body.replaceChildren(); });
 
+it.each(['MacIntel', 'Win32'])('routes available shared undo/redo on %s without consuming unavailable/native input', platform => {
+  vi.spyOn(navigator, 'platform', 'get').mockReturnValue(platform);
+  const undo = vi.fn(), redo = vi.fn();
+  let available = true;
+  renderHook(() => useKeyboardShortcuts({ undo, redo, canExecute: () => available }));
+  const modifiers = { metaKey: platform === 'MacIntel', ctrlKey: platform !== 'MacIntel' };
+  function press(key: string, shiftKey = false, target: EventTarget = window) {
+    const event = new KeyboardEvent('keydown', { key, shiftKey, ...modifiers, bubbles: true, cancelable: true });
+    act(() => { target.dispatchEvent(event); });
+    return event.defaultPrevented;
+  }
+  expect(press('z')).toBe(true);
+  expect(press('Z', true)).toBe(true);
+  expect(undo).toHaveBeenCalledTimes(1);
+  expect(redo).toHaveBeenCalledTimes(1);
+  expect(press('y')).toBe(platform === 'Win32');
+  available = false;
+  expect(press('z')).toBe(false);
+  available = true;
+  const input = document.createElement('input'); document.body.append(input);
+  expect(press('z', false, input)).toBe(false);
+  expect(undo).toHaveBeenCalledTimes(1);
+  vi.restoreAllMocks();
+});
+
 it.each(['MacIntel', 'Win32'])('keeps undo native and accepts only the primary export modifier on %s', platform => {
   vi.spyOn(navigator, 'platform', 'get').mockReturnValue(platform);
   const exportCSV = vi.fn();

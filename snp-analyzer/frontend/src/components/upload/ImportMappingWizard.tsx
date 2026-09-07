@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { AlertCircle, Check, ChevronLeft, ChevronRight, RotateCcw, UploadCloud } from "lucide-react";
-import { ApiError, parseImportPreview } from "@/lib/api";
+import { parseImportPreview } from "@/lib/api";
+import { useOwnedOperation } from '@/hooks/use-owned-operation';
+import { recoveryReason } from '@/lib/recovery-reason';
+import { validUploadResponse } from '@/lib/upload-response';
+import { runImportJob } from '@/lib/import-job';
+import { RecoveryNotice } from '@/components/shared/RecoveryNotice';
+import type { RecoveryReason } from '@/stores/upload-job-store';
 import { useI18n } from "@/hooks/use-i18n";
 import type { Translations } from "@/locales/en";
 import type {
@@ -45,11 +51,12 @@ export function ImportMappingWizard({
   onImported,
 }: ImportMappingWizardProps) {
   const { t } = useI18n();
+  const operation = useOwnedOperation();
   const [structure, setStructure] = useState<TableStructure>(() => inferStructure(preview));
   const [mapping, setMapping] = useState<MappingConfig>(() => buildInitialMapping(preview, inferStructure(preview)));
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
   const [unsupported, setUnsupported] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<RecoveryReason | null>(null);
   const [importing, setImporting] = useState(false);
   const [step, setStep] = useState(1); // guided flow: 1=structure 2=columns 3=roles 4=review
 
@@ -191,45 +198,42 @@ export function ImportMappingWizard({
     setStep(2); // structure changed rebuilds mapping; keep the user just past step 1
   }
 
+  function applyImportResponse(response: ImportParseResponse) {
+    if (isValidationResponse(response)) {
+      setIssues(response.issues);
+      const roleRelated = response.issues.some(issue => issue.channel_id || /role|normalization|assay/i.test(issue.code));
+      const columnRelated = response.issues.some(issue => issue.column || /column|well|cycle|rfu|dye|header|delimiter|decimal/i.test(issue.code));
+      if (roleRelated && !columnRelated) setStep(3);
+      else if (columnRelated) setStep(2);
+      else if (response.issues.length) setStep(4);
+      return;
+    }
+    if (isUnsupportedResponse(response)) { setUnsupported(t.recoveryInvalid); return; }
+    if (validUploadResponse(response)) onImported(response);
+    else setSubmitError('response_lost');
+  }
+
   async function handleImport() {
+    const ticket = operation.begin();
     setImporting(true);
     setIssues([]);
     setUnsupported(null);
     setSubmitError(null);
     try {
-      const response = await parseImportPreview({
+      const outcome = await runImportJob(file.name, () => parseImportPreview({
         preview_id: preview.preview_id,
         mapping,
-      });
-
-      if (isValidationResponse(response)) {
-        setIssues(response.issues);
-        // Route the user to the step most relevant to the returned issues so
-        // they fix it in context instead of re-scanning the whole form.
-        const codes = response.issues.map((i) => i.code);
-        const roleRelated = response.issues.some(
-          (i) => i.channel_id || /role|normalization|assay/i.test(i.code)
-        );
-        const columnRelated = response.issues.some(
-          (i) => i.column || /column|well|cycle|rfu|dye|header|delimiter|decimal/i.test(i.code)
-        );
-        if (roleRelated && !columnRelated) setStep(3);
-        else if (columnRelated) setStep(2);
-        else if (codes.length) setStep(4);
-        return;
-      }
-      if (isUnsupportedResponse(response)) {
-        setUnsupported(response.message);
-        return;
-      }
-      onImported(response);
+      }));
+      if (!operation.current(ticket)) return;
+      if (!outcome) return;
+      if ('reason' in outcome) { setSubmitError(outcome.reason); return; }
+      applyImportResponse(outcome.response);
     } catch (error) {
-      const message = error instanceof ApiError || error instanceof Error
-        ? error.message
-        : "Import failed";
-      setSubmitError(message);
+      if (!operation.current(ticket)) return;
+      const reason = recoveryReason(error);
+      setSubmitError(reason === 'network' ? 'response_lost' : reason);
     } finally {
-      setImporting(false);
+      if (operation.current(ticket)) setImporting(false);
     }
   }
 
@@ -494,7 +498,7 @@ export function ImportMappingWizard({
         )}
         {submitError && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
-            <span>{submitError}</span>
+            <RecoveryNotice reason={submitError} />
             <button
               type="button"
               onClick={onPreviewAgain}

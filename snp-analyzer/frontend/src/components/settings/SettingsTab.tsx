@@ -1,16 +1,13 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { useI18n } from "@/hooks/use-i18n";
 import { Button, Card } from "@/components/shared/ui";
-import {
-  getPresets,
-  createPreset,
-  deletePreset as apiDeletePreset,
-} from "@/lib/api";
-import type { BackgroundMode, PresetResponse } from "@/types/api";
+import type { BackgroundMode } from "@/types/api";
+import { usePresetOperations } from '@/hooks/use-preset-operations';
+import { PresetFeedback } from './PresetFeedback';
 import { analyzeCurrent } from "@/lib/analysis-actions";
 import { useAnalysisStore } from "@/stores/analysis-store";
 import { applyPreset } from './apply-preset';
@@ -24,9 +21,9 @@ function PresetError({ message }: { message: string | null }) {
 
 export function SettingsTab() {
   const { t, language } = useI18n();
-  const [presets, setPresets] = useState<PresetResponse[]>([]);
-  const [selectedPresetId, setSelectedPresetId] = useState("");
-  const [newPresetName, setNewPresetName] = useState("");
+  const presetOperations = usePresetOperations();
+  const { presets, selected: selectedPresetId, setSelected: setSelectedPresetId,
+    name: newPresetName, setName: setNewPresetName } = presetOperations;
   const clusterLoading = useAnalysisStore(state => state.pending);
   const analysisReady = useNavigationStore(state => state.status === 'ready');
   const [presetError, setPresetError] = useState<string | null>(null);
@@ -55,22 +52,6 @@ export function SettingsTab() {
   const [showThresholdLines, setShowThresholdLines] = useState(false);
   const analysisError = useAnalysisStore(state => state.error);
   const clusterError = analysisError instanceof Error ? analysisError.message : null;
-
-  // Load presets on mount
-  const loadPresetList = useCallback(async () => {
-    try {
-      const data = await getPresets();
-      setPresets(data.presets || []);
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void getPresets().then(data => { if (!cancelled) setPresets(data.presets || []); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
 
   // A mode absent from the run's own list is not offered. Until a session is
   // loaded there is nothing to constrain, so all three show.
@@ -101,12 +82,7 @@ export function SettingsTab() {
     setClusterAlgorithm, setNtcThreshold, setAllele1RatioMax, setAllele2RatioMin, setNClusters,
   ]);
 
-  const handleSavePreset = useCallback(async () => {
-    const name = newPresetName.trim();
-    if (!name) return;
-
-    try {
-      await createPreset(name, {
+  const handleSavePreset = () => presetOperations.save({
         algorithm: clusterAlgorithm,
         ntc_threshold: ntcThreshold,
         allele1_ratio_max: allele1RatioMax,
@@ -120,26 +96,6 @@ export function SettingsTab() {
         y_min: yMin,
         y_max: yMax,
       });
-      setNewPresetName("");
-      await loadPresetList();
-    } catch {
-      // ignore
-    }
-  }, [
-    newPresetName, clusterAlgorithm, ntcThreshold, allele1RatioMax, allele2RatioMin,
-    nClusters, useRox, backgroundMode, fixAxis, xMin, xMax, yMin, yMax, loadPresetList,
-  ]);
-
-  const handleDeletePreset = useCallback(async () => {
-    if (!selectedPresetId) return;
-    try {
-      await apiDeletePreset(selectedPresetId);
-      setSelectedPresetId("");
-      await loadPresetList();
-    } catch {
-      // ignore
-    }
-  }, [selectedPresetId, loadPresetList]);
 
   const currentRequest = useMemo(() => ({
         algorithm: clusterAlgorithm,
@@ -169,6 +125,7 @@ export function SettingsTab() {
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 sm:px-6">
       {/* Panel 1: Assay Presets */}
       <Card title={t.assayPresets}>
+        <PresetFeedback state={presetOperations} />
         <PresetError message={presetError} />
         <div className="mb-4">
           <div className="flex gap-2 items-center">
@@ -198,8 +155,8 @@ export function SettingsTab() {
               variant="danger"
               size="sm"
               title={t.deleteSelectedPreset}
-              onClick={handleDeletePreset}
-              disabled={!selectedPresetId}
+              onClick={presetOperations.remove}
+              disabled={presetOperations.deleteDisabled}
             >
               {t.del}
             </Button>
@@ -219,7 +176,7 @@ export function SettingsTab() {
             id="save-preset-btn"
             size="sm"
             onClick={handleSavePreset}
-            disabled={!newPresetName.trim()}
+            disabled={presetOperations.saveDisabled}
           >
             {t.save}
           </Button>
