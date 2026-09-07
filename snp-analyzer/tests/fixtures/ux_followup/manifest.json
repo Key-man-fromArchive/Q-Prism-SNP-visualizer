@@ -1,0 +1,35 @@
+{
+  "provenance": "Hand-authored synthetic arithmetic only; no instrument or private sample data.",
+  "schema_version": 1,
+  "numeric_expectations": [
+    {"id":"cycle20_raw", "cycle":20,"use_rox":false,"background":"none","fam":90.0,"allele2":60.0},
+    {"id":"cycle40_raw", "cycle":40,"use_rox":false,"background":"none","fam":170.0,"allele2":100.0},
+    {"id":"cycle20_normalized", "cycle":20,"use_rox":true,"background":"none","fam":9.0,"allele2":6.0},
+    {"id":"cycle40_normalized", "cycle":40,"use_rox":true,"background":"none","fam":17.0,"allele2":10.0},
+    {"id":"cycle20_pre_read_raw", "cycle":20,"use_rox":false,"background":"pre_read","fam":80.0,"allele2":40.0},
+    {"id":"cycle40_pre_read_raw", "cycle":40,"use_rox":false,"background":"pre_read","fam":160.0,"allele2":80.0},
+    {"id":"cycle20_pre_read_normalized", "cycle":20,"use_rox":true,"background":"pre_read","fam":8.0,"allele2":4.0},
+    {"id":"cycle40_pre_read_normalized", "cycle":40,"use_rox":true,"background":"pre_read","fam":16.0,"allele2":8.0}
+  ],
+  "ntc_expectations": [
+    {"id":"ok","status":"ok","flagged":{"H11":false,"H12":false}},
+    {"id":"warning","status":"warning","flagged":{"H11":false,"H12":true}},
+    {"id":"no_ntc","status":"no_ntc","flagged":{}},
+    {"id":"missing_read","status":"insufficient","flagged":{"H11":false,"H12":null}},
+    {"id":"zero_reference","status":"insufficient","flagged":{"H11":null,"H12":null}}
+  ],
+  "failure_scenarios": [
+    {"id":"late_analysis", "events":["start_A_cycle20","start_B_cycle40","complete_B","complete_A"],"expected":"B remains latest; A cannot publish"},
+    {"id":"mutation_during_analysis", "events":["start_A","change_manual_type","complete_A"],"expected":"A rejected as stale input"},
+    {"id":"export_revision_replaced", "events":["select_revision_A","publish_B","request_export_A"],"expected":"409; no mixed report"},
+    {"id":"accepted_export_snapshot", "events":["accept_export_A","change_manual_type","finish_export_A"],"expected":"completed file remains snapshot A"},
+    {"id":"save_failure", "events":["start_A","database_save_fails"],"expected":"previous complete result remains; request fails"},
+    {"id":"restore_late_session", "events":["load_session_A","load_session_B","receive_B","receive_A"],"expected":"B stays visible; no analysis request"},
+    {"id":"preset_500", "events":["enter_name","save_returns_500"],"expected":"error shown; input retained; retry available"},
+    {"id":"session_401", "events":["open_session","response_401"],"expected":"mode-specific reauthentication; no previous session leak"},
+    {"id":"session_403", "events":["open_session","response_403"],"expected":"access denied; no previous session leak"},
+    {"id":"session_404", "events":["open_session","response_404"],"expected":"not found; session-list action"},
+    {"id":"batch_response_lost", "events":["upload_A_success","upload_B_response_lost","change_tab"],"expected":"A session ID retained; B unknown; no automatic retry"},
+    {"id":"undo_failure", "events":["manual_type_success","undo_response_500"],"expected":"history pointer and server type unchanged"}
+  ]
+}
