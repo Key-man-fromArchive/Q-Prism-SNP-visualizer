@@ -1,4 +1,6 @@
 const en = {
+  keyboardTypeSaved: (count: number) => `Type updated for ${count} wells. Selection retained.`,
+  keyboardTypeFailed: (reason: string) => `Type update failed; selection retained. ${reason}`,
   qcReferenceRequested: (requested: boolean) => 'Reference normalization requested: ' + (requested ? 'yes' : 'no'),
   qcMarkerSummary: 'Marker QC summaries',
   qcOnsetScope: 'Full-curve NTC rise evaluation — separate from plate QC',

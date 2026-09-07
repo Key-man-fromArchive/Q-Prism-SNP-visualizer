@@ -1,7 +1,7 @@
 // @TASK Frontend - Plate View Component
 // @SPEC Renders 96-well plate grid with drag selection and genotype coloring
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useSelectionStore } from '@/stores/selection-store';
@@ -11,6 +11,7 @@ import { getPlate } from '@/lib/api';
 import { WELL_TYPE_INFO } from '@/lib/constants';
 import { wellInfo, dosageOfLabel } from '@/lib/genotype';
 import { useWellFilter } from '@/hooks/use-well-filter';
+import { useWellGrid } from '@/hooks/use-well-grid';
 import { useI18n } from '@/hooks/use-i18n';
 import { StatusState } from '@/components/shared/ui';
 import type { PlateWell } from '@/types/api';
@@ -45,7 +46,6 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   const ploidy = ploidyOverride ?? storedPloidy;
   const selectedWell = useSelectionStore((s) => s.selectedWell);
   const selectedWells = useSelectionStore((s) => s.selectedWells);
-  const selectWell = useSelectionStore((s) => s.selectWell);
   const selectWells = useSelectionStore((s) => s.selectWells);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
@@ -63,8 +63,6 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   const dragAdditiveRef = useRef(false);
   const didDragRef = useRef(false);
   const dragThreshold = 5;
-  const [activeCell, setActiveCell] = useState({ r: 0, c: 0 });
-  const anchorRef = useRef({ r: 0, c: 0 });
 
   // Re-fetch trigger (incremented when well types change)
   const [refetchTrigger, setRefetchTrigger] = useState(0);
@@ -113,6 +111,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   }, [fetchPlateData, refetchTrigger]);
 
   const { plateRows, plateCols, isWellVisible } = useWellFilter();
+  const keyboardGrid = useWellGrid(plateRows, plateCols, plateWells.map(well => well.well));
   const isLargePlate = plateCols.length > 12;
 
   // Build wellMap for quick lookup
@@ -154,28 +153,6 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
     return `rgb(${r}, ${g}, ${b})`;
   };
 
-  // Handle well click
-  const handleWellClick = (wellId: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (didDragRef.current) {
-      didDragRef.current = false;
-      return;
-    }
-    const row = plateRows.indexOf(wellId[0]);
-    const col = plateCols.indexOf(parseInt(wellId.slice(1), 10));
-    if (event.shiftKey && row >= 0 && col >= 0) {
-      selectWells(rangeWells(anchorRef.current, { r: row, c: col }));
-      return;
-    }
-    if (event.ctrlKey || event.metaKey) {
-      toggleWells([wellId]);
-      anchorRef.current = { r: row, c: col };
-      return;
-    }
-    selectWell(wellId, 'plate');
-    anchorRef.current = { r: row, c: col };
-  };
-
   // Handle drag start
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -183,7 +160,6 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
     didDragRef.current = false;
     dragStartRef.current = { x: event.clientX, y: event.clientY };
     dragRectRef.current = null;
-    event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   // Handle drag move
@@ -197,6 +173,8 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
     // Start dragging if moved beyond threshold
     if (!didDragRef.current && (deltaX > dragThreshold || deltaY > dragThreshold)) {
       didDragRef.current = true;
+      // Capturing on pointerdown retargets the subsequent native child click.
+      event.currentTarget.setPointerCapture(event.pointerId);
     }
 
     if (didDragRef.current) {
@@ -262,9 +240,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   };
 
   // ── Keyboard grid navigation (roving tabindex, PRD FR-X-3) ─────────────────
-  const wellBtnRefs = useRef<Map<string, HTMLButtonElement | null>>(new Map());
   const wellIdAt = (r: number, c: number) => `${plateRows[r]}${plateCols[c]}`;
-  const focusCell = (r: number, c: number) => wellBtnRefs.current.get(wellIdAt(r, c))?.focus();
 
   // Toggle a set of wells: if all are already selected, remove them; else add.
   const toggleWells = (ids: string[]) => {
@@ -280,50 +256,6 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
     else clearSelection();
   };
 
-  const rangeWells = (a: { r: number; c: number }, b: { r: number; c: number }) => {
-    const [r0, r1] = [Math.min(a.r, b.r), Math.max(a.r, b.r)];
-    const [c0, c1] = [Math.min(a.c, b.c), Math.max(a.c, b.c)];
-    const ids: string[] = [];
-    for (let r = r0; r <= r1; r++)
-      for (let c = c0; c <= c1; c++) {
-        const w = wellIdAt(r, c);
-        if (wellMap.has(w)) ids.push(w);
-      }
-    return ids;
-  };
-
-  const onGridKeyDown = (e: React.KeyboardEvent) => {
-    const { r, c } = activeCell;
-    const maxR = plateRows.length - 1;
-    const maxC = plateCols.length - 1;
-    let nr = r;
-    let nc = c;
-    switch (e.key) {
-      case "ArrowUp": nr = Math.max(0, r - 1); break;
-      case "ArrowDown": nr = Math.min(maxR, r + 1); break;
-      case "ArrowLeft": nc = Math.max(0, c - 1); break;
-      case "ArrowRight": nc = Math.min(maxC, c + 1); break;
-      case "Home": nc = 0; break;
-      case "End": nc = maxC; break;
-      case "Enter":
-      case " ": {
-        e.preventDefault();
-        const w = wellIdAt(r, c);
-        if (wellMap.has(w)) toggleWells([w]);
-        return;
-      }
-      case "Escape": clearSelection(); return;
-      default: return;
-    }
-    e.preventDefault();
-    if (e.shiftKey && e.key.startsWith("Arrow")) {
-      selectWells(rangeWells(anchorRef.current, { r: nr, c: nc }));
-    } else {
-      anchorRef.current = { r: nr, c: nc };
-    }
-    setActiveCell({ r: nr, c: nc });
-    focusCell(nr, nc);
-  };
 
   const toggleColumn = (c: number) =>
     toggleWells(plateRows.map((_, r) => wellIdAt(r, c)).filter((w) => wellMap.has(w)));
@@ -340,6 +272,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
       onPointerCancel={handlePointerUp}
     >
       <h3 className="text-sm font-semibold mb-3 text-text">{t.plateView} ({plateRows.length}×{plateCols.length})</h3>
+      <p role="status" aria-live="polite" className="sr-only">{t.selectedWellCount(selectedWells.length)}</p>
 
       {status === "loading" && <StatusState variant="loading" message={t.loading} />}
       {status === "error" && (
@@ -361,7 +294,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
         aria-label={t.plateGridAria}
         className="plate-grid select-none"
         ref={gridRef}
-        onKeyDown={onGridKeyDown}
+        onKeyDown={keyboardGrid.onKeyDown}
         style={{
           display: 'grid',
           gridTemplateColumns: `auto repeat(${plateCols.length}, 1fr)`,
@@ -372,14 +305,16 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
         }}
       >
         {/* Corner cell */}
-        <div className="plate-label" />
+        <div role="row" style={{ display: 'contents' }}>
+        <div role="columnheader" className="plate-label" />
 
         {/* Column headers (click / Enter toggles the whole column) */}
         {plateCols.map((col, cIdx) => (
           <button
             key={`col-${col}`}
+            {...keyboardGrid.cell(-1, cIdx)}
             type="button"
-            tabIndex={-1}
+            role="columnheader"
             aria-label={t.toggleColumnAria(col)}
             onClick={() => {
               if (didDragRef.current) {
@@ -394,14 +329,16 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
             {col}
           </button>
         ))}
+        </div>
 
         {/* Rows with wells */}
         {plateRows.map((row, rIdx) => (
-          <Fragment key={row}>
+          <div role="row" key={row} style={{ display: 'contents' }}>
             {/* Row header (click / Enter toggles the whole row) */}
             <button
+              {...keyboardGrid.cell(rIdx, -1)}
               type="button"
-              tabIndex={-1}
+              role="rowheader"
               aria-label={t.toggleRowAria(row)}
               onClick={() => {
                 if (didDragRef.current) {
@@ -428,7 +365,6 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
               // Has data but excluded from plots (omitted, group-filtered, or hidden Empty)
               const isExcluded = hasData && !isWellVisible(wellId);
               const isOutOfScope = hasData && scopeSet !== null && !scopeSet.has(wellId);
-              const isActive = activeCell.r === rIdx && activeCell.c === cIdx;
 
               const wellColor = isEmpty ? '' : getWellColor(wellData);
               const cellSize = isLargePlate ? '18px' : '28px';
@@ -442,14 +378,13 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
 
               return (
                 <button
+                  {...keyboardGrid.cell(rIdx, cIdx)}
                   key={wellId}
                   type="button"
                   role="gridcell"
                   data-well={wellId}
-                  ref={(el) => { wellBtnRefs.current.set(wellId, el); }}
-                  tabIndex={isActive ? 0 : -1}
                   aria-label={ariaLabel}
-                  aria-pressed={isSelected || isMultiSelected}
+                  aria-selected={isSelected || isMultiSelected}
                   className={`
                     plate-well
                     rounded
@@ -470,8 +405,8 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
                     aspectRatio: '1',
                   }}
                   onClick={(e) => {
-                    setActiveCell({ r: rIdx, c: cIdx });
-                    if (!isEmpty) handleWellClick(wellId, e);
+                    if (didDragRef.current) { didDragRef.current = false; return; }
+                    if (!isEmpty) keyboardGrid.cell(rIdx, cIdx).onClick(e);
                   }}
                   title={
                     wellData
@@ -490,7 +425,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
                 </button>
               );
             })}
-          </Fragment>
+          </div>
         ))}
       </div>
       </div>

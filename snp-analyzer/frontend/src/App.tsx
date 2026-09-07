@@ -3,7 +3,7 @@ import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useAuthStore } from "@/stores/auth-store";
-import { asgLaunch, asgLaunchCookie, getAuthConfig, setWellTypes, getMe } from "@/lib/api";
+import { asgLaunch, asgLaunchCookie, getAuthConfig, getMe } from "@/lib/api";
 import { Header } from "@/components/layout/Header";
 import { UploadZone } from "@/components/upload/UploadZone";
 import { TabNavigation } from "@/components/layout/TabNavigation";
@@ -21,11 +21,11 @@ import { ReferencesTab } from "@/components/references/ReferencesTab";
 import { LibraryTab } from "@/components/library/LibraryTab";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
-import { useExports } from "@/hooks/use-exports";
-import { useUndoRedo } from "@/hooks/use-undo-redo";
+import { adjacentCycle } from "@/lib/keyboard-routing";
+import { keyboardCanExecute } from "@/lib/keyboard-authority";
 import { useDarkMode } from "@/hooks/use-dark-mode";
 import { useI18n } from "@/hooks/use-i18n";
-import type { WellType } from "@/types/api";
+import { useKeyboardAssignment } from "@/hooks/use-keyboard-assignment";
 import { KeyboardHelpOverlay } from "@/components/shared/KeyboardHelpOverlay";
 
 const ASG_LAUNCH_TOKEN_STORAGE_KEY = "__asg_launch_token";
@@ -45,9 +45,8 @@ export default function App() {
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const setUseRox = useSettingsStore((s) => s.setUseRox);
   const { toggle: toggleDarkMode } = useDarkMode();
-  const { downloadCSV } = useExports();
-  const { undo, redo } = useUndoRedo();
   const { t } = useI18n();
+  const { assign, message: keyboardMessage } = useKeyboardAssignment();
 
   // Auth state
   const user = useAuthStore((s) => s.user);
@@ -130,36 +129,26 @@ export default function App() {
   // Keyboard shortcut callbacks
   const shortcuts = useMemo(
     () => ({
+      canExecute: keyboardCanExecute,
       togglePlay: () => {
         const store = useSelectionStore.getState();
         store.setPlaying(!store.isPlaying);
       },
       prevCycle: () => {
         const store = useSelectionStore.getState();
-        if (store.currentCycle > 1) store.setCycle(store.currentCycle - 1);
+        const cycle = adjacentCycle(useNavigationStore.getState().availableCycles, store.currentCycle, -1);
+        if (cycle !== null) store.setCycle(cycle);
       },
       nextCycle: () => {
         const store = useSelectionStore.getState();
-        store.setCycle(store.currentCycle + 1);
+        const cycle = adjacentCycle(useNavigationStore.getState().availableCycles, store.currentCycle, 1);
+        if (cycle !== null) store.setCycle(cycle);
       },
-      exportCSV: downloadCSV,
+      exportCSV: () => window.dispatchEvent(new CustomEvent('keyboard-export-csv')),
       toggleDarkMode,
-      undo,
-      redo,
-      assignWellType: async (type: string) => {
-        const sid = useSessionStore.getState().sessionId;
-        const wells = useSelectionStore.getState().selectedWells;
-        if (!sid || wells.length === 0) return;
-        try {
-          await setWellTypes(sid, { wells, well_type: type as WellType });
-          useSelectionStore.getState().clearSelection();
-          window.dispatchEvent(new CustomEvent("welltypes-changed"));
-        } catch (err) {
-          console.error("Failed to assign well type:", err);
-        }
-      },
+      assignWellType: assign,
     }),
-    [downloadCSV, toggleDarkMode, undo, redo]
+    [toggleDarkMode, assign]
   );
 
   const { showHelp, setShowHelp } = useKeyboardShortcuts(shortcuts);
@@ -221,10 +210,12 @@ export default function App() {
               the P4 2-surface shell (Plate Setup / Analysis) wrapping the
               existing AnalysisTab. */}
           {sessionId && (
-            <div className={activeTab === "analysis" ? "" : "hidden"}>
+            <div id="main-panel-analysis" role="tabpanel" aria-labelledby="tab-analysis" className={activeTab === "analysis" ? "" : "hidden"}>
               <AnalysisWorkspace />
             </div>
           )}
+          {!sessionId && <div id="main-panel-analysis" role="tabpanel" aria-labelledby="tab-analysis" hidden />}
+          <div id={activeTab === 'analysis' ? undefined : `main-panel-${activeTab}`} role={['analysis', 'references', 'users'].includes(activeTab) ? undefined : 'tabpanel'} aria-labelledby={['analysis', 'references', 'users'].includes(activeTab) ? undefined : `tab-${activeTab}`} hidden={activeTab === 'analysis'}>
           {sessionId && activeTab === "protocol" && <ProtocolTab />}
           {sessionId && activeTab === "settings" && <SettingsTab />}
           {sessionId && activeTab === "quality" && <QualityTab />}
@@ -236,10 +227,14 @@ export default function App() {
           {activeTab === "users" && isAdmin && <UserManagement />}
           {activeTab === "references" && <ReferencesTab />}
           {activeTab === "library" && <LibraryTab />}
+          </div>
+          {['protocol', 'settings', 'quality', 'statistics', 'compare', 'project', 'library'].filter(tab => tab !== activeTab).map(tab =>
+            <div key={tab} id={`main-panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} hidden />)}
         </div>
       </main>
 
       {showHelp && <KeyboardHelpOverlay onClose={() => setShowHelp(false)} />}
+      <p role="status" aria-live="polite" className="sr-only">{keyboardMessage}</p>
     </div>
   );
 }

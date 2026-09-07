@@ -6,6 +6,7 @@ import { useAnalysisStore } from '@/stores/analysis-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useSettingsStore } from '@/stores/settings-store';
+import { useNavigationStore } from '@/stores/navigation-store';
 
 vi.mock('@/lib/api', () => ({
   setWellTypes: vi.fn().mockResolvedValue({}),
@@ -33,6 +34,7 @@ beforeEach(() => {
   useSessionStore.setState({ sessionId: 'synthetic-assignment', wellGroups: null });
   useSelectionStore.setState({ currentCycle: 0, selectedWells: ['A1', 'A2'], selectedGroup: null });
   useAnalysisStore.getState().setSession('synthetic-assignment', 'u');
+  useNavigationStore.setState({ session: 'synthetic-assignment', tab: 'analysis', status: 'ready', exportRestoring: false });
 });
 it('returns the current profile to AUTO without manual cuts when boundary mode is turned off', () => {
   useSettingsStore.setState({ showManualTypes: true, showBoundaryLines: true });
@@ -53,6 +55,15 @@ it('passes the validated popup type and selected wells to the API', async () => 
     wells: ['A1', 'A2'], well_type: 'NTC',
   }));
   await waitFor(() => expect(useSelectionStore.getState().selectedWells).toEqual([]));
+});
+it('retains the popup and selection and announces a rejected assignment', async () => {
+  vi.mocked(setWellTypes).mockRejectedValueOnce(new Error('offline'));
+  render(<AnalysisTab />);
+  fireEvent.contextMenu(document.body);
+  fireEvent.click(screen.getByRole('button', { name: 'Assign valid type' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toContain('offline'));
+  expect(screen.getByRole('button', { name: 'Assign valid type' })).toBeVisible();
+  expect(useSelectionStore.getState().selectedWells).toEqual(['A1', 'A2']);
 });
 
 it('blocks invalid popup input before the API and preserves the selection', async () => {

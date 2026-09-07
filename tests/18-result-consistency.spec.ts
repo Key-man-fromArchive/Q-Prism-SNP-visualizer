@@ -57,7 +57,7 @@ test('whole-run CSV export binds the visible result revision and explicit cycle 
   const a1Cell = page.locator('#plate-grid').getByRole('gridcell', { name: /^A1, d2\/2/ });
   await a1Cell.focus();
   await page.keyboard.press('Enter');
-  await expect(a1Cell).toHaveAttribute('aria-pressed', 'true');
+  await expect(a1Cell).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('analysis-selection-toolbar')).toBeVisible();
   await expect(page.getByTestId('analysis-selection-count')).not.toContainText('0');
   const grouped = page.waitForResponse(response => response.url().endsWith('/groups')

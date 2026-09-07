@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { AlertCircle, Check, Download, Moon, Redo2, Save, Sun, Undo2 } from "lucide-react";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
@@ -174,6 +174,12 @@ export function Header() {
     { key: "pdf", label: t.exportPDF, onSelect: () => void safeExport("pdf", exportPDF, t.pdfExportFailed)() },
     { key: "xlsx", label: t.exportXLSX, onSelect: () => void safeExport("xlsx", exportXLSX, t.xlsxExportFailed)() },
   ];
+  const keyboardExport = useEffectEvent(() => { void safeExport("csv", downloadCSV, t.csvExportFailed)(); });
+  useEffect(() => {
+    const listener = () => keyboardExport();
+    window.addEventListener('keyboard-export-csv', listener);
+    return () => window.removeEventListener('keyboard-export-csv', listener);
+  }, []);
 
   const runMismatchReanalysis = async () => {
     const pendingMismatch = exportMismatch;

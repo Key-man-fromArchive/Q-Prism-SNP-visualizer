@@ -7,6 +7,7 @@ import { genotypeClasses } from '@/lib/genotype';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useI18n } from '@/hooks/use-i18n';
 import { useIsDarkMode } from "@/hooks/use-dark-mode";
+import { moveMenuFocus } from '@/lib/menu-focus';
 
 type WellTypePopupProps = {
   wells: string[];
@@ -52,21 +53,23 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
     };
   }, [onClose]);
 
-  // Close on Escape key
+  // Menu owns focus while open; closing returns to its invoking well.
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
+    const previous = document.activeElement;
+    ref.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    return () => { if (previous instanceof HTMLElement) previous.focus(); };
+  }, []);
 
   return (
     <div
       ref={ref}
+      role="menu"
+      aria-label={t.assignType(wells.length)}
+      onKeyDown={event => {
+        if (moveMenuFocus(event)) return;
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); }
+        if (event.key === 'Tab') { event.preventDefault(); onClose(); }
+      }}
       className="welltype-popup"
       style={{
         position: 'fixed',
@@ -97,6 +100,9 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
       ].map(({ type, label, color }) => (
         <button
           key={type}
+          type="button"
+          role="menuitem"
+          tabIndex={-1}
           className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-bg cursor-pointer border-none bg-transparent flex items-center gap-2"
           style={{ borderLeft: `3px solid ${color}` }}
           onClick={() => onAssign(type)}
@@ -109,6 +115,7 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
 
       {WELL_TYPE_INFO['Omit'] && (
         <button
+          type="button" role="menuitem" tabIndex={-1}
           className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-bg cursor-pointer border-none bg-transparent flex items-center gap-2"
           style={{ borderLeft: `3px solid ${WELL_TYPE_INFO['Omit'].color}` }}
           onClick={() => onAssign('Omit')}
@@ -119,6 +126,7 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
 
       {WELL_TYPE_INFO['Empty'] && (
         <button
+          type="button" role="menuitem" tabIndex={-1}
           className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-bg cursor-pointer border-none bg-transparent flex items-center gap-2"
           style={{ borderLeft: `3px solid ${WELL_TYPE_INFO['Empty'].color}` }}
           onClick={() => onAssign('Empty')}
@@ -128,6 +136,7 @@ export function WellTypePopup({ wells, position, onAssign, onClose }: WellTypePo
       )}
 
       <button
+        type="button" role="menuitem" tabIndex={-1}
         className="w-full text-left px-2 py-1.5 text-sm rounded text-text-muted hover:bg-bg cursor-pointer border-none bg-transparent mt-1"
         onClick={onClose}
       >

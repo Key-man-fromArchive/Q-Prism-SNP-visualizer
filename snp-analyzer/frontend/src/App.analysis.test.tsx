@@ -22,6 +22,11 @@ it('uses navigation ownership and disconnects its result projection on unmount',
   fireEvent.click(screen.getByText('Open project'));
   expect(useNavigationStore.getState().tab).toBe('project');
   expect(screen.getByText('Synthetic projects')).toBeInTheDocument();
+  for (const tab of screen.getAllByRole('tab')) {
+    const controlled = document.getElementById(tab.getAttribute('aria-controls')!);
+    expect(controlled).not.toBeNull();
+    expect(controlled?.getAttribute('aria-labelledby')).toBe(tab.id);
+  }
   act(() => {
     useAnalysisStore.getState().setSession('s', 'u');
     useAnalysisStore.getState().accept(useAnalysisStore.getState().beginRequest('analysis'), {

@@ -1,10 +1,11 @@
-import { Fragment, useMemo } from "react";
+import { useMemo } from "react";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { UNASSIGNED_TYPE } from "@/lib/constants";
 import { wellInfo, genotypeShortLabel } from "@/lib/genotype";
 import { useWellFilter } from "@/hooks/use-well-filter";
+import { useWellGrid } from "@/hooks/use-well-grid";
 import { useI18n } from "@/hooks/use-i18n";
 import { StatusState } from "@/components/shared/ui";
 import type { ScatterPoint } from "@/types/api";
@@ -25,10 +26,11 @@ const LABEL_MAP: Record<string, string> = {
 
 function isLightColor(hex: string): boolean {
   if (!hex || hex.length < 7) return true;
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return r * 0.299 + g * 0.587 + b * 0.114 > 150;
+  const [r, g, b] = [1, 3, 5].map(index => {
+    const value = parseInt(hex.slice(index, index + 2), 16) / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return r * 0.2126 + g * 0.7152 + b * 0.0722 > 0.179;
 }
 
 function effectiveType(
@@ -48,13 +50,14 @@ export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
   const { t } = useI18n();
   const dark = useIsDarkMode();
   const scatterPoints = useDataStore((s) => s.scatterPoints);
-  const selectWell = useSelectionStore((s) => s.selectWell);
+  const selectedWells = useSelectionStore((s) => s.selectedWells);
   const showAutoCluster = useSettingsStore((s) => s.showAutoCluster);
   const showManualTypes = useSettingsStore((s) => s.showManualTypes);
   const storedPloidy = useSettingsStore((s) => s.ploidy);
   const ploidy = ploidyOverride ?? storedPloidy;
 
   const { visibleRows, visibleCols } = useWellFilter();
+  const grid = useWellGrid(visibleRows, visibleCols, scatterPoints.map(point => point.well));
 
   const wellMap = useMemo(() => {
     const map = new Map<string, ScatterPoint>();
@@ -65,12 +68,16 @@ export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
   return (
     <div className="panel results-panel">
       <h3 className="text-sm font-semibold mb-2 text-text">{t.genotypeResults}</h3>
+      <p role="status" aria-live="polite" className="sr-only">{t.selectedWellCount(selectedWells.length)}</p>
 
       {scatterPoints.length === 0 ? (
         <StatusState variant="empty" message={t.scatterEmpty} />
       ) : (
       <div
         id="results-plate"
+        role="grid"
+        aria-label={t.genotypeResults}
+        onKeyDown={grid.onKeyDown}
         style={{
           display: "grid",
           gridTemplateColumns: `auto repeat(${visibleCols.length}, 1fr)`,
@@ -79,36 +86,51 @@ export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
         }}
       >
         {/* Corner */}
-        <div className="plate-label" />
+        <div role="row" style={{ display: 'contents' }}>
+        <div role="columnheader" className="plate-label" />
 
         {/* Column headers */}
-        {visibleCols.map((col) => (
-          <div
+        {visibleCols.map((col, c) => (
+          <button
+            {...grid.cell(-1, c)}
+            type="button"
+            role="columnheader"
+            aria-label={t.toggleColumnAria(col)}
             key={`col-${col}`}
             className="text-center text-xs text-text-muted font-medium"
             style={{ padding: "2px" }}
           >
             {col}
-          </div>
+          </button>
         ))}
+        </div>
 
         {/* Rows */}
-        {visibleRows.map((row) => (
-          <Fragment key={row}>
-            <div
+        {visibleRows.map((row, r) => (
+          <div role="row" key={row} style={{ display: 'contents' }}>
+            <button
+              {...grid.cell(r, -1)}
+              type="button"
+              role="rowheader"
+              aria-label={t.toggleRowAria(row)}
               className="text-center text-xs text-text-muted font-medium"
               style={{ padding: "2px" }}
             >
               {row}
-            </div>
+            </button>
 
-            {visibleCols.map((col) => {
+            {visibleCols.map((col, c) => {
               const well = `${row}${col}`;
               const point = wellMap.get(well);
 
               if (!point) {
                 return (
-                  <div
+                  <button
+                    {...grid.cell(r, c)}
+                    type="button"
+                    role="gridcell"
+                    aria-label={`${well}, ${t.wellEmptyState}`}
+                    aria-selected={false}
                     key={well}
                     className="result-cell text-center text-text-muted"
                     data-well={well}
@@ -119,7 +141,7 @@ export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
                     }}
                   >
                     <span className="text-[9px]">{well}</span>
-                  </div>
+                  </button>
                 );
               }
 
@@ -132,12 +154,17 @@ export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
               const info = type ? wellInfo(type, ploidy, dark) : UNASSIGNED_TYPE;
               const label = type ? LABEL_MAP[type] ?? genotypeShortLabel(type, ploidy) : "";
               const bgColor = type ? info.color : "transparent";
-              const textColor = type && !isLightColor(info.color) ? "#ffffff" : "#1a1a2e";
+              const textColor = type && !isLightColor(info.color) ? "#ffffff" : "#000000";
 
               const confPct =
                 point.confidence != null ? ` · ${t.confidence} ${Math.round(point.confidence * 100)}%` : "";
               return (
-                <div
+                <button
+                  {...grid.cell(r, c)}
+                  type="button"
+                  role="gridcell"
+                  aria-label={`${well}, ${type ?? t.wellEmptyState}${selectedWells.includes(well) ? `, ${t.wellSelectedState}` : ''}`}
+                  aria-selected={selectedWells.includes(well)}
                   key={well}
                   className="result-cell text-center cursor-pointer hover:opacity-80"
                   data-well={well}
@@ -149,14 +176,13 @@ export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
                     color: textColor,
                     transition: "all 0.15s",
                   }}
-                  onClick={() => selectWell(well, "table")}
                 >
-                  <div className="text-[9px] opacity-70">{well}</div>
+                  <div className="text-[9px]">{well}</div>
                   <div className="font-medium">{label}</div>
-                </div>
+                </button>
               );
             })}
-          </Fragment>
+          </div>
         ))}
       </div>
       )}

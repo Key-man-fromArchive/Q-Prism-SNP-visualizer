@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { moveMenuFocus } from '@/lib/menu-focus';
 
 export type MenuItem = {
   key: string;
@@ -53,7 +54,9 @@ export function Menu({ trigger, items, label, align = "end", className, triggerC
   }, [open, activeIdx]);
 
   const openMenu = (idx = 0) => {
-    setActiveIdx(idx);
+    const enabled = items.map((item, index) => item.disabled ? -1 : index).filter(index => index >= 0);
+    if (!enabled.length) return;
+    setActiveIdx(idx === 0 ? enabled[0] : enabled[enabled.length - 1]);
     setOpen(true);
   };
 
@@ -68,21 +71,11 @@ export function Menu({ trigger, items, label, align = "end", className, triggerC
   };
 
   const onMenuKey = (e: React.KeyboardEvent) => {
+    if (moveMenuFocus(e)) return;
     if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
       close();
-    } else if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActiveIdx((i) => (i + 1) % items.length);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveIdx((i) => (i - 1 + items.length) % items.length);
-    } else if (e.key === "Home") {
-      e.preventDefault();
-      setActiveIdx(0);
-    } else if (e.key === "End") {
-      e.preventDefault();
-      setActiveIdx(items.length - 1);
     } else if (e.key === "Tab") {
       setOpen(false);
     }
@@ -134,6 +127,7 @@ export function Menu({ trigger, items, label, align = "end", className, triggerC
               type="button"
               disabled={item.disabled}
               tabIndex={idx === activeIdx ? 0 : -1}
+              onFocus={() => setActiveIdx(idx)}
               onClick={() => select(item)}
               onMouseEnter={() => setActiveIdx(idx)}
               className={cn(

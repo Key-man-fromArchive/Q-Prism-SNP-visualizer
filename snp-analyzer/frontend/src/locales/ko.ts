@@ -1,6 +1,8 @@
 import type { Translations } from './en';
 
 const ko: Translations = {
+  keyboardTypeSaved: (count: number) => `${count}개 웰의 유형을 변경했습니다. 선택은 유지됩니다.`,
+  keyboardTypeFailed: (reason: string) => `유형 변경에 실패했습니다. 선택은 유지됩니다. ${reason}`,
   qcReferenceRequested: (requested: boolean) => '기준 채널 정규화 요청: ' + (requested ? '예' : '아니요'),
   qcMarkerSummary: '마커별 QC 요약',
   qcOnsetScope: '전체 곡선 NTC 상승 평가 — 플레이트 QC와 별개',

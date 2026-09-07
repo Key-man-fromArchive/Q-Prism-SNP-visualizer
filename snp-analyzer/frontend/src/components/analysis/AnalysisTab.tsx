@@ -6,7 +6,6 @@ import { useSelectionStore } from "@/stores/selection-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useDataStore } from "@/stores/data-store";
 import {
-  setWellTypes,
   getWellGroups,
   getWellTypes,
 } from "@/lib/api";
@@ -25,9 +24,11 @@ import { Callout } from "@/components/shared/ui";
 import { analysisWarningTexts } from "@/lib/analysis-warnings";
 import { parseWellType } from "@/lib/well-type-input";
 import { useCurrentAnalysisRequest } from '@/hooks/use-current-analysis-request';
+import { useKeyboardAssignment } from '@/hooks/use-keyboard-assignment';
 
 export function AnalysisTab() {
   const { t } = useI18n();
+  const { assign, message: assignmentMessage } = useKeyboardAssignment();
   const sessionId = useSessionStore((s) => s.sessionId);
   const wellGroups = useSessionStore((s) => s.wellGroups);
   const setWellGroups = useSessionStore((s) => s.setWellGroups);
@@ -91,17 +92,13 @@ export function AnalysisTab() {
       if (!sessionId || popupWells.length === 0) return;
       const assignment = parseWellType(wellType);
       if (!assignment) return;
-      try {
-        await setWellTypes(sessionId, { wells: popupWells, well_type: assignment });
-        window.dispatchEvent(new CustomEvent("welltypes-changed"));
-      } catch (err) {
-        console.error("Failed to assign well type:", err);
-      }
+      const succeeded = await assign(assignment, popupWells);
+      if (!succeeded) return;
       setPopupPos(null);
       setPopupWells([]);
-      clearSelection();
+      if (useSelectionStore.getState().selectedWells.join('|') === popupWells.join('|')) clearSelection();
     },
-    [sessionId, popupWells, clearSelection]
+    [sessionId, popupWells, clearSelection, assign]
   );
 
   const handleClosePopup = useCallback(() => {
@@ -351,6 +348,7 @@ export function AnalysisTab() {
           onClose={handleClosePopup}
         />
       )}
+      <p role="status" aria-live="polite">{assignmentMessage}</p>
 
       {/* Group Manager Dialog */}
       {showGroupManager && sessionId && (

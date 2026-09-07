@@ -3,6 +3,7 @@
 // @TEST e2e/p4-s0-single-marker-default.spec.ts, e2e/p4-s1-plate-setup.spec.ts
 
 import { useState } from "react";
+import { navigateTabs } from '@/lib/tab-keyboard';
 import { X } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { Callout, StatusState } from "@/components/shared/ui";
@@ -55,6 +56,7 @@ export function AnalysisWorkspace() {
     <div>
       <div
         role="tablist"
+        onKeyDown={navigateTabs}
         aria-label={t.wsTabAnalysis}
         className="flex gap-1 px-6 pt-3 border-b border-border bg-surface"
       >
@@ -62,6 +64,7 @@ export function AnalysisWorkspace() {
           type="button"
           role="tab"
           id="workspace-tab-plate"
+          tabIndex={activeSurface === 'plate' ? 0 : -1}
           aria-controls="workspace-panel-plate"
           data-testid="workspace-tab-plate"
           aria-selected={activeSurface === "plate"}
@@ -78,6 +81,7 @@ export function AnalysisWorkspace() {
           type="button"
           role="tab"
           id="workspace-tab-analysis"
+          tabIndex={activeSurface === 'analysis' ? 0 : -1}
           aria-controls="workspace-panel-analysis"
           data-testid="workspace-tab-analysis"
           aria-selected={activeSurface === "analysis"}

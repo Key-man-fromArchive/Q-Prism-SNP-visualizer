@@ -306,14 +306,15 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P2-S4-T1: 포커스별 키보드 계약
 
-- Status: TODO
+- Status: DONE
 - 담당: frontend-specialist
 - Depends On: [P2-S3-T1]
 - Write Scope: SRC/hooks/의 단축키, SRC/components/의 PlateView·결과 그리드·메뉴/대화상자, tests/20-keyboard.spec.ts 및 단위 테스트
 - 구현: defaultPrevented 우선 반환, 위젯 이벤트 소유권, 입력/editable에서 앱 단축키 차단을 적용한다. 일반 버튼/탭/메뉴/대화상자는 Space·Enter·방향키·Escape 기본 동작을 보존한다.
 - 구현: 그리드 방향키/Home/End/Shift 선택·Enter/Space 선택·Escape 해제와 유효한 1–7/Ctrl+E를 연결한다. 분석 바깥 재생/사이클/타입 변경을 차단하고 언어/테마/도움말 예외를 PRD대로 제한한다.
 - 검증: mouse 없이 포커스 순회, 버튼 Space가 재생하지 않음, 입력 Ctrl+Z는 브라우저 동작. undo/redo 실제 API 성공·실패 검증은 P3-S2-T1에서 완결한다.
-- [ ] AC: UX-03 키보드 행렬을 통과하고 기존 PlateView roving focus를 회귀시키지 않음.
+- [x] AC: UX-03 키보드 행렬을 통과하고 기존 PlateView roving focus를 회귀시키지 않음.
+- 증거: `ui-ux-overhaul/evidence/P2-S4-T1.md` — FE336, ROOT18+20 3/3, axe critical/serious0, 독립 소스·브라우저 리뷰 PASS. 96웰은 실제 서버, 384웰은 명시적 응답 fixture의 실제 16×24 DOM 검증이며 native384 파싱 검증이 아니다. Undo/CAS는 P3-S2, Omit 선택 정책은 P3-S4, 전체 반응형 레이아웃 검증은 P4에서 완결한다.
 
 ### P2-S0-V: 정확성 품질 게이트
 
