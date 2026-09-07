@@ -397,13 +397,15 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P4-S0-T1: 공통 헤더·반응형 기반
 
-- Status: TODO
+- Status: DONE
+- Commit: bb7118e9a9111e1119d4f333b02d2df76f18f305
+- Evidence: [P4-S0-T1](ui-ux-overhaul/evidence/P4-S0-T1.md). FE 486개, ROOT24 21개+시각 3개, 기존 회귀 8개, lint·typecheck·build·audit, coverage/CC, 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P3-S0-V]
 - Write Scope: SRC/components/의 Header·공통 Navigation, 공통 CSS, tests/24-responsive.spec.ts
 - 구현: 헤더 두 줄 재배치를 허용하고 viewport overflow를 제거한다. 1280px 이상 2열, 768–1279px 1열, 390–767px 검토 중심 구성을 위한 공통 레이아웃을 만든다.
 - 검증: 390/768/1024/1280/1440 × KO/EN × light/dark에서 긴 세션명/사용자명 포함 헤더. 페이지 전체 가로 스크롤 금지, 플레이트 내부 스크롤은 허용.
-- [ ] AC: UX-07 헤더 기준 통과. 기능을 숨기기만 해서 overflow를 해결하지 않음.
+- [x] AC: UX-07 헤더 기준 통과. 기능을 숨기기만 해서 overflow를 해결하지 않음.
 
 ### P4-S1-T1: 분석 결과 중심 배치·고급 설정 접기
 
