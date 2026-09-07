@@ -1,7 +1,9 @@
 from __future__ import annotations
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal
-from pydantic import BaseModel, Field, computed_field
+from uuid import UUID
+from pydantic import AwareDatetime, BaseModel, Field, JsonValue, computed_field, field_validator
 
 
 class WellCycleData(BaseModel):
@@ -55,6 +57,7 @@ class RatioOrigin(BaseModel):
 
 
 class UnifiedData(BaseModel):
+    input_revision: int = Field(default=0, ge=0)
     instrument: str                  # "QuantStudio 3" or "CFX Opus"
     allele2_dye: str                 # "VIC" or "HEX"
     wells: list[str]                 # sorted list of well IDs
@@ -333,6 +336,7 @@ class RegionResult(BaseModel):
 
 
 class ClusteringRequest(BaseModel):
+    expected_input_revision: int | None = Field(default=None, ge=0)
     algorithm: ClusteringAlgorithm = ClusteringAlgorithm.THRESHOLD
     cycle: int = 0
     threshold_config: ThresholdConfig | None = None
@@ -350,7 +354,50 @@ class ClusteringRequest(BaseModel):
     use_rox: bool = True
 
 
+class AnalysisRegionContext(BaseModel):
+    """Actual per-marker inputs, independent of later marker edits."""
+    marker_id: str
+    name: str
+    wells: list[str]
+    ploidy: int = Field(ge=1)
+    algorithm: ClusteringAlgorithm
+    parameters: dict[str, JsonValue]
+
+
+class AnalysisContext(BaseModel):
+    """Complete result provenance; absent on historical unverified results.
+
+    The publisher supplies resolved parameters, rather than reconstructing them
+    from current session settings during loading. No inferred field defaults.
+    """
+    schema_version: Literal[1]
+    result_revision: UUID
+    analysed_at: AwareDatetime
+    cycle: int = Field(ge=0)
+    use_rox: bool
+    normalization_applied: bool
+    background: Literal["none", "pre_read", "channel_min"]
+    algorithm: ClusteringAlgorithm | Literal["mixed"]
+    parameters: dict[str, JsonValue]
+    regions: list[AnalysisRegionContext]
+    input_revision: int = Field(ge=0)
+
+    @field_validator("analysed_at")
+    @classmethod
+    def normalize_completion_to_utc(cls, value: datetime) -> datetime:
+        return value.astimezone(timezone.utc)
+
+
 class ClusteringResult(BaseModel):
+    analysis_context: AnalysisContext | None = None
+
+    # Pydantic supports this property wrapper; mypy cannot model it (as above
+    # for MarkerCatalogEntry.dosage_trust). Keep the precise public return type.
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def context_status(self) -> Literal["verified", "legacy_unknown"]:
+        return "verified" if self.analysis_context is not None else "legacy_unknown"
+
     algorithm: str
     cycle: int
     assignments: dict[str, str]
@@ -377,6 +424,7 @@ class ClusteringResult(BaseModel):
 
 
 class ManualWellTypeUpdate(BaseModel):
+    expected_input_revision: int | None = Field(default=None, ge=0)
     wells: list[str]
     well_type: WellType
 

@@ -2,7 +2,7 @@
 
 - Contract ID: qprism-ux-followup-20260907-v1
 - 작성일: 2026-09-07
-- 상태: IN PROGRESS — 2026-09-07 사용자 승인으로 lint·도구·런타임/인증 의존성 선행 보완 재개. P1 미착수.
+- 상태: IN PROGRESS — P0 로컬 통합 완료(0bd5090). P1 서버·계약 기반 게이트 통과. P2 분석·QC 화면 연결 대기.
 - 기준: [UI/UX 후속 개선 기획서 v0.2](ui-ux-overhaul/04-review-followup-prd.md)
 - 실행 기준 파일: docs/planning/06-tasks.md
 - 이전 계약: [qPCR Import Expansion 원문 보관](archive/06-tasks-qpcr-import-expansion.md). 보관본의 작업은 이번 실행 대상이 아니다.
@@ -156,89 +156,107 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P1-R1-T1: 분석 컨텍스트 모델·DB 왕복 저장
 
-- Status: TODO
+- Status: DONE
+- Commit: b7c6e8752aa57de2fb5b9ae44b37e512f60ffee8
+- Evidence: [P1-R1-T1](ui-ux-overhaul/evidence/P1-R1-T1.md). 독립 최종 BE 530 passed + 2 subtests, 변경 실행 줄 100%, mypy/Ruff 통과.
 - 담당: database-specialist
 - Depends On: [P0-S0-V]
-- Write Scope: BE/app/models.py·db.py·main.py, BE/tests/test_analysis_context_persistence.py
+- Write Scope: BE/app/models.py·db.py·main.py, BE/tests/test_analysis_context_persistence.py 및 BE/tests/test_marker_catalog.py의 migration 버전 호환 assertion·중복 테스트명 정정
 - 구현: context 전체 필드·schema/result/input revision·UTC 완료 시각·마커별 실제 parameters를 모델링하고 결과와 함께 원자 저장한다. 구버전은 추정 없이 legacy_unknown으로 읽는다.
 - 구현: SQLite/JSON 호환 migration과 시작 복원을 연결한다. 기존 결과 삭제나 임의 backfill 금지.
 - 검증: 새 결과 왕복·구버전 JSON/행·재시작·rollback, 기존 persistence 회귀.
-- [ ] AC: 조건이 손실 없이 복원되고 기존 DB가 데이터 손실 없이 열림.
+- [x] AC: 조건이 손실 없이 복원되고 기존 DB가 데이터 손실 없이 열림.
 
 ### P1-R1-T2: 입력 revision·변경 명령 일원화
 
-- Status: TODO
+- Status: DONE
+- Commit: da35b12c01b16c7df75d5eabaee0e0ca9e300f7f
+- Evidence: [P1-R1-T2](ui-ux-overhaul/evidence/P1-R1-T2.md). 독립 BE 552 passed + 2 subtests, 변경 실행 줄 91.67–100%, 새 논리 복잡도 최대 8.
 - 담당: backend-specialist
 - Depends On: [P1-R1-T1]
-- Write Scope: BE/app/routers/clustering.py·layouts.py·sample.py·marker_catalog.py, BE/app/db.py, 신규 BE/app/processing/analysis_state.py, BE/tests/test_analysis_input_revision.py
+- Write Scope: BE/app/routers/clustering.py·layouts.py·sample.py·marker_catalog.py, BE/app/models.py·db.py, 신규 BE/app/processing/analysis_state.py, BE/tests/test_analysis_input_revision.py 및 기존 mutation/marker 계약 회귀 테스트
 - 구현: welltype set/clear/bulk, ploidy, marker create/update/delete, layout apply 등 모든 판정 입력 변경을 조사해 변경/revision 증가를 같은 transaction·직렬화 경계에 연결한다.
 - 구현: mutation 응답 input_revision, undo용 선택적 expected revision·409를 추가한다. 보기·언어·축 변경은 제외하고 stale 결과 정책을 보존한다.
+- 접점 확인: 공용 mutation body는 models.py에 있고 session 삭제/정보는 sample.py에 있다. 요청에 포함된 ploidy 변경도 숨은 입력 변경으로 조사한다. 세션 삭제는 결과/마커/진행 요청 상태를 함께 정리하고, 마커 변경 시 결과 삭제를 요구하던 기존 테스트는 새 retained-stale 계약의 명시적 기대값으로 갱신한다.
 - 검증: 경로별 증가, 실패/no-op, 권한, stale expected revision, layout/bulk 누락 검사.
-- [ ] AC: API 직접 변경도 결과를 무효화하고 실패 mutation은 버전을 전진시키지 않음.
+- [x] AC: API 직접 변경도 결과를 무효화하고 실패 mutation은 버전을 전진시키지 않음.
 
 ### P1-R1-T3: 결과 원자 게시·동시성 제어
 
-- Status: TODO
+- Status: DONE
+- Commit: 43a013be8639b90baee6fbff62f4d70f47c05046
+- Evidence: [P1-R1-T3](ui-ux-overhaul/evidence/P1-R1-T3.md). 독립 BE 571 passed + 2 subtests, 변경 실행 줄 97.98–100%, 새 논리 복잡도 최대 10.
 - 담당: backend-specialist
 - Depends On: [P1-R1-T2]
-- Write Scope: BE/app/routers/clustering.py, BE/app/processing/analysis_state.py, BE/app/db.py, BE/tests/test_analysis_revision_races.py
+- Write Scope: BE/app/routers/clustering.py 및 sample.py의 세션 상태/삭제 연결, BE/app/processing/analysis_state.py, BE/app/models.py·db.py, BE/tests/test_analysis_revision_races.py
 - 구현: 계산 시작 입력/parameters를 고정하고 완료 시 input revision·요청 순서를 검증해 게시한다. DB와 cluster_store가 다른 버전을 가리키지 않게 한다.
 - 구현: 계산 중 mutation·늦은 완료·저장 실패·조회 상태를 다룬다. 현재 동기/비동기·프로세스 범위에 맞는 lock/CAS를 기록하고 최신 결과 한 건만 유지한다.
 - 검증: A/B 역순 완료, 계산 중 marker/welltype 변경, 저장 실패, 독립 세션 동시 처리.
-- [ ] AC: 오래된 계산이 최신 결과를 덮어쓰지 않고 context가 실제 계산 입력과 일치함.
+- [x] AC: 오래된 계산이 최신 결과를 덮어쓰지 않고 context가 실제 계산 입력과 일치함.
 
 ### P1-R2-T1: NTC·마커별 QC·상승 평가 계약
 
-- Status: TODO
+- Status: DONE
+- Commit: 9c15ff968c5026a41d6e322665e0bccc35767b93 (초기 d514a94 이후 imported Unknown 보완)
+- Evidence: [P1-R2-T1](ui-ux-overhaul/evidence/P1-R2-T1.md). 최종 BE 619 passed + 2 subtests, 독립 집중 89 passed, 변경 실행 줄 100%, 새 논리 복잡도 최대 10.
 - 담당: backend-specialist
 - Depends On: [P1-R1-T3]
-- Write Scope: BE/app/routers/qc.py·data.py, BE/app/processing/ntc_detection.py, BE/app/models.py, BE/tests/test_qc_status_contract.py
+- Write Scope: BE/app/routers/qc.py·data.py, BE/app/processing/ntc_detection.py, BE/app/models.py, BE/tests/test_qc_status_contract.py 및 기존 test_a2_region_passthrough.py·test_marker_contract.py·control/cycle 테스트의 QC 계약 setup·회귀 보강. 장비의 일반 시료 Unknown과 명시적 수동 Unknown을 구분하기 위한 clustering.py의 captured manual_well_types 및 관련 test_analysis_revision_races.py 보완 포함.
 - 구현: 기존 ok/wells 유지, status·flagged/reason 추가. NTC 없음/평가불가/부분평가/오염을 구분하고 상승 감지 evaluation 상태를 별도로 반환한다. 임계값은 변경하지 않는다.
 - 구현: authoritative/markers와 판정 기반 지표의 버전/조건, 현재 보기 NTC 조건을 구분한다. legacy/stale를 정상 최신 QC로 포장하지 않는다.
 - 검증: 정상/오염 혼합·0개·불충분·구응답, 두 배수성 QC, 20/40사이클, no-onset/not-evaluated, 기존 control QC·cycle suggestion 회귀.
-- [ ] AC: 모든 NTC와 flagged 웰이 구분되고 마커별 권위값·조건이 명확함.
+- [x] AC: 모든 NTC와 flagged 웰이 구분되고 마커별 권위값·조건이 명확함.
 
 ### P1-R3-T1: 출력 스냅샷 계약·CSV
 
-- Status: TODO
+- Status: DONE
+- Commit: 991dabad1142f7df4a311162eed9077a0014ba74
+- Evidence: [P1-R3-T1](ui-ux-overhaul/evidence/P1-R3-T1.md). 최종 BE 678 passed + 2 subtests, 독립 집중 85 passed, 신규 스냅샷 98.34%·CSV 추가 실행 줄 100%.
 - 담당: backend-specialist
 - Depends On: [P1-R2-T1]
-- Write Scope: 신규 BE/app/reporting/result_snapshot.py, BE/app/routers/export.py, BE/app/processing/analysis_state.py, BE/tests/test_export_snapshot_csv.py
+- Write Scope: 신규 BE/app/reporting/result_snapshot.py, BE/app/routers/export.py, BE/app/processing/analysis_state.py, BE/tests/test_export_snapshot_csv.py 및 기존 CSV/마커 출력 테스트의 계약·setup 갱신. 같은 export.py의 기존 XLSX QC dict 타입 불변성 오류는 주석만 보완하며 XLSX 동작 연결은 다음 작업에 둔다.
 - 구현: result_revision 지정/생략, input revision/legacy 검증, 409를 공통 snapshot 서비스로 구현한다. 수락 이후 판정·신뢰도·manual 유형·표시 metadata·계산 조건을 고정한다.
 - 구현: 전체 실행 CSV의 마커 열·기존 데이터 열을 유지하고 조건 metadata 열을 추가한다. 임의 cycle/ROX/background와 저장 조건 불일치는 명시 오류로 전환한다.
 - 검증: 20/40·ROX/background만 차이, legacy/missing/stale, 결과 교체·수락 후 mutation·권한.
-- [ ] AC: CSV에 혼합 조건이 없고 수락된 snapshot을 끝까지 사용하며 버전/조건을 파일에서 읽을 수 있음.
+- [x] AC: CSV에 혼합 조건이 없고 수락된 snapshot을 끝까지 사용하며 버전/조건을 파일에서 읽을 수 있음.
 
 ### P1-R3-T2: PDF·XLSX 일치·연결 소비자 호환
 
-- Status: TODO
+- Status: DONE
+- Commit: ccc590fcd31f81417ee947b40f35a30ab44f8ad7
+- Evidence: [P1-R3-T2](ui-ux-overhaul/evidence/P1-R3-T2.md). 최종 BE 710 passed + 2 subtests, 독립 집중 80 passed, 신규 모듈 98.5% 이상·변경 실행 줄 93.3% 이상.
 - 담당: backend-specialist
 - Depends On: [P1-R3-T1]
-- Write Scope: BE/app/routers/data.py·export.py·asg.py, BE/app/reporting/*, BE/tests/test_export_snapshot_reports.py·test_asg_result_save.py
+- Write Scope: BE/app/routers/data.py·export.py·asg.py, BE/app/asg_result.py, BE/app/reporting/* (한글 TrueType 글꼴·라이선스·출처 포함), BE/requirements-dev.txt의 PDF 렌더 검증 도구, BE/tests/test_export_snapshot_reports.py·test_asg_result_save.py 및 기존 PDF/XLSX/ASG 출력 테스트의 계약·setup 갱신
 - 구현: PDF max(cycles)·XLSX 독자 조건 선택을 공통 snapshot으로 연결한다. 그림·판정·신뢰도는 같은 결과, Ct 등 전체 곡선 값은 별도 계산 범위를 명시한다.
 - 구현: ASG 등 결과 소비자의 추가 필드/오류를 점검하고 필요한 adapter만 적용한다. 스코프·저장 상태 정책은 보존한다.
 - 검증: 실제 CSV/PDF/XLSX의 공통 웰·판정·수치·metadata 비교. PDF metadata만이 아니라 렌더에 전달된 수치도 검증. 기존 보고서/ASG 회귀.
-- [ ] AC: 형식별 묵시적 사이클 대체가 없고 정상/legacy/stale·소비자 호환성이 확인됨.
+- 검증 준비: pypdfium2는 검증된 wheel 버전을 개발 의존성에만 고정하고 audit한다. 한글 TrueType 글꼴은 원본·재배포 라이선스·upstream commit/SHA-256을 함께 보관하고 PDF에 포함한다. 호스트 전용 글꼴 경로나 뷰어의 CJK 대체 글꼴을 배포 검증으로 간주하지 않는다. 긴 한글 이름·모든 페이지의 렌더링과 텍스트를 확인한다.
+- [x] AC: 형식별 묵시적 사이클 대체가 없고 정상/legacy/stale·소비자 호환성이 확인됨.
 
 ### P1-S0-T1: 프론트 API·분석/탐색 상태 기반
 
-- Status: TODO
+- Status: DONE
+- Commit: c880b0a803aa41635237ed9cd0609431670c001a
+- Evidence: [P1-S0-T1](ui-ux-overhaul/evidence/P1-S0-T1.md). FE 167개·독립 집중 62개, lint/build/type 통과. 신규 모듈 및 API 변경 실행 줄 각각 100%, 복잡도 ≤10. 실제 화면 연결은 P2/P3 범위.
 - 담당: frontend-specialist
 - Depends On: [P1-R3-T2]
 - Write Scope: SRC/types/api.ts, SRC/lib/api.ts, 신규 SRC/stores/analysis-store.ts·navigation-store.ts, SRC/lib/analysis-context.ts 및 단위 테스트
 - 구현: context/QC/revision/409 타입·API를 연결하고 런타임 경계에서 missing/legacy/error를 구분한다. analysis-store에 결과·pending/current/mismatch/error·요청 ID를 둔다.
 - 구현: navigation-store와 URL 직렬화/유효성 순수 함수를 정의한다. 실제 App 마운트·URL 복원은 후속 작업에서 연결한다.
 - 검증: parameters별 불일치/보기 변경, 구응답·역순 응답, URL 왕복·잘못된 값, 409. FE-TEST, FE-CHECK.
-- [ ] AC: 소비 화면이 값을 추정하지 않고 조건/버전/탐색의 단일 소유자를 사용할 수 있음.
+- [x] AC: 소비 화면이 값을 추정하지 않고 조건/버전/탐색의 단일 소유자를 사용할 수 있음.
 
 ### P1-S0-V: 계약·서버 품질 게이트
 
-- Status: TODO
+- Status: DONE
+- Commit: 4a1a632fcdb73d92273214f10fa572d4fd2c03af
+- Evidence: [P1-S0-V](ui-ux-overhaul/evidence/P1-S0-V.md). BE 710개+2 subtests, FE 167개, 브라우저 14개 및 상태 smoke 통과. 누적 변경 코드 모듈별 coverage·정적/보안 검사 통과. 기존 헤더 QC 갱신·onset 의미 구분은 P2-S1/S2 필수이며 최종 UI 승인·배포는 아님.
 - 담당: test-specialist
 - Depends On: [P1-S0-T1]
 - Write Scope: docs/planning/ui-ux-overhaul/evidence/P1-S0-V.md
 - 검증: BE-ALL, FE-ALL, FE-CHECK, COVERAGE, migration/동시성/출력/권한 리뷰, 문서·타입·응답 대조.
-- [ ] AC: UX-01 서버·UX-02 A/서버 출력 기준 통과. 새 필드로 기존 UI가 깨지지 않는 smoke 확인. 필수 소비자 연결 누락 시 진입/배포 불가.
+- [x] AC: UX-01 서버·UX-02 A/서버 출력 기준 통과. 새 필드로 기존 UI가 깨지지 않는 smoke 확인. 필수 소비자 연결 누락 시 진입/배포 불가.
 
 ## Phase P2 — 분석 화면의 정확성·입력 동작
 
@@ -500,4 +518,4 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 4. 각 작업은 승인된 scope에서 RED → GREEN → REFACTOR → 검증 → 로컬 commit → 증거 보고 순으로 진행한다. 게이트 실패 시 후속 작업을 시작하지 않는다.
 5. 재개 시 계획 hash·branch/commit·상태·증거를 대조한다. 문서의 TODO를 추측으로 DONE 처리하거나 이전 작업서의 상태를 재사용하지 않는다.
 
-현재 상태: **2026-09-07 P0 5/33 완료, 독립 게이트 PASS**. 사용자가 lint·도구·런타임/인증 의존성 보완과 완료까지 자율 진행을 승인했다. 로컬 Phase 통합 후 P1부터 자동 진행하며 원격 push·배포·외부 알림은 제외한다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.
+현재 상태: **2026-09-07 10/33 완료, P1 PDF·XLSX·ASG 연결 구현 중**. P0 독립 게이트 통과·로컬 통합 후 P1-R1-T1/T2/T3, P1-R2-T1, P1-R3-T1도 독립 검증했다. 사용자가 lint·도구·런타임/인증 의존성 보완과 완료까지 자율 진행을 승인했다. 로컬 Phase 통합·자동 진행하며 원격 push·배포·외부 알림은 제외한다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.

@@ -119,11 +119,15 @@ def client(tmp_path):
     async def override():
         return TokenData(user_id="u", username="u", role="user")
     app.dependency_overrides[get_current_user] = override
-    upload.sessions.clear(); clustering.welltype_store.clear(); clustering.cluster_store.clear()
+    upload.sessions.clear()
+    clustering.welltype_store.clear()
+    clustering.cluster_store.clear()
     with TestClient(app) as c:
         yield SimpleNamespace(client=c, upload=upload, clustering=clustering, db=db)
     app.dependency_overrides.pop(get_current_user, None)
-    upload.sessions.clear(); clustering.welltype_store.clear(); clustering.cluster_store.clear()
+    upload.sessions.clear()
+    clustering.welltype_store.clear()
+    clustering.cluster_store.clear()
     if db._conn is not None:
         db._conn.close()
     db._conn = None
@@ -199,9 +203,26 @@ def test_statistics_multi_marker_manual_override_applies_per_marker(client):
 # 2. export.py (CSV)
 # ---------------------------------------------------------------------------
 
+def _capture_csv_golden_context(client, sid):
+    """Attach known raw cycle-1 provenance without changing golden calls."""
+    from app.models import ClusteringRequest, MarkerRegion
+    from app.processing.analysis_state import fail_analysis
+
+    result = client.clustering.cluster_store[sid]
+    request = ClusteringRequest(cycle=1, use_rox=False, regions=[
+        MarkerRegion(id=r.id, name=r.name, wells=r.wells, ploidy=r.ploidy)
+        for r in result.regions or []
+    ] or None)
+    ticket, snapshot = client.clustering._capture_analysis(sid, request)
+    _, origin, excluded = client.clustering._snapshot_points(snapshot)
+    client.clustering._attach_context(snapshot, result, origin, excluded)
+    fail_analysis(ticket)
+
+
 def test_export_csv_single_marker_unchanged(client):
     _register(client, "s1", _unified_single_marker())
     client.clustering.cluster_store["s1"] = _single_marker_cluster_result()
+    _capture_csv_golden_context(client, "s1")
 
     resp = client.client.get("/api/data/s1/export/csv?cycle=1&use_rox=false")
     assert resp.status_code == 200, resp.text
@@ -209,16 +230,19 @@ def test_export_csv_single_marker_unchanged(client):
     rows = list(reader)
     header = rows[0]
     assert "Marker" not in header
-    assert header == [
+    assert header[:9] == [
         "Well", "Sample Name", "Genotype", "Confidence (%)",
         "FAM (norm)", "VIC (norm)", "FAM (raw)", "VIC (raw)", "ROX (raw)",
     ]
+    assert "Result Revision" in header
+    assert "Analysis Context" in header
     assert len(rows) == 7  # header + 6 wells
 
 
 def test_export_csv_multi_marker_has_marker_column_and_per_marker_vocab(client):
     _register(client, "s2", _unified_multi_marker())
     client.clustering.cluster_store["s2"] = _multi_marker_cluster_result()
+    _capture_csv_golden_context(client, "s2")
 
     resp = client.client.get("/api/data/s2/export/csv?cycle=1&use_rox=false")
     assert resp.status_code == 200, resp.text
@@ -243,6 +267,7 @@ def test_export_csv_multi_marker_has_marker_column_and_per_marker_vocab(client):
 def test_export_xlsx_single_marker_unchanged(client):
     _register(client, "s1", _unified_single_marker())
     client.clustering.cluster_store["s1"] = _single_marker_cluster_result()
+    _capture_csv_golden_context(client, "s1")
 
     resp = client.client.get("/api/data/s1/export/xlsx?use_rox=false")
     assert resp.status_code == 200, resp.text
@@ -257,6 +282,7 @@ def test_export_xlsx_single_marker_unchanged(client):
 def test_export_xlsx_multi_marker_has_marker_column_and_per_marker_counts(client):
     _register(client, "s2", _unified_multi_marker())
     client.clustering.cluster_store["s2"] = _multi_marker_cluster_result()
+    _capture_csv_golden_context(client, "s2")
 
     resp = client.client.get("/api/data/s2/export/xlsx?use_rox=false")
     assert resp.status_code == 200, resp.text
@@ -292,6 +318,19 @@ def test_qc_single_marker_golden_path_unchanged(client):
 def test_qc_multi_marker_reports_per_marker_cluster_separation(client):
     _register(client, "s2", _unified_multi_marker())
     client.clustering.cluster_store["s2"] = _multi_marker_cluster_result()
+
+    # Golden numeric result has known cycle/raw conditions, not legacy provenance.
+    from app.models import ClusteringRequest, MarkerRegion
+    result = client.clustering.cluster_store["s2"]
+    request = ClusteringRequest(cycle=1, use_rox=False, regions=[
+        MarkerRegion(id=r.id, name=r.name, wells=r.wells, ploidy=r.ploidy)
+        for r in result.regions
+    ])
+    ticket, snapshot = client.clustering._capture_analysis("s2", request)
+    _, origin, excluded = client.clustering._snapshot_points(snapshot)
+    client.clustering._attach_context(snapshot, result, origin, excluded)
+    from app.processing.analysis_state import fail_analysis
+    fail_analysis(ticket)
 
     resp = client.client.get("/api/data/s2/qc?cycle=1&use_rox=false")
     assert resp.status_code == 200, resp.text
@@ -370,8 +409,11 @@ def test_asg_snapshot_single_marker_unchanged(asg_env):
 
     _bind_asg_session(asg_env, "sid-single", _unified_single_marker())
     cluster_store["sid-single"] = _single_marker_cluster_result()
+    from app.routers import clustering
+    from types import SimpleNamespace
+    _capture_csv_golden_context(SimpleNamespace(clustering=clustering), "sid-single")
 
-    snapshot = build_result_snapshot("sid-single", selected_cycle=1)
+    snapshot = build_result_snapshot("sid-single", user=TokenData(user_id="asg-1", username="owner@example.com", role="user"), selected_cycle=1)
     assert snapshot["schema_version"] == 1
     assert snapshot["summary"]["genotype_counts"]["AA"] == 3
     assert snapshot["summary"]["genotype_counts"]["BB"] == 3
@@ -388,6 +430,6 @@ def test_asg_snapshot_multi_marker_refuses_with_409(asg_env):
     cluster_store["sid-multi"] = _multi_marker_cluster_result()
 
     with pytest.raises(HTTPException) as exc:
-        build_result_snapshot("sid-multi", selected_cycle=1)
+        build_result_snapshot("sid-multi", user=TokenData(user_id="asg-1", username="owner@example.com", role="user"), selected_cycle=1)
     assert exc.value.status_code == 409
     assert "schema_version 3" in exc.value.detail

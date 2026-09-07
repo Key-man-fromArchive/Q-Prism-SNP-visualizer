@@ -1,17 +1,27 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
-from app.models import UnifiedData
+from app.models import (
+    UnifiedData,
+    ClusteringResult,
+    NormalizedPoint,
+    RatioOrigin,
+    RegionResult,
+    AnalysisContext,
+)
 from app.processing.background import BackgroundMode
 from app.processing.genotype_vocab import label_by_ratio
-from app.processing.normalize import normalize_for_cycle
+from app.processing.normalize import normalize_for_cycle, normalization_applies
 from app.processing.ratio_origin import shift_points_to_origin
 from app.routers.upload import sessions
-from app.routers.clustering import cluster_store, welltype_store, ratio_origin_for
+from app.routers.clustering import cluster_store, effective_well_types_for
+from app.processing.analysis_state import input_lock, analysis_status
 from app.auth import CurrentUser, check_session_access
 
 router = APIRouter()
@@ -27,12 +37,26 @@ _UNDETERMINED_FRAC = 0.2
 
 class NtcWell(BaseModel):
     well: str
-    signal: float
+    signal: float | None
+    flagged: bool | None
+    reason: Literal[
+        "none",
+        "signal_above_threshold",
+        "missing_signal",
+        "missing_reference",
+        "insufficient_points",
+    ]
 
 
 class NtcCheck(BaseModel):
     ok: bool
     wells: list[NtcWell]
+    status: Literal["ok", "warning", "no_ntc", "insufficient"]
+    scope: Literal["plate"] = "plate"
+    cycle: int
+    use_rox: bool
+    normalization_applied: bool
+    background: str
 
 
 class QcResult(BaseModel):
@@ -49,6 +73,7 @@ class MarkerQc(BaseModel):
     unrelated markers' dosage classes into one grouping and is meaningless once
     a plate holds multiple independently-genotyped markers -- each marker gets
     its own metrics here, scoped to its own wells/assignments/ploidy."""
+
     id: str
     name: str
     ploidy: int
@@ -161,10 +186,11 @@ def _compute_cluster_separation(sid: str, points: list) -> float | None:
 
 
 def _marker_qc(
-    region,
-    points: list,
+    region: RegionResult,
+    points: list[NormalizedPoint],
     manual_assignments: dict[str, str],
     undetermined_min: float,
+    excluded: frozenset[str] = frozenset(),
 ) -> "MarkerQc":
     """Per-marker QC (A2): call rate + cluster separation scoped to a single
     region's own wells/assignments/ploidy, instead of the flat plate-level
@@ -176,25 +202,23 @@ def _marker_qc(
     n_called = 0
     effective_assignments: dict[str, str] = {}
     for p in region_points:
-        manual = manual_assignments.get(p.well)
-        auto = region.assignments.get(p.well)
-        if manual is not None:
-            genotype = manual
-        elif auto is not None:
-            genotype = auto
-        else:
-            total = p.norm_fam + p.norm_allele2
-            genotype = (
-                "Undetermined"
-                if total <= undetermined_min
-                else label_by_ratio(p.norm_fam / total, region.ploidy)
-            )
+        genotype = _determine_genotype(
+            p.well,
+            p.norm_fam,
+            p.norm_allele2,
+            region.assignments,
+            manual_assignments,
+            undetermined_min,
+            region.ploidy,
+        )
         effective_assignments[p.well] = genotype
         if genotype not in ("Undetermined", "NTC"):
             n_called += 1
 
     call_rate = n_called / n_total if n_total > 0 else 0.0
-    separation = _cluster_separation_for(effective_assignments, region_points)
+    separation = _cluster_separation_for(
+        effective_assignments, [p for p in region_points if p.well not in excluded]
+    )
 
     return MarkerQc(
         id=region.id,
@@ -208,6 +232,264 @@ def _marker_qc(
     )
 
 
+@dataclass(frozen=True)
+class QcSnapshot:
+    unified: UnifiedData
+    result: ClusteringResult | None
+    types: dict[str, str]
+    status: dict[str, object]
+
+
+def _capture_qc(sid: str) -> QcSnapshot:
+    with input_lock:
+        unified = _get_session(sid)
+        result = cluster_store.get(sid)
+        return QcSnapshot(
+            unified.model_copy(deep=True),
+            result.model_copy(deep=True) if result else None,
+            effective_well_types_for(sid, unified),
+            analysis_status(sid),
+        )
+
+
+def _median_signal(points: list[NormalizedPoint]) -> float:
+    signals = sorted(
+        p.norm_fam + p.norm_allele2
+        for p in points
+        if math.isfinite(p.norm_fam + p.norm_allele2)
+    )
+    return signals[len(signals) // 2] if signals else 0.0
+
+
+def _ntc_well(well: str, point: NormalizedPoint | None, median: float) -> NtcWell:
+    if point is None:
+        return NtcWell(well=well, signal=None, flagged=None, reason="missing_signal")
+    signal = point.norm_fam + point.norm_allele2
+    if not math.isfinite(signal):
+        return NtcWell(well=well, signal=None, flagged=None, reason="missing_signal")
+    if median <= 0:
+        return NtcWell(
+            well=well, signal=round(signal, 6), flagged=None, reason="missing_reference"
+        )
+    flagged = signal >= _NTC_HOT_FRAC * median
+    return NtcWell(
+        well=well,
+        signal=round(signal, 6),
+        flagged=flagged,
+        reason="signal_above_threshold" if flagged else "none",
+    )
+
+
+def _ntc_status(
+    wells: list[NtcWell],
+) -> Literal["ok", "warning", "no_ntc", "insufficient"]:
+    if any(w.flagged is True for w in wells):
+        return "warning"
+    if any(w.flagged is None for w in wells):
+        return "insufficient"
+    return "ok" if wells else "no_ntc"
+
+
+def _normalization_used(unified: UnifiedData, cycle: int, use_rox: bool) -> bool:
+    if not normalization_applies(unified, use_rox=use_rox):
+        return False
+    return any(
+        (d.normalization_value if d.normalization_value is not None else d.rox or 0) > 0
+        for d in unified.data
+        if d.cycle == cycle
+    )
+
+
+def _plate_check(
+    snapshot: QcSnapshot,
+    points: list[NormalizedPoint],
+    cycle: int,
+    use_rox: bool,
+    background: str,
+) -> NtcCheck:
+    by_well = {p.well: p for p in points}
+    median = _median_signal(points)
+    wells = [
+        _ntc_well(w, by_well.get(w), median)
+        for w, kind in sorted(snapshot.types.items())
+        if kind == "NTC"
+    ]
+    status = _ntc_status(wells)
+    return NtcCheck(
+        ok=status != "warning",
+        wells=wells,
+        status=status,
+        cycle=cycle,
+        use_rox=use_rox,
+        background=background,
+        normalization_applied=_normalization_used(snapshot.unified, cycle, use_rox),
+    )
+
+
+def _control_warnings(
+    points: list[NormalizedPoint], types: dict[str, str], check: NtcCheck
+) -> list[str]:
+    median = _median_signal(points)
+    warnings = [
+        f"NTC {w.well} shows genotype-level signal "
+        f"({round((w.signal or 0) / median * 100)}% of median) — possible contamination."
+        for w in check.wells
+        if w.flagged is True
+    ]
+    warnings.extend(
+        f"Positive control {p.well} shows no amplification — check the run."
+        for p in points
+        if types.get(p.well) == "Positive Control"
+        and p.norm_fam + p.norm_allele2 <= _UNDETERMINED_FRAC * median
+    )
+    return warnings
+
+
+def _judgment_metadata(snapshot: QcSnapshot) -> dict[str, object]:
+    result = snapshot.result
+    context = result.analysis_context if result else None
+    if result is None:
+        status, reason = "missing", "no_completed_result"
+    elif context is None or _judgment_inputs(context) is None:
+        status, reason = "legacy_unknown", "context_missing"
+    elif context.input_revision != snapshot.unified.input_revision:
+        status, reason = "stale", "input_changed"
+    else:
+        status, reason = "verified", "none"
+    return {
+        "judgment_status": status,
+        "judgment_reason": reason,
+        "input_revision": context.input_revision if context else None,
+        "current_input_revision": snapshot.unified.input_revision,
+        "context_status": "verified" if context else "legacy_unknown",
+        "result_revision": str(context.result_revision) if context else None,
+        "analysis_context": context.model_dump() if context else None,
+        **snapshot.status,
+    }
+
+
+def _assignment_counts(
+    assignments: dict[str, str], wells: list[str]
+) -> dict[str, object]:
+    called = sum(
+        assignments.get(w, "Undetermined") not in ("Undetermined", "NTC") for w in wells
+    )
+    total = len(wells)
+    return {
+        "n_called": called,
+        "n_total": total,
+        "call_rate": round(called / total, 4) if total else 0.0,
+        "cluster_separation": None,
+    }
+
+
+def _unknown_judgment(snapshot: QcSnapshot) -> dict[str, object]:
+    result = snapshot.result
+    metrics = _assignment_counts(
+        result.assignments if result else {}, snapshot.unified.wells
+    )
+    if result and result.regions:
+        metrics["authoritative"] = "markers"
+        metrics["markers"] = [
+            {
+                "id": r.id,
+                "name": r.name,
+                "ploidy": r.ploidy,
+                "warnings": r.warnings,
+                **_assignment_counts(r.assignments, r.wells),
+            }
+            for r in result.regions
+        ]
+    return metrics
+
+
+@dataclass(frozen=True)
+class JudgmentInputs:
+    origin: RatioOrigin
+    types: dict[str, str]
+    excluded: frozenset[str]
+
+
+def _captured_origin(value: object) -> RatioOrigin | None:
+    if not isinstance(value, dict) or not {"fam", "allele2", "source"}.issubset(value):
+        return None
+    try:
+        origin = RatioOrigin.model_validate(value, strict=True)
+    except ValidationError:
+        return None
+    return (
+        origin if math.isfinite(origin.fam) and math.isfinite(origin.allele2) else None
+    )
+
+
+def _judgment_inputs(context: AnalysisContext) -> JudgmentInputs | None:
+    origin = _captured_origin(context.parameters.get("ratio_origin"))
+    if origin is None:
+        return None
+    try:
+        types = TypeAdapter(dict[str, str]).validate_python(
+            context.parameters["effective_well_types"], strict=True
+        )
+        manual_types = TypeAdapter(dict[str, str]).validate_python(
+            context.parameters["manual_well_types"], strict=True
+        )
+        excluded = TypeAdapter(list[str]).validate_python(
+            context.parameters["excluded_wells"], strict=True
+        )
+    except (KeyError, ValidationError):
+        return None
+    # Imported Unknown is an ordinary sample, not an operator override.
+    overrides = {well: kind for well, kind in types.items() if kind != "Unknown"}
+    overrides.update(manual_types)
+    return JudgmentInputs(origin, overrides, frozenset(excluded))
+
+
+def _verified_judgment(
+    snapshot: QcSnapshot, result: ClusteringResult
+) -> dict[str, object]:
+    context = result.analysis_context
+    if context is None:
+        return _unknown_judgment(snapshot)
+    inputs = _judgment_inputs(context)
+    if inputs is None:
+        return _unknown_judgment(snapshot)
+    points = normalize_for_cycle(
+        snapshot.unified,
+        context.cycle,
+        use_rox=context.use_rox,
+        background=context.background,
+    )
+    called = shift_points_to_origin(points, inputs.origin)
+    types = inputs.types
+    cutoff = _UNDETERMINED_FRAC * _median_signal(called)
+    effective = {
+        p.well: _determine_genotype(
+            p.well,
+            p.norm_fam,
+            p.norm_allele2,
+            result.assignments,
+            types,
+            cutoff,
+            result.ploidy,
+        )
+        for p in called
+    }
+    metrics = _assignment_counts(effective, [p.well for p in points])
+    excluded = inputs.excluded
+    eligible = [p for p in points if p.well not in excluded]
+    if result.regions:
+        metrics["authoritative"] = "markers"
+        metrics["markers"] = [
+            _marker_qc(r, called, types, cutoff, excluded).model_dump()
+            for r in result.regions
+        ]
+    else:
+        metrics["cluster_separation"] = _cluster_separation_for(
+            result.assignments, eligible
+        )
+    return metrics
+
+
 @router.get("/api/data/{sid}/qc")
 async def qc_metrics(
     sid: str,
@@ -215,123 +497,24 @@ async def qc_metrics(
     cycle: int = Query(default=0),
     use_rox: bool = Query(default=True),
     background: BackgroundMode = Query(default="none"),
-):
-    """Compute quality-control metrics for the current dataset."""
+) -> dict[str, object]:
+    """Current plate controls and separately labeled historical judgment QC."""
     check_session_access(sid, current_user)
-    unified = _get_session(sid)
-
-    if cycle <= 0:
-        cycle = max(unified.cycles)
-
+    snapshot = _capture_qc(sid)
+    unified = snapshot.unified
+    cycle = cycle if cycle > 0 else max(unified.cycles)
     if cycle not in unified.cycles:
-        raise HTTPException(
-            400,
-            f"Cycle {cycle} not available. Range: {unified.cycles[0]}-{unified.cycles[-1]}",
-        )
-
+        raise HTTPException(400, f"Cycle {cycle} not available")
     points = normalize_for_cycle(unified, cycle, use_rox=use_rox, background=background)
-
-    # Two different questions get asked of this plate, and they need different
-    # reference points.
-    #
-    # A genotype is a fam-FRACTION, i.e. an angle, and on raw endpoint data the
-    # angle has to be measured from where "no signal" actually sits rather than
-    # from (0, 0) — see app/processing/ratio_origin.py. Hence ``called``.
-    #
-    # "Is this NTC well contaminated?" is not an angle. It asks whether the well
-    # is BRIGHT, and it must be asked of the well as measured. Asking it in
-    # ``called`` space is self-defeating: the NTC wells are what define that
-    # origin, so a contaminated NTC is subtracted to (0, 0) by its own
-    # contamination and reads as perfectly clean. The signal-level control
-    # checks below therefore stay on ``points``.
-    called = shift_points_to_origin(
-        points, ratio_origin_for(sid, unified, points)
+    ntc = _plate_check(snapshot, points, cycle, use_rox, background)
+    metrics = (
+        _verified_judgment(snapshot, snapshot.result)
+        if snapshot.result
+        else _unknown_judgment(snapshot)
     )
-
-    cluster_assignments: dict[str, str] = {}
-    if sid in cluster_store:
-        cluster_assignments = cluster_store[sid].assignments
-    manual_assignments = welltype_store.get(sid, {})
-
-    # Scale references: the plate's own median total signal, in each space.
-    # Every threshold is a fraction of one of these, so a low-ROX kit (large
-    # magnitudes) works unchanged.
-    signals = sorted(p.norm_fam + p.norm_allele2 for p in points)
-    median_signal = signals[len(signals) // 2] if signals else 0.0
-    ntc_hot = _NTC_HOT_FRAC * median_signal
-    no_amp_max = _UNDETERMINED_FRAC * median_signal
-
-    call_signals = sorted(p.norm_fam + p.norm_allele2 for p in called)
-    call_median = call_signals[len(call_signals) // 2] if call_signals else 0.0
-    undetermined_min = _UNDETERMINED_FRAC * call_median
-
-    # --- Call rate ---
-    n_total = len(points)
-    n_called = 0
-    ploidy = getattr(unified, "ploidy", 2)
-    for p in called:
-        genotype = _determine_genotype(
-            p.well, p.norm_fam, p.norm_allele2,
-            cluster_assignments, manual_assignments, undetermined_min, ploidy,
-        )
-        if genotype not in ("Undetermined", "NTC"):
-            n_called += 1
-
-    call_rate = n_called / n_total if n_total > 0 else 0.0
-
-    # --- NTC check + control QC warnings ---
-    ntc_flagged: list[NtcWell] = []
-    ntc_ok = True
-    warnings: list[str] = []
-
-    for p in points:
-        effective_type = manual_assignments.get(p.well) or cluster_assignments.get(p.well)
-        signal = p.norm_fam + p.norm_allele2
-        if effective_type == "NTC":
-            ntc_flagged.append(NtcWell(well=p.well, signal=round(signal, 6)))
-            # Contamination / NTC-overlap: an NTC well as bright as real samples.
-            if median_signal > 0 and signal >= ntc_hot:
-                ntc_ok = False
-                warnings.append(
-                    f"NTC {p.well} shows genotype-level signal "
-                    f"({round(signal / median_signal * 100)}% of median) — possible contamination."
-                )
-        elif effective_type == "Positive Control":
-            # A positive control should amplify; near-NTC signal means it failed.
-            # Also a brightness question, so also judged as measured.
-            if signal <= no_amp_max:
-                warnings.append(
-                    f"Positive control {p.well} shows no amplification — check the run."
-                )
-
-    ntc_check = NtcCheck(ok=ntc_ok, wells=ntc_flagged)
-
-    # --- Cluster separation ---
-    cluster_separation = _compute_cluster_separation(sid, points)
-
-    result = QcResult(
-        call_rate=round(call_rate, 4),
-        n_called=n_called,
-        n_total=n_total,
-        ntc_check=ntc_check,
-        cluster_separation=cluster_separation,
-        warnings=warnings,
-    ).model_dump()
-
-    # A2: multi-marker plate -- the plate-level cluster_separation above pools
-    # every marker's wells into one grouping, which is meaningless once
-    # unrelated markers (different ploidy/dosage vocabularies) share the plate.
-    # Add a per-marker breakdown; single-marker (regions is None) sessions
-    # never get this key, so their JSON is unchanged.
-    ca = cluster_store.get(sid)
-    if ca is not None and ca.regions:
-        # The plate-level cluster_separation above is NOT authoritative once
-        # multiple independently-genotyped markers share this plate -- tell
-        # the client so it can prefer the per-marker breakdown for display.
-        result["authoritative"] = "markers"
-        result["markers"] = [
-            _marker_qc(r, called, manual_assignments, undetermined_min).model_dump()
-            for r in ca.regions
-        ]
-
-    return result
+    return {
+        **metrics,
+        "ntc_check": ntc.model_dump(),
+        "warnings": _control_warnings(points, snapshot.types, ntc),
+        **_judgment_metadata(snapshot),
+    }

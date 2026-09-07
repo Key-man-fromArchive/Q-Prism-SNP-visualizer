@@ -48,6 +48,8 @@ def compute_cycle_suggestion(unified: UnifiedData) -> dict:
         "suggested_high": None,
         "suggested_window": None,
         "ntc_onset_cycle": None,
+        "ntc_onset_status": "not_evaluated",
+        "ntc_onset_reason": "insufficient_points",
         "ntc_wells": [],
         "amp_start": None,
         "amp_end": None,
@@ -61,6 +63,8 @@ def compute_cycle_suggestion(unified: UnifiedData) -> dict:
     result["amp_end"] = info["amp_end"]
     result["ntc_wells"] = info["ntc_wells"]
     result["ntc_onset_cycle"] = info["ntc_onset_cycle"]
+    result["ntc_onset_status"] = info["ntc_onset_status"]
+    result["ntc_onset_reason"] = info["ntc_onset_reason"]
 
     # Amplification candidates (ASG-PCR reads the plateau):
     #   upper boundary = just before NTC background rises,
@@ -119,6 +123,8 @@ def _analyze_amplification(unified: UnifiedData) -> dict | None:
         "amp_end": amp_window.end_cycle,
         "ntc_wells": [],
         "ntc_onset_cycle": None,
+        "ntc_onset_status": "not_evaluated",
+        "ntc_onset_reason": "insufficient_points",
     }
 
     amp_cycles = list(range(amp_window.start_cycle, amp_window.end_cycle + 1))
@@ -128,20 +134,45 @@ def _analyze_amplification(unified: UnifiedData) -> dict | None:
     # Per-well signal curves (raw FAM + allele2, no normalization)
     well_curves = _build_well_curves(unified, amp_cycles)
     if len(well_curves) < 3:
+        if _missing_curve_signal(unified, well_curves):
+            info["ntc_onset_reason"] = "missing_signal"
         return info
 
     ntc_wells = _detect_ntc_wells(well_curves, amp_cycles)
     info["ntc_wells"] = ntc_wells
     if not ntc_wells:
+        info["ntc_onset_reason"] = "missing_signal" if _missing_curve_signal(unified, well_curves) else "no_ntc"
         return info
 
+    info.update(_onset_evaluation(well_curves, amp_cycles, ntc_wells))
+    if info["ntc_onset_cycle"] is None and _missing_curve_signal(unified, well_curves):
+        info.update(ntc_onset_status="not_evaluated", ntc_onset_reason="missing_signal")
+    return info
+
+
+def _missing_curve_signal(unified: UnifiedData, curves: dict[str, list[float]]) -> bool:
+    return len(curves) < len(unified.wells) or any(
+        not all(math.isfinite(value) for value in curve) for curve in curves.values())
+
+
+def _finite_curve_onset(curve: list[float], cycles: list[int]) -> int | None:
+    if not all(math.isfinite(value) for value in curve):
+        return None
+    return _second_derivative_ct(curve, cycles)
+
+
+def _onset_evaluation(curves: dict[str, list[float]], cycles: list[int],
+                      ntc_wells: list[str]) -> dict[str, str | int | None]:
+    # Existing derivative needs baseline_cycles + 2 derivatives = nine reads.
+    if len(cycles) < 9:
+        return {"ntc_onset_status": "not_evaluated", "ntc_onset_reason": "insufficient_points"}
     earliest_ct = None
     for well in ntc_wells:
-        ct = _second_derivative_ct(well_curves[well], amp_cycles)
+        ct = _finite_curve_onset(curves[well], cycles)
         if ct is not None and (earliest_ct is None or ct < earliest_ct):
             earliest_ct = ct
-    info["ntc_onset_cycle"] = earliest_ct
-    return info
+    return {"ntc_onset_cycle": earliest_ct, "ntc_onset_reason": "none",
+            "ntc_onset_status": "detected" if earliest_ct is not None else "not_detected"}
 
 
 def _best_separation_cycle(

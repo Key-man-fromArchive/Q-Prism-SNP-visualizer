@@ -119,38 +119,30 @@ class BulkDeleteRequest(BaseModel):
     session_ids: list[str]
 
 
-def _delete_sessions_impl(sids_to_delete: list[str]):
-    """Delete multiple sessions from memory, DB, and projects in one go."""
-    from app.routers.clustering import cluster_store, welltype_store, group_store
+def _delete_sessions_impl(sids_to_delete: list[str]) -> None:
+    """Commit deletion before clearing caches; no partially deleted memory."""
+    from app.routers.clustering import cluster_store, welltype_store, group_store, marker_store
     from app.routers.data import protocol_store
     from app.db import get_db
     from app.asg_session import forget_session_asg_launch
+    from app.processing.analysis_state import input_lock, forget_analysis
 
-    # Remove from in-memory stores
-    for sid in sids_to_delete:
-        sessions.pop(sid, None)
-        cluster_store.pop(sid, None)
-        welltype_store.pop(sid, None)
-        sample_name_store.pop(sid, None)
-        protocol_store.pop(sid, None)
-        group_store.pop(sid, None)
-        forget_session_asg_launch(sid)
-
-    # Remove from project_sessions
-    conn = get_db()
-    placeholders = ",".join("?" * len(sids_to_delete))
-    conn.execute(
-        f"DELETE FROM project_sessions WHERE session_id IN ({placeholders})",
-        sids_to_delete,
-    )
-
-    # Remove from DB (CASCADE deletes remaining child tables)
-    conn.execute(
-        f"DELETE FROM sessions WHERE session_id IN ({placeholders})",
-        sids_to_delete,
-    )
-    conn.commit()
-
+    with input_lock:
+        conn = get_db()
+        placeholders = ",".join("?" * len(sids_to_delete))
+        try:
+            conn.execute(f"DELETE FROM project_sessions WHERE session_id IN ({placeholders})", sids_to_delete)
+            conn.execute(f"DELETE FROM sessions WHERE session_id IN ({placeholders})", sids_to_delete)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        stores = (sessions, cluster_store, welltype_store, sample_name_store, protocol_store, group_store, marker_store)
+        for sid in sids_to_delete:
+            for cache in stores:
+                cache.pop(sid, None)
+            forget_session_asg_launch(sid)
+            forget_analysis(sid)
 
 # NOTE: bulk-delete MUST be registered before {sid} to avoid path conflict
 @router.post("/api/sessions/bulk-delete")
@@ -187,9 +179,12 @@ async def get_session_info(sid: str, current_user: CurrentUser):
 
     from app.processing.ntc_detection import compute_suggested_cycle
     suggested = compute_suggested_cycle(unified)
+    from app.processing.analysis_state import analysis_status
 
     return {
         "session_id": sid,
+        "input_revision": unified.input_revision,
+        **analysis_status(sid),
         "instrument": unified.instrument,
         "allele2_dye": unified.allele2_dye,
         "num_wells": len(unified.wells),

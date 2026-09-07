@@ -316,6 +316,8 @@ export type ThresholdConfig = {
 };
 
 export type ClusteringRequest = {
+  expected_input_revision?: number;
+  regions?: MarkerRegion[] | null;
   algorithm: ClusteringAlgorithm;
   cycle: number;
   threshold_config?: ThresholdConfig | null;
@@ -343,9 +345,65 @@ export type ClusteringResult = {
   // plate) run; `assignments` above is then the flat merge across regions.
   regions?: RegionResult[] | null;
   warnings?: string[] | null;
+  analysis_context?: AnalysisContext | null;
+  context_status?: 'verified' | 'legacy_unknown';
+  input_revision?: number;
+  analysis_status?: AnalysisStatus;
+  analysis_pending?: boolean;
+};
+
+export type AnalysisStatus = 'idle' | 'computing' | 'completed' | 'failed';
+export type InputRevision = { input_revision: number };
+export type ExpectedRevision = { expected_input_revision?: number };
+export type SessionInfoResponse = UploadResponse & InputRevision & {
+  analysis_status: AnalysisStatus;
+  analysis_pending: boolean;
+};
+export type MissingClusteringResult = Omit<ClusteringResult, 'algorithm'> & { algorithm: null };
+export type ClusterResponse = ClusteringResult | MissingClusteringResult;
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type AnalysisContext = {
+  schema_version: 1;
+  result_revision: string;
+  analysed_at: string;
+  cycle: number;
+  use_rox: boolean;
+  normalization_applied: boolean;
+  background: BackgroundMode;
+  algorithm: ClusteringAlgorithm | 'mixed';
+  parameters: Record<string, JsonValue>;
+  regions: AnalysisRegionContext[];
+  input_revision: number;
+};
+export type AnalysisRegionContext = {
+  marker_id: string;
+  name: string;
+  wells: string[];
+  ploidy: number;
+  algorithm: ClusteringAlgorithm;
+  parameters: Record<string, JsonValue>;
+};
+export type ResolvedThresholdConfig = {
+  ntc_threshold: number;
+  ntc_fam_max: number | null;
+  ntc_allele2_max: number | null;
+  allele1_ratio_max: number;
+  allele2_ratio_min: number;
+  boundaries: number[] | null;
+  offset: number;
+  dosage_max: number | null;
+};
+export type AnalysisErrorCode = 'NO_COMPLETED_RESULT' | 'LEGACY_CONTEXT_UNKNOWN'
+  | 'INPUT_REVISION_CONFLICT' | 'RESULT_REVISION_CONFLICT' | 'ANALYSIS_SUPERSEDED'
+  | 'ANALYSIS_IN_PROGRESS' | 'EXPORT_CONDITION_MISMATCH';
+export type AnalysisErrorDetail = {
+  code: AnalysisErrorCode;
+  message: string;
+  current_input_revision?: number;
 };
 
 export type ManualWellTypeUpdate = {
+  expected_input_revision?: number;
   wells: string[];
   well_type: WellType;
 };
@@ -491,12 +549,14 @@ export type LayoutListResponse = {
 };
 
 export type LayoutApplyRequest = {
+  expected_input_revision?: number;
   sid: string;
   apply_analysis_settings?: boolean;
   force?: boolean;
 };
 
 export type LayoutApplyResult = {
+  input_revision: number;
   sid: string;
   markers: MarkerRegion[];
   well_types_applied: Record<string, string>;
@@ -598,11 +658,43 @@ export type QcResponse = {
   n_called: number;
   n_total: number;
   ntc_check: {
-    status: string;
-    details: string;
+    /** Legacy display-only tooltip; current server omits it. */
+    details?: string;
+    ok: boolean;
+    status: 'ok' | 'warning' | 'no_ntc' | 'insufficient';
+    wells: { well: string; signal: number | null; flagged: boolean | null;
+      reason: 'none' | 'signal_above_threshold' | 'missing_signal' | 'missing_reference' | 'insufficient_points' }[];
+    scope: 'plate';
+    cycle: number;
+    use_rox: boolean;
+    normalization_applied: boolean;
+    background: BackgroundMode;
   };
   cluster_separation: number | null;
   warnings?: string[];
+  /** QC input_revision is captured, unlike session/result input_revision. */
+  input_revision: number | null;
+  current_input_revision: number;
+  result_revision: string | null;
+  analysis_context: AnalysisContext | null;
+  context_status: 'verified' | 'legacy_unknown';
+  judgment_status: 'verified' | 'stale' | 'legacy_unknown' | 'missing';
+  judgment_reason: 'none' | 'input_changed' | 'context_missing' | 'no_completed_result';
+  analysis_status: AnalysisStatus;
+  analysis_pending: boolean;
+  authoritative?: 'markers';
+  markers?: MarkerQc[];
+};
+
+export type MarkerQc = {
+  id: string;
+  name: string;
+  ploidy: number;
+  call_rate: number;
+  n_called: number;
+  n_total: number;
+  cluster_separation: number | null;
+  warnings?: string[] | null;
 };
 
 export type WellTypesResponse = {
