@@ -2,7 +2,7 @@
 
 - Contract ID: qprism-ux-followup-20260907-v1
 - 작성일: 2026-09-07
-- 상태: IN PROGRESS — P0 독립 게이트 통과·로컬 통합 완료(0bd5090). P1 분석 조건 저장 계약 구현 중.
+- 상태: IN PROGRESS — P0 로컬 통합 완료(0bd5090). P1 서버·계약 기반 게이트 통과. P2 분석·QC 화면 연결 대기.
 - 기준: [UI/UX 후속 개선 기획서 v0.2](ui-ux-overhaul/04-review-followup-prd.md)
 - 실행 기준 파일: docs/planning/06-tasks.md
 - 이전 계약: [qPCR Import Expansion 원문 보관](archive/06-tasks-qpcr-import-expansion.md). 보관본의 작업은 이번 실행 대상이 아니다.
@@ -249,12 +249,14 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P1-S0-V: 계약·서버 품질 게이트
 
-- Status: IN_PROGRESS
+- Status: DONE
+- Commit: 4a1a632fcdb73d92273214f10fa572d4fd2c03af
+- Evidence: [P1-S0-V](ui-ux-overhaul/evidence/P1-S0-V.md). BE 710개+2 subtests, FE 167개, 브라우저 14개 및 상태 smoke 통과. 누적 변경 코드 모듈별 coverage·정적/보안 검사 통과. 기존 헤더 QC 갱신·onset 의미 구분은 P2-S1/S2 필수이며 최종 UI 승인·배포는 아님.
 - 담당: test-specialist
 - Depends On: [P1-S0-T1]
 - Write Scope: docs/planning/ui-ux-overhaul/evidence/P1-S0-V.md
 - 검증: BE-ALL, FE-ALL, FE-CHECK, COVERAGE, migration/동시성/출력/권한 리뷰, 문서·타입·응답 대조.
-- [ ] AC: UX-01 서버·UX-02 A/서버 출력 기준 통과. 새 필드로 기존 UI가 깨지지 않는 smoke 확인. 필수 소비자 연결 누락 시 진입/배포 불가.
+- [x] AC: UX-01 서버·UX-02 A/서버 출력 기준 통과. 새 필드로 기존 UI가 깨지지 않는 smoke 확인. 필수 소비자 연결 누락 시 진입/배포 불가.
 
 ## Phase P2 — 분석 화면의 정확성·입력 동작
 
