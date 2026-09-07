@@ -28,6 +28,7 @@ def test_result_captures_resolved_conditions(plate: SimpleNamespace) -> None:
     assert context["parameters"]["threshold_config"]["ntc_threshold"] == 0.1
     assert context["parameters"]["n_clusters"] == 4
     assert context["parameters"]["requested_algorithm"] == "threshold"
+    assert context["parameters"]["manual_well_types"] == {}
     assert body["analysis_status"] == "completed"
 
 

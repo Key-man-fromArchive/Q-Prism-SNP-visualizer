@@ -430,12 +430,18 @@ def _judgment_inputs(context: AnalysisContext) -> JudgmentInputs | None:
         types = TypeAdapter(dict[str, str]).validate_python(
             context.parameters["effective_well_types"], strict=True
         )
+        manual_types = TypeAdapter(dict[str, str]).validate_python(
+            context.parameters["manual_well_types"], strict=True
+        )
         excluded = TypeAdapter(list[str]).validate_python(
             context.parameters["excluded_wells"], strict=True
         )
     except (KeyError, ValidationError):
         return None
-    return JudgmentInputs(origin, types, frozenset(excluded))
+    # Imported Unknown is an ordinary sample, not an operator override.
+    overrides = {well: kind for well, kind in types.items() if kind != "Unknown"}
+    overrides.update(manual_types)
+    return JudgmentInputs(origin, overrides, frozenset(excluded))
 
 
 def _verified_judgment(

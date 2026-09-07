@@ -397,6 +397,7 @@ class CalculationSnapshot:
     request: ClusteringRequest
     cycle: int
     welltypes: dict[str, str]
+    manual_welltypes: dict[str, str]
 
 
 def _capture_analysis(sid: str, req: ClusteringRequest) -> tuple[AnalysisTicket, CalculationSnapshot]:
@@ -416,7 +417,8 @@ def _capture_analysis(sid: str, req: ClusteringRequest) -> tuple[AnalysisTicket,
         if not resolved.regions and req.ploidy is not None:
             mutate_inputs(sid, req.expected_input_revision, ploidy=req.ploidy)
         snapshot = CalculationSnapshot(unified.model_copy(deep=True), resolved, cycle,
-                                       effective_well_types_for(sid, unified))
+                                       effective_well_types_for(sid, unified),
+                                       dict(welltype_store.get(sid, {})))
         return begin_analysis(sid, unified), snapshot
 
 
@@ -501,6 +503,7 @@ def _attach_context(snapshot: CalculationSnapshot, result: ClusteringResult, ori
     if regions:
         parameters["n_clusters_applied"] = False
     parameters.update({"effective_well_types": dict(snapshot.welltypes),
+                       "manual_well_types": dict(snapshot.manual_welltypes),
                        "ratio_origin": origin.model_dump(mode="json"), "excluded_wells": [well for well in sorted(excluded)]})
     result.analysis_context = AnalysisContext(
         schema_version=1, result_revision=uuid4(), analysed_at=datetime.now(timezone.utc),

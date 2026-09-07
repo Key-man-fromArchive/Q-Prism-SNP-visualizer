@@ -9,6 +9,92 @@ from test_marker_contract import data_client as _data_client, _plate_unified, _r
 data_client = _data_client
 
 
+@pytest.mark.parametrize("manual_unknown", [False, True])
+def test_imported_unknown_preserves_real_auto_calls_but_manual_unknown_overrides(
+    plate: SimpleNamespace,
+    manual_unknown: bool,
+) -> None:
+    from app.models import RatioOrigin
+    from app.processing.normalize import normalize_for_cycle
+    from app.processing.ratio_origin import shift_points_to_origin
+    from app.routers.qc import _cluster_separation_for
+
+    unified = plate.upload.sessions["s1"]
+    unified.imported_well_types = dict.fromkeys(unified.wells, "Unknown")
+    if manual_unknown:
+        changed = plate.client.post(
+            "/api/data/s1/welltypes", json={"wells": ["A1"], "well_type": "Unknown"}
+        )
+        assert changed.json()["input_revision"] == 1
+    response = plate.client.post(
+        "/api/data/s1/cluster",
+        json={
+            "cycle": 1,
+            "use_rox": False,
+            "algorithm": "auto",
+            "regions": [
+                {"id": "m", "name": "Synthetic", "wells": unified.wells, "ploidy": 2}
+            ],
+        },
+    )
+    assert response.status_code == 200
+    result = plate.clustering.cluster_store["s1"]
+    assert len(set(result.assignments.values())) == 2
+    points = shift_points_to_origin(
+        normalize_for_cycle(unified, 1, use_rox=False),
+        RatioOrigin.model_validate(result.analysis_context.parameters["ratio_origin"]),
+    )
+    expected_calls = dict(result.assignments)
+    if manual_unknown:
+        expected_calls["A1"] = "Unknown"
+    expected = _cluster_separation_for(expected_calls, points)
+    assert expected is not None
+    before = plate.client.get("/api/data/s1/qc?cycle=1&use_rox=false").json()
+    assert before["markers"][0]["cluster_separation"] == expected
+    assert result.analysis_context.parameters["manual_well_types"] == (
+        {"A1": "Unknown"} if manual_unknown else {}
+    )
+    plate.client.post(
+        "/api/data/s1/welltypes", json={"wells": ["A2"], "well_type": "NTC"}
+    )
+    after = plate.client.get("/api/data/s1/qc?cycle=3").json()
+    assert after["judgment_status"] == "stale"
+    assert after["markers"] == before["markers"]
+
+
+def test_old_context_without_explicit_manual_provenance_is_unavailable(
+    plate: SimpleNamespace,
+) -> None:
+    plate.client.post("/api/data/s1/cluster", json={"cycle": 1})
+    result = plate.clustering.cluster_store["s1"]
+    result.analysis_context.parameters.pop("manual_well_types", None)
+    body = plate.client.get("/api/data/s1/qc").json()
+    assert body["judgment_status"] == "legacy_unknown"
+    assert body["judgment_reason"] == "context_missing"
+    assert body["context_status"] == "verified"
+    assert body["cluster_separation"] is None
+
+
+def test_calculation_captures_explicit_manual_map_before_later_clear(
+    plate: SimpleNamespace,
+) -> None:
+    from app.models import ClusteringRequest
+    from app.processing.analysis_state import fail_analysis
+
+    plate.upload.sessions["s1"].imported_well_types = {"A1": "Unknown"}
+    plate.client.post(
+        "/api/data/s1/welltypes", json={"wells": ["A1"], "well_type": "Unknown"}
+    )
+    ticket, snapshot = plate.clustering._capture_analysis(
+        "s1", ClusteringRequest(cycle=1)
+    )
+    plate.client.delete("/api/data/s1/welltypes")
+    result = plate.clustering._calculate_snapshot(snapshot)
+    assert result.analysis_context.parameters["manual_well_types"] == {"A1": "Unknown"}
+    assert result.analysis_context.parameters["effective_well_types"]["A1"] == "Unknown"
+    fail_analysis(ticket)
+
+
 @pytest.fixture
 def plate(data_client: SimpleNamespace) -> SimpleNamespace:
     _register(data_client, "s1", _plate_unified())
@@ -324,6 +410,8 @@ def test_invalid_cycle_and_background_remain_domain_errors(
         ("ratio_origin", {"fam": "bad", "allele2": 1, "source": "ntc"}),
         ("effective_well_types", []),
         ("effective_well_types", {"A1": 3}),
+        ("manual_well_types", []),
+        ("manual_well_types", {"A1": 3}),
         ("excluded_wells", {}),
         ("excluded_wells", [1]),
     ],
