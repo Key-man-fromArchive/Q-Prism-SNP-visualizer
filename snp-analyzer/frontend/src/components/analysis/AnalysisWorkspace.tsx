@@ -15,6 +15,22 @@ import { PlateSetupTab } from "./PlateSetupTab";
 import { MultiMarkerAnalysisPanel } from "./MultiMarkerAnalysisPanel";
 import { AnalysisResultStatus } from './AnalysisResultStatus';
 
+function WorkspaceTabs() {
+  const { t } = useI18n();
+  const active = useNavigationStore(state => state.surface);
+  const setSurface = useNavigationStore(state => state.setSurface);
+  return (['plate', 'analysis'] as const).map(surface => <button
+    key={surface} type="button" role="tab" id={`workspace-tab-${surface}`}
+    tabIndex={active === surface ? 0 : -1} aria-controls={`workspace-panel-${surface}`}
+    data-testid={`workspace-tab-${surface}`} aria-selected={active === surface}
+    onClick={() => setSurface(surface)}
+    className={`px-4 py-2 rounded-t-md text-sm font-medium cursor-pointer ${active === surface
+      ? 'bg-bg text-primary border border-b-0 border-border' : 'text-text-muted hover:text-text'}`}>
+    {surface === 'plate' ? t.wsTabPlate : t.wsTabAnalysis}
+  </button>);
+}
+function panelClass(active: string, surface: string): string { return active === surface ? '' : 'hidden'; }
+
 /**
  * Always-present 2-surface workspace (Plate Setup + Analysis), replacing the
  * bare `<AnalysisTab/>` mount inside the top-level "Analysis" tab. Free
@@ -60,46 +76,13 @@ export function AnalysisWorkspace() {
         aria-label={t.wsTabAnalysis}
         className="flex gap-1 px-6 pt-3 border-b border-border bg-surface"
       >
-        <button
-          type="button"
-          role="tab"
-          id="workspace-tab-plate"
-          tabIndex={activeSurface === 'plate' ? 0 : -1}
-          aria-controls="workspace-panel-plate"
-          data-testid="workspace-tab-plate"
-          aria-selected={activeSurface === "plate"}
-          onClick={() => setActiveSurface("plate")}
-          className={`px-4 py-2 rounded-t-md text-sm font-medium cursor-pointer ${
-            activeSurface === "plate"
-              ? "bg-bg text-primary border border-b-0 border-border"
-              : "text-text-muted hover:text-text"
-          }`}
-        >
-          {t.wsTabPlate}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="workspace-tab-analysis"
-          tabIndex={activeSurface === 'analysis' ? 0 : -1}
-          aria-controls="workspace-panel-analysis"
-          data-testid="workspace-tab-analysis"
-          aria-selected={activeSurface === "analysis"}
-          onClick={() => setActiveSurface("analysis")}
-          className={`px-4 py-2 rounded-t-md text-sm font-medium cursor-pointer ${
-            activeSurface === "analysis"
-              ? "bg-bg text-primary border border-b-0 border-border"
-              : "text-text-muted hover:text-text"
-          }`}
-        >
-          {t.wsTabAnalysis}
-        </button>
+        <WorkspaceTabs />
       </div>
 
       <div
         data-testid="workspace-panel-plate"
         id="workspace-panel-plate" role="tabpanel" aria-labelledby="workspace-tab-plate"
-        className={activeSurface === "plate" ? "" : "hidden"}
+        className={panelClass(activeSurface, 'plate')}
       >
         {ready && <PlateSetupTab />}
       </div>
@@ -107,7 +90,7 @@ export function AnalysisWorkspace() {
       <div
         data-testid="workspace-panel-analysis"
         id="workspace-panel-analysis" role="tabpanel" aria-labelledby="workspace-tab-analysis"
-        className={activeSurface === "analysis" ? "" : "hidden"}
+        className={panelClass(activeSurface, 'analysis')}
       >
         {ready && <AnalysisResultStatus markers={markers} />}
         {!ready ? <StatusState variant={status === 'error' ? 'error' : 'loading'} message={status === 'error' ? t.analysisLoadFailed : t.loading} action={status === 'error' ? { label: t.retry, onClick: retry } : undefined} /> : markers.length > 0 ? (

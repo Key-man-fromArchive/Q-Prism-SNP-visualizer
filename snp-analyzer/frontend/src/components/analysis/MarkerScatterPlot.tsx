@@ -18,6 +18,7 @@ import { clearActiveChart, setActiveChart } from "@/lib/chart-export-registry";
 import { completeThresholdConfig } from "@/lib/threshold-config";
 import { useDataStore, ZERO_ORIGIN } from "@/stores/data-store";
 import { useAnalysisStore } from "@/stores/analysis-store";
+import { ownsChartResult } from '@/lib/chart-export-owner';
 import { useSelectionStore } from "@/stores/selection-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSessionStore } from "@/stores/session-store";
@@ -448,9 +449,7 @@ export function MarkerScatterPlot({
     const ownerId = useAuthStore.getState().user?.id;
     const publishExport = (element: HTMLDivElement) => {
       if (token !== exportRender.current || !revision || !scatterProvenance
-        || useSessionStore.getState().entryGeneration !== entry
-        || useAuthStore.getState().user?.id !== ownerId
-        || useAnalysisStore.getState().result?.analysis_context?.result_revision !== revision) return;
+        || !ownsChartResult(entry, ownerId, revision)) return;
       const wells = scopedPoints.map(point => point.well).sort().join(',');
       setActiveChart({ element, sessionId, resultRevision: revision,
         cycle: scatterProvenance.cycle, useRox: scatterProvenance.useRox, backgroundMode: scatterProvenance.backgroundMode, entry, ownerId,

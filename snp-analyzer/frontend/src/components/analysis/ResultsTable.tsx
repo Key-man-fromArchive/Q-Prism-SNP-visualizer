@@ -46,6 +46,15 @@ function effectiveType(
 
 type ResultsTableProps = { ploidyOverride?: number };
 
+function resultAppearance(type: string | null, ploidy: number, dark: boolean) {
+  const info = type ? wellInfo(type, ploidy, dark) : UNASSIGNED_TYPE;
+  return {
+    label: type ? LABEL_MAP[type] ?? genotypeShortLabel(type, ploidy) : '',
+    bgColor: type ? info.color : 'transparent',
+    textColor: type && !isLightColor(info.color) ? '#ffffff' : '#000000',
+  };
+}
+
 export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
   const { t } = useI18n();
   const dark = useIsDarkMode();
@@ -151,10 +160,7 @@ export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
                 showAutoCluster,
                 showManualTypes
               );
-              const info = type ? wellInfo(type, ploidy, dark) : UNASSIGNED_TYPE;
-              const label = type ? LABEL_MAP[type] ?? genotypeShortLabel(type, ploidy) : "";
-              const bgColor = type ? info.color : "transparent";
-              const textColor = type && !isLightColor(info.color) ? "#ffffff" : "#000000";
+              const { label, bgColor, textColor } = resultAppearance(type, ploidy, dark);
 
               const confPct =
                 point.confidence != null ? ` · ${t.confidence} ${Math.round(point.confidence * 100)}%` : "";

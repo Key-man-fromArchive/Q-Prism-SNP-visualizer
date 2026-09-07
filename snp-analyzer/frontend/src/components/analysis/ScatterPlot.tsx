@@ -9,6 +9,7 @@ import { useDataStore } from "@/stores/data-store";
 import { getScatter } from "@/lib/api";
 import { analyzeCurrent } from "@/lib/analysis-actions";
 import { useAnalysisStore } from '@/stores/analysis-store';
+import { ownsChartResult } from '@/lib/chart-export-owner';
 import { channelLabels, normalizationLabel, normalizedLabel } from "@/lib/channel-labels";
 import { WELL_TYPE_INFO } from "@/lib/constants";
 import { genotypeClasses, wellInfo, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
@@ -496,9 +497,7 @@ export function ScatterPlot() {
     const ownerId = useAuthStore.getState().user?.id;
     const publishExport = (element: HTMLDivElement) => {
       if (token !== exportRender.current || !sessionId || !revision
-        || useSessionStore.getState().entryGeneration !== entry
-        || useAuthStore.getState().user?.id !== ownerId
-        || useAnalysisStore.getState().result?.analysis_context?.result_revision !== revision) return;
+        || !ownsChartResult(entry, ownerId, revision)) return;
       setActiveChart({ element, sessionId, resultRevision: revision,
         cycle: responseIdentity.cycle, useRox: responseIdentity.useRox, backgroundMode: responseIdentity.backgroundMode, entry, ownerId,
         caption: `whole-run; cycle ${responseIdentity.cycle}; ${responseIdentity.useRox ? 'reference requested' : 'raw basis'}; background ${responseIdentity.backgroundMode}; visible wells ${visiblePoints.map(point => point.well).sort().join(',')}; revision ${revision}; analysed ${analysedAt ?? 'unknown'}`,
@@ -799,6 +798,13 @@ export function ScatterPlot() {
       return Math.max(0, Math.min(1, fx / total));
     };
 
+    const restoreRejectedEdit = (cuts: number[]) => {
+      if (editRef.current !== cuts || useAnalysisStore.getState().sessionId !== sessionId) return;
+      const restored = useDataStore.getState().boundaries;
+      editRef.current = restored;
+      setEditBoundaries(restored);
+    };
+
     const persist = async (cuts: number[], off: number) => {
       if (!sessionId) return;
       try {
@@ -820,11 +826,7 @@ export function ScatterPlot() {
           use_rox: useRox,
         });
         if (accepted) window.dispatchEvent(new CustomEvent("analysis-result-changed"));
-        else if (editRef.current === cuts && useAnalysisStore.getState().sessionId === sessionId) {
-          const restored = useDataStore.getState().boundaries;
-          editRef.current = restored;
-          setEditBoundaries(restored);
-        }
+        else restoreRejectedEdit(cuts);
       } catch (err) {
         console.error("Failed to persist boundaries:", err);
       }

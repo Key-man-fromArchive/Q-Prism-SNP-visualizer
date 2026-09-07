@@ -6,7 +6,8 @@ import { useAnalysisStore } from '@/stores/analysis-store';
 import { useAuthStore } from '@/stores/auth-store';
 import { ApiError, exportCsv, exportPdf, exportXlsx } from '@/lib/api';
 import Plotly from 'plotly.js-dist-min';
-import { getActiveChart } from '@/lib/chart-export-registry';
+import { getActiveChart, type ActiveChart } from '@/lib/chart-export-registry';
+import type { BackgroundMode } from '@/types/api';
 
 async function captionPng(dataUrl: string, caption: string): Promise<string> {
   const image = new Image();
@@ -37,10 +38,68 @@ async function captionPng(dataUrl: string, caption: string): Promise<string> {
 }
 
 type ExportIdentity = { sessionId: string; entry: number; ownerId: string | undefined };
+type ExportConditions = ExportIdentity & { cycle: number | undefined; useRox: boolean; backgroundMode: BackgroundMode; revision: string };
 function stillOwns(identity: ExportIdentity): boolean {
   return useSessionStore.getState().sessionId === identity.sessionId
     && useSessionStore.getState().entryGeneration === identity.entry
     && useAuthStore.getState().user?.id === identity.ownerId;
+}
+
+function validatePngConditions(current: ExportConditions): void {
+  const analysis = useAnalysisStore.getState();
+  const context = analysis.result?.analysis_context;
+  if (!context || analysis.inputRevisionRefreshing || analysis.currentInputRevision === null
+    || analysis.currentInputRevision !== context.input_revision) {
+    throw new Error('Reanalyze before exporting a stale or unverified result');
+  }
+  if (context.cycle !== current.cycle || context.use_rox !== current.useRox || context.background !== current.backgroundMode) {
+    throw new ApiError('The current view differs from the completed result', 409, {
+      detail: { code: 'EXPORT_CONDITION_MISMATCH', message: 'Choose current reanalysis or the stored result' },
+    });
+  }
+}
+function chartMatches(chart: ActiveChart | null, current: ExportConditions): boolean {
+  return chart !== null && chart.entry === current.entry && chart.ownerId === current.ownerId
+    && chart.cycle === current.cycle && chart.useRox === current.useRox && chart.backgroundMode === current.backgroundMode;
+}
+function requirePngChart(current: ExportConditions): ActiveChart {
+  const chart = getActiveChart(current.sessionId, current.revision);
+  if (!chart) throw new Error('The active chart is not ready for export');
+  if (!chartMatches(chart, current)) {
+    throw new ApiError('The rendered chart does not match the current analysis conditions', 409, {
+      detail: { code: 'EXPORT_CONDITION_MISMATCH', message: 'Render the requested analysis conditions first' },
+    });
+  }
+  return chart;
+}
+function assertPngOwnership(current: ExportConditions, chart: ActiveChart, stage: string, signal?: AbortSignal): void {
+  if (signal?.aborted || !stillOwns(current) || getActiveChart(current.sessionId, current.revision)?.identity !== chart.identity) {
+    throw new Error(`The active chart changed during PNG ${stage}`);
+  }
+}
+async function waitForStoredChart(current: ExportConditions, exportPNG: (signal?: AbortSignal) => Promise<void>, signal?: AbortSignal): Promise<void> {
+  for (let frame = 0; frame < 60; frame += 1) {
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    if (signal?.aborted) return;
+    if (chartMatches(getActiveChart(current.sessionId, current.revision), current)) {
+      await exportPNG(signal); return;
+    }
+  }
+  throw new Error('The stored chart did not finish rendering');
+}
+async function renderStoredPng(current: ExportConditions, exportPNG: (signal?: AbortSignal) => Promise<void>, signal?: AbortSignal): Promise<void> {
+  const nav = useNavigationStore.getState();
+  const restore = { session: nav.session, entry: useSessionStore.getState().entryGeneration };
+  nav.setExportRestoring(true);
+  useNavigationStore.getState().setCycle(current.cycle ?? 0);
+  useSettingsStore.getState().setUseRox(current.useRox);
+  useSettingsStore.getState().setBackgroundMode(current.backgroundMode);
+  try { await waitForStoredChart(current, exportPNG, signal); }
+  finally {
+    if (useNavigationStore.getState().session === restore.session && useSessionStore.getState().entryGeneration === restore.entry) {
+      useNavigationStore.getState().setExportRestoring(false);
+    }
+  }
 }
 
 /**
@@ -112,26 +171,8 @@ export function useExports(): {
 
   const exportPNG = useCallback(async (signal?: AbortSignal) => {
     const current = conditions();
-    const analysis = useAnalysisStore.getState();
-    const context = analysis.result?.analysis_context;
-    if (!context || analysis.inputRevisionRefreshing || analysis.currentInputRevision === null
-      || analysis.currentInputRevision !== context.input_revision) {
-      throw new Error('Reanalyze before exporting a stale or unverified result');
-    }
-    if (context.cycle !== current.cycle || context.use_rox !== current.useRox
-      || context.background !== current.backgroundMode) {
-      throw new ApiError('The current view differs from the completed result', 409, {
-        detail: { code: 'EXPORT_CONDITION_MISMATCH', message: 'Choose current reanalysis or the stored result' },
-      });
-    }
-    const chart = getActiveChart(current.sessionId, current.revision);
-    if (!chart) throw new Error('The active chart is not ready for export');
-    if (chart.entry !== current.entry || chart.ownerId !== current.ownerId || chart.cycle !== current.cycle || chart.useRox !== current.useRox
-      || chart.backgroundMode !== current.backgroundMode) {
-      throw new ApiError('The rendered chart does not match the current analysis conditions', 409, {
-        detail: { code: 'EXPORT_CONDITION_MISMATCH', message: 'Render the requested analysis conditions first' },
-      });
-    }
+    validatePngConditions(current);
+    const chart = requirePngChart(current);
 
     try {
       const dataUrl = await Plotly.toImage(chart.element, {
@@ -141,13 +182,9 @@ export function useExports(): {
         scale: 2,
       });
 
-      if (signal?.aborted || !stillOwns(current) || getActiveChart(current.sessionId, current.revision)?.identity !== chart.identity) {
-        throw new Error('The active chart changed during PNG rendering');
-      }
+      assertPngOwnership(current, chart, 'rendering', signal);
       const captioned = await captionPng(dataUrl, chart.caption);
-      if (signal?.aborted || !stillOwns(current) || getActiveChart(current.sessionId, current.revision)?.identity !== chart.identity) {
-        throw new Error('The active chart changed during PNG captioning');
-      }
+      assertPngOwnership(current, chart, 'captioning', signal);
       const a = document.createElement('a');
       a.href = captioned;
       const suffix = current.sessionId.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -190,31 +227,8 @@ export function useExports(): {
     try {
       if (signal?.aborted) return;
       if (kind === 'png') {
-        const nav = useNavigationStore.getState();
-        const restore = { session: nav.session, entry: useSessionStore.getState().entryGeneration };
-        useNavigationStore.getState().setExportRestoring(true);
-        useNavigationStore.getState().setCycle(current.cycle ?? 0);
-        useSettingsStore.getState().setUseRox(current.useRox);
-        useSettingsStore.getState().setBackgroundMode(current.backgroundMode);
-        try {
-          for (let frame = 0; frame < 60; frame += 1) {
-            await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-            if (signal?.aborted) return;
-            const chart = getActiveChart(current.sessionId, current.revision);
-            if (chart?.cycle === current.cycle && chart.useRox === current.useRox
-              && chart.backgroundMode === current.backgroundMode && chart.entry === current.entry
-              && chart.ownerId === current.ownerId) {
-              await exportPNG(signal);
-              return;
-            }
-          }
-          throw new Error('The stored chart did not finish rendering');
-        } finally {
-          if (useNavigationStore.getState().session === restore.session
-            && useSessionStore.getState().entryGeneration === restore.entry) {
-            useNavigationStore.getState().setExportRestoring(false);
-          }
-        }
+        await renderStoredPng(current, exportPNG, signal);
+        return;
       }
       const blob = kind === 'csv'
         ? await exportCsv(current.sessionId, current.cycle, current.useRox, current.backgroundMode, current.revision)
