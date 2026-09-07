@@ -330,7 +330,9 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P3-S1-T1: URL·세션 복원 상태 머신
 
-- Status: TODO
+- Status: DONE
+- Commit: 297e98157d6aafc6ad7ca0742d8e89b990c94837
+- Evidence: [P3-S1-T1](ui-ux-overhaul/evidence/P3-S1-T1.md). FE 381개, ROOT21 3개, lint·typecheck·build, 변경 모듈 coverage 70% 이상·새 함수 CC 10 이하, 실제 DB 재시작 복원과 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P2-S0-V]
 - Write Scope: SRC/App.tsx, navigation-store, Workspace·MultiMarker·CycleControl 및 세션/설정 hooks, tests/21-workspace-restore.spec.ts
@@ -338,7 +340,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - 구현: 탐색은 URL > 저장 결과 사이클/기본 마커 > 데이터 기본값, 분석 설정은 사용자·세션별 sessionStorage > 저장 context > 유효 기본값으로 결정한다. 로그아웃 캐시 제거, 다른 세션 데이터 누출 방지.
 - 구현: restoring 중 CycleControl 초기화·App ROX 초기값·다중 자동 분석·URL 쓰기를 차단하고 ready 직후 첫 자동 분석도 생략한다. 불일치는 표시만 한다. 탭/하위 화면/마커 pushState, 사이클 replaceState, popstate는 재생 중지·URL 재기록 금지.
 - 검증: 새로고침/직접 링크/뒤로·앞으로, 잘못된 마커·절대 사이클·윈도, ROX 복원, 401 인증 모드별 동작/403/404/5xx 재시도. DB 재시작 후 복원은 서버 유지 동작과 함께 검사한다.
-- [ ] AC: UX-06 우선순위와 오류 행렬을 통과하고 복원이 새 분석을 암묵적으로 생성하지 않음.
+- [x] AC: UX-06 우선순위와 오류 행렬을 통과하고 복원이 새 분석을 암묵적으로 생성하지 않음.
 
 ### P3-S2-T1: 공유 수동 편집 명령·undo/redo
 
