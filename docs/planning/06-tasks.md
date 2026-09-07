@@ -372,13 +372,15 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P3-S4-T1: 마커 미설정·제외·Empty/Omit 의미 정리
 
-- Status: TODO
+- Status: DONE
+- Commit: 5681041a06f122d2037c09bea76896187e7aa393
+- Evidence: [P3-S4-T1](ui-ux-overhaul/evidence/P3-S4-T1.md). FE 475개, BE 743개+2 subtests, 브라우저 19개, 변경 FE 실행 줄 55/55, lint·typecheck·build·audit, 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P3-S3-T1]
 - Write Scope: SRC/components/의 PlateSetup·분석 요약/배너, 관련 계산 helpers/locales, FE/e2e/의 기존 관련 spec 및 단위 테스트
 - 구현: 마커 0개는 전체 플레이트 분석 안내로 표시한다. 마커 존재 시 미할당 웰 제외 수를 계산하고 Empty/Omit 상태와 섞지 않는다.
 - 검증: 0/1/다중 마커, 일부 할당, Empty/Omit 혼합 96/384 fixtures의 개수·문구·진입 경로. 기존 마커 설정 E2E 기대값도 정책에 맞춰 갱신한다.
-- [ ] AC: UX-04 통과. 정상 전체 플레이트 분석을 96개 제외로 표시하지 않음.
+- [x] AC: UX-04 통과. 정상 전체 플레이트 분석을 96개 제외로 표시하지 않음.
 
 ### P3-S0-V: 연속성 품질 게이트
 
