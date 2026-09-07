@@ -409,14 +409,16 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P4-S1-T1: 분석 결과 중심 배치·고급 설정 접기
 
-- Status: TODO
+- Status: DONE
+- Commit: 39239091c5b1ec14b4f122f169295ba2168bd383
+- Evidence: [P4-S1-T1](ui-ux-overhaul/evidence/P4-S1-T1.md). FE 491개, 반응형/회귀 30개·최종 집중 3개·P5+마커 21개, lint·typecheck·build·audit, coverage/CC, 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P4-S0-T1]
 - Write Scope: SRC/components/의 단일/다중 분석 Workspace·설정·Plate/요약, 관련 CSS/locales, tests/24-responsive.spec.ts
 - 구현: 데스크톱 왼쪽 scatter, 오른쪽 plate+선택 웰 요약으로 배치한다. 고급 설정은 접되 활성 조건·변경 경로가 보이게 한다. 설정 값을 별도 local state로 복제하지 않는다.
 - 구현: 384웰/다수 경고는 영역 내부 스크롤, 작은 화면은 순차 검토 흐름으로 제공한다. 긴 런·경고·ASG 문맥에서도 주요 결과/행동을 유지한다.
 - 검증: 1440×1000, 100% 배율, 96웰에서 scatter·plate·선택 요약을 페이지 스크롤 없이 확인. 다중 마커·384웰·작은 화면은 별도 기준으로 확인한다.
-- [ ] AC: UX-08 및 UX-07 분석 레이아웃 기준 통과, 설정/결과 상태 회귀 없음.
+- [x] AC: UX-08 및 UX-07 분석 레이아웃 기준 통과, 설정/결과 상태 회귀 없음.
 
 ### P4-S2-T1: 품질 경고에서 웰·마커로 이동
 
