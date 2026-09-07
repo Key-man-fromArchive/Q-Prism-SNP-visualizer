@@ -9,6 +9,9 @@ import type {
   ProtocolStep,
   ClusteringRequest,
   ClusteringResult,
+  ClusterResponse,
+  InputRevision,
+  SessionInfoResponse,
   ManualWellTypeUpdate,
   WellTypesResponse,
   WellGroupsResponse,
@@ -50,6 +53,7 @@ import type {
 } from '@/types/auth';
 import { useAuthStore } from '@/stores/auth-store';
 import { runtimeApiBasePath } from '@/lib/runtime-paths';
+import { parseClusterResponse } from '@/lib/analysis-context';
 
 /**
  * Build query string from params object, skipping undefined values
@@ -81,23 +85,7 @@ async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
-    // Auto-clear auth on 401
-    if (res.status === 401) {
-      useAuthStore.getState().clearAuth();
-    }
-
-    let errorMessage = `HTTP ${res.status}: ${res.statusText}`;
-    try {
-      const errorData = await res.json();
-      if (errorData.detail) {
-        errorMessage = typeof errorData.detail === 'string'
-          ? errorData.detail
-          : JSON.stringify(errorData.detail);
-      }
-    } catch {
-      // If JSON parsing fails, use default error message
-    }
-    throw new Error(errorMessage);
+    throw responseError(res, await readErrorPayload(res));
   }
 
   return res.json();
@@ -120,13 +108,53 @@ export async function uploadFile(file: File): Promise<UploadResponse> {
 export class ApiError extends Error {
   status: number;
   payload: unknown;
+  detail: unknown;
+  code: string | null;
 
   constructor(message: string, status: number, payload: unknown) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.payload = payload;
+    this.detail = objectDetail(payload);
+    this.code = detailCode(this.detail);
   }
+}
+
+function objectDetail(payload: unknown): unknown {
+  return payload !== null && typeof payload === 'object' && 'detail' in payload
+    ? payload.detail : null;
+}
+
+function detailCode(detail: unknown): string | null {
+  if (detail !== null && typeof detail === 'object' && 'code' in detail && typeof detail.code === 'string') {
+    return detail.code;
+  }
+  return null;
+}
+
+function errorMessage(detail: unknown, fallback: string): string {
+  if (typeof detail === 'string') return detail;
+  if (detail !== null && typeof detail === 'object' && 'message' in detail && typeof detail.message === 'string') {
+    return detail.message;
+  }
+  return detail == null ? fallback : JSON.stringify(detail);
+}
+
+async function readErrorPayload(res: Response): Promise<unknown> {
+  const text = await res.text().catch(() => '');
+  try { return JSON.parse(text); } catch { return text; }
+}
+
+function responseError(res: Response, payload: unknown): ApiError {
+  if (res.status === 401) useAuthStore.getState().clearAuth();
+  return new ApiError(errorMessage(objectDetail(payload), `HTTP ${res.status}: ${res.statusText}`), res.status, payload);
+}
+
+async function blobFetch(url: string): Promise<Blob> {
+  const res = await fetch(apiUrl(url), { credentials: 'same-origin' });
+  if (!res.ok) throw responseError(res, await readErrorPayload(res));
+  return res.blob();
 }
 
 async function importFetch<T>(url: string, init: RequestInit, structuredStatuses: Set<number>): Promise<T> {
@@ -135,23 +163,13 @@ async function importFetch<T>(url: string, init: RequestInit, structuredStatuses
     credentials: 'same-origin',
   });
 
-  const payload: unknown = await res.json().catch(() => null);
+  const payload: unknown = await readErrorPayload(res);
 
-  if (res.ok || structuredStatuses.has(res.status)) {
+  if ((res.ok || structuredStatuses.has(res.status)) && payload !== null && typeof payload === 'object' && !Array.isArray(payload)) {
     return payload as T;
   }
 
-  if (res.status === 401) {
-    useAuthStore.getState().clearAuth();
-  }
-
-  let message = `HTTP ${res.status}: ${res.statusText}`;
-  if (payload && typeof payload === 'object' && 'detail' in payload) {
-    const detail = (payload as { detail: unknown }).detail;
-    message = typeof detail === 'string' ? detail : JSON.stringify(detail);
-  }
-
-  throw new ApiError(message, res.status, payload);
+  throw responseError(res, payload);
 }
 
 export async function previewImportFile(file: File): Promise<ImportPreviewResponse> {
@@ -226,31 +244,23 @@ export async function getCtData(
 export async function exportPdf(
   sid: string,
   useRox?: boolean,
-  background?: BackgroundMode
+  background?: BackgroundMode,
+  cycle?: number,
+  resultRevision?: string
 ): Promise<Blob> {
-  const query = buildQuery({ use_rox: useRox, background });
-  const res = await fetch(apiUrl(`/api/data/${sid}/export/pdf${query}`), { credentials: 'same-origin' });
-
-  if (!res.ok) {
-    throw new Error(`Failed to export PDF: ${res.statusText}`);
-  }
-
-  return res.blob();
+  const query = buildQuery({ cycle, use_rox: useRox, background, result_revision: resultRevision });
+  return blobFetch(`/api/data/${sid}/export/pdf${query}`);
 }
 
 export async function exportXlsx(
   sid: string,
   useRox?: boolean,
-  background?: BackgroundMode
+  background?: BackgroundMode,
+  cycle?: number,
+  resultRevision?: string
 ): Promise<Blob> {
-  const query = buildQuery({ use_rox: useRox, background });
-  const res = await fetch(apiUrl(`/api/data/${sid}/export/xlsx${query}`), { credentials: 'same-origin' });
-
-  if (!res.ok) {
-    throw new Error(`Failed to export XLSX: ${res.statusText}`);
-  }
-
-  return res.blob();
+  const query = buildQuery({ cycle, use_rox: useRox, background, result_revision: resultRevision });
+  return blobFetch(`/api/data/${sid}/export/xlsx${query}`);
 }
 
 export async function getProtocol(sid: string): Promise<ProtocolResponse> {
@@ -276,19 +286,28 @@ export async function runClustering(
   sid: string,
   req: ClusteringRequest
 ): Promise<ClusteringResult> {
-  return apiFetch<ClusteringResult>(`/api/data/${sid}/cluster`, {
+  const response = parseClusterResponse(await apiFetch<unknown>(`/api/data/${sid}/cluster`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
-  });
+  }));
+  if (response.algorithm === null) throw new Error('Invalid clustering response');
+  return response;
 }
 
-export async function getCluster(sid: string): Promise<ClusteringResult> {
-  return apiFetch<ClusteringResult>(`/api/data/${sid}/cluster`);
+export async function getCluster(sid: string): Promise<ClusterResponse> {
+  return parseClusterResponse(await apiFetch<unknown>(`/api/data/${sid}/cluster`));
 }
 
 export async function getPloidy(sid: string): Promise<{ ploidy: number }> {
   return apiFetch<{ ploidy: number }>(`/api/data/${sid}/ploidy`);
+}
+
+export async function setPloidy(sid: string, ploidy: number, expectedRevision?: number): Promise<{ ploidy: number } & InputRevision> {
+  return apiFetch(`/api/data/${sid}/ploidy`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ploidy, expected_input_revision: expectedRevision }),
+  });
 }
 
 export async function listExamples(): Promise<{ examples: { ploidy: number; label: string }[] }> {
@@ -304,6 +323,8 @@ export async function loadExample(ploidy: number): Promise<UploadResponse> {
 }
 
 export type CycleSuggestion = {
+  ntc_onset_status: 'detected' | 'not_detected' | 'not_evaluated';
+  ntc_onset_reason: 'none' | 'no_ntc' | 'missing_signal' | 'insufficient_points';
   suggested_cycle: number | null;
   suggested_low: number | null;
   suggested_high: number | null;
@@ -321,8 +342,8 @@ export async function suggestCycle(sid: string): Promise<CycleSuggestion> {
 export async function setWellTypes(
   sid: string,
   req: ManualWellTypeUpdate
-): Promise<WellTypesResponse> {
-  return apiFetch<WellTypesResponse>(`/api/data/${sid}/welltypes`, {
+): Promise<WellTypesResponse & InputRevision> {
+  return apiFetch<WellTypesResponse & InputRevision>(`/api/data/${sid}/welltypes`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
@@ -333,20 +354,21 @@ export async function getWellTypes(sid: string): Promise<WellTypesResponse> {
   return apiFetch<WellTypesResponse>(`/api/data/${sid}/welltypes`);
 }
 
-export async function deleteWellTypes(sid: string): Promise<{ status: string }> {
-  return apiFetch<{ status: string }>(`/api/data/${sid}/welltypes`, {
+export async function deleteWellTypes(sid: string, expectedRevision?: number): Promise<{ status: string } & InputRevision> {
+  return apiFetch(`/api/data/${sid}/welltypes${buildQuery({ expected_input_revision: expectedRevision })}`, {
     method: 'DELETE',
   });
 }
 
 export async function bulkSetWellTypes(
   sid: string,
-  assignments: Record<string, string>
-): Promise<WellTypesResponse> {
-  return apiFetch<WellTypesResponse>(`/api/data/${sid}/welltypes/bulk`, {
+  assignments: Record<string, string>,
+  expectedRevision?: number
+): Promise<WellTypesResponse & InputRevision> {
+  return apiFetch<WellTypesResponse & InputRevision>(`/api/data/${sid}/welltypes/bulk`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ assignments }),
+    body: JSON.stringify({ assignments, expected_input_revision: expectedRevision }),
   });
 }
 
@@ -361,12 +383,13 @@ export async function getMarkers(sid: string): Promise<MarkersResponse> {
 /** Replaces the session's whole marker (assay) set. */
 export async function saveMarkers(
   sid: string,
-  markers: MarkerRegion[]
-): Promise<MarkersResponse> {
-  return apiFetch<MarkersResponse>(`/api/data/${sid}/markers`, {
+  markers: MarkerRegion[],
+  expectedRevision?: number
+): Promise<MarkersResponse & InputRevision> {
+  return apiFetch<MarkersResponse & InputRevision>(`/api/data/${sid}/markers`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ markers }),
+    body: JSON.stringify({ markers, expected_input_revision: expectedRevision }),
   });
 }
 
@@ -374,17 +397,18 @@ export async function saveMarkers(
 export async function updateMarker(
   sid: string,
   markerId: string,
-  patch: Partial<Pick<MarkerRegion, 'name' | 'wells' | 'ploidy' | 'color' | 'threshold_config'>>
-): Promise<MarkersResponse> {
-  return apiFetch<MarkersResponse>(`/api/data/${sid}/markers/${encodeURIComponent(markerId)}`, {
+  patch: Partial<Pick<MarkerRegion, 'name' | 'wells' | 'ploidy' | 'color' | 'threshold_config'>>,
+  expectedRevision?: number
+): Promise<MarkersResponse & InputRevision> {
+  return apiFetch<MarkersResponse & InputRevision>(`/api/data/${sid}/markers/${encodeURIComponent(markerId)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(patch),
+    body: JSON.stringify({ ...patch, expected_input_revision: expectedRevision }),
   });
 }
 
-export async function deleteMarkers(sid: string): Promise<{ status: string }> {
-  return apiFetch<{ status: string }>(`/api/data/${sid}/markers`, {
+export async function deleteMarkers(sid: string, expectedRevision?: number): Promise<{ status: string } & InputRevision> {
+  return apiFetch(`/api/data/${sid}/markers${buildQuery({ expected_input_revision: expectedRevision })}`, {
     method: 'DELETE',
   });
 }
@@ -441,14 +465,15 @@ export async function copyMarkerCatalogEntry(id: string): Promise<MarkerCatalogE
 export async function attachMarkerCatalog(
   sid: string,
   markerId: string,
-  catalogId: string
-): Promise<MarkerRegion> {
-  return apiFetch<MarkerRegion>(
+  catalogId: string,
+  expectedRevision?: number
+): Promise<MarkerRegion & InputRevision> {
+  return apiFetch<MarkerRegion & InputRevision>(
     `/api/data/${sid}/markers/${encodeURIComponent(markerId)}/attach-catalog`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ catalog_id: catalogId }),
+      body: JSON.stringify({ catalog_id: catalogId, expected_input_revision: expectedRevision }),
     }
   );
 }
@@ -560,16 +585,11 @@ export async function exportCsv(
   sid: string,
   cycle?: number,
   useRox?: boolean,
-  background?: BackgroundMode
+  background?: BackgroundMode,
+  resultRevision?: string
 ): Promise<Blob> {
-  const query = buildQuery({ cycle, use_rox: useRox, background });
-  const res = await fetch(apiUrl(`/api/data/${sid}/export/csv${query}`), { credentials: 'same-origin' });
-
-  if (!res.ok) {
-    throw new Error(`Failed to export CSV: ${res.statusText}`);
-  }
-
-  return res.blob();
+  const query = buildQuery({ cycle, use_rox: useRox, background, result_revision: resultRevision });
+  return blobFetch(`/api/data/${sid}/export/csv${query}`);
 }
 
 // ============================================================================
@@ -615,8 +635,8 @@ export async function getSessions(): Promise<SessionListItem[]> {
   return apiFetch<SessionListItem[]>('/api/sessions');
 }
 
-export async function getSessionInfo(sid: string): Promise<UploadResponse> {
-  return apiFetch<UploadResponse>(`/api/sessions/${sid}`);
+export async function getSessionInfo(sid: string): Promise<SessionInfoResponse> {
+  return apiFetch<SessionInfoResponse>(`/api/sessions/${sid}`);
 }
 
 export async function deleteSession(sid: string): Promise<{ status: string }> {
@@ -912,7 +932,9 @@ export async function getAdminDashboard(): Promise<AdminDashboardResponse> {
 export async function saveAsgResult(
   sid: string,
   selectedCycle?: number,
-  useRox?: boolean
+  useRox?: boolean,
+  background?: BackgroundMode,
+  resultRevision?: string
 ): Promise<ASGSaveResultResponse> {
   return apiFetch<ASGSaveResultResponse>('/api/asg/save-result', {
     method: 'POST',
@@ -921,6 +943,8 @@ export async function saveAsgResult(
       session_id: sid,
       selected_cycle: selectedCycle,
       use_rox: useRox,
+      background,
+      result_revision: resultRevision,
     }),
   });
 }
