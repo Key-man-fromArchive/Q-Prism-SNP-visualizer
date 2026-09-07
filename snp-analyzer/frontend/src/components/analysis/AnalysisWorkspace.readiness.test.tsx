@@ -10,6 +10,7 @@ import type { UploadResponse } from '@/types/api';
 import { useNavigationStore } from '@/stores/navigation-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { writeViewCache } from '@/lib/session-view-cache';
+import { useLanguageStore } from '@/stores/language-store';
 
 vi.mock('@/lib/api', () => ({ getCluster: vi.fn(), getMarkers: vi.fn(), getPloidy: vi.fn(), getSessionInfo: vi.fn(), runClustering: vi.fn() }));
 vi.mock('./AnalysisTab', () => ({ AnalysisTab: () => <div>single-ready</div> }));
@@ -120,4 +121,79 @@ it('settles malformed mutation metadata as a separate revision error', async () 
   expect(useAnalysisStore.getState().inputRevisionRefreshing).toBe(false);
   expect(useAnalysisStore.getState().currentInputRevision).toBeNull();
   expect(useAnalysisStore.getState().status).toBe('completed');
+});
+
+it.each([false, true])('withdraws old marker scope and consumers during an external transition (initial marker: %s)', async initialMarker => {
+  const marker = { id: 'm', name: 'Synthetic', wells: ['A1'], ploidy: 2, color: '#000' };
+  vi.mocked(getMarkers).mockResolvedValue({ markers: initialMarker ? [marker] : [] });
+  vi.mocked(getCluster).mockResolvedValue({ algorithm: 'auto', cycle: 20, assignments: { A1: 'NTC' }, input_revision: 0 });
+  render(<AnalysisWorkspace />);
+  await screen.findByText(initialMarker ? 'multi-ready' : 'single-ready');
+  let resolve!: (value: { markers: typeof marker[] }) => void;
+  vi.mocked(getMarkers).mockReturnValue(new Promise(done => { resolve = done; }));
+  act(() => window.dispatchEvent(new CustomEvent('markers-changed')));
+  expect(screen.getByTestId('marker-scope-unavailable')).toBeInTheDocument();
+  expect(screen.queryByText('single-ready')).not.toBeInTheDocument();
+  expect(screen.queryByText('multi-ready')).not.toBeInTheDocument();
+  expect(useAnalysisStore.getState().result?.assignments).toEqual({ A1: 'NTC' });
+  await act(async () => resolve({ markers: initialMarker ? [] : [marker] }));
+  await screen.findByText(initialMarker ? 'single-ready' : 'multi-ready');
+  expect(runClustering).not.toHaveBeenCalled();
+});
+
+it('keeps failed marker refresh unavailable while preserving the saved result', async () => {
+  vi.mocked(getCluster).mockResolvedValue({ algorithm: 'auto', cycle: 20, assignments: { A1: 'NTC' }, input_revision: 0 });
+  render(<AnalysisWorkspace />);
+  await screen.findByText('single-ready');
+  vi.mocked(getMarkers).mockRejectedValue(new Error('offline'));
+  act(() => window.dispatchEvent(new CustomEvent('markers-changed')));
+  await waitFor(() => expect(useAnalysisStore.getState().inputRevisionError).toBeInstanceOf(Error));
+  expect(screen.getByTestId('marker-scope-unavailable')).toBeInTheDocument();
+  expect(screen.queryByText('single-ready')).not.toBeInTheDocument();
+  expect(useAnalysisStore.getState().result?.assignments).toEqual({ A1: 'NTC' });
+  expect(runClustering).not.toHaveBeenCalled();
+});
+
+it('retains scope for type-only refresh and ignores an older marker response after the latest reload', async () => {
+  vi.mocked(getCluster).mockResolvedValue({ algorithm: 'auto', cycle: 20, assignments: {}, input_revision: 0 });
+  render(<AnalysisWorkspace />);
+  await screen.findByText('single-ready');
+  let resolveOld!: (value: { markers: [] }) => void;
+  vi.mocked(getMarkers).mockReturnValueOnce(new Promise(done => { resolveOld = done; }));
+  act(() => window.dispatchEvent(new CustomEvent('welltypes-changed')));
+  expect(screen.getByText('single-ready')).toBeInTheDocument();
+  expect(screen.queryByTestId('marker-scope-unavailable')).not.toBeInTheDocument();
+  vi.mocked(getMarkers).mockResolvedValue({ markers: [{ id: 'm', name: 'Synthetic', wells: ['A1'], ploidy: 2, color: '#000' }] });
+  act(() => window.dispatchEvent(new CustomEvent('markers-changed')));
+  expect(screen.getByTestId('marker-scope-unavailable')).toBeInTheDocument();
+  await screen.findByText('multi-ready');
+  await act(async () => resolveOld({ markers: [] }));
+  expect(screen.getByText('multi-ready')).toBeInTheDocument();
+  expect(screen.queryByText('single-ready')).not.toBeInTheDocument();
+  expect(runClustering).not.toHaveBeenCalled();
+});
+
+it('withdraws verified view equality during a held marker reload without discarding completion', async () => {
+  useLanguageStore.setState({ language: 'en' });
+  vi.mocked(getCluster).mockResolvedValue({ algorithm: 'auto', cycle: 20, assignments: {}, input_revision: 0 });
+  render(<AnalysisWorkspace />);
+  await screen.findByText('single-ready');
+  const threshold = { ntc_threshold: 0.1, ntc_fam_max: null, ntc_allele2_max: null,
+    allele1_ratio_max: 0.4, allele2_ratio_min: 0.6, boundaries: null, offset: 0, dosage_max: null };
+  act(() => useAnalysisStore.setState({ currentRequest: { algorithm: 'auto', cycle: 20, use_rox: false,
+    background: 'none', n_clusters: 4, ploidy: 2, threshold_config: threshold },
+    result: { algorithm: 'auto', cycle: 20, assignments: {}, analysis_context: {
+      schema_version: 1, result_revision: '11111111-1111-4111-8111-111111111111', analysed_at: '2026-09-07T00:00:00Z',
+      cycle: 20, use_rox: false, normalization_applied: false, background: 'none', algorithm: 'auto', input_revision: 0, regions: [],
+      parameters: { requested_algorithm: 'auto', ploidy: 2, n_clusters: 4, n_clusters_applied: false, threshold_config: threshold,
+        actual_window: { boundaries: [0.7, 0.3], offset: 0, dosage_max: null, offset_uncertain: false, low_separation: false },
+        scope: 'whole_plate', effective_well_types: {}, manual_well_types: {}, excluded_wells: [],
+        ratio_origin: { fam: 0, allele2: 0, source: 'zero' } },
+    } } }));
+  expect(screen.getByText(/Current conditions match/)).toBeInTheDocument();
+  vi.mocked(getMarkers).mockReturnValue(new Promise(() => {}));
+  act(() => window.dispatchEvent(new CustomEvent('markers-changed')));
+  expect(screen.queryByText(/Current conditions match|Current view differs/)).not.toBeInTheDocument();
+  expect(screen.getByText(/Current analysis conditions cannot be compared/)).toBeInTheDocument();
+  expect(screen.getByText('Last completed cycle: 20')).toBeInTheDocument();
 });

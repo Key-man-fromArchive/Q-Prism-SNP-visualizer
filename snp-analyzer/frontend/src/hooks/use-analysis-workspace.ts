@@ -27,6 +27,7 @@ export function useAnalysisWorkspace() {
   const entry = useSessionStore(state => state.entryGeneration);
   const owner = useAuthStore(state => state.user?.id);
   const [loaded, setLoaded] = useState<{ entry: number; value: ReadyAnalysisSession } | null>(null);
+  const [markerEntry, setMarkerEntry] = useState<number | null>(null);
   const [retryGeneration, setRetryGeneration] = useState(0);
   const status = useNavigationStore(state => state.status);
   useEffect(() => {
@@ -47,6 +48,7 @@ export function useAnalysisWorkspace() {
       if (value.hasCompletedResult) useSessionStore.getState().consumeInitialAnalysis();
       useSessionStore.setState({ sessionInfo: value.info });
       setLoaded({ entry, value });
+      setMarkerEntry(entry);
       const restored = completeWorkspaceRestore(owner, session, generation, value);
       if (restored.accepted) analyzeFreshSession(restored.cycle, value);
     };
@@ -70,17 +72,19 @@ export function useAnalysisWorkspace() {
         if (!isRevision(info.input_revision)) throw new Error('Input revision unavailable');
         if (!useAnalysisStore.getState().updateInputRevision(session, owner, info.input_revision)) return;
         setLoaded(previous => previous ? { entry, value: { ...previous.value, markers: structuredClone(markers) } } : null);
+        setMarkerEntry(entry);
       } catch (error) {
         if (request === sequence && useSessionStore.getState().entryGeneration === entry) useAnalysisStore.getState().failInputRefresh(error);
       }
     };
-    window.addEventListener('markers-changed', refresh);
+    const refreshMarkers = () => { setMarkerEntry(null); void refresh(); };
+    window.addEventListener('markers-changed', refreshMarkers);
     window.addEventListener('welltypes-changed', refresh);
     return () => {
       sequence++;
-      window.removeEventListener('markers-changed', refresh);
+      window.removeEventListener('markers-changed', refreshMarkers);
       window.removeEventListener('welltypes-changed', refresh);
     };
   }, [session, owner, entry]);
-  return { ready: status === 'ready' && loaded?.entry === entry, status, markers: loaded?.value.markers ?? [], retry: () => setRetryGeneration(value => value + 1) };
+  return { ready: status === 'ready' && loaded?.entry === entry, markersAvailable: markerEntry === entry, status, markers: loaded?.value.markers ?? [], retry: () => setRetryGeneration(value => value + 1) };
 }

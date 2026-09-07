@@ -51,6 +51,15 @@ it('compares explicit AUTO input rather than global threshold or fitted result b
   render(<AnalysisResultStatus markers={[]} />);
   expect(screen.getByText(/Current conditions match/)).toBeInTheDocument();
 });
+it('withdraws condition comparison while marker metadata is unavailable but retains completed provenance', () => {
+  verified();
+  const view = render(<AnalysisResultStatus markers={[]} />);
+  expect(screen.getByText(/Current conditions match/)).toBeInTheDocument();
+  view.rerender(<AnalysisResultStatus markers={null} />);
+  expect(screen.queryByText(/Current conditions match|Current view differs/)).not.toBeInTheDocument();
+  expect(screen.getByText(/20/)).toBeInTheDocument();
+  expect(screen.getByText(/Current analysis conditions cannot be compared/)).toBeInTheDocument();
+});
 it.each([
   { cycle: 40 }, { use_rox: true }, { background: 'channel_min' as const }, { algorithm: 'kmeans' as const },
   { ploidy: 4 }, { threshold_config: { ...thresholds, boundaries: [0.6, 0.4] } },

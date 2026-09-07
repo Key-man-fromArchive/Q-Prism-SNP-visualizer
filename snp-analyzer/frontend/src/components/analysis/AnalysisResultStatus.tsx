@@ -11,12 +11,12 @@ function revisionMessage(state: ReturnType<typeof useAnalysisStore.getState>, in
   if (state.inputRevisionError !== null || input === 'unknown') return t.resultInputUnknown;
   return input === 'stale' ? t.resultInputStale : null;
 }
-function ViewComparison({ markers }: { markers: MarkerRegion[] }) {
+function ViewComparison({ markers }: { markers: MarkerRegion[] | null }) {
   const state = useAnalysisStore();
   const cycles = useNavigationStore(value => value.availableCycles);
   const ploidy = useSettingsStore(value => value.ploidy);
   const { t } = useI18n();
-  if (!state.currentRequest) return <p>{t.resultViewUnknown}</p>;
+  if (!state.currentRequest || markers === null) return <p>{t.resultViewUnknown}</p>;
   try {
     const view = resolveAnalysisView(state.currentRequest, { markers, ploidy, cycles }, 'absolute');
     const compared = compareAnalysisView(state.result?.analysis_context, view);
@@ -25,7 +25,7 @@ function ViewComparison({ markers }: { markers: MarkerRegion[] }) {
     return <p>{t.resultMatched}</p>;
   } catch { return <p>{t.resultViewUnknown}</p>; }
 }
-function CompletedStatus({ markers }: { markers: MarkerRegion[] }) {
+function CompletedStatus({ markers }: { markers: MarkerRegion[] | null }) {
   const state = useAnalysisStore();
   const { t } = useI18n();
   const inspection = inspectResult(state.result, state.currentInputRevision);
@@ -40,7 +40,7 @@ function CompletedStatus({ markers }: { markers: MarkerRegion[] }) {
   </>;
 }
 /** Last completion, latest request and input verification are independent facts. */
-export function AnalysisResultStatus({ markers }: { markers: MarkerRegion[] }) {
+export function AnalysisResultStatus({ markers }: { markers: MarkerRegion[] | null }) {
   const pending = useAnalysisStore(state => state.pending);
   const failed = useAnalysisStore(state => state.status === 'failed');
   const retained = useAnalysisStore(state => state.result !== null);
