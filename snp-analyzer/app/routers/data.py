@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, HTTPException, Query
 
 from app.models import (
@@ -279,82 +281,21 @@ async def ct_data(sid: str, current_user: CurrentUser, use_rox: bool = Query(def
 async def export_pdf(
     sid: str,
     current_user: CurrentUser,
-    use_rox: bool = Query(default=True),
-    background: BackgroundMode = Query(default="none"),
+    use_rox: bool | None = Query(default=None),
+    background: BackgroundMode | None = Query(default=None),
+    cycle: int | None = Query(default=None, ge=0),
+    result_revision: UUID | None = Query(default=None),
 ):
-    check_session_access(sid, current_user)
     from fastapi.responses import Response
-    from app.processing.normalize import normalize_for_cycle
-    from app.processing.ct_calculation import calculate_all_ct
-    from app.reporting.pdf_builder import build_report
+    from app.reporting.result_snapshot import ExportOptions, capture_result_snapshot
+    from app.reporting.snapshot_pdf import build_snapshot_pdf
 
-    unified = _get_session(sid)
-    cycle = max(unified.cycles)
-
-    # Get scatter points with effective types
-    points = normalize_for_cycle(unified, cycle, use_rox=use_rox, background=background)
-    cluster_assignments = cluster_store.get(sid, None)
-    manual_assignments = welltype_store.get(sid, {})
-
-    scatter_points = []
-    plate_wells = []
-    for p in points:
-        auto_type = cluster_assignments.assignments.get(p.well) if cluster_assignments else None
-        manual_type = manual_assignments.get(p.well)
-        effective_type = manual_type or auto_type or "Unknown"
-
-        scatter_points.append({
-            "well": p.well,
-            "norm_fam": p.norm_fam,
-            "norm_allele2": p.norm_allele2,
-            "effective_type": effective_type,
-        })
-
-        row = ord(p.well[0]) - ord("A")
-        col = int(p.well[1:]) - 1
-        plate_wells.append({
-            "well": p.well,
-            "row": row,
-            "col": col,
-            "effective_type": effective_type,
-        })
-
-    # Ct results
-    ct_results = None
-    if len(unified.cycles) >= 3:
-        ct_results = calculate_all_ct(unified, use_rox)
-
-    # Get filename from DB if available
-    filename = ""
-    try:
-        from app.db import get_db
-        row = get_db().execute(
-            "SELECT raw_filename FROM sessions WHERE session_id = ?", (sid,)
-        ).fetchone()
-        if row:
-            filename = row["raw_filename"] or ""
-    except Exception:
-        pass
-
-    pdf_bytes = build_report(
-        session_id=sid,
-        instrument=unified.instrument,
-        allele2_dye=unified.allele2_dye,
-        num_wells=len(unified.wells),
-        num_cycles=len(unified.cycles),
-        scatter_points=scatter_points,
-        plate_wells=plate_wells,
-        ct_results=ct_results,
-        filename=filename,
-        # Without this the report coloured and named a diploid trio whatever
-        # the plate's ploidy, so every polyploid dosage class came out grey.
-        ploidy=unified.ploidy,
+    snapshot = capture_result_snapshot(
+        sid, current_user, ExportOptions(result_revision, cycle, use_rox, background),
     )
-
     return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="snp_report_{sid}.pdf"'},
+        build_snapshot_pdf(snapshot), media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="snp_report_whole-run_cycle{snapshot.context.cycle}.pdf"'},
     )
 
 

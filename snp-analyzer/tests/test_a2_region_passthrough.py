@@ -267,6 +267,7 @@ def test_export_csv_multi_marker_has_marker_column_and_per_marker_vocab(client):
 def test_export_xlsx_single_marker_unchanged(client):
     _register(client, "s1", _unified_single_marker())
     client.clustering.cluster_store["s1"] = _single_marker_cluster_result()
+    _capture_csv_golden_context(client, "s1")
 
     resp = client.client.get("/api/data/s1/export/xlsx?use_rox=false")
     assert resp.status_code == 200, resp.text
@@ -281,6 +282,7 @@ def test_export_xlsx_single_marker_unchanged(client):
 def test_export_xlsx_multi_marker_has_marker_column_and_per_marker_counts(client):
     _register(client, "s2", _unified_multi_marker())
     client.clustering.cluster_store["s2"] = _multi_marker_cluster_result()
+    _capture_csv_golden_context(client, "s2")
 
     resp = client.client.get("/api/data/s2/export/xlsx?use_rox=false")
     assert resp.status_code == 200, resp.text
@@ -407,8 +409,11 @@ def test_asg_snapshot_single_marker_unchanged(asg_env):
 
     _bind_asg_session(asg_env, "sid-single", _unified_single_marker())
     cluster_store["sid-single"] = _single_marker_cluster_result()
+    from app.routers import clustering
+    from types import SimpleNamespace
+    _capture_csv_golden_context(SimpleNamespace(clustering=clustering), "sid-single")
 
-    snapshot = build_result_snapshot("sid-single", selected_cycle=1)
+    snapshot = build_result_snapshot("sid-single", user=TokenData(user_id="asg-1", username="owner@example.com", role="user"), selected_cycle=1)
     assert snapshot["schema_version"] == 1
     assert snapshot["summary"]["genotype_counts"]["AA"] == 3
     assert snapshot["summary"]["genotype_counts"]["BB"] == 3
@@ -425,6 +430,6 @@ def test_asg_snapshot_multi_marker_refuses_with_409(asg_env):
     cluster_store["sid-multi"] = _multi_marker_cluster_result()
 
     with pytest.raises(HTTPException) as exc:
-        build_result_snapshot("sid-multi", selected_cycle=1)
+        build_result_snapshot("sid-multi", user=TokenData(user_id="asg-1", username="owner@example.com", role="user"), selected_cycle=1)
     assert exc.value.status_code == 409
     assert "schema_version 3" in exc.value.detail

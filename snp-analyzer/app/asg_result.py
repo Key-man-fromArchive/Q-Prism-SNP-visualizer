@@ -1,197 +1,108 @@
-"""Build compact SNP result snapshots for ASG Designer persistence."""
-from __future__ import annotations
+"""Compact ASG adapter over a shared accepted result."""
+from copy import deepcopy
+from uuid import UUID
 
 from fastapi import HTTPException
+from pydantic import TypeAdapter
 
-from app.asg_session import get_session_asg_launch
+from app.asg_session import LinkedASGLaunch, get_session_asg_launch
+from app.auth import TokenData, check_session_access
+from app.processing.analysis_state import input_lock
+from app.processing.background import BackgroundMode
 from app.processing.ct_calculation import calculate_all_ct
-from app.processing.genotype import count_genotypes, get_effective_types
-from app.processing.normalize import normalize_for_cycle
+from app.processing.genotype import count_genotypes
 from app.processing.statistics import allele_frequencies, hwe_test
-from app.routers.clustering import cluster_store, group_store, welltype_store
-from app.routers.data import protocol_store
-from app.routers.sample import sample_name_store
-from app.routers.upload import sessions
+from app.reporting.result_snapshot import (
+    ExportOptions, ResultRow, ResultSnapshot, capture_result_snapshot, snapshot_rows,
+)
+
+
+def _capture_asg(session_id: str, user: TokenData, options: ExportOptions) -> tuple[ResultSnapshot, LinkedASGLaunch]:
+    from app.routers.clustering import cluster_store
+    from app.routers.upload import sessions
+
+    with input_lock:
+        check_session_access(session_id, user)
+        if session_id not in sessions:
+            raise HTTPException(404, "Session not found")
+        launch = get_session_asg_launch(session_id)
+        if launch is None:
+            raise HTTPException(409, "Session is not linked to an ASG launch")
+        if not launch.allows_save():
+            raise HTTPException(403, "ASG launch does not allow saving results")
+        cluster = cluster_store.get(session_id)
+        if cluster is not None and cluster.regions:
+            raise HTTPException(409, "multi-marker ASG save requires schema_version 3 (pending)")
+        return capture_result_snapshot(session_id, user, options), deepcopy(launch)
+
+
+def _asg_well(row: ResultRow, snapshot: ResultSnapshot, ct: dict) -> dict:
+    point = row.point
+    coordinates = {key: getattr(point, key) if point is not None else None
+                   for key in ("norm_fam", "norm_allele2", "raw_fam", "raw_allele2", "raw_rox")}
+    manual = TypeAdapter(dict[str, str]).validate_python(snapshot.context.parameters["manual_well_types"])
+    return {"well": row.well, "sample_name": row.sample_name or None,
+            **coordinates, "auto_cluster": snapshot.result.assignments.get(row.well),
+            "manual_type": manual.get(row.well), "effective_type": row.genotype,
+            "confidence": row.confidence, "fam_ct": ct.get("fam_ct"),
+            "allele2_ct": ct.get("allele2_ct"), "read_status": row.read_status,
+            "assignment_status": row.assignment_status}
+
+
+def _summary(snapshot: ResultSnapshot, rows: list[ResultRow]) -> dict:
+    ploidy = snapshot.result.ploidy
+    counts = count_genotypes({row.well: row.genotype for row in rows}, ploidy)
+    frequency = hwe = None
+    if ploidy == 2:
+        frequency = allele_frequencies(counts["AA"], counts["AB"], counts["BB"])
+        hwe = hwe_test(counts["AA"], counts["AB"], counts["BB"])
+    return {"genotype_counts": counts, "allele_frequency": frequency, "hwe": hwe,
+            "ploidy": ploidy, "offset": snapshot.result.offset,
+            "total_wells": len(rows), "cluster_algorithm": snapshot.result.algorithm,
+            "cluster_cycle": snapshot.context.cycle}
+
+
+def _render_asg(snapshot: ResultSnapshot, launch: LinkedASGLaunch) -> dict:
+    unified, result, context = snapshot.unified, snapshot.result, snapshot.context
+    rows = snapshot_rows(snapshot)
+    ct = calculate_all_ct(unified, context.use_rox) if len(unified.cycles) >= 3 else {}
+    manual = TypeAdapter(dict[str, str]).validate_python(context.parameters["manual_well_types"])
+    return {
+        "schema_version": 1 if result.ploidy == 2 else 2,
+        "ploidy": result.ploidy,
+        "launch": {"id": launch.launch_id, "save_token": launch.save_token},
+        "session_id": snapshot.session_id,
+        "file": {"name": snapshot.raw_filename, "sha256": ""},
+        "instrument": {"name": unified.instrument, "allele2_dye": unified.allele2_dye,
+                       "has_rox": unified.has_rox, "num_wells": len(unified.wells),
+                       "num_cycles": len(unified.cycles)},
+        "selected_cycle": context.cycle, "summary": _summary(snapshot, rows),
+        "result": {
+            "asg_target": {"target_type": launch.target_type, "target_id": launch.target_id,
+                           "context": launch.context},
+            "wells": [_asg_well(row, snapshot, ct.get(row.well, {})) for row in rows],
+            "clustering": {"algorithm": result.algorithm, "cycle": result.cycle,
+                           "assignments": result.assignments},
+            "manual_welltypes": manual, "sample_names": snapshot.sample_names,
+            "well_groups": {name: {"wells": wells, "source": snapshot.group_sources[name]}
+                            for name, wells in snapshot.groups.items()},
+            "data_windows": [window.model_dump() for window in unified.data_windows or []],
+            "protocol_steps": [step.model_dump() for step in snapshot.protocol],
+            "analysis_context": context.model_dump(mode="json"),
+            "scope": "whole-run", "raw_coordinate_basis": "post-background/pre-reference",
+            "passive_reference_dye": snapshot.passive_reference_label,
+            "ct_conditions": {"scope": "full-curve", "use_rox": context.use_rox,
+                              "background": "none", "cycles": unified.cycles},
+        },
+    }
 
 
 def build_result_snapshot(
-    session_id: str,
-    *,
-    selected_cycle: int | None = None,
-    use_rox: bool = True,
+    session_id: str, *, user: TokenData,
+    selected_cycle: int | None = None, use_rox: bool | None = None,
+    background: BackgroundMode | None = None, result_revision: UUID | None = None,
 ) -> dict:
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    launch = get_session_asg_launch(session_id)
-    if launch is None:
-        raise HTTPException(status_code=409, detail="Session is not linked to an ASG launch")
-    if not launch.allows_save():
-        raise HTTPException(status_code=403, detail="ASG launch does not allow saving results")
-
-    unified = sessions[session_id]
-    cluster = cluster_store.get(session_id)
-
-    # A2: cross-service contract guard. A multi-marker plate (regions set) has
-    # no single authoritative ploidy/genotype_counts -- emitting today's
-    # flat/plate-level snapshot would silently mis-aggregate it on the ASG
-    # side. Multi-marker ASG save is deferred to schema_version 3; refuse
-    # clearly instead of guessing. Single-marker (regions is None) sessions
-    # are completely unaffected by this check.
-    if cluster is not None and cluster.regions:
-        raise HTTPException(
-            status_code=409,
-            detail="multi-marker ASG save requires schema_version 3 (pending)",
-        )
-
-    cycle = selected_cycle if selected_cycle and selected_cycle > 0 else _default_cycle(session_id)
-    if cycle not in unified.cycles:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cycle {cycle} not available. Range: {unified.cycles[0]}-{unified.cycles[-1]}",
-        )
-
-    cluster_assignments = cluster.assignments if cluster else {}
-    confidences = (cluster.confidences or {}) if cluster else {}
-    manual_assignments = welltype_store.get(session_id, {})
-    ploidy = getattr(unified, "ploidy", 2)
-    effective_types = get_effective_types(cluster_assignments, manual_assignments, unified.wells)
-    genotype_counts = count_genotypes(effective_types, ploidy)
-    sample_names = _merged_sample_names(session_id)
-    selected_points = normalize_for_cycle(unified, cycle, use_rox=use_rox)
-    ct_results = calculate_all_ct(unified, use_rox) if len(unified.cycles) >= 3 else {}
-
-    wells = []
-    for point in selected_points:
-        ct = ct_results.get(point.well, {})
-        wells.append(
-            {
-                "well": point.well,
-                "sample_name": sample_names.get(point.well),
-                "norm_fam": point.norm_fam,
-                "norm_allele2": point.norm_allele2,
-                "raw_fam": point.raw_fam,
-                "raw_allele2": point.raw_allele2,
-                "raw_rox": point.raw_rox,
-                "auto_cluster": cluster_assignments.get(point.well),
-                "manual_type": manual_assignments.get(point.well),
-                "effective_type": effective_types.get(point.well, "Unknown"),
-                "confidence": confidences.get(point.well),
-                "fam_ct": ct.get("fam_ct"),
-                "allele2_ct": ct.get("allele2_ct"),
-            }
-        )
-
-    # Allele frequency + HWE are biallelic-diploid only. For higher ploidy the
-    # cross-service contract (dosage counts under schema_version 2) is Phase 4;
-    # here we keep schema 1 valid for diploid and avoid the AA/AB/BB KeyError for
-    # polyploid by emitting nulls.
-    if ploidy == 2:
-        allele_frequency = allele_frequencies(
-            genotype_counts["AA"], genotype_counts["AB"], genotype_counts["BB"]
-        )
-        hwe = hwe_test(
-            genotype_counts["AA"], genotype_counts["AB"], genotype_counts["BB"]
-        )
-    else:
-        allele_frequency = None
-        hwe = None
-
-    # Diploid stays schema_version 1 (byte-compatible with existing ASG). Polyploid
-    # bumps to 2: dosage-keyed genotype_counts + ploidy/offset, with allele_freq /
-    # HWE null. Both are accepted by the ASG receiver.
-    offset = cluster.offset if cluster else 0
-    schema_version = 1 if ploidy == 2 else 2
-    return {
-        "schema_version": schema_version,
-        "ploidy": ploidy,
-        "launch": {
-            "id": launch.launch_id,
-            "save_token": launch.save_token,
-        },
-        "session_id": session_id,
-        "file": _file_metadata(session_id),
-        "instrument": {
-            "name": unified.instrument,
-            "allele2_dye": unified.allele2_dye,
-            "has_rox": unified.has_rox,
-            "num_wells": len(unified.wells),
-            "num_cycles": len(unified.cycles),
-        },
-        "selected_cycle": cycle,
-        "summary": {
-            "genotype_counts": genotype_counts,
-            "allele_frequency": allele_frequency,
-            "hwe": hwe,
-            "ploidy": ploidy,
-            "offset": offset,
-            "total_wells": len(unified.wells),
-            "cluster_algorithm": cluster.algorithm if cluster else None,
-            "cluster_cycle": cluster.cycle if cluster else None,
-        },
-        "result": {
-            "asg_target": {
-                "target_type": launch.target_type,
-                "target_id": launch.target_id,
-                "context": launch.context,
-            },
-            "wells": wells,
-            "clustering": {
-                "algorithm": cluster.algorithm if cluster else None,
-                "cycle": cluster.cycle if cluster else None,
-                "assignments": cluster_assignments,
-            },
-            "manual_welltypes": manual_assignments,
-            "sample_names": sample_names,
-            "well_groups": _merged_well_groups(session_id),
-            "data_windows": [w.model_dump() for w in unified.data_windows] if unified.data_windows else [],
-            "protocol_steps": [s.model_dump() for s in _protocol_steps(session_id)],
-        },
-    }
-
-
-def _default_cycle(session_id: str) -> int:
-    cluster = cluster_store.get(session_id)
-    if cluster and cluster.cycle > 0:
-        return cluster.cycle
-    return max(sessions[session_id].cycles)
-
-
-def _merged_sample_names(session_id: str) -> dict[str, str]:
-    unified = sessions[session_id]
-    names = dict(unified.sample_names or {})
-    names.update(sample_name_store.get(session_id, {}))
-    return names
-
-
-def _merged_well_groups(session_id: str) -> dict[str, dict]:
-    unified = sessions[session_id]
-    groups: dict[str, dict] = {}
-    for name, wells in (unified.well_groups or {}).items():
-        groups[name] = {"wells": wells, "source": "parsed"}
-    for name, wells in group_store.get(session_id, {}).items():
-        groups[name] = {"wells": wells, "source": "manual"}
-    return groups
-
-
-def _protocol_steps(session_id: str):
-    unified = sessions[session_id]
-    if session_id in protocol_store:
-        return protocol_store[session_id]
-    return unified.protocol_steps or []
-
-
-def _file_metadata(session_id: str) -> dict[str, str]:
-    try:
-        from app.db import get_db
-
-        row = get_db().execute(
-            "SELECT raw_filename FROM sessions WHERE session_id = ?",
-            (session_id,),
-        ).fetchone()
-    except Exception:
-        row = None
-    return {
-        "name": (row["raw_filename"] if row else "") or "",
-        "sha256": "",
-    }
+    snapshot, launch = _capture_asg(
+        session_id, user, ExportOptions(result_revision, selected_cycle, use_rox, background),
+    )
+    return _render_asg(snapshot, launch)

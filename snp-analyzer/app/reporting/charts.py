@@ -5,7 +5,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import numpy as np
 
 
 # Non-genotype well categories. Fixed across ploidy, like the frontend's
@@ -69,7 +68,7 @@ def genotype_color(label: str, ploidy: int) -> str | None:
     return CONTROL_COLORS.get(label)
 
 
-def render_scatter_png(points: list[dict], allele2_dye: str = "VIC", width: float = 6, height: float = 4.5, ploidy: int = 2) -> bytes:
+def render_scatter_png(points: list[dict], allele2_dye: str = "VIC", width: float = 6, height: float = 4.5, ploidy: int = 2, coordinate_basis: str = "normalized") -> bytes:
     """Render scatter plot as PNG bytes.
 
     Args:
@@ -94,8 +93,8 @@ def render_scatter_png(points: list[dict], allele2_dye: str = "VIC", width: floa
         ys = [p["norm_fam"] for p in pts]
         ax.scatter(xs, ys, c=color, s=20, alpha=0.7, label=gt, edgecolors="white", linewidth=0.3)
 
-    ax.set_xlabel(f"{allele2_dye} (normalized)", fontsize=10)
-    ax.set_ylabel("FAM (normalized)", fontsize=10)
+    ax.set_xlabel(f"{allele2_dye} ({coordinate_basis})", fontsize=10)
+    ax.set_ylabel(f"FAM ({coordinate_basis})", fontsize=10)
     ax.set_title("Allele Discrimination Plot", fontsize=12, fontweight="bold")
     ax.legend(fontsize=8, loc="upper right", framealpha=0.9)
     ax.grid(True, alpha=0.3)

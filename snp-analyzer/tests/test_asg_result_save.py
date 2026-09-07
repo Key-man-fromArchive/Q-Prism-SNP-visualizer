@@ -5,6 +5,20 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
+from app.auth import TokenData
+
+
+def _verified_asg_result(sid: str) -> None:
+    """Run analysis after all fixture input overrides, as an actual accepted result."""
+    from app.models import ClusteringRequest
+    from app.routers.clustering import _capture_analysis, _calculate_snapshot
+    from app.processing.analysis_state import publish_analysis
+    ticket, snapshot = _capture_analysis(sid, ClusteringRequest(cycle=2))
+    publish_analysis(ticket, _calculate_snapshot(snapshot))
+
+
+def _owner() -> TokenData:
+    return TokenData(user_id="asg-1", username="owner@example.com", role="user")
 
 
 class _Response:
@@ -136,8 +150,9 @@ class ASGResultSaveTest(unittest.TestCase):
             assignments={"A1": "Allele 1 Homo", "A2": "Allele 2 Homo"},
         )
         welltype_store["sid-1"] = {"A2": "Heterozygous"}
+        _verified_asg_result("sid-1")
 
-        snapshot = build_result_snapshot("sid-1", selected_cycle=2)
+        snapshot = build_result_snapshot("sid-1", user=_owner(), selected_cycle=2)
 
         self.assertEqual(snapshot["schema_version"], 1)
         self.assertEqual(snapshot["launch"]["id"], "launch-1")
@@ -171,7 +186,8 @@ class ASGResultSaveTest(unittest.TestCase):
         )
         bind_session_to_current_asg_launch("sid-expired-launch", "asg-1")
 
-        snapshot = build_result_snapshot("sid-expired-launch", selected_cycle=2)
+        _verified_asg_result("sid-expired-launch")
+        snapshot = build_result_snapshot("sid-expired-launch", user=_owner(), selected_cycle=2)
 
         self.assertEqual(snapshot["launch"]["id"], "launch-1")
 
@@ -233,6 +249,7 @@ class ASGResultSaveTest(unittest.TestCase):
                 )
                 bind_session_to_current_asg_launch("sid-1", "asg-1")
                 client.cookies.set("snp_auth", create_access_token("asg-1", "owner@example.com", "user"))
+                _verified_asg_result("sid-1")
                 response = client.post("/api/asg/save-result", json={"session_id": "sid-1", "selected_cycle": 2})
 
             posted_payloads.append(mock_post.call_args.args[0])

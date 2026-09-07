@@ -58,6 +58,7 @@ def test_export_xlsx_returns_valid_workbook(client):
     unified = _unified()
     client.upload.sessions["s1"] = unified
     client.db.save_session("s1", unified, filename="t.eds", user_id=None)
+    assert client.client.post("/api/data/s1/cluster", json={"cycle": 1, "use_rox": False}).status_code == 200
 
     resp = client.client.get("/api/data/s1/export/xlsx?use_rox=false")
     assert resp.status_code == 200, resp.text
@@ -66,5 +67,5 @@ def test_export_xlsx_returns_valid_workbook(client):
 
     from openpyxl import load_workbook
     wb = load_workbook(io.BytesIO(resp.content))
-    assert wb.sheetnames == ["Summary", "Results"]
+    assert wb.sheetnames == ["Summary", "Results", "Analysis Context"]
     assert wb["Results"].max_row == 7  # header + 6 wells

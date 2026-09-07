@@ -10,11 +10,8 @@ from fastapi.responses import StreamingResponse
 from app.models import UnifiedData
 from app.processing.genotype_vocab import DEFAULT_PLOIDY, label_by_ratio
 from app.processing.background import BackgroundMode
-from app.processing.normalize import normalize_for_cycle
-from app.processing.ratio_origin import shift_points_to_origin
 from app.routers.upload import sessions
-from app.routers.clustering import cluster_store, welltype_store, ratio_origin_for
-from app.auth import CurrentUser, check_session_access
+from app.auth import CurrentUser
 from app.reporting.result_snapshot import (
     ExportOptions, ResultRow, ResultSnapshot, capture_result_snapshot, snapshot_rows,
 )
@@ -153,135 +150,19 @@ async def export_csv(
 async def export_xlsx(
     sid: str,
     current_user: CurrentUser,
-    use_rox: bool = Query(default=True),
-    background: BackgroundMode = Query(default="none"),
+    use_rox: bool | None = Query(default=None),
+    background: BackgroundMode | None = Query(default=None),
+    cycle: int | None = Query(default=None, ge=0),
+    result_revision: UUID | None = Query(default=None),
 ):
-    """XLSX workbook: Summary sheet (embedded allele-discrimination plot +
-    metadata + QC) and a Results sheet with the full genotype table."""
-    from collections import Counter
     from fastapi.responses import Response
-    from app.processing.genotype import count_genotypes, get_effective_types
-    from app.reporting.xlsx_builder import build_xlsx
+    from app.reporting.snapshot_xlsx import build_snapshot_xlsx
 
-    check_session_access(sid, current_user)
-    unified = _get_session(sid)
-
-    # Use the analysed cycle (where clustering was computed) so the plot matches
-    # the on-screen result; fall back to the last cycle.
-    analysed = cluster_store[sid].cycle if sid in cluster_store else 0
-    cycle = analysed if analysed and analysed in unified.cycles else max(unified.cycles)
-
-    points = normalize_for_cycle(unified, cycle, use_rox=use_rox, background=background)
-    # The exported columns are the values as measured. The genotype fallback and
-    # the low-signal cutoff are ratios, so they are computed against the plate's
-    # own no-signal origin instead of (0, 0) -- see app/processing/ratio_origin.py.
-    called = {
-        p.well: p
-        for p in shift_points_to_origin(
-            points, ratio_origin_for(sid, unified, points)
-        )
-    }
-    cluster_assignments = cluster_store[sid].assignments if sid in cluster_store else {}
-    confidences = (cluster_store[sid].confidences or {}) if sid in cluster_store else {}
-    regions = cluster_store[sid].regions if sid in cluster_store else None
-    manual_assignments = welltype_store.get(sid, {})
-    sample_names = unified.sample_names or {}
-
-    ploidy = getattr(unified, "ploidy", 2)
-    effective_types = get_effective_types(cluster_assignments, manual_assignments, unified.wells)
-    genotype_counts = count_genotypes(effective_types, ploidy)
-
-    # A2: multi-marker plate -- each well's genotype uses its OWN marker's
-    # ploidy vocabulary, and the pooled genotype_counts above (one binning
-    # across every marker) is NOT authoritative -- replace it with a
-    # per-marker-prefixed breakdown. Single-marker (regions is None) sessions
-    # build empty maps and keep the pooled genotype_counts exactly as before.
-    well_marker: dict[str, str] = {}
-    well_ploidy: dict[str, int] = {}
-    if regions:
-        for r in regions:
-            for w in r.wells:
-                well_marker[w] = r.name
-                well_ploidy[w] = r.ploidy
-        marker_counts: dict[str, int] = {}
-        for r in regions:
-            r_effective = get_effective_types(r.assignments, manual_assignments, r.wells)
-            for gt, n in count_genotypes(r_effective, r.ploidy).items():
-                marker_counts[f"{r.name}: {gt}"] = n
-        genotype_counts = marker_counts
-
-    scatter_points: list[dict] = []
-    table_rows: list[list] = []
-    umin = _undetermined_min(called.values())
-    for p in sorted(points, key=lambda pt: (pt.well[0], int(pt.well[1:]))):
-        well_gt_ploidy = well_ploidy.get(p.well, ploidy)
-        gt = _determine_genotype(
-            p.well, called[p.well].norm_fam, called[p.well].norm_allele2,
-            cluster_assignments, manual_assignments, well_gt_ploidy, umin
-        )
-        scatter_points.append({
-            "well": p.well,
-            "norm_fam": p.norm_fam,
-            "norm_allele2": p.norm_allele2,
-            "effective_type": gt,
-        })
-        conf = confidences.get(p.well)
-        row: list[object] = [p.well]
-        if regions:
-            row.append(well_marker.get(p.well, ""))
-        row += [
-            sample_names.get(p.well, ""),
-            gt,
-            round(conf * 100, 1) if conf is not None else "",
-            round(p.norm_fam, 6),
-            round(p.norm_allele2, 6),
-            round(p.raw_fam, 4),
-            round(p.raw_allele2, 4),
-            round(p.raw_rox, 4) if p.raw_rox is not None else "",
-        ]
-        table_rows.append(row)
-
-    headers: list[str] = ["Well"]
-    if regions:
-        headers.append("Marker")
-    headers += [
-        "Sample Name", "Genotype", "Confidence (%)",
-        "FAM (norm)", f"{unified.allele2_dye} (norm)",
-        "FAM (raw)", f"{unified.allele2_dye} (raw)", "ROX (raw)",
-    ]
-    counts = Counter(gt for gt in effective_types.values())
-    n_called = sum(c for g, c in counts.items() if g not in ("Undetermined", "NTC", "Unknown"))
-    n_total = len(unified.wells)
-    qc: dict[str, object] = {
-        "Total wells": n_total,
-        "Called": n_called,
-        "Call rate (%)": round(n_called / n_total * 100, 1) if n_total else 0,
-    }
-
-    filename = ""
-    try:
-        from app.db import get_db
-        db_row = get_db().execute(
-            "SELECT raw_filename FROM sessions WHERE session_id = ?", (sid,)
-        ).fetchone()
-        if db_row:
-            filename = db_row["raw_filename"] or ""
-    except Exception:
-        pass
-
-    xlsx_bytes = build_xlsx(
-        instrument=unified.instrument,
-        allele2_dye=unified.allele2_dye,
-        cycle=cycle,
-        filename=filename,
-        scatter_points=scatter_points,
-        table_headers=headers,
-        table_rows=table_rows,
-        genotype_counts=genotype_counts,
-        qc=qc,
+    snapshot = capture_result_snapshot(
+        sid, current_user, ExportOptions(result_revision, cycle, use_rox, background),
     )
     return Response(
-        content=xlsx_bytes,
+        build_snapshot_xlsx(snapshot),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="snp_report_cycle{cycle}.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="snp_report_whole-run_cycle{snapshot.context.cycle}.xlsx"'},
     )
