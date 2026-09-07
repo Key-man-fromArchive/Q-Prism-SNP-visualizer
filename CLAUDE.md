@@ -2,6 +2,10 @@
 
 Follow AGENTS.md and docs/planning/06-tasks.md. This file records execution evidence, not permission to skip quality gates.
 
+## Current authorization — resumed 2026-09-07
+
+User approved baseline lint, testing-tool/runtime/auth dependency remediation and autonomous implementation through completion, and explicitly requested specialist delegation. P0-R0-T1 and P0-S0-T1 cover that prerequisite scope. The blocked record below is historical: repair and re-run the gate, without re-asking the same scope question. Local commits/Phase integration are authorized; no remote push, deployment, or external notifications. Root orchestrates; specialist agents implement.
+
 ## 2026-09-07 — UI/UX P0
 
 - Contract: qprism-ux-followup-20260907-v1; baseline commit 80c2c8a.
