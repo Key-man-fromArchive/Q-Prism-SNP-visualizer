@@ -5,6 +5,14 @@ import { useAuthStore } from '@/stores/auth-store';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('API error contract', () => {
+  it('uses absolute QC zero while preserving omitted QC mode', async () => {
+    const fetcher = vi.fn().mockImplementation(() => Promise.resolve(new Response('{}')));
+    vi.stubGlobal('fetch', fetcher);
+    await api.getQc('s', 0, false, 'none');
+    await api.getQc('s');
+    expect(fetcher.mock.calls[0][0]).toContain('cycle=0&cycle_mode=absolute');
+    expect(fetcher.mock.calls[1][0]).not.toContain('cycle_mode');
+  });
   it('sends absolute mode for selected zero but preserves omitted read defaults', async () => {
     const fetcher = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ algorithm: 'auto', cycle: 0, assignments: {} }))));
     vi.stubGlobal('fetch', fetcher);

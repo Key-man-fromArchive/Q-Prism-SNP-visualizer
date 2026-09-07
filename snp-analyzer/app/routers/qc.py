@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
+from app.processing.cycle_selection import CycleMode, resolve_cycle
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from app.models import (
@@ -495,6 +496,7 @@ async def qc_metrics(
     sid: str,
     current_user: CurrentUser,
     cycle: int = Query(default=0),
+    cycle_mode: CycleMode = Query(default="legacy_latest"),
     use_rox: bool = Query(default=True),
     background: BackgroundMode = Query(default="none"),
 ) -> dict[str, object]:
@@ -502,7 +504,7 @@ async def qc_metrics(
     check_session_access(sid, current_user)
     snapshot = _capture_qc(sid)
     unified = snapshot.unified
-    cycle = cycle if cycle > 0 else max(unified.cycles)
+    cycle = resolve_cycle(unified.cycles, cycle, cycle_mode)
     if cycle not in unified.cycles:
         raise HTTPException(400, f"Cycle {cycle} not available")
     points = normalize_for_cycle(unified, cycle, use_rox=use_rox, background=background)

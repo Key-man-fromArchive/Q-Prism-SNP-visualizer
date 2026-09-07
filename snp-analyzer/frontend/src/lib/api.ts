@@ -602,7 +602,7 @@ export async function getQc(
   useRox?: boolean,
   background?: BackgroundMode
 ): Promise<QcResponse> {
-  const query = buildQuery({ cycle, use_rox: useRox, background });
+  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background });
   return apiFetch<QcResponse>(`/api/data/${sid}/qc${query}`);
 }
 

@@ -26,9 +26,11 @@ export async function analyzeRecommended(request: ClusteringRequest, navigate: (
   useAnalysisStore.getState().setCurrentRequest(request);
   const ticket = useAnalysisStore.getState().beginRequest('analysis');
   const captured = structuredClone(request);
+  const inputRevision = useAnalysisStore.getState().currentInputRevision;
   try {
     const suggestion = await suggestCycle(ticket.sessionId);
     if (!useAnalysisStore.getState().isCurrent(ticket)) return false;
+    useAnalysisStore.getState().captureRecommendation(ticket, suggestion, inputRevision);
     const cycle = suggestion.suggested_cycle ?? captured.cycle;
     navigate(cycle);
     if (!useAnalysisStore.getState().isCurrent(ticket)) return false;

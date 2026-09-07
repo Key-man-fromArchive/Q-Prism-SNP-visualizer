@@ -1,9 +1,12 @@
 import { create } from 'zustand';
 import type { AnalysisStatus, ClusterResponse, ClusteringResult, ClusteringRequest } from '@/types/api';
 import { isRevision } from '@/lib/analysis-context';
+import type { CycleSuggestion } from '@/lib/api';
 
 export type AnalysisTicket = { sessionId: string; ownerId: string; generation: number; loadGeneration: number; kind: 'analysis' | 'load' };
 interface AnalysisState {
+  recommendation: { suggestion: CycleSuggestion; inputRevision: number | null } | null;
+  captureRecommendation: (ticket: AnalysisTicket, suggestion: CycleSuggestion, revision: number | null) => void;
   submittedRequest: ClusteringRequest | null;
   currentRequest: ClusteringRequest | null;
   setCurrentRequest: (request: ClusteringRequest) => void;
@@ -31,7 +34,7 @@ interface AnalysisState {
   fail: (ticket: AnalysisTicket, error: unknown) => boolean;
   updateInputRevision: (sessionId: string, ownerId: string, revision: number) => boolean;
 }
-const empty = { submittedRequest: null, currentRequest: null, result: null, currentInputRevision: null, knownInputRevision: null, inputRevisionRefreshing: false, inputRevisionError: null,
+const empty = { recommendation: null, submittedRequest: null, currentRequest: null, result: null, currentInputRevision: null, knownInputRevision: null, inputRevisionRefreshing: false, inputRevisionError: null,
   status: 'idle', pending: false, localPending: false, error: null } as const;
 function current(state: AnalysisState, ticket: AnalysisTicket): boolean {
   return state.sessionId === ticket.sessionId && state.ownerId === ticket.ownerId && state.generation === ticket.generation
@@ -53,6 +56,7 @@ function responseStatus(response: ClusterResponse, kind: AnalysisTicket['kind'])
 function responseRevision(state: AnalysisState, response: ClusterResponse) {
   const revision = isRevision(response.input_revision) ? response.input_revision : null;
   return { currentInputRevision: state.inputRevisionRefreshing || state.inputRevisionError !== null ? null : revision,
+    recommendation: state.recommendation?.inputRevision === revision ? state.recommendation : null,
     knownInputRevision: revision ?? state.knownInputRevision };
 }
 /** Explicit owner identity invalidates same-session responses across authentication changes. */
@@ -63,14 +67,18 @@ export function createAnalysisStore() {
     clear: () => get().setSession(null, null),
     setCurrentRequest: request => set({ currentRequest: structuredClone(request) }),
     captureRequest: request => set({ submittedRequest: structuredClone(request) }),
+    captureRecommendation: (ticket, suggestion, revision) => {
+      if (!current(get(), ticket) || get().currentInputRevision !== revision || get().inputRevisionRefreshing) return;
+      set({ recommendation: { suggestion: structuredClone(suggestion), inputRevision: revision } });
+    },
     isCurrent: ticket => current(get(), ticket),
-    beginInputRefresh: () => set(state => ({ currentInputRevision: null, inputRevisionRefreshing: true,
+    beginInputRefresh: () => set(state => ({ recommendation: null, currentInputRevision: null, inputRevisionRefreshing: true,
       inputRevisionError: null, loadGeneration: state.loadGeneration + 1 })),
     failInputRefresh: error => set({ currentInputRevision: null, inputRevisionRefreshing: false, inputRevisionError: error }),
     beginRequest: kind => {
       const state = get();
       if (state.sessionId === null || state.ownerId === null) throw new Error('No active analysis session');
-      if (kind === 'analysis') set({ generation: state.generation + 1, status: 'computing', pending: true, localPending: true, error: null });
+      if (kind === 'analysis') set({ recommendation: null, generation: state.generation + 1, status: 'computing', pending: true, localPending: true, error: null });
       else set({ loadGeneration: state.loadGeneration + 1 });
       return { sessionId: state.sessionId, ownerId: state.ownerId, generation: get().generation, loadGeneration: get().loadGeneration, kind };
     },
@@ -98,7 +106,8 @@ export function createAnalysisStore() {
     updateInputRevision: (sessionId, ownerId, revision) => {
       const state = get();
       if (state.sessionId !== sessionId || state.ownerId !== ownerId || !isRevision(revision) || obsoleteRevision(state, revision)) return false;
-      set({ currentInputRevision: revision, knownInputRevision: revision, inputRevisionRefreshing: false, inputRevisionError: null }); return true;
+      set({ recommendation: state.recommendation?.inputRevision === revision ? state.recommendation : null,
+        currentInputRevision: revision, knownInputRevision: revision, inputRevisionRefreshing: false, inputRevisionError: null }); return true;
     },
   }));
 }

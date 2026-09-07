@@ -18,6 +18,36 @@ beforeEach(() => {
   useAnalysisStore.getState().setSession('s', 'u');
   useNavigationStore.setState({ status: 'ready' });
 });
+it('retains explicit full-curve recommendation including zero onset, then invalidates changed inputs', async () => {
+  const suggestion = { suggested_cycle: 0, suggested_low: 0, suggested_high: 0, suggested_window: null,
+    ntc_onset_cycle: 0, ntc_onset_status: 'detected' as const, ntc_onset_reason: 'none' as const,
+    ntc_wells: ['A1'], amp_start: 0, amp_end: 40 };
+  useAnalysisStore.getState().updateInputRevision('s', 'u', 0);
+  vi.mocked(suggestCycle).mockResolvedValue(suggestion);
+  vi.mocked(runClustering).mockResolvedValue({ ...result, cycle: 0 });
+  await analyzeRecommended(request, vi.fn());
+  expect(useAnalysisStore.getState().recommendation).toEqual({ suggestion, inputRevision: 0 });
+  useAnalysisStore.getState().updateInputRevision('s', 'u', 1);
+  expect(useAnalysisStore.getState().recommendation).toBeNull();
+});
+it('drops a recommendation whose inputs change while suggestion is in flight', async () => {
+  const suggestion = deferred<Awaited<ReturnType<typeof suggestCycle>>>();
+  useAnalysisStore.getState().updateInputRevision('s', 'u', 0);
+  vi.mocked(suggestCycle).mockReturnValue(suggestion.promise);
+  vi.mocked(runClustering).mockResolvedValue({ ...result, input_revision: 1 });
+  const pending = analyzeRecommended(request, vi.fn());
+  useAnalysisStore.getState().updateInputRevision('s', 'u', 1);
+  suggestion.resolve({ suggested_cycle: 20 } as Awaited<ReturnType<typeof suggestCycle>>);
+  await pending;
+  expect(useAnalysisStore.getState().recommendation).toBeNull();
+});
+it('drops an onset outcome when the submitted analysis itself advances input revision', async () => {
+  useAnalysisStore.getState().updateInputRevision('s', 'u', 0);
+  vi.mocked(suggestCycle).mockResolvedValue({ suggested_cycle: 20 } as Awaited<ReturnType<typeof suggestCycle>>);
+  vi.mocked(runClustering).mockResolvedValue({ ...result, input_revision: 1 });
+  await analyzeRecommended(request, vi.fn());
+  expect(useAnalysisStore.getState().recommendation).toBeNull();
+});
 it('does not supersede a restoration load with a current or recommended action', async () => {
   const load = useAnalysisStore.getState().beginRequest('load');
   useNavigationStore.setState({ status: 'restoring' });

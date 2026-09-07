@@ -279,14 +279,15 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 - P2-S1 후속 계약: 선택한 실제 cycle 0을 QC 요청에서도 `cycle_mode=absolute`로 전달하고 공유 resolver를 적용한다. 모드 생략 시 기존 0→마지막 cycle 호환성을 유지한다.
 
-- Status: TODO
+- Status: DONE
+- Evidence: [P2-S2-T1](ui-ux-overhaul/evidence/P2-S2-T1.md). 독립 소스·브라우저 검증 PASS; 검증 계층별 한계는 evidence 참조.
 - 담당: frontend-specialist
 - Depends On: [P2-S1-T1]
 - Write Scope: SRC/components/의 Header·QC 표시/상세, 관련 hooks/locales, tests/19-qc-status.spec.ts
 - 구현: ok/warning/no_ntc/insufficient와 웰별 flagged/reason을 구분한다. NTC 전체 목록을 경고 목록으로 해석하지 않는다. 추천 사이클 미평가/검출 없음도 구분한다.
 - 구현: 선택 마커의 서버 QC와 전체 플레이트 NTC 범위를 표시하고, 이전 조건 QC를 현재 조건으로 오인하지 않도록 표시한다. 마커 없는 경우 임의 pooled separation을 만들지 않는다.
 - 검증: NTC 없음·정상·경고·부족, 일부 웰만 경고, 마커별 상이한 QC, stale/legacy 시나리오. FE-TEST, ROOT-E2E.
-- [ ] AC: UX-01 상태 행렬 전체를 KO/EN으로 확인하고 서버 판정과 화면이 일치함.
+- [x] AC: UX-01 상태 행렬 전체를 KO/EN으로 확인하고 서버 판정과 화면이 일치함.
 
 ### P2-S3-T1: 출력 버전 선택·활성 차트 PNG
 
