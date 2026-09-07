@@ -358,7 +358,9 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P3-S3-T1: 프리셋·최근 세션·배치 업로드 실패 복구
 
-- Status: TODO
+- Status: DONE
+- Commit: c8161ba37dede090da061a450067e985888e220e
+- Evidence: [P3-S3-T1](ui-ux-overhaul/evidence/P3-S3-T1.md). FE 452개, ROOT22 3개, lint·typecheck·build·audit, 변경 coverage 기준·새 CC 10 이하, 독립 리뷰 PASS. 기존 공용 preset JSON 제약은 증거에 기록.
 - 담당: frontend-specialist
 - Depends On: [P3-S2-T1]
 - Write Scope: SRC/components/의 프리셋·최근 세션·Upload/Project, 신규 SRC/stores/upload-job-store.ts, 관련 API/hooks/locales, tests/22-error-recovery.spec.ts
@@ -366,7 +368,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - 구현: 배치 업로드별 파일명·상태·실패 원인·성공 sessionID를 메모리에 보관해 탭 이동 후에도 보여준다. 부분 실패 시 자동 이동하지 않고 사용자가 프로젝트 이동을 선택하게 한다.
 - 구현: 응답 유실은 성공/실패로 단정하지 않고 unknown과 세션 확인 경로를 제공한다. 새로고침/로그아웃에서 작업 목록 제거; File 바이트 유지·자동 멱등 재업로드는 구현하지 않는다.
 - 검증: 500/네트워크 단절/부분 성공/응답 유실, 재시도 입력 보존, 탭 이동·초기화·다른 사용자 접근 방지.
-- [ ] AC: UX-05 모든 오류가 조용히 무시되지 않고, 중복 업로드를 유도하는 자동 재시도가 없음.
+- [x] AC: UX-05 모든 오류가 조용히 무시되지 않고, 중복 업로드를 유도하는 자동 재시도가 없음.
 
 ### P3-S4-T1: 마커 미설정·제외·Empty/Omit 의미 정리
 
