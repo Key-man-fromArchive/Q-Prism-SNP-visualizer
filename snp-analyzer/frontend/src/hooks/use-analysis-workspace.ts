@@ -3,6 +3,8 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useNavigationStore } from '@/stores/navigation-store';
+import { completeWorkspaceRestore } from '@/lib/workspace-ready';
+import { restorationError } from '@/lib/workspace-location';
 import { useSettingsStore } from '@/stores/settings-store';
 import { loadAnalysisSession, type ReadyAnalysisSession } from '@/lib/analysis-session';
 import { analyzeCurrent } from '@/lib/analysis-actions';
@@ -34,26 +36,27 @@ export function useAnalysisWorkspace() {
     const generation = useNavigationStore.getState().beginRestore(session);
     const load = async () => {
       const value = await loadAnalysisSession();
-      if (cancelled) return;
-      if (!value) { useNavigationStore.getState().fail(generation, 'Unable to load analysis session'); return; }
+      if (cancelled || useSessionStore.getState().entryGeneration !== entry || useAuthStore.getState().user?.id !== owner
+        || useNavigationStore.getState().generation !== generation) return;
+      if (!value) {
+        const reason = restorationError(useAnalysisStore.getState().error);
+        if (reason === 'unauthorized') useAuthStore.getState().clearAuth();
+        else useNavigationStore.getState().fail(generation, reason);
+        return;
+      }
       if (value.hasCompletedResult) useSessionStore.getState().consumeInitialAnalysis();
-      useSettingsStore.getState().setPloidy(value.ploidy);
       setLoaded({ entry, value });
-      const result = useAnalysisStore.getState().result;
-      const info = value.info;
-      const cycles = [...info.cycles].sort((left, right) => left - right);
-      useNavigationStore.getState().setAvailableCycles(cycles);
-      const preferred = result?.cycle ?? info.suggested_cycle;
-      const cycle = preferred !== null && cycles.includes(preferred) ? preferred : cycles.at(-1) ?? null;
-      const accepted = useNavigationStore.getState().complete(generation, { reasons: [], value: {
-        session, tab: 'analysis', surface: 'analysis', marker: null,
-        cycle,
-      } });
-      if (accepted) analyzeFreshSession(cycle, value);
+      const restored = completeWorkspaceRestore(owner, session, generation, value);
+      if (restored.accepted) analyzeFreshSession(restored.cycle, value);
     };
     void load();
     return () => { cancelled = true; };
   }, [session, owner, entry, retryGeneration]);
+  useEffect(() => {
+    const retry = () => setRetryGeneration(value => value + 1);
+    window.addEventListener('workspace-load-retry', retry);
+    return () => window.removeEventListener('workspace-load-retry', retry);
+  }, []);
   useEffect(() => {
     if (!session || !owner) return;
     let sequence = 0;

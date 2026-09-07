@@ -7,6 +7,9 @@ import { useAnalysisStore } from '@/stores/analysis-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useAuthStore } from '@/stores/auth-store';
 import type { UploadResponse } from '@/types/api';
+import { useNavigationStore } from '@/stores/navigation-store';
+import { useSettingsStore } from '@/stores/settings-store';
+import { writeViewCache } from '@/lib/session-view-cache';
 
 vi.mock('@/lib/api', () => ({ getCluster: vi.fn(), getMarkers: vi.fn(), getPloidy: vi.fn(), getSessionInfo: vi.fn(), runClustering: vi.fn() }));
 vi.mock('./AnalysisTab', () => ({ AnalysisTab: () => <div>single-ready</div> }));
@@ -15,12 +18,27 @@ vi.mock('./PlateSetupTab', () => ({ PlateSetupTab: () => null }));
 const info: UploadResponse = { session_id: 's', instrument: 'test', allele2_dye: 'VIC', num_wells: 1,
   num_cycles: 40, has_rox: false, data_windows: null, suggested_cycle: 40, well_groups: null };
 beforeEach(() => {
+  sessionStorage.clear();
   vi.resetAllMocks();
   useAuthStore.getState().setUser({ id: 'u', username: 'u', display_name: null, role: 'user' });
   useSessionStore.getState().setSession('s', info);
   vi.mocked(getMarkers).mockResolvedValue({ markers: [] });
   vi.mocked(getPloidy).mockResolvedValue({ ploidy: 2 });
   vi.mocked(getSessionInfo).mockResolvedValue({ ...info, cycles: [0, 20, 40], input_revision: 0, analysis_status: 'idle', analysis_pending: false });
+});
+it('applies the explicit URL zero and cached ROX false before ready without analysis', async () => {
+  useSessionStore.getState().setSession('s', { ...info, has_rox: true }, 'reopen', '?session=s&cycle=0&surface=analysis');
+  writeViewCache('u', 's', { ...useSettingsStore.getState(), useRox: false });
+  useSettingsStore.setState({ useRox: true });
+  vi.mocked(getSessionInfo).mockResolvedValue({ ...info, has_rox: true, cycles: [0, 20, 40], input_revision: 0, analysis_status: 'completed', analysis_pending: false });
+  vi.mocked(getCluster).mockResolvedValue({ algorithm: 'auto', cycle: 20, assignments: {} });
+  const ready = vi.fn();
+  const unsubscribe = useNavigationStore.subscribe(state => { if (state.status === 'ready') ready(useSettingsStore.getState().useRox, state.cycle); });
+  render(<AnalysisWorkspace />);
+  await screen.findByText('single-ready');
+  expect(ready).toHaveBeenLastCalledWith(false, 0);
+  expect(runClustering).not.toHaveBeenCalled();
+  unsubscribe();
 });
 it('does not mount a single-analysis consumer until the stored result has also loaded', async () => {
   let resolve!: (value: { algorithm: null; cycle: number; assignments: Record<string, string> }) => void;
