@@ -318,12 +318,13 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P2-S0-V: 정확성 품질 게이트
 
-- Status: TODO
+- Status: DONE
+- Evidence: [P2-S0-V](ui-ux-overhaul/evidence/P2-S0-V.md). 최종 source 3edae4c: BE739+2 subtests, FE338, ROOT18–20 5/5, P5 14/14, 누적 변경 모듈58개 coverage·새 logical unit CC PASS. 기존 집계 복잡도·typing baseline·후속 범위는 evidence에 명시.
 - 담당: test-specialist
 - Depends On: [P2-S4-T1]
 - Write Scope: docs/planning/ui-ux-overhaul/evidence/P2-S0-V.md
 - 검증: BE-ALL, FE-ALL, FE-CHECK, ROOT-E2E 18–20, COVERAGE, 출력 실파일 증거와 frontend/code 리뷰.
-- [ ] AC: UX-01·02·03 통과. UX-03 undo 연결만 명시적으로 P3에 이관하며 나머지 미구현을 통과 처리하지 않음.
+- [x] AC: UX-01·02·03 통과. UX-03 undo 연결만 명시적으로 P3에 이관하며 나머지 미구현을 통과 처리하지 않음.
 
 ## Phase P3 — 복원·실패 복구·수동 편집
 
