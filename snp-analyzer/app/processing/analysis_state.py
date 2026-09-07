@@ -7,15 +7,105 @@ writer, not arbitrary legacy DB writers or multiple uvicorn processes.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from threading import RLock
 
 from fastapi import HTTPException
 
 from app import db
-from app.models import MarkerRegion, UnifiedData, WellType
+from app.models import ClusteringResult, MarkerRegion, UnifiedData, WellType
 
 input_lock = RLock()
+
+
+@dataclass
+class PublicationState:
+    owner: UnifiedData
+    lock: RLock = field(default_factory=RLock)
+    sequence: int = 0
+    pending: bool = False
+    failed: bool = False
+
+
+@dataclass(frozen=True)
+class AnalysisTicket:
+    sid: str
+    session: UnifiedData
+    state: PublicationState
+    sequence: int
+    input_revision: int
+
+
+publication_states: dict[str, PublicationState] = {}
+
+
+def _current_publication_state(sid: str) -> PublicationState | None:
+    from app.routers.upload import sessions
+
+    state = publication_states.get(sid)
+    if state is not None and state.owner is sessions.get(sid):
+        return state
+    return None
+
+
+def begin_analysis(sid: str, session: UnifiedData) -> AnalysisTicket:
+    """Caller holds input_lock; accepted requests supersede even if they fail."""
+    state = _current_publication_state(sid)
+    if state is None:
+        state = PublicationState(session)
+        publication_states[sid] = state
+    with state.lock:
+        state.sequence += 1
+        state.pending = True
+        state.failed = False
+        return AnalysisTicket(sid, session, state, state.sequence, session.input_revision)
+
+
+def forget_analysis(sid: str) -> None:
+    """Called only after session deletion commits, under input_lock."""
+    publication_states.pop(sid, None)
+
+
+def analysis_status(sid: str) -> dict[str, object]:
+    from app.routers.clustering import cluster_store
+
+    with input_lock:
+        state = _current_publication_state(sid)
+        if state and state.pending:
+            return {"analysis_pending": True, "analysis_status": "computing"}
+        if state and state.failed:
+            return {"analysis_pending": False, "analysis_status": "failed"}
+        return {"analysis_pending": False,
+                "analysis_status": "completed" if sid in cluster_store else "idle"}
+
+
+def fail_analysis(ticket: AnalysisTicket) -> None:
+    with input_lock, ticket.state.lock:
+        if publication_states.get(ticket.sid) is ticket.state and ticket.sequence == ticket.state.sequence:
+            ticket.state.pending = False
+            ticket.state.failed = True
+
+
+def _check_publication(ticket: AnalysisTicket) -> None:
+    from app.routers.upload import sessions
+
+    if sessions.get(ticket.sid) is not ticket.session or publication_states.get(ticket.sid) is not ticket.state:
+        raise HTTPException(404, "Session not found")
+    if ticket.sequence != ticket.state.sequence:
+        raise HTTPException(409, {"code": "ANALYSIS_SUPERSEDED", "message": "A newer analysis was accepted."})
+    check_expected(ticket.session, ticket.input_revision)
+
+
+def publish_analysis(ticket: AnalysisTicket, result: ClusteringResult) -> None:
+    """Single-process CAS + short DB boundary; never called in calculation workers."""
+    from app.routers.clustering import cluster_store
+
+    with input_lock, ticket.state.lock:
+        _check_publication(ticket)
+        db.save_clustering(ticket.sid, result)
+        cluster_store[ticket.sid] = result
+        ticket.state.pending = False
+        ticket.state.failed = False
 
 
 @dataclass

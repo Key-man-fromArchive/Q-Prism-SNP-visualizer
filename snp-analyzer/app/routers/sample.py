@@ -125,7 +125,7 @@ def _delete_sessions_impl(sids_to_delete: list[str]) -> None:
     from app.routers.data import protocol_store
     from app.db import get_db
     from app.asg_session import forget_session_asg_launch
-    from app.processing.analysis_state import input_lock
+    from app.processing.analysis_state import input_lock, forget_analysis
 
     with input_lock:
         conn = get_db()
@@ -142,6 +142,7 @@ def _delete_sessions_impl(sids_to_delete: list[str]) -> None:
             for cache in stores:
                 cache.pop(sid, None)
             forget_session_asg_launch(sid)
+            forget_analysis(sid)
 
 # NOTE: bulk-delete MUST be registered before {sid} to avoid path conflict
 @router.post("/api/sessions/bulk-delete")
@@ -178,10 +179,12 @@ async def get_session_info(sid: str, current_user: CurrentUser):
 
     from app.processing.ntc_detection import compute_suggested_cycle
     suggested = compute_suggested_cycle(unified)
+    from app.processing.analysis_state import analysis_status
 
     return {
         "session_id": sid,
         "input_revision": unified.input_revision,
+        **analysis_status(sid),
         "instrument": unified.instrument,
         "allele2_dye": unified.allele2_dye,
         "num_wells": len(unified.wells),

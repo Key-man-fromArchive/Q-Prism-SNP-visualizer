@@ -1,10 +1,19 @@
 import hashlib
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from uuid import uuid4
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 
-from pydantic import BaseModel as _BaseModel
+from pydantic import BaseModel as _BaseModel, JsonValue
+from starlette.concurrency import run_in_threadpool
 
 from app.models import (
+    AnalysisContext,
+    AnalysisRegionContext,
+    RatioOrigin,
+    UnifiedData,
     ClusteringAlgorithm,
     ClusteringRequest,
     ClusteringResult,
@@ -21,11 +30,15 @@ from app.processing.clustering import (
     cluster_threshold,
 )
 from app.processing.genotype_vocab import validate_ploidy
-from app.processing.normalize import normalize_for_cycle
+from app.processing.normalize import normalize_for_cycle, normalization_applies
+from app.processing.background import available_background_modes, BackgroundModeError
 from app.processing.ratio_origin import compute_ratio_origin, shift_to_origin
 from app.routers.upload import sessions
 from app.auth import CurrentUser, check_session_access
-from app.processing.analysis_state import check_expected, mutate_inputs
+from app.processing.analysis_state import (
+    AnalysisTicket, analysis_status, begin_analysis, check_expected, fail_analysis,
+    input_lock, mutate_inputs, publish_analysis,
+)
 
 
 class BulkWellTypeReplace(_BaseModel):
@@ -378,127 +391,149 @@ def _validate_analysis_request(req: ClusteringRequest, stored_markers: list[Mark
         raise HTTPException(400, str(exc)) from exc
 
 
+@dataclass(frozen=True)
+class CalculationSnapshot:
+    unified: UnifiedData
+    request: ClusteringRequest
+    cycle: int
+    welltypes: dict[str, str]
+
+
+def _capture_analysis(sid: str, req: ClusteringRequest) -> tuple[AnalysisTicket, CalculationSnapshot]:
+    # No await under this short boundary. Workers receive copies and never use DB.
+    with input_lock:
+        unified = _get_session(sid)
+        resolved = req.model_copy(deep=True)
+        resolved.regions = [m.model_copy(deep=True) for m in (req.regions or marker_store.get(sid, []))]
+        cycle = req.cycle if req.cycle > 0 else max(unified.cycles)
+        if cycle not in unified.cycles:
+            raise HTTPException(400, f"Cycle {cycle} not available")
+        _validate_analysis_request(resolved, [])
+        background = req.background or "none"
+        if background not in available_background_modes(unified):
+            raise BackgroundModeError(f"Background mode {background!r} is not valid for this run")
+        check_expected(unified, req.expected_input_revision)
+        if not resolved.regions and req.ploidy is not None:
+            mutate_inputs(sid, req.expected_input_revision, ploidy=req.ploidy)
+        snapshot = CalculationSnapshot(unified.model_copy(deep=True), resolved, cycle,
+                                       effective_well_types_for(sid, unified))
+        return begin_analysis(sid, unified), snapshot
+
+
+def _snapshot_points(snapshot: CalculationSnapshot):
+    req, unified = snapshot.request, snapshot.unified
+    points = normalize_for_cycle(unified, snapshot.cycle, use_rox=req.use_rox, background=req.background)
+    filled = [p for p in points if snapshot.welltypes.get(p.well) != WellType.EMPTY.value]
+    ntcs = {well for well, kind in snapshot.welltypes.items() if kind == WellType.NTC.value}
+    origin = compute_ratio_origin(filled or points, ntcs)
+    excluded = {well for well, kind in snapshot.welltypes.items()
+                if kind in (WellType.OMIT.value, WellType.EMPTY.value)}
+    point_dicts = shift_to_origin([
+        {"well": p.well, "norm_fam": p.norm_fam, "norm_allele2": p.norm_allele2,
+         "plot_fam": p.norm_fam, "plot_allele2": p.norm_allele2}
+        for p in points if p.well not in excluded
+    ], origin)
+    return point_dicts, origin, excluded
+
+
+def _snapshot_controls(snapshot: CalculationSnapshot) -> dict[str, str]:
+    return {well: kind for well, kind in snapshot.welltypes.items()
+            if kind in (WellType.NTC.value, WellType.POSITIVE_CONTROL.value,
+                        WellType.ALLELE1_CONTROL.value, WellType.ALLELE2_CONTROL.value)}
+
+
+def _single_result(snapshot: CalculationSnapshot, points, controls) -> ClusteringResult:
+    req, ploidy = snapshot.request, snapshot.unified.ploidy
+    assignments, confidences, window, warnings = _cluster_point_dicts(
+        points, controls, req.algorithm, req.threshold_config, req.n_clusters, ploidy)
+    return ClusteringResult(
+        algorithm=req.algorithm.value, cycle=snapshot.cycle, assignments=assignments,
+        confidences=confidences or None, ploidy=ploidy, warnings=warnings, **window)
+
+
+def _actual_algorithm(requested: ClusteringAlgorithm, config: ThresholdConfig, *, region: bool) -> ClusteringAlgorithm:
+    if config.boundaries:
+        return ClusteringAlgorithm.THRESHOLD
+    return ClusteringAlgorithm.AUTO if region else requested
+
+
+def _resolved_parameters(req: ClusteringRequest, ploidy: int, config: ThresholdConfig,
+                         actual: ClusteringAlgorithm, result: ClusteringResult | RegionResult) -> dict[str, JsonValue]:
+    return {
+        "requested_algorithm": req.algorithm.value, "ploidy": ploidy,
+        "n_clusters": req.n_clusters, "n_clusters_applied": actual == ClusteringAlgorithm.KMEANS,
+        "threshold_config": config.model_dump(mode="json"),
+        "actual_window": {"boundaries": None if result.boundaries is None else [float(v) for v in result.boundaries], "offset": result.offset,
+                          "offset_uncertain": result.offset_uncertain,
+                          "dosage_max": result.dosage_max, "low_separation": result.low_separation},
+    }
+
+
+def _region_contexts(snapshot: CalculationSnapshot, result: ClusteringResult) -> list[AnalysisRegionContext]:
+    req = snapshot.request
+    contexts = []
+    for marker, region_result in zip(req.regions or [], result.regions or [], strict=True):
+        config = marker.threshold_config or req.threshold_config or ThresholdConfig()
+        actual = _actual_algorithm(req.algorithm, config, region=True)
+        contexts.append(AnalysisRegionContext(
+            marker_id=marker.id, name=marker.name, wells=list(marker.wells), ploidy=marker.ploidy,
+            algorithm=actual, parameters=_resolved_parameters(req, marker.ploidy, config, actual, region_result)))
+    return contexts
+
+
+def _normalization_was_applied(snapshot: CalculationSnapshot) -> bool:
+    if not normalization_applies(snapshot.unified, use_rox=snapshot.request.use_rox):
+        return False
+    return any((reading.normalization_value if reading.normalization_value is not None else reading.rox or 0) > 0
+               for reading in snapshot.unified.data if reading.cycle == snapshot.cycle)
+
+
+def _attach_context(snapshot: CalculationSnapshot, result: ClusteringResult, origin: RatioOrigin,
+                    excluded: set[str]) -> None:
+    req = snapshot.request
+    config = req.threshold_config or ThresholdConfig()
+    actual = _actual_algorithm(req.algorithm, config, region=False)
+    regions = _region_contexts(snapshot, result)
+    algorithms = {region.algorithm for region in regions}
+    aggregate: ClusteringAlgorithm | Literal["mixed"] = next(iter(algorithms)) if len(algorithms) == 1 else "mixed"
+    parameters = _resolved_parameters(req, snapshot.unified.ploidy, config, actual, result)
+    parameters["scope"] = "regions" if regions else "whole_plate"
+    if regions:
+        parameters["n_clusters_applied"] = False
+    parameters.update({"effective_well_types": dict(snapshot.welltypes),
+                       "ratio_origin": origin.model_dump(mode="json"), "excluded_wells": [well for well in sorted(excluded)]})
+    result.analysis_context = AnalysisContext(
+        schema_version=1, result_revision=uuid4(), analysed_at=datetime.now(timezone.utc),
+        cycle=snapshot.cycle, use_rox=req.use_rox,
+        normalization_applied=_normalization_was_applied(snapshot),
+        background=req.background or "none", algorithm=aggregate if regions else actual,
+        parameters=parameters, regions=regions, input_revision=snapshot.unified.input_revision)
+
+
+def _calculate_snapshot(snapshot: CalculationSnapshot) -> ClusteringResult:
+    """Pure worker: no sessions/stores/DB access, scientific functions unchanged."""
+    points, origin, excluded = _snapshot_points(snapshot)
+    controls = _snapshot_controls(snapshot)
+    if snapshot.request.regions:
+        result = _run_regions(snapshot.request, snapshot.unified, snapshot.cycle, points, controls)
+    else:
+        result = _single_result(snapshot, points, controls)
+    _attach_context(snapshot, result, origin, excluded)
+    return result
+
+
 @router.post("/api/data/{sid}/cluster")
 async def run_clustering(sid: str, req: ClusteringRequest, current_user: CurrentUser):
     check_session_access(sid, current_user)
-    unified = _get_session(sid)
-
-    cycle = req.cycle if req.cycle > 0 else max(unified.cycles)
-    if cycle not in unified.cycles:
-        raise HTTPException(400, f"Cycle {cycle} not available")
-
-    _validate_analysis_request(req, marker_store.get(sid, []))
-    points = normalize_for_cycle(
-        unified, cycle, use_rox=req.use_rox, background=req.background
-    )
-    check_expected(unified, req.expected_input_revision)
-    # Wells marked "Omit" have data but should not skew clustering (bad/spiked
-    # readings would drag kmeans centroids or threshold ratios). Wells marked
-    # "Empty" hold no reaction at all: there is no genotype in them to call,
-    # and -- unlike an omitted well -- their optical read is not this assay's
-    # background either, because a well with no reaction mix in it reads lower
-    # than one that has some. Left in, a plate whose unused wells outnumber its
-    # samples has its no-signal floor estimated from the empty wells rather
-    # than from the assay, which moves the origin and therefore every ratio.
-    effective_well_types = effective_well_types_for(sid, unified)
-    excluded = {
-        well
-        for well, wtype in effective_well_types.items()
-        if wtype in (WellType.OMIT.value, WellType.EMPTY.value)
-    }
-    # Every call below this line is a ratio, so it needs an origin that means
-    # "no signal". Raw endpoint RFU does not put that at (0, 0) -- see
-    # app/processing/ratio_origin.py and ratio_origin_for above. Applied to the
-    # clustering input only; the plot keeps the raw values.
-    origin = ratio_origin_for(sid, unified, points)
-    point_dicts = shift_to_origin(
-        [
-            {
-                "well": p.well,
-                "norm_fam": p.norm_fam,
-                "norm_allele2": p.norm_allele2,
-                # Keep the displayed coordinates for the operator-defined NTC
-                # quadrant while shift_to_origin adjusts only the ratio inputs.
-                "plot_fam": p.norm_fam,
-                "plot_allele2": p.norm_allele2,
-            }
-            for p in points
-            if p.well not in excluded
-        ],
-        origin,
-    )
-
-    # User-marked controls anchor the analysis: they are honored as-is and
-    # excluded from the clustering input. Allele-1/Allele-2 controls (C1) are
-    # homozygous reference wells that additionally anchor the dosage ladder's
-    # extremes (see cluster_auto) -- they are excluded from the fit exactly
-    # like NTC/Positive Control, but also feed the offset resolution.
-    control_wells = {
-        well: wtype
-        for well, wtype in effective_well_types.items()
-        if wtype in (
-            WellType.NTC.value,
-            WellType.POSITIVE_CONTROL.value,
-            WellType.ALLELE1_CONTROL.value,
-            WellType.ALLELE2_CONTROL.value,
-        )
-    }
-
-    stored_markers = marker_store.get(sid)
-    if req.regions:
-        # Multi-marker: per-region ploidy governs; do NOT persist req.ploidy onto
-        # the session (that is single-marker state).
-        result = _run_regions(req, unified, cycle, point_dicts, control_wells)
-    elif stored_markers:
-        # B1: the persisted marker (assay) set is authoritative when the caller
-        # did not pass explicit regions -- a plain "cluster this session" call
-        # must genotype each saved marker independently, not the whole plate as
-        # one blob. Reuse _run_regions unchanged by injecting the stored markers
-        # as this request's regions.
-        effective_req = req.model_copy(update={"regions": list(stored_markers)})
-        result = _run_regions(effective_req, unified, cycle, point_dicts, control_wells)
-    else:
-        # Single-marker (whole plate) — unchanged behavior. Ploidy travels with
-        # the request; persist it on the session so downstream views/stats/
-        # export/ASG can read it. Default (None) keeps the stored value.
-        if req.ploidy is not None:
-            validate_ploidy(req.ploidy)
-            if req.ploidy != getattr(unified, "ploidy", 2):
-                mutate_inputs(sid, req.expected_input_revision, ploidy=req.ploidy)
-
-        ploidy = getattr(unified, "ploidy", 2)
-        assignments, confidences, window, warnings = _cluster_point_dicts(
-            point_dicts,
-            control_wells,
-            req.algorithm,
-            req.threshold_config,
-            req.n_clusters,
-            ploidy,
-        )
-        result = ClusteringResult(
-            algorithm=req.algorithm.value,
-            cycle=cycle,
-            assignments=assignments,
-            confidences=confidences or None,
-            ploidy=ploidy,
-            boundaries=window["boundaries"],
-            offset=window["offset"],
-            offset_uncertain=window["offset_uncertain"],
-            dosage_max=window["dosage_max"],
-            low_separation=window["low_separation"],
-            warnings=warnings,
-        )
-
-    cluster_store[sid] = result
-
-    from app.db import save_clustering
-    save_clustering(sid, result)
-
-    # Omit None fields (e.g. regions/warnings on the legacy single-marker
-    # path) so a clean response doesn't grow keys that were never part of
-    # its contract -- a multi-marker result's (non-None) regions still
-    # serialize normally.
-    return result.model_dump(exclude_none=True)
+    ticket, snapshot = _capture_analysis(sid, req)
+    try:
+        result = await run_in_threadpool(_calculate_snapshot, snapshot)
+        publish_analysis(ticket, result)
+    except BaseException:
+        fail_analysis(ticket)
+        raise
+    return {**result.model_dump(exclude_none=True), "input_revision": snapshot.unified.input_revision,
+            **analysis_status(sid)}
 
 
 @router.get("/api/data/{sid}/ploidy")
@@ -527,8 +562,8 @@ async def get_clustering(sid: str, current_user: CurrentUser):
     check_session_access(sid, current_user)
     unified = _get_session(sid)
     if sid not in cluster_store:
-        return {"algorithm": None, "cycle": 0, "assignments": {}, "input_revision": unified.input_revision}
-    return {**cluster_store[sid].model_dump(exclude_none=True), "input_revision": unified.input_revision}
+        return {"algorithm": None, "cycle": 0, "assignments": {}, "input_revision": unified.input_revision, **analysis_status(sid)}
+    return {**cluster_store[sid].model_dump(exclude_none=True), "input_revision": unified.input_revision, **analysis_status(sid)}
 
 
 @router.post("/api/data/{sid}/welltypes")

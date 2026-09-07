@@ -377,7 +377,7 @@ class AnalysisContext(BaseModel):
     use_rox: bool
     normalization_applied: bool
     background: Literal["none", "pre_read", "channel_min"]
-    algorithm: ClusteringAlgorithm
+    algorithm: ClusteringAlgorithm | Literal["mixed"]
     parameters: dict[str, JsonValue]
     regions: list[AnalysisRegionContext]
     input_revision: int = Field(ge=0)
