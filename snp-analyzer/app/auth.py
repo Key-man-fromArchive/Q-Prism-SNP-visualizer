@@ -14,7 +14,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from passlib.context import CryptContext
-from jose import JWTError, jwt
+import jwt
 
 from app.db import get_db
 from app.auth_security import validate_password_strength
@@ -101,7 +101,14 @@ def create_access_token(user_id: str, username: str, role: str) -> str:
 
 def decode_token(token: str) -> TokenData | None:
     try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        # python-jose accepted future iat values, but required integer shape.
+        # Preserve that policy rather than adopting PyJWT's future-iat check.
+        payload = jwt.decode(
+            token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM],
+            options={"verify_iat": False},
+        )
+        if "iat" in payload:
+            int(payload["iat"])
         user_id = payload.get("sub")
         username = payload.get("username")
         role = payload.get("role")
@@ -110,7 +117,7 @@ def decode_token(token: str) -> TokenData | None:
         if is_asg_launch_mode() and payload.get("auth_mode") != AUTH_MODE_ASG_LAUNCH:
             return None
         return TokenData(user_id=user_id, username=username, role=role)
-    except JWTError:
+    except (jwt.InvalidTokenError, ValueError, TypeError):
         return None
 
 

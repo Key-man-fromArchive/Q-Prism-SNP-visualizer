@@ -70,7 +70,7 @@ export function ImportMappingWizard({
 
   const localIssues = useMemo(
     () => buildLocalIssues(mapping, channels, t),
-    [mapping, channels],
+    [mapping, channels, t],
   );
   const channelKey = channels.join("\u0001");
 

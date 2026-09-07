@@ -2,7 +2,7 @@
 
 - Contract ID: qprism-ux-followup-20260907-v1
 - 작성일: 2026-09-07
-- 상태: READY FOR PREFLIGHT — 모든 작업 미착수. 구현·테스트 통과를 의미하지 않음.
+- 상태: IN PROGRESS — 2026-09-07 사용자 승인으로 lint·도구·런타임/인증 의존성 선행 보완 재개. P1 미착수.
 - 기준: [UI/UX 후속 개선 기획서 v0.2](ui-ux-overhaul/04-review-followup-prd.md)
 - 실행 기준 파일: docs/planning/06-tasks.md
 - 이전 계약: [qPCR Import Expansion 원문 보관](archive/06-tasks-qpcr-import-expansion.md). 보관본의 작업은 이번 실행 대상이 아니다.
@@ -89,34 +89,68 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P0-T0.1: 기준 커밋·계약·검증 환경 확정
 
-- Status: TODO
+- Status: DONE
+- Commit: 9f519ae86cc430c819ee49dbb2bf7b2913a0aefa
+- Evidence: [P0-T0.1](ui-ux-overhaul/evidence/P0-T0.1.md). 기준선 기록 완료이며 품질 게이트 통과는 아님.
 - 담당: test-specialist
 - Depends On: []
 - Write Scope: docs/planning/ui-ux-overhaul/05-contract-appendix.md, BE/requirements-dev.txt, FE/package.json·lockfile·vitest.config.ts, tests/helpers.ts, 테스트/coverage 설정
 - 구현: 코드·문서 커밋/해시와 기존 기준선을 기록한다. appendix에 revision 증가 대상·생성, stale/legacy 오류, 상태 소유권, 응답 필드·호환 정책을 backend 관점으로 명세한다. 제품 모델/DB 변경은 하지 않는다.
 - 구현: pytest-cov, Vitest와 버전이 맞는 coverage provider, PDF/XLSX 내용 검사 도구와 대상 manifest를 준비한다. 기존 전체/변경 모듈 지표를 분리하고 격리 환경·로그인 helper를 정리한다.
 - 검증: BE-ALL, FE-ALL, FE-CHECK, 기존 E2E 목록/기준선, COVERAGE. 환경 실패와 제품 결함 구분.
-- [ ] AC: 올바른 소스/계획을 읽는 격리 환경과 계약 appendix가 준비되고 baseline 실패가 숨겨지지 않음.
+- [x] AC: 올바른 소스/계획을 읽는 격리 환경과 계약 appendix가 준비되고 baseline 실패가 숨겨지지 않음.
 
 ### P0-T0.2: 결정적 판정·QC·보고서 fixture
 
-- Status: TODO
+- Status: DONE
+- Commit: 77010b0d9956fba11e3547bf21935c953b50b4ca (초기 d6345b6 이후 복잡도 수정)
+- Evidence: [P0-T0.2](ui-ux-overhaul/evidence/P0-T0.2.md). 합성 fixture 검증 25개 통과, 생성기 coverage 100%, 최대 복잡도 9.
 - 담당: test-specialist
 - Depends On: []
 - Write Scope: BE/tests/fixtures/ux_followup/, BE/tests/fixtures_ux_followup.py, BE/tests/test_ux_fixtures.py
 - 구현: 기존 fixture를 재사용해 값이 다른 20/40사이클·96/384웰·읽기 구간·서로 다른 배수성 마커·ROX 없음/해제·NTC 정상/오염/미존재/불충분을 정의한다. 비공개 파일을 사용하지 않는다.
 - 구현: raw/normalized·background별 기대 수치, context 없는 저장 결과, 지연/실패 사례를 포함한다. 새 API는 구현하지 않는다.
 - 검증: BE-TEST(test_ux_fixtures.py), 결정성·범위·크기·출처 검사.
-- [ ] AC: 각 실패 시나리오에 이름과 기대 결과가 있고 반복 생성 입력이 동일함.
+- [x] AC: 각 실패 시나리오에 이름과 기대 결과가 있고 반복 생성 입력이 동일함.
+
+### P0-R0-T1: 런타임·인증 의존성 보안 보완
+
+- Status: DONE
+- Commit: 009a7627dbbe266b895943884bad9a476e827e0f
+- Evidence: [P0-R0-T1](ui-ux-overhaul/evidence/P0-R0-T1.md)
+- 담당: security-specialist
+- Depends On: [P0-T0.1]
+- Write Scope: BE/requirements.txt·requirements-dev.txt, BE/app/auth.py 및 필요한 JWT adapter, BE/tests/의 auth·dependency 보완, evidence/P0-R0-T1.md
+- 구현: python-multipart 수정 버전을 고정하고 python-jose/ecdsa 의존 경로를 검증 가능한 JWT 구현으로 교체한다. HS256 제한·토큰 claim·만료·쿠키·ASG 정책과 기존 유효 토큰 호환을 보존한다. 취약점 제외 규칙으로 통과시키지 않는다.
+- 검증: TDD_MODE:RED_FIRST, 기존 토큰/잘못된 서명·알고리즘·만료·claim 회귀, BE-ALL, pip check/audit, 변경 코드 coverage/복잡도. 호스트 환경 수정 금지.
+- [x] AC: 인증·업로드 정책 회귀 없이 의존성 보안 게이트 통과, 실제 깨끗한 venv에서 재현 가능.
+
+### P0-S0-T1: 프론트엔드 lint·검증 도구 보안 보완
+
+- Status: DONE
+- Commit: e9c9b1d5fdb4f608d424a66cca4f0bd078a36a56 (typing 723b551, state a11ece17 및 선행 보완 포함)
+- Evidence: [P0-S0-T1](ui-ux-overhaul/evidence/P0-S0-T1.md), [typing](ui-ux-overhaul/evidence/P0-S0-T1-typing.md). Phase 통과는 독립 P0-S0-V 판정으로 확정한다.
+- 담당: frontend-specialist
+- Depends On: [P0-T0.1]
+- Write Scope: FE/package.json·lockfile·vitest/test 설정, SRC의 기존 lint 오류/경고 파일 및 필요한 typed helpers·회귀 테스트, evidence/P0-S0-T1.md
+- 구현: Vitest와 coverage를 동일 호환 버전으로 업그레이드하고 필요한 전이 의존성을 보완한다. 기존 lint 문제를 타입/상태 소유권 수정으로 해소하며 규칙 비활성화·무의미한 타이머 우회 금지. 제품 UX/과학 알고리즘 재설계는 후속 작업에 남긴다.
+- 확인된 계약 보완: Batch 집계의 실제 `genotypes/ntc_count/unknown_count` 응답 매핑과 SettingsTab의 지원하지 않는 preset algorithm 검증은 typed API 연결에 필요한 최소 회귀 수정으로 포함한다. 임의 응답 타입 추가나 조용한 알고리즘 변경으로 숨기지 않는다.
+- 검증: 상태 변경에는 TDD_MODE:RED_FIRST, FE-ALL/CHECK·coverage·npm audit, 분석/ASG 상태·Plotly·화면 smoke 회귀. 변경된 실행 분기는 테스트하고 브라우저 증거를 남긴다.
+- [x] AC: lint 오류 0, 기존 테스트/build 통과, high/critical audit 0, 사용 동작 회귀 없음.
+
+두 보완 작업은 사용자 승인된 P0 추가 범위다. BE/FE 파일·환경을 분리해 병렬 실행 가능하나 git index/commit은 오케스트레이터가 슬롯을 지정해 직렬화한다. 총 작업은 33개이며 이후 의존성은 유지한다.
 
 ### P0-S0-V: Preflight·ICV 게이트
 
-- Status: TODO
+- Status: DONE
+- Gate Commit: 079d23ce449b14a6e8789813f93d40a3fb6bc93d (이전 BLOCKED bc8fc0d는 증거에 보존)
+- Evidence: [P0-S0-V](ui-ux-overhaul/evidence/P0-S0-V.md)
+- Previous Blocker: 기존 lint 32 errors 및 의존성 audit. 사용자 승인으로 P0-R0-T1/P0-S0-T1에서 해결 후 재검증한다. 이전 BLOCKED 증거는 이력으로 보존한다.
 - 담당: test-specialist
-- Depends On: [P0-T0.1, P0-T0.2]
+- Depends On: [P0-T0.1, P0-T0.2, P0-R0-T1, P0-S0-T1]
 - Write Scope: docs/planning/ui-ux-overhaul/evidence/P0-S0-V.md
 - 검증: DAG/ID/Write Scope, fixture 연결, 환경/coverage, appendix와 PRD 대조. 미지원 필드에 소비 코드가 의존하지 않도록 순서 확인.
-- [ ] AC: 기준 커밋·해시·baseline·미해결 범위 밖 문제와 P1 진입 판정을 기록함.
+- [x] AC: 기준 커밋·해시·baseline·미해결 범위 밖 문제와 P1 진입 판정을 기록함.
 
 ## Phase P1 — 결과 계약과 서버 일관성
 
@@ -136,7 +170,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - Status: TODO
 - 담당: backend-specialist
 - Depends On: [P1-R1-T1]
-- Write Scope: BE/app/routers/clustering.py·layouts.py·sample.py, BE/app/db.py, 신규 BE/app/processing/analysis_state.py, BE/tests/test_analysis_input_revision.py
+- Write Scope: BE/app/routers/clustering.py·layouts.py·sample.py·marker_catalog.py, BE/app/db.py, 신규 BE/app/processing/analysis_state.py, BE/tests/test_analysis_input_revision.py
 - 구현: welltype set/clear/bulk, ploidy, marker create/update/delete, layout apply 등 모든 판정 입력 변경을 조사해 변경/revision 증가를 같은 transaction·직렬화 경계에 연결한다.
 - 구현: mutation 응답 input_revision, undo용 선택적 expected revision·409를 추가한다. 보기·언어·축 변경은 제외하고 stale 결과 정책을 보존한다.
 - 검증: 경로별 증가, 실패/no-op, 권한, stale expected revision, layout/bulk 누락 검사.
@@ -423,7 +457,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - Write Scope: docs/planning/06-tasks.md, docs/planning/ui-ux-overhaul/의 인수 문서, 필요한 README/API 문서
 - 구현: 검증된 변경·마이그레이션/legacy 재분석 안내·설정/복원·출력 동작·실행 명령·남은 제한을 정리한다. 작업별 실제 commit/증거를 연결하고 PRD와 차이가 생긴 경우 결정 근거를 기록한다.
 - 검증: 링크/명령/작업 상태와 실제 실행 로그 대조. 문서만 수정한 뒤에도 diff 검사하며 제품 완료를 새로 추정하지 않는다.
-- [ ] AC: 31개 작업의 상태·증거가 추적 가능하고, 후속 운영자가 재현할 수 있음. merge/push는 실행 당시 오케스트레이터 권한 범위에서만 수행함.
+- [ ] AC: 33개 작업의 상태·증거가 추적 가능하고, 후속 운영자가 재현할 수 있음. merge/push는 실행 당시 오케스트레이터 권한 범위에서만 수행함.
 
 ## 수용 기준 추적표
 
@@ -466,4 +500,4 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 4. 각 작업은 승인된 scope에서 RED → GREEN → REFACTOR → 검증 → 로컬 commit → 증거 보고 순으로 진행한다. 게이트 실패 시 후속 작업을 시작하지 않는다.
 5. 재개 시 계획 hash·branch/commit·상태·증거를 대조한다. 문서의 TODO를 추측으로 DONE 처리하거나 이전 작업서의 상태를 재사용하지 않는다.
 
-현재 상태: **작업서 작성 완료, 구현/테스트/오케스트레이션 미실행**. 모든 작업은 TODO이며 완료 체크박스는 비워 둔다.
+현재 상태: **2026-09-07 P0 5/33 완료, 독립 게이트 PASS**. 사용자가 lint·도구·런타임/인증 의존성 보완과 완료까지 자율 진행을 승인했다. 로컬 Phase 통합 후 P1부터 자동 진행하며 원격 push·배포·외부 알림은 제외한다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.

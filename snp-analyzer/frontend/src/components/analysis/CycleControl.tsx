@@ -109,7 +109,7 @@ export function CycleControl() {
         animRef.current = null;
       }
     };
-  }, [isPlaying, windowCycles, activeWindow, setCycle]);
+  }, [isPlaying, relativeValue, windowCycles, activeWindow, setCycle]);
 
   // External "go to cycle" (e.g. the Analyze button jumping to the suggested cycle)
   useEffect(() => {

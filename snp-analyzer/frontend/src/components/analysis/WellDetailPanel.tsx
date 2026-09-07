@@ -1,5 +1,6 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import Plotly from "plotly.js-dist-min";
+import type { Data, Layout, Shape } from "plotly.js";
 import { useSessionStore } from "@/stores/session-store";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -16,6 +17,15 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   const { t } = useI18n();
   const plotRef = useRef<HTMLDivElement>(null);
   const plotInitRef = useRef(false);
+  const attachPlot = useCallback((node: HTMLDivElement | null) => {
+    plotRef.current = node;
+    if (!node) return;
+    return () => {
+      if (plotInitRef.current) Plotly.purge(node);
+      plotInitRef.current = false;
+      plotRef.current = null;
+    };
+  }, []);
 
   const sessionId = useSessionStore((s) => s.sessionId);
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
@@ -60,7 +70,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
           res.allele2_dye || allele2Dye
         );
 
-        const traces: any[] = [
+        const traces: Data[] = [
           {
             x: curve.cycles,
             y: curve.norm_fam,
@@ -75,7 +85,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
           },
         ];
 
-        const shapes: any[] = currentCycle
+        const shapes: Partial<Shape>[] = currentCycle
           ? [
               {
                 type: "line",
@@ -90,9 +100,9 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
           : [];
 
         const c = plotlyColors();
-        const layout: any = {
-          xaxis: { title: t.axisCycle, gridcolor: c.gridColor },
-          yaxis: { title: t.axisNormRFU, gridcolor: c.gridColor },
+        const layout: Partial<Layout> = {
+          xaxis: { title: { text: t.axisCycle }, gridcolor: c.gridColor },
+          yaxis: { title: { text: t.axisNormRFU }, gridcolor: c.gridColor },
           paper_bgcolor: c.paper_bgcolor,
           plot_bgcolor: c.plot_bgcolor,
           font: { color: c.fontColor },
@@ -114,16 +124,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [selectedWell, sessionId, useRox, backgroundMode, currentCycle, allele2Dye, roleLabels, numCycles]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (plotRef.current && plotInitRef.current) {
-        Plotly.purge(plotRef.current);
-      }
-    };
-  }, []);
+  }, [selectedWell, sessionId, useRox, backgroundMode, currentCycle, allele2Dye, roleLabels, numCycles, t.axisCycle, t.axisNormRFU]);
 
   if (!selectedWell) {
     return (
@@ -261,7 +262,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
         {numCycles > 1 && (
           <div
             id="amplification-plot"
-            ref={plotRef}
+            ref={attachPlot}
             style={{ width: "100%", height: "200px", marginTop: "12px" }}
           />
         )}

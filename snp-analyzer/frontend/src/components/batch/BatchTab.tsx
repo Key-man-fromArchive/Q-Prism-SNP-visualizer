@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { projectGenotypeCounts } from './project-summary';
 import { ArrowLeft, X } from 'lucide-react';
 import { useI18n } from '@/hooks/use-i18n';
 import { useConfirm } from '@/hooks/use-confirm';
@@ -128,7 +129,8 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   const setSession = useSessionStore((s) => s.setSession);
   const resetSession = useSessionStore((s) => s.reset);
 
-  useEffect(() => { loadProjects(); loadSessions(); }, []);
+  const loadInitialData = useEffectEvent(() => { loadProjects(); loadSessions(); });
+  useEffect(() => { loadInitialData(); }, []);
 
   const loadProjects = async () => {
     try { setProjects((await getProjects()).projects); }
@@ -305,9 +307,9 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
     const rows: string[] = ['Session ID,Filename,Instrument,Wells,AA,AB,BB,NTC,Unknown,Mean Quality'];
     let tw = 0, taa = 0, tab = 0, tbb = 0, tntc = 0, tu = 0, tq = 0, pc = 0;
     summary.plates.forEach((p) => {
-      const aa = p.genotype_counts?.AA || 0, ab2 = p.genotype_counts?.AB || 0;
-      const bb = p.genotype_counts?.BB || 0, ntc = p.genotype_counts?.NTC || 0;
-      const uk = p.genotype_counts?.Unknown || 0, w = p.num_wells || 0, q = p.mean_quality || 0;
+      const aa = projectGenotypeCounts(p).AA || 0, ab2 = projectGenotypeCounts(p).AB || 0;
+      const bb = projectGenotypeCounts(p).BB || 0, ntc = projectGenotypeCounts(p).NTC || 0;
+      const uk = projectGenotypeCounts(p).Unknown || 0, w = p.num_wells || 0, q = p.mean_quality || 0;
       rows.push(`${p.session_id},${p.raw_filename||''},${p.instrument},${w},${aa},${ab2},${bb},${ntc},${uk},${q.toFixed(1)}`);
       tw += w; taa += aa; tab += ab2; tbb += bb; tntc += ntc; tu += uk; tq += q; pc++;
     });
@@ -324,7 +326,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   // ── Derived data ───────────────────────────────────────────────────────────
   const sessionFilenameMap: Record<string, string> = {};
   if (currentProject?.sessions) {
-    for (const s of currentProject.sessions) if ((s as any).raw_filename) sessionFilenameMap[s.session_id] = (s as any).raw_filename;
+    for (const s of currentProject.sessions) if (s.raw_filename) sessionFilenameMap[s.session_id] = s.raw_filename;
   }
   for (const s of sessions) if (s.raw_filename) sessionFilenameMap[s.session_id] = s.raw_filename;
 
@@ -490,9 +492,9 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
 
   const totals = summary.plates.reduce(
     (a, p) => ({
-      wells: a.wells + (p.num_wells || 0), aa: a.aa + (p.genotype_counts?.AA || 0),
-      ab: a.ab + (p.genotype_counts?.AB || 0), bb: a.bb + (p.genotype_counts?.BB || 0),
-      ntc: a.ntc + (p.genotype_counts?.NTC || 0), unknown: a.unknown + (p.genotype_counts?.Unknown || 0),
+      wells: a.wells + (p.num_wells || 0), aa: a.aa + (projectGenotypeCounts(p).AA || 0),
+      ab: a.ab + (projectGenotypeCounts(p).AB || 0), bb: a.bb + (projectGenotypeCounts(p).BB || 0),
+      ntc: a.ntc + (projectGenotypeCounts(p).NTC || 0), unknown: a.unknown + (projectGenotypeCounts(p).Unknown || 0),
       quality: a.quality + (p.mean_quality || 0), count: a.count + 1,
     }),
     { wells: 0, aa: 0, ab: 0, bb: 0, ntc: 0, unknown: 0, quality: 0, count: 0 }
@@ -612,11 +614,11 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                     </td>
                     <td className="py-2 px-3 text-text">{plate.instrument}</td>
                     <td className="py-2 px-3 text-text">{plate.num_wells}</td>
-                    <td className="py-2 px-3 text-text">{plate.genotype_counts?.AA || 0}</td>
-                    <td className="py-2 px-3 text-text">{plate.genotype_counts?.AB || 0}</td>
-                    <td className="py-2 px-3 text-text">{plate.genotype_counts?.BB || 0}</td>
-                    <td className="py-2 px-3 text-text">{plate.genotype_counts?.NTC || 0}</td>
-                    <td className="py-2 px-3 text-text">{plate.genotype_counts?.Unknown || 0}</td>
+                    <td className="py-2 px-3 text-text">{projectGenotypeCounts(plate).AA || 0}</td>
+                    <td className="py-2 px-3 text-text">{projectGenotypeCounts(plate).AB || 0}</td>
+                    <td className="py-2 px-3 text-text">{projectGenotypeCounts(plate).BB || 0}</td>
+                    <td className="py-2 px-3 text-text">{projectGenotypeCounts(plate).NTC || 0}</td>
+                    <td className="py-2 px-3 text-text">{projectGenotypeCounts(plate).Unknown || 0}</td>
                     <td className={`py-2 px-3 font-medium ${getQualityColor(plate.mean_quality || 0)}`}>
                       {(plate.mean_quality || 0).toFixed(1)}
                     </td>

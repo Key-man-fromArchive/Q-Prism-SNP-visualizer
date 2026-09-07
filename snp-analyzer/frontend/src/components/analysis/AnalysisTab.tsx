@@ -26,6 +26,7 @@ import { GroupManager } from "./GroupManager";
 import { WellSelectionToolbar } from "./WellSelectionToolbar";
 import { Callout } from "@/components/shared/ui";
 import { analysisWarningTexts } from "@/lib/analysis-warnings";
+import { parseWellType } from "@/lib/well-type-input";
 
 export function AnalysisTab() {
   const { t } = useI18n();
@@ -106,8 +107,10 @@ export function AnalysisTab() {
   const handleAssignType = useCallback(
     async (wellType: string) => {
       if (!sessionId || popupWells.length === 0) return;
+      const assignment = parseWellType(wellType);
+      if (!assignment) return;
       try {
-        await setWellTypes(sessionId, { wells: popupWells, well_type: wellType as any });
+        await setWellTypes(sessionId, { wells: popupWells, well_type: assignment });
         window.dispatchEvent(new CustomEvent("welltypes-changed"));
       } catch (err) {
         console.error("Failed to assign well type:", err);
@@ -216,6 +219,7 @@ export function AnalysisTab() {
     allele2RatioMin,
     nClusters,
     setClusterAssignments,
+    setBoundaries, setDosageMax, setLowSeparation, setOffset, setOffsetUncertain,
     t,
   ]);
 
@@ -254,7 +258,7 @@ export function AnalysisTab() {
       }
       handleAnalyze();
     })();
-  }, [sessionId, currentCycle, handleAnalyze, setClusterAssignments, setPloidy]);
+  }, [sessionId, currentCycle, handleAnalyze, setClusterAssignments, setPloidy, setBoundaries, setDosageMax, setLowSeparation, setOffset, setOffsetUncertain]);
 
   // Check if any wells are typed as Empty
   const hasEmptyWells = useMemo(

@@ -131,7 +131,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         setPreviewingImport(false);
       }
     },
-    [t.uploadFailed, setUploadState, setUploadProgress, setUploadError],
+    [t, setUploadState, setUploadProgress, setUploadError],
   );
 
   /** Upload a single file and go to Analysis tab */
