@@ -2,6 +2,7 @@
 import json
 import sqlite3
 from pathlib import Path
+from app.models import ClusteringResult, UnifiedData
 
 import os as _os
 
@@ -30,6 +31,17 @@ def _get_schema_version(conn: sqlite3.Connection) -> int:
         return row[0] or 0
     except sqlite3.OperationalError:
         return 0
+
+
+def _migrate_input_revision(conn: sqlite3.Connection, current: int) -> None:
+    """Add provenance versioning without rewriting sessions or child rows."""
+    if current >= 7:
+        return
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+    if "input_revision" not in columns:
+        conn.execute("ALTER TABLE sessions ADD COLUMN input_revision "
+                     "INTEGER NOT NULL DEFAULT 0 CHECK (input_revision >= 0)")
+    conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (7)")
 
 
 def _run_migrations(conn: sqlite3.Connection):
@@ -139,6 +151,7 @@ def _run_migrations(conn: sqlite3.Connection):
             conn.execute("ALTER TABLE marker_regions ADD COLUMN catalog_id TEXT")
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (6)")
 
+    _migrate_input_revision(conn, current)
     conn.commit()
 
 
@@ -150,10 +163,10 @@ def init_db():
     conn.commit()
 
 
-def save_session(session_id: str, unified, filename: str = "", user_id: str | None = None):
+def save_session(session_id: str, unified: UnifiedData, filename: str = "", user_id: str | None = None) -> None:
     """Write session metadata + all well cycle data to DB."""
     conn = get_db()
-    metadata = {}
+    metadata: dict[str, object] = {}
     if unified.sample_names:
         metadata["sample_names"] = unified.sample_names
     if unified.imported_well_types:
@@ -182,10 +195,10 @@ def save_session(session_id: str, unified, filename: str = "", user_id: str | No
 
     conn.execute(
         """INSERT OR REPLACE INTO sessions
-           (session_id, instrument, num_wells, num_cycles, allele2_dye, has_rox, raw_filename, metadata_json, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           (session_id, instrument, num_wells, num_cycles, allele2_dye, has_rox, raw_filename, metadata_json, user_id, input_revision)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (session_id, unified.instrument, len(unified.wells), len(unified.cycles),
-         unified.allele2_dye, int(unified.has_rox), filename, json.dumps(metadata), user_id),
+         unified.allele2_dye, int(unified.has_rox), filename, json.dumps(metadata), user_id, unified.input_revision),
     )
 
     # Batch insert well cycle data
@@ -217,23 +230,28 @@ def set_session_ploidy(session_id: str, ploidy: int) -> None:
     conn.commit()
 
 
-def save_clustering(session_id: str, result):
-    """Write clustering result to DB."""
+def save_clustering(session_id: str, result: ClusteringResult) -> None:
+    """Atomically save result and provenance; failed commits leave no pending write.
+
+    The caller must publish to memory only after this succeeds. Session-level
+    computation ordering/CAS belongs to the analysis publisher, not this writer.
+    """
     conn = get_db()
-    conn.execute(
-        "INSERT OR REPLACE INTO clustering_results "
-        "(session_id, labels_json, method, cycle, confidences_json, result_json) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (
-            session_id,
-            json.dumps(result.assignments),
-            result.algorithm,
-            result.cycle,
-            json.dumps(result.confidences) if result.confidences else None,
-            result.model_dump_json(),
-        ),
+    values = (
+        session_id, json.dumps(result.assignments), result.algorithm, result.cycle,
+        json.dumps(result.confidences) if result.confidences is not None else None,
+        result.model_dump_json(),
     )
-    conn.commit()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO clustering_results "
+            "(session_id, labels_json, method, cycle, confidences_json, result_json) "
+            "VALUES (?, ?, ?, ?, ?, ?)", values,
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def delete_clustering(session_id: str) -> None:
@@ -615,6 +633,7 @@ def load_all_sessions():
         well_groups = metadata.get("well_groups")
 
         unified = UnifiedData(
+            input_revision=row["input_revision"],
             instrument=row["instrument"],
             allele2_dye=row["allele2_dye"],
             wells=wells,

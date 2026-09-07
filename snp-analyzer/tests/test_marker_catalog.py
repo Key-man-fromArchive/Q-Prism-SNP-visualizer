@@ -120,7 +120,7 @@ def test_update_catalog_entry(fresh_db):
     assert loaded["default_ploidy"] == 4
 
 
-def test_delete_catalog_entry(fresh_db):
+def test_delete_catalog_entry_from_database(fresh_db):
     db = fresh_db
     _insert_user(db, "u1", "alice")
     db.save_marker_catalog_entry("cat-1", "u1", _sample_entry_data())
@@ -185,7 +185,8 @@ def test_migration_6_adds_marker_catalog_table_and_catalog_id_column(tmp_path):
     cols = [r[1] for r in conn.execute("PRAGMA table_info(marker_regions)").fetchall()]
     assert "catalog_id" in cols
     version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-    assert version == 6
+    assert version >= 6
+    assert conn.execute("SELECT version FROM schema_version WHERE version=6").fetchone() is not None
 
     # Migration 6 back-fills nothing.
     assert db.list_marker_catalog_entries("any-user") == []
