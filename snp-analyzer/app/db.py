@@ -213,7 +213,7 @@ def save_session(session_id: str, unified: UnifiedData, filename: str = "", user
     conn.commit()
 
 
-def set_session_ploidy(session_id: str, ploidy: int) -> None:
+def set_session_ploidy(session_id: str, ploidy: int, *, commit: bool = True) -> None:
     """Merge the session's ploidy into its stored metadata_json (no data rewrite)."""
     conn = get_db()
     row = conn.execute(
@@ -227,7 +227,8 @@ def set_session_ploidy(session_id: str, ploidy: int) -> None:
         "UPDATE sessions SET metadata_json = ? WHERE session_id = ?",
         (json.dumps(metadata), session_id),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def save_clustering(session_id: str, result: ClusteringResult) -> None:
@@ -266,21 +267,23 @@ def delete_clustering(session_id: str) -> None:
     conn.commit()
 
 
-def save_welltype(session_id: str, well: str, welltype: str):
+def save_welltype(session_id: str, well: str, welltype: str, *, commit: bool = True):
     """Write a single manual welltype override."""
     conn = get_db()
     conn.execute(
         "INSERT OR REPLACE INTO manual_welltypes (session_id, well, welltype) VALUES (?, ?, ?)",
         (session_id, well, welltype),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
-def delete_welltypes(session_id: str):
+def delete_welltypes(session_id: str, *, commit: bool = True):
     """Delete all manual welltypes for a session."""
     conn = get_db()
     conn.execute("DELETE FROM manual_welltypes WHERE session_id = ?", (session_id,))
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def save_sample_override(session_id: str, well: str, name: str):
@@ -346,7 +349,7 @@ def delete_well_groups(session_id: str):
     conn.commit()
 
 
-def save_marker_regions(session_id: str, regions: list[dict]):
+def save_marker_regions(session_id: str, regions: list[dict], *, commit: bool = True):
     """Replace-all: write the session's full marker (assay) definition set.
 
     Marker definitions own wells/ploidy/color/threshold_config/name only --
@@ -370,7 +373,8 @@ def save_marker_regions(session_id: str, regions: list[dict]):
                 reg.get("catalog_id"),
             ),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def load_marker_regions(session_id: str) -> list[dict]:

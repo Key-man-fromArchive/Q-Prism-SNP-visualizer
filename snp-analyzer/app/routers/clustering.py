@@ -25,13 +25,16 @@ from app.processing.normalize import normalize_for_cycle
 from app.processing.ratio_origin import compute_ratio_origin, shift_to_origin
 from app.routers.upload import sessions
 from app.auth import CurrentUser, check_session_access
+from app.processing.analysis_state import check_expected, mutate_inputs
 
 
 class BulkWellTypeReplace(_BaseModel):
+    expected_input_revision: int | None = None
     assignments: dict[str, str]
 
 
 class PloidyUpdate(_BaseModel):
+    expected_input_revision: int | None = None
     ploidy: int
 
 
@@ -41,10 +44,12 @@ class WellGroupCreate(_BaseModel):
 
 
 class MarkerSetCreate(_BaseModel):
+    expected_input_revision: int | None = None
     markers: list[MarkerRegion]
 
 
 class MarkerUpdate(_BaseModel):
+    expected_input_revision: int | None = None
     """Partial update for one marker (PUT /markers/{marker_id}).
 
     Only the fields the client actually sends are applied (``model_dump
@@ -248,19 +253,6 @@ def _validate_marker_set(markers: list[MarkerRegion], unified) -> None:
             seen_wells.add(well)
 
 
-def _invalidate_clustering(sid: str) -> None:
-    """Clear a session's clustering result (memory + DB).
-
-    A marker set edit changes what "the plate's markers" means, so any
-    clustering computed against the old set is stale. DB is cleared first
-    (mirrors the DB-before-memory rule used for marker writes) so a crash
-    between the two calls cannot leave a persisted result the in-memory
-    store no longer agrees existed."""
-    from app.db import delete_clustering
-    delete_clustering(sid)
-    cluster_store.pop(sid, None)
-
-
 def _region_input_hash(
     wells: list[str],
     ploidy: int,
@@ -369,6 +361,23 @@ def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringR
     )
 
 
+def _validate_analysis_request(req: ClusteringRequest, stored_markers: list[MarkerRegion]) -> None:
+    """Validate actual analysis domain inputs before disclosing revisions."""
+    regions = req.regions or stored_markers
+    try:
+        if not regions and req.ploidy is not None:
+            validate_ploidy(req.ploidy)
+        seen: set[str] = set()
+        for region in regions:
+            validate_ploidy(region.ploidy)
+            for well in region.wells:
+                if well in seen:
+                    raise HTTPException(400, f"Well {well} is assigned to more than one marker")
+                seen.add(well)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @router.post("/api/data/{sid}/cluster")
 async def run_clustering(sid: str, req: ClusteringRequest, current_user: CurrentUser):
     check_session_access(sid, current_user)
@@ -378,9 +387,11 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
     if cycle not in unified.cycles:
         raise HTTPException(400, f"Cycle {cycle} not available")
 
+    _validate_analysis_request(req, marker_store.get(sid, []))
     points = normalize_for_cycle(
         unified, cycle, use_rox=req.use_rox, background=req.background
     )
+    check_expected(unified, req.expected_input_revision)
     # Wells marked "Omit" have data but should not skew clustering (bad/spiked
     # readings would drag kmeans centroids or threshold ratios). Wells marked
     # "Empty" hold no reaction at all: there is no genotype in them to call,
@@ -453,9 +464,7 @@ async def run_clustering(sid: str, req: ClusteringRequest, current_user: Current
         if req.ploidy is not None:
             validate_ploidy(req.ploidy)
             if req.ploidy != getattr(unified, "ploidy", 2):
-                unified.ploidy = req.ploidy
-                from app.db import set_session_ploidy
-                set_session_ploidy(sid, req.ploidy)
+                mutate_inputs(sid, req.expected_input_revision, ploidy=req.ploidy)
 
         ploidy = getattr(unified, "ploidy", 2)
         assignments, confidences, window, warnings = _cluster_point_dicts(
@@ -504,44 +513,38 @@ async def get_ploidy(sid: str, current_user: CurrentUser):
 async def set_ploidy(sid: str, body: PloidyUpdate, current_user: CurrentUser):
     """Set the session's ploidy (does not re-run clustering)."""
     check_session_access(sid, current_user)
-    unified = _get_session(sid)
+    _get_session(sid)
     try:
         validate_ploidy(body.ploidy)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
-    unified.ploidy = body.ploidy
-    from app.db import set_session_ploidy
-    set_session_ploidy(sid, body.ploidy)
-    return {"ploidy": body.ploidy}
+    revision = mutate_inputs(sid, body.expected_input_revision, ploidy=body.ploidy)
+    return {"ploidy": body.ploidy, "input_revision": revision}
 
 
 @router.get("/api/data/{sid}/cluster")
 async def get_clustering(sid: str, current_user: CurrentUser):
     check_session_access(sid, current_user)
-    _get_session(sid)
+    unified = _get_session(sid)
     if sid not in cluster_store:
-        return {"algorithm": None, "cycle": 0, "assignments": {}}
-    return cluster_store[sid].model_dump(exclude_none=True)
+        return {"algorithm": None, "cycle": 0, "assignments": {}, "input_revision": unified.input_revision}
+    return {**cluster_store[sid].model_dump(exclude_none=True), "input_revision": unified.input_revision}
 
 
 @router.post("/api/data/{sid}/welltypes")
 async def set_well_types(sid: str, update: ManualWellTypeUpdate, current_user: CurrentUser):
     check_session_access(sid, current_user)
     _get_session(sid)
-    if sid not in welltype_store:
-        welltype_store[sid] = {}
-    for well in update.wells:
-        welltype_store[sid][well] = update.well_type.value
-
-    from app.db import save_welltype
-    for well in update.wells:
-        save_welltype(sid, well, update.well_type.value)
+    proposed = {**welltype_store.get(sid, {}),
+                **dict.fromkeys(update.wells, update.well_type.value)}
+    revision = mutate_inputs(sid, update.expected_input_revision, welltypes=proposed)
 
     unified = _get_session(sid)
     assignments = dict(unified.imported_well_types or {})
-    assignments.update(welltype_store[sid])
+    assignments.update(welltype_store.get(sid, {}))
     return {
         "status": "ok",
+        "input_revision": revision,
         "assignments": assignments,
         "imported_assignments": unified.imported_well_types or {},
     }
@@ -560,15 +563,11 @@ async def get_well_types(sid: str, current_user: CurrentUser):
 
 
 @router.delete("/api/data/{sid}/welltypes")
-async def clear_well_types(sid: str, current_user: CurrentUser):
+async def clear_well_types(sid: str, current_user: CurrentUser, expected_input_revision: int | None = None):
     check_session_access(sid, current_user)
     _get_session(sid)
-    welltype_store.pop(sid, None)
-
-    from app.db import delete_welltypes
-    delete_welltypes(sid)
-
-    return {"status": "ok"}
+    revision = mutate_inputs(sid, expected_input_revision, welltypes={})
+    return {"status": "ok", "input_revision": revision}
 
 
 @router.put("/api/data/{sid}/welltypes/bulk")
@@ -576,19 +575,15 @@ async def bulk_replace_well_types(sid: str, body: BulkWellTypeReplace, current_u
     """Replace all manual welltypes with the given snapshot (for undo/redo)."""
     check_session_access(sid, current_user)
     _get_session(sid)
-    welltype_store[sid] = dict(body.assignments)
-
-    from app.db import delete_welltypes, save_welltype
-    delete_welltypes(sid)
-    for well, wtype in body.assignments.items():
-        save_welltype(sid, well, wtype)
+    revision = mutate_inputs(sid, body.expected_input_revision, welltypes=dict(body.assignments))
 
     unified = _get_session(sid)
     assignments = dict(unified.imported_well_types or {})
-    assignments.update(welltype_store[sid])
+    assignments.update(welltype_store.get(sid, {}))
     return {
         "status": "ok",
         "assignments": assignments,
+        "input_revision": revision,
         "imported_assignments": unified.imported_well_types or {},
     }
 
@@ -697,16 +692,9 @@ async def create_markers(sid: str, body: MarkerSetCreate, current_user: CurrentU
 
     # DB-before-memory: write the durable copy first so a DB failure cannot
     # leave the in-memory store ahead of what is actually persisted.
-    from app.db import save_marker_regions
-    save_marker_regions(sid, [m.model_dump() for m in body.markers])
-
-    marker_store[sid] = list(body.markers)
-    # B1: editing the marker set invalidates any clustering computed against
-    # the OLD set -- otherwise a later GET /cluster would silently serve
-    # stale results for markers that no longer exist.
-    _invalidate_clustering(sid)
-
-    return {"markers": marker_store[sid]}
+    revision = mutate_inputs(sid, body.expected_input_revision, markers=list(body.markers))
+    # Preserve prior provenance; its captured revision now identifies stale input.
+    return {"markers": marker_store.get(sid, []), "input_revision": revision}
 
 
 @router.put("/api/data/{sid}/markers/{marker_id}")
@@ -724,7 +712,7 @@ async def update_marker(sid: str, marker_id: str, body: MarkerUpdate, current_us
     if idx is None:
         raise HTTPException(404, f"Marker {marker_id!r} not found")
 
-    updates = body.model_dump(exclude_unset=True)
+    updates = body.model_dump(exclude_unset=True, exclude={"expected_input_revision"})
     merged = {**markers[idx].model_dump(), **updates}
     updated_marker = MarkerRegion(**merged)
 
@@ -735,27 +723,16 @@ async def update_marker(sid: str, marker_id: str, body: MarkerUpdate, current_us
     new_markers[idx] = updated_marker
 
     # DB-before-memory (dbfix): persist first, then update memory.
-    from app.db import save_marker_regions
-    save_marker_regions(sid, [m.model_dump() for m in new_markers])
-
-    marker_store[sid] = new_markers
-    _invalidate_clustering(sid)
-
-    return {"markers": marker_store[sid]}
+    revision = mutate_inputs(sid, body.expected_input_revision, markers=new_markers)
+    return {"markers": marker_store[sid], "input_revision": revision}
 
 
 @router.delete("/api/data/{sid}/markers")
-async def delete_markers(sid: str, current_user: CurrentUser):
+async def delete_markers(sid: str, current_user: CurrentUser, expected_input_revision: int | None = None):
     """Clear the session's marker (assay) definitions."""
     check_session_access(sid, current_user)
     _get_session(sid)
 
     # DB-before-memory: delete the durable copy first.
-    from app.db import delete_marker_regions
-    delete_marker_regions(sid)
-
-    marker_store.pop(sid, None)
-    # B1: clearing the marker set invalidates any clustering computed against it.
-    _invalidate_clustering(sid)
-
-    return {"status": "ok"}
+    revision = mutate_inputs(sid, expected_input_revision, markers=[])
+    return {"status": "ok", "input_revision": revision}

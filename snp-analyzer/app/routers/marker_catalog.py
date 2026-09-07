@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from app.auth import CurrentUser, check_session_access
 from app.models import MarkerCalibration, MarkerCatalogEntry, MarkerRegion, MarkerValidation
 from app.processing.genotype_vocab import validate_ploidy
-from app.routers.clustering import _invalidate_clustering, _validate_marker_set, marker_store
+from app.routers.clustering import _validate_marker_set, marker_store
 from app.routers.upload import sessions
 
 router = APIRouter()
@@ -69,6 +69,7 @@ class MarkerCatalogUpdate(BaseModel):
 
 
 class AttachCatalogRequest(BaseModel):
+    expected_input_revision: int | None = None
     catalog_id: str
 
 
@@ -89,7 +90,9 @@ def _new_catalog_id() -> str:
     return uuid.uuid4().hex[:16]
 
 
-def _row_to_entry(row: dict) -> MarkerCatalogEntry:
+def _row_to_entry(row: dict | None) -> MarkerCatalogEntry:
+    if row is None:
+        raise RuntimeError("Persisted catalog entry unavailable")
     return MarkerCatalogEntry(
         id=row["id"],
         owner_user_id=row["owner_user_id"],
@@ -240,10 +243,6 @@ async def attach_catalog_to_marker(
     new_markers[idx] = updated_marker
 
     # DB-before-memory (mirrors app.routers.clustering.update_marker).
-    from app.db import save_marker_regions
-
-    save_marker_regions(sid, [m.model_dump() for m in new_markers])
-    marker_store[sid] = new_markers
-    _invalidate_clustering(sid)
-
-    return updated_marker.model_dump()
+    from app.processing.analysis_state import mutate_inputs
+    revision = mutate_inputs(sid, body.expected_input_revision, markers=new_markers)
+    return {**updated_marker.model_dump(), "input_revision": revision}

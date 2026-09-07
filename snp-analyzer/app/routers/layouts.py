@@ -25,7 +25,6 @@ from pydantic import BaseModel
 from app.auth import CurrentUser, check_session_access
 from app.models import MarkerRegion
 from app.routers.clustering import (
-    _invalidate_clustering,
     _validate_marker_set,
     marker_store,
     welltype_store,
@@ -44,6 +43,7 @@ class LayoutCreate(BaseModel):
 
 
 class LayoutApply(BaseModel):
+    expected_input_revision: int | None = None
     sid: str
     # L4: threshold_config.boundaries are data-specific (tuned against ONE
     # run's fluorescence); default OFF so applying a layout never silently
@@ -246,12 +246,6 @@ async def apply_layout_endpoint(layout_id: str, body: LayoutApply, current_user:
     incoming_markers = [MarkerRegion(**m) for m in incoming_raw]
     _validate_marker_set(incoming_markers, unified)
 
-    from app.db import save_marker_regions
-
-    save_marker_regions(body.sid, [m.model_dump() for m in incoming_markers])
-    marker_store[body.sid] = incoming_markers
-    _invalidate_clustering(body.sid)
-
     # well_type carryover: well-type roles (NTC / Positive Control / Allele
     # controls / Omit) describe the PHYSICAL layout of the plate -- which
     # wells are reserved as controls -- so they travel with the marker set
@@ -261,15 +255,13 @@ async def apply_layout_endpoint(layout_id: str, body: LayoutApply, current_user:
     # wells almost certainly hold different physical samples.
     well_types = snapshot.get("well_types") or {}
     applied_well_types = {w: t for w, t in well_types.items() if w in valid_wells}
-    if applied_well_types:
-        from app.db import save_welltype
-
-        welltype_store.setdefault(body.sid, {}).update(applied_well_types)
-        for w, t in applied_well_types.items():
-            save_welltype(body.sid, w, t)
+    from app.processing.analysis_state import mutate_inputs
+    revision = mutate_inputs(body.sid, body.expected_input_revision, markers=incoming_markers,
+                             welltypes={**welltype_store.get(body.sid, {}), **applied_well_types})
 
     return {
         "sid": body.sid,
         "markers": [m.model_dump() for m in incoming_markers],
         "well_types_applied": applied_well_types,
+        "input_revision": revision,
     }

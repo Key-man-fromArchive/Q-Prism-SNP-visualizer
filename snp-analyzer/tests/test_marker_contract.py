@@ -180,8 +180,8 @@ def test_editing_markers_via_post_invalidates_stale_clustering(data_client):
     resp = data_client.client.get("/api/data/s1/cluster")
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["algorithm"] is None
-    assert body["assignments"] == {}
+    assert body["algorithm"] is not None
+    assert body["assignments"]  # Retained previous result; new input revision marks it stale.
 
 
 def test_deleting_markers_invalidates_stale_clustering(data_client):
@@ -194,7 +194,7 @@ def test_deleting_markers_invalidates_stale_clustering(data_client):
 
     resp = data_client.client.get("/api/data/s1/cluster")
     body = resp.json()
-    assert body["algorithm"] is None
+    assert body["algorithm"] is not None  # Retain provenance instead of deleting results.
 
 
 def test_updating_one_marker_via_put_invalidates_stale_clustering(data_client):
@@ -210,7 +210,7 @@ def test_updating_one_marker_via_put_invalidates_stale_clustering(data_client):
 
     resp = data_client.client.get("/api/data/s1/cluster")
     body = resp.json()
-    assert body["algorithm"] is None
+    assert body["algorithm"] is not None  # Retain provenance instead of deleting results.
 
 
 # ---------------------------------------------------------------------------

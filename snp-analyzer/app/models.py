@@ -336,6 +336,7 @@ class RegionResult(BaseModel):
 
 
 class ClusteringRequest(BaseModel):
+    expected_input_revision: int | None = Field(default=None, ge=0)
     algorithm: ClusteringAlgorithm = ClusteringAlgorithm.THRESHOLD
     cycle: int = 0
     threshold_config: ThresholdConfig | None = None
@@ -423,6 +424,7 @@ class ClusteringResult(BaseModel):
 
 
 class ManualWellTypeUpdate(BaseModel):
+    expected_input_revision: int | None = Field(default=None, ge=0)
     wells: list[str]
     well_type: WellType
 
