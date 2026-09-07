@@ -2,7 +2,7 @@
 
 - Contract ID: qprism-ux-followup-20260907-v1
 - 작성일: 2026-09-07
-- 상태: IN PROGRESS — P0 로컬 통합 완료(0bd5090). P1 서버·계약 기반 게이트 통과. P2 분석·QC 화면 연결 대기.
+- 상태: IN PROGRESS — P1 서버·계약 기반 게이트 통과·로컬 통합 완료(83887a4). P2 분석·QC 화면 연결 진행 중.
 - 기준: [UI/UX 후속 개선 기획서 v0.2](ui-ux-overhaul/04-review-followup-prd.md)
 - 실행 기준 파일: docs/planning/06-tasks.md
 - 이전 계약: [qPCR Import Expansion 원문 보관](archive/06-tasks-qpcr-import-expansion.md). 보관본의 작업은 이번 실행 대상이 아니다.
@@ -262,7 +262,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P2-S1-T1: 단일·다중 마커 분석 상태 연결
 
-- Status: TODO
+- Status: IN_PROGRESS
 - 담당: frontend-specialist
 - Depends On: [P1-S0-V]
 - Write Scope: SRC/App.tsx, SRC/components/의 분석 Workspace·MultiMarker·CycleControl, 관련 stores/hooks 및 테스트
