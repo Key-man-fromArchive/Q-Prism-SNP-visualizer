@@ -3,6 +3,8 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { UploadZone } from './UploadZone';
 import { getSessions, getSessionInfo, loadExample, uploadFile, previewImportFile } from '@/lib/api';
 import { useSessionStore } from '@/stores/session-store';
+import { useAuthStore } from '@/stores/auth-store';
+import { useUploadJobStore } from '@/stores/upload-job-store';
 import type { UploadResponse } from '@/types/api';
 const info: UploadResponse = { session_id: 'synthetic', instrument: 'Synthetic', allele2_dye: 'VIC', num_wells: 1,
   num_cycles: 40, has_rox: false, data_windows: null, suggested_cycle: 40, well_groups: null };
@@ -12,6 +14,8 @@ vi.mock('./ImportMappingWizard', () => ({ ImportMappingWizard: ({ onImported }: 
 beforeEach(() => {
   vi.resetAllMocks();
   useSessionStore.getState().reset();
+  useUploadJobStore.getState().reset();
+  useAuthStore.setState({ user: { id: 'u', username: 'u', role: 'admin', display_name: null } });
   vi.mocked(getSessions).mockResolvedValue([]);
   vi.mocked(loadExample).mockResolvedValue(info);
   vi.mocked(uploadFile).mockResolvedValue(info);

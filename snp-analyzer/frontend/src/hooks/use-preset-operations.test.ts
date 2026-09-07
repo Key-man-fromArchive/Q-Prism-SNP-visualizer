@@ -1,0 +1,72 @@
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { beforeEach, expect, it, vi } from 'vitest';
+import { ApiError, createPreset, deletePreset, getPresets } from '@/lib/api';
+import { useAuthStore } from '@/stores/auth-store';
+import { usePresetOperations } from './use-preset-operations';
+vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), getPresets: vi.fn(), createPreset: vi.fn(), deletePreset: vi.fn() }));
+const preset = { id: 'p', name: 'Synthetic', builtin: false, settings: {} };
+it.each([{}, { presets: null }, { presets: [null] }, { presets: [{ id: 'x' }] }])('retains inputs and exposes malformed list response %j for retry', async response => {
+  vi.mocked(getPresets).mockResolvedValueOnce({ presets: [preset] });
+  const hook = renderHook(() => usePresetOperations());
+  await waitFor(() => expect(hook.result.current.listStatus).toBe('ready'));
+  act(() => { hook.result.current.setName('Keep'); hook.result.current.setSelected('p'); });
+  vi.mocked(getPresets).mockResolvedValueOnce(response as Awaited<ReturnType<typeof getPresets>>);
+  await act(async () => { await hook.result.current.reload(); });
+  expect(hook.result.current).toMatchObject({ name: 'Keep', selected: 'p', presets: [preset], listStatus: 'error', listError: 'invalid' });
+});
+beforeEach(() => {
+  vi.resetAllMocks(); useAuthStore.setState({ user: { id: 'u', username: 'u', role: 'admin', display_name: null } });
+  vi.mocked(getPresets).mockResolvedValue({ presets: [preset] });
+});
+it('distinguishes list failure from empty and preserves name on save failure with explicit retry', async () => {
+  vi.mocked(getPresets).mockRejectedValueOnce(new ApiError('private', 500, {}));
+  const hook = renderHook(() => usePresetOperations());
+  await waitFor(() => expect(hook.result.current.listError).toBe('server'));
+  act(() => hook.result.current.setName('Keep this name'));
+  vi.mocked(createPreset).mockRejectedValueOnce(new ApiError('private', 500, {})).mockResolvedValue(preset);
+  await act(async () => { await hook.result.current.save({}); });
+  expect(hook.result.current.name).toBe('Keep this name');
+  expect(hook.result.current.operationError).toBe('server');
+  await act(async () => { await hook.result.current.save({}); });
+  expect(hook.result.current.operation).toBe('saved');
+  expect(hook.result.current.name).toBe('');
+  expect(createPreset).toHaveBeenCalledTimes(2);
+});
+it('reports saved even if refresh fails and list retry never repeats POST', async () => {
+  const hook = renderHook(() => usePresetOperations());
+  await waitFor(() => expect(hook.result.current.listStatus).toBe('ready'));
+  act(() => hook.result.current.setName('Keep')); vi.mocked(createPreset).mockResolvedValue(preset);
+  vi.mocked(getPresets).mockRejectedValueOnce(new TypeError('lost URL'));
+  await act(async () => { await hook.result.current.save({}); });
+  expect(hook.result.current).toMatchObject({ operation: 'saved', listError: 'network', operationError: null });
+  await act(async () => { await hook.result.current.reload(); });
+  expect(createPreset).toHaveBeenCalledTimes(1);
+});
+it('blocks overlapping mutations and preserves selected preset when delete fails', async () => {
+  const hook = renderHook(() => usePresetOperations());
+  await waitFor(() => expect(hook.result.current.listStatus).toBe('ready'));
+  act(() => hook.result.current.setSelected('p'));
+  let reject!: (error: Error) => void;
+  vi.mocked(deletePreset).mockReturnValue(new Promise((_, fail) => { reject = fail; }));
+  act(() => { void hook.result.current.remove(); void hook.result.current.remove(); });
+  expect(deletePreset).toHaveBeenCalledTimes(1);
+  await act(async () => reject(new Error('private')));
+  expect(hook.result.current.selected).toBe('p');
+  expect(hook.result.current.operationError).toBe('network');
+});
+it('ignores late save/refresh after owner change and preserves newer form typing during save', async () => {
+  const hook = renderHook(() => usePresetOperations());
+  await waitFor(() => expect(hook.result.current.listStatus).toBe('ready'));
+  let resolve!: (value: typeof preset) => void;
+  vi.mocked(createPreset).mockReturnValue(new Promise(done => { resolve = done; }));
+  act(() => hook.result.current.setName('old'));
+  act(() => { void hook.result.current.save({}); });
+  act(() => hook.result.current.setName('new'));
+  await act(async () => resolve(preset));
+  expect(hook.result.current.name).toBe('new');
+  act(() => { void hook.result.current.save({}); });
+  await act(async () => useAuthStore.getState().clearAuth());
+  await act(async () => resolve(preset));
+  expect(hook.result.current.name).toBe('');
+  expect(hook.result.current.operation).toBe('idle');
+});

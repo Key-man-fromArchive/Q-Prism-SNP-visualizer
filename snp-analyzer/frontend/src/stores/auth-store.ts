@@ -5,8 +5,10 @@ import { useNavigationStore } from './navigation-store';
 import { useSessionStore } from './session-store';
 import { useDataStore } from './data-store';
 import { clearOwnerViewCache } from '@/lib/session-view-cache';
+import { useUploadJobStore } from './upload-job-store';
 
 function clearOwnedSession() {
+  useUploadJobStore.getState().reset();
   useAnalysisStore.getState().clear();
   useNavigationStore.getState().clear();
   useSessionStore.getState().reset();
