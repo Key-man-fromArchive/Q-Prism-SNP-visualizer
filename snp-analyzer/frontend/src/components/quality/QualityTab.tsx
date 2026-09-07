@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { getQuality } from '@/lib/api';
@@ -17,16 +17,22 @@ export function QualityTab() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const useRox = useSettingsStore((s) => s.useRox);
 
+  if (!sessionId) return <div className="p-6 text-text-muted">{t.noQualityData}</div>;
+  return <SessionQuality key={`${sessionId}:${useRox}`} sessionId={sessionId} useRox={useRox} />;
+}
+
+function SessionQuality({ sessionId, useRox }: { sessionId: string; useRox: boolean }) {
+  const { t } = useI18n();
+  const errorMessage = useEffectEvent((err: unknown) => err instanceof Error ? err.message : t.errLoadQuality);
+
   const [data, setData] = useState<QualityResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
 
     let mounted = true;
-    setLoading(true);
-    setError(null);
 
     getQuality(sessionId, useRox)
       .then((res) => {
@@ -37,7 +43,7 @@ export function QualityTab() {
       })
       .catch((err) => {
         if (mounted) {
-          setError(err instanceof Error ? err.message : t.errLoadQuality);
+          setError(errorMessage(err));
           setLoading(false);
         }
       });

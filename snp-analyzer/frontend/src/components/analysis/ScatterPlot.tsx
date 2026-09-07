@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import Plotly from "plotly.js-dist-min";
+import type { Data, Layout, Config, Shape, PlotlyHTMLElement, PlotMouseEvent, PlotSelectionEvent } from "plotly.js";
 import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
@@ -136,22 +137,23 @@ export function ScatterPlot() {
   // wedge rather than a line, so leaving it armed made large parts of the plot
   // unselectable. See ScatterTool in the settings store.
   const editing = scatterTool === "edit";
-  const [editBoundaries, setEditBoundaries] = useState<number[] | null>(null);
+  const seedBoundaries = useMemo(() => linesActive
+    ? (boundaries?.length ? [...boundaries] : defaultRatioCuts(ploidy))
+    : null, [linesActive, boundaries, ploidy]);
+  const [boundarySeed, setBoundarySeed] = useState(seedBoundaries);
+  const [editBoundaries, setEditBoundaries] = useState<number[] | null>(seedBoundaries);
+  if (boundarySeed !== seedBoundaries) {
+    setBoundarySeed(seedBoundaries);
+    setEditBoundaries(seedBoundaries);
+  }
   const editRef = useRef<number[] | null>(null);
   const dragIndexRef = useRef<number | null>(null);
 
   // Sync the working copy from the stored boundaries whenever the tool opens or
   // a fresh analysis arrives (fall back to equal-spacing seeds).
   useEffect(() => {
-    if (!linesActive) {
-      setEditBoundaries(null);
-      editRef.current = null;
-      return;
-    }
-    const seed = boundaries && boundaries.length ? [...boundaries] : defaultRatioCuts(ploidy);
-    setEditBoundaries(seed);
-    editRef.current = seed;
-  }, [linesActive, boundaries, ploidy]);
+    editRef.current = editBoundaries;
+  }, [editBoundaries]);
 
   // Plotly's `plotly_selected` payload carries no modifier state, so the
   // modifiers are read off the mousedown that began the drag. (`plotly_click`
@@ -182,31 +184,37 @@ export function ScatterPlot() {
   // waiting for the cycle to initialise.
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const fetchKey = JSON.stringify([sessionId, currentCycle, useRox, backgroundMode, refetchTrigger]);
+  const [lastFetch, setLastFetch] = useState({ key: fetchKey, sessionId });
+  const fetchRevision = useRef(0);
+  if (lastFetch.key !== fetchKey) {
+    setLastFetch({ key: fetchKey, sessionId });
+    setStatus(status === "ready" && lastFetch.sessionId === sessionId ? "ready" : "loading");
+    setFetchError(null);
+  }
 
   // Fetch scatter data
-  const fetchData = useCallback(async () => {
-    if (!sessionId || !currentCycle) {
-      setStatus("loading");
-      return;
-    }
-    setStatus((s) => (s === "ready" ? s : "loading"));
-    setFetchError(null);
-    try {
-      const res = await getScatter(sessionId, currentCycle, useRox, backgroundMode);
+  const fetchData = useCallback(() => {
+    const revision = ++fetchRevision.current;
+    if (!sessionId || !currentCycle) return;
+    return getScatter(sessionId, currentCycle, useRox, backgroundMode).then((res) => {
+      if (revision !== fetchRevision.current) return;
       setScatterData(res.points, res.allele2_dye, res.channel_labels, res.ratio_origin, {
         applied: res.normalization_applied,
         roxOutlierWells: res.rox_outlier_wells,
       });
       setStatus("ready");
-    } catch (err) {
+    }).catch((err: unknown) => {
+      if (revision !== fetchRevision.current) return;
       console.error("Failed to fetch scatter data:", err);
       setFetchError(err instanceof Error ? err.message : String(err));
       setStatus("error");
-    }
+    });
   }, [sessionId, currentCycle, useRox, backgroundMode, setScatterData]);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
+    return () => { fetchRevision.current += 1; };
   }, [fetchData, refetchTrigger]);
 
   // Build and render traces
@@ -256,7 +264,7 @@ export function ScatterPlot() {
 
     const colors = plotlyColors();
     const decimals = normalizationApplied ? 4 : 1;
-    const traces: any[] = [];
+    const traces: Data[] = [];
     const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
 
     // Localized genotype names for the plot legend
@@ -358,7 +366,7 @@ export function ScatterPlot() {
       ext = Math.max(ext, p.norm_fam - ratioOrigin.fam, p.norm_allele2 - ratioOrigin.allele2);
     }
     ext *= 1.05;
-    const shapes: Record<string, unknown>[] = bnd
+    const shapes: Partial<Shape>[] = bnd
       ? bnd.map((r) => {
           const tlen = ext / Math.max(r, 1 - r, 1e-6);
           return {
@@ -415,7 +423,7 @@ export function ScatterPlot() {
     );
 
     const axes = axisRangeLayout(axisMode, lockAspect, bounds);
-    const layout: any = {
+    const layout: Partial<Layout> = {
       xaxis: {
         title: { text: xLabel, font: axisTitleFont, standoff: 10 },
         gridcolor: colors.gridColor,
@@ -441,7 +449,7 @@ export function ScatterPlot() {
       legend: { orientation: "h", y: -0.2 },
     };
 
-    const config = {
+    const config: Partial<Config> = {
       responsive: true,
       displayModeBar: true,
       // zoom2d/pan2d are kept: with the clusters this squashed, selecting an
@@ -450,28 +458,28 @@ export function ScatterPlot() {
     };
 
     if (!initialized.current) {
-      Plotly.newPlot(plotRef.current, traces, layout, config).then(() => {
+      const el = plotRef.current as HTMLDivElement & Pick<PlotlyHTMLElement, "on">;
+      Plotly.newPlot(el, traces, layout, config).then(() => {
+        if (el !== plotRef.current) return;
         initialized.current = true;
-        const el = plotRef.current as any;
-        if (!el) return;
 
         // Selection modifiers, matching PlateView: ctrl/meta toggles one well
         // or unions a box into the current selection, shift unions, and a
         // plain drag replaces. The scatter can only box ONE rectangle at a
         // time and the wells an operator needs are rarely a rectangle, so
         // without this every new box threw the previous one away.
-        el.on("plotly_click", (data: any) => {
+        el.on("plotly_click", (data: PlotMouseEvent) => {
           const well = data?.points?.[0]?.customdata;
-          if (!well) return;
+          if (typeof well !== "string" || !well) return;
           const event: MouseEvent | undefined = data.event;
           if (event?.ctrlKey || event?.metaKey) toggleWell(well);
           else if (event?.shiftKey) addWells([well]);
           else selectWell(well, "scatter");
         });
 
-        el.on("plotly_selected", (data: any) => {
+        el.on("plotly_selected", (data: PlotSelectionEvent) => {
           if (!data?.points?.length) return;
-          const wells = data.points.map((p: any) => p.customdata).filter(Boolean);
+          const wells = data.points.map((p) => p.customdata).filter((well): well is string => typeof well === "string" && well.length > 0);
           if (wells.length === 0) return;
           if (additiveRef.current) addWells(wells);
           else selectWells(wells);
@@ -571,18 +579,19 @@ export function ScatterPlot() {
   // workflow, not merely an intermediate state before assigning a well type.
   useEffect(() => {
     if (!plotRef.current || !initialized.current) return;
-    const el = plotRef.current as any;
+    const el = plotRef.current as PlotlyGraphDiv;
     const data = el.data;
     if (!data || data.length === 0) return;
 
     const colors = plotlyColors();
     for (let t = 0; t < data.length; t++) {
       if (data[t].name === "NTC threshold") continue;
-      const customdata = data[t].customdata || [];
-      const sizes = customdata.map((w: string) => (selectedWellSet.has(w) ? 18 : 12));
-      const lineWidths = customdata.map((w: string) => (selectedWellSet.has(w) ? 3 : 1));
-      const lineColors = customdata.map((w: string) =>
-        selectedWellSet.has(w) ? colors.selectedLineColor : colors.markerLineColor
+      const rawCustomdata = data[t].customdata;
+      const customdata: unknown[] = Array.isArray(rawCustomdata) ? rawCustomdata : [];
+      const sizes = customdata.map((w: unknown) => (typeof w === "string" && selectedWellSet.has(w) ? 18 : 12));
+      const lineWidths = customdata.map((w: unknown) => (typeof w === "string" && selectedWellSet.has(w) ? 3 : 1));
+      const lineColors = customdata.map((w: unknown) =>
+        typeof w === "string" && selectedWellSet.has(w) ? colors.selectedLineColor : colors.markerLineColor
       );
 
       Plotly.restyle(plotRef.current!, {
@@ -724,17 +733,17 @@ export function ScatterPlot() {
   // adds one (ploidy+1). Committing persists a threshold clustering with the new
   // cuts so the calls flow to every view.
   useEffect(() => {
-    const gd: any = plotRef.current;
+    const gd = plotRef.current as PlotlyGraphDiv | null;
     if (!gd || !linesActive || !editing) return;
 
     const clientToRatio = (clientX: number, clientY: number): number | null => {
       const fl = gd._fullLayout;
       const xa = fl?.xaxis;
       const ya = fl?.yaxis;
-      if (!xa || !ya || !xa._length || !ya._length) return null;
+      if (!xa || !ya || !xa._length || !ya._length || !xa.range || !ya.range) return null;
       const bb = gd.getBoundingClientRect();
-      const px = clientX - bb.left - xa._offset;
-      const py = clientY - bb.top - ya._offset;
+      const px = clientX - bb.left - (xa._offset ?? 0);
+      const py = clientY - bb.top - (ya._offset ?? 0);
       if (px < 0 || py < 0 || px > xa._length || py > ya._length) return null;
       const dx = xa.range[0] + (px / xa._length) * (xa.range[1] - xa.range[0]);
       const dy = ya.range[1] - (py / ya._length) * (ya.range[1] - ya.range[0]);
@@ -885,7 +894,11 @@ export function ScatterPlot() {
         variant="error"
         message={t.statusLoadFailed}
         detail={fetchError ?? undefined}
-        action={{ label: t.retry, onClick: () => void fetchData() }}
+        action={{ label: t.retry, onClick: () => {
+          setStatus("loading");
+          setFetchError(null);
+          void fetchData();
+        } }}
       />
     ) : showEmpty ? (
       <StatusState variant="empty" message={t.scatterEmpty} />

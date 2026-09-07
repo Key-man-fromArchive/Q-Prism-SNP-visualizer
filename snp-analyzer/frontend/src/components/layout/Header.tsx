@@ -38,13 +38,19 @@ export function Header() {
     canSaveToAsg ? "Save result to ASG Designer" : "Open from an ASG marker, design result, or order item to save"
   );
   const asgResultRevision = useRef(0);
+  const [saveInputs, setSaveInputs] = useState({ sessionId, currentCycle, useRox });
 
-  useEffect(() => {
-    asgResultRevision.current += 1;
+  // Reset render-owned state when its identity changes, before children commit.
+  if (saveInputs.sessionId !== sessionId || saveInputs.currentCycle !== currentCycle || saveInputs.useRox !== useRox) {
+    setSaveInputs({ sessionId, currentCycle, useRox });
     setAsgSaveState("idle");
     setAsgAnalysisId(null);
     setAsgSaveError(null);
-  }, [sessionId]);
+  }
+
+  useEffect(() => {
+    asgResultRevision.current += 1;
+  }, [sessionId, currentCycle, useRox]);
 
   const handleNewUpload = () => {
     reset();
@@ -83,10 +89,6 @@ export function Header() {
     setAsgAnalysisId(null);
     setAsgSaveError(null);
   }, []);
-
-  useEffect(() => {
-    markAsgResultDirty();
-  }, [currentCycle, useRox, markAsgResultDirty]);
 
   useEffect(() => {
     window.addEventListener("welltypes-changed", markAsgResultDirty);
