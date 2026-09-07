@@ -45,6 +45,7 @@ export function useAnalysisWorkspace() {
         return;
       }
       if (value.hasCompletedResult) useSessionStore.getState().consumeInitialAnalysis();
+      useSessionStore.setState({ sessionInfo: value.info });
       setLoaded({ entry, value });
       const restored = completeWorkspaceRestore(owner, session, generation, value);
       if (restored.accepted) analyzeFreshSession(restored.cycle, value);

@@ -34,6 +34,7 @@ def create_session_from_import(
 
     return UploadResponse(
         session_id=session_id,
+        well_ids=list(unified.wells),
         instrument=unified.instrument,
         allele2_dye=unified.allele2_dye,
         num_wells=len(unified.wells),

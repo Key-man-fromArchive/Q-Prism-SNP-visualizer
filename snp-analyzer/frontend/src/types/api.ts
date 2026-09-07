@@ -61,6 +61,8 @@ export type UnifiedData = {
 
 export type UploadResponse = {
   session_id: string;
+  /** Exact run inventory; absent on legacy servers, never infer from the current cycle. */
+  well_ids?: string[];
   instrument: string;
   allele2_dye: string;
   num_wells: number;

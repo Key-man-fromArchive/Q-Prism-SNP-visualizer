@@ -14,6 +14,7 @@ import { AnalysisTab } from "./AnalysisTab";
 import { PlateSetupTab } from "./PlateSetupTab";
 import { MultiMarkerAnalysisPanel } from "./MultiMarkerAnalysisPanel";
 import { AnalysisResultStatus } from './AnalysisResultStatus';
+import { PlateScopeSummary } from './PlateScopeSummary';
 
 function WorkspaceTabs() {
   const { t } = useI18n();
@@ -93,6 +94,7 @@ export function AnalysisWorkspace() {
         className={panelClass(activeSurface, 'analysis')}
       >
         {ready && <AnalysisResultStatus markers={markers} />}
+        {ready && <PlateScopeSummary markers={markers} />}
         {!ready ? <StatusState variant={status === 'error' ? 'error' : 'loading'} message={status === 'error' ? t.analysisLoadFailed : t.loading} action={status === 'error' ? { label: t.retry, onClick: retry } : undefined} /> : markers.length > 0 ? (
           <MultiMarkerAnalysisPanel markers={markers} />
         ) : (
