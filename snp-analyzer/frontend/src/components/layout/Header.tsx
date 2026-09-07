@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { AlertCircle, Check, Download, Moon, Redo2, Save, Sun, Undo2 } from "lucide-react";
 import { useSessionStore } from "@/stores/session-store";
-import { useAuthStore } from "@/stores/auth-store";
 import { useSelectionStore } from "@/stores/selection-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useNavigationStore } from "@/stores/navigation-store";
+import { useAnalysisStore } from "@/stores/analysis-store";
 import { useDarkMode } from "@/hooks/use-dark-mode";
 import { useExports } from "@/hooks/use-exports";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
@@ -11,10 +13,12 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useLanguageStore } from "@/stores/language-store";
 import { QcBadges } from "@/components/shared/QcBadges";
 import { AddToProjectButton } from "@/components/analysis/AddToProjectButton";
-import { Button, IconButton, Menu, type MenuItem } from "@/components/shared/ui";
-import { logout, saveAsgResult } from "@/lib/api";
+import { Button, IconButton, Menu, Modal, type MenuItem } from "@/components/shared/ui";
+import { ApiError, logout, saveAsgResult } from "@/lib/api";
+import { analyzeCurrent } from "@/lib/analysis-actions";
+import { loadAnalysisSession } from "@/lib/analysis-session";
 
-function useAsgSavePresentation(sessionId: string | null, currentCycle: number, useRox: boolean) {
+function useAsgSavePresentation(sessionId: string | null, currentCycle: number | null, useRox: boolean) {
   const [asgSaveState, setAsgSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [asgAnalysisId, setAsgAnalysisId] = useState<string | null>(null);
   const [asgSaveError, setAsgSaveError] = useState<string | null>(null);
@@ -30,13 +34,19 @@ function useAsgSavePresentation(sessionId: string | null, currentCycle: number, 
 }
 
 export function Header() {
+  type ExportKind = "csv" | "png" | "pdf" | "xlsx";
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const sessionId = useSessionStore((s) => s.sessionId);
   const reset = useSessionStore((s) => s.reset);
-  const currentCycle = useSelectionStore((s) => s.currentCycle);
+  const navigationCycle = useNavigationStore((s) => s.cycle);
+  const legacyCycle = useSelectionStore((s) => s.currentCycle);
+  const currentCycle = navigationCycle ?? legacyCycle;
   const useRox = useSettingsStore((s) => s.useRox);
+  const backgroundMode = useSettingsStore((s) => s.backgroundMode);
+  const resultRevision = useAnalysisStore((s) => s.result?.analysis_context?.result_revision);
+  const analysisPending = useAnalysisStore((s) => s.pending);
   const { isDark, toggle: toggleDarkMode } = useDarkMode();
-  const { downloadCSV, exportPNG, exportPDF, exportXLSX, printReport } = useExports();
+  const { downloadCSV, exportPNG, exportPDF, exportXLSX, exportStored, printReport } = useExports();
   const { undo, redo, canUndo, canRedo } = useUndoRedo();
   const { t } = useI18n();
   const { language, setLanguage } = useLanguageStore();
@@ -51,10 +61,32 @@ export function Header() {
     canSaveToAsg ? "Save result to ASG Designer" : "Open from an ASG marker, design result, or order item to save"
   );
   const asgResultRevision = useRef(0);
+  const mismatchToken = useRef(0);
+  const mismatchAbort = useRef<AbortController | null>(null);
+  const [exportMismatch, setExportMismatch] = useState<{
+    kind: ExportKind; label: string; token: number; sessionId: string; entry: number; ownerId: string | undefined; revision: string | undefined;
+  } | null>(null);
+  const [mismatchBusy, setMismatchBusy] = useState(false);
+  const closeMismatch = useCallback(() => { mismatchToken.current += 1; mismatchAbort.current?.abort(); mismatchAbort.current = null; setMismatchBusy(false); setExportMismatch(null); }, []);
+  const openMismatch = useCallback((kind: ExportKind, label: string) => {
+    const state = useAnalysisStore.getState();
+    const token = mismatchToken.current + 1;
+    mismatchToken.current = token;
+    mismatchAbort.current?.abort();
+    mismatchAbort.current = new AbortController();
+    setExportMismatch({ kind, label, token, sessionId: useSessionStore.getState().sessionId ?? '',
+      entry: useSessionStore.getState().entryGeneration, ownerId: useAuthStore.getState().user?.id,
+      revision: state.result?.analysis_context?.result_revision });
+  }, []);
+  const ownsMismatch = useCallback((value: NonNullable<typeof exportMismatch>, allowRevised = false) =>
+    mismatchToken.current === value.token && useSessionStore.getState().sessionId === value.sessionId
+      && useSessionStore.getState().entryGeneration === value.entry
+      && useAuthStore.getState().user?.id === value.ownerId
+      && (allowRevised || useAnalysisStore.getState().result?.analysis_context?.result_revision === value.revision), []);
 
   useEffect(() => {
     asgResultRevision.current += 1;
-  }, [sessionId, currentCycle, useRox]);
+  }, [sessionId, currentCycle, useRox, backgroundMode, resultRevision]);
 
   const handleNewUpload = () => {
     reset();
@@ -75,7 +107,10 @@ export function Header() {
     setAsgSaveState("saving");
     setAsgSaveError(null);
     try {
-      const result = await saveAsgResult(sessionId, currentCycle, useRox);
+      if (analysisPending) throw new Error("Wait for the active analysis before saving");
+      // An absent store value occurs during the initial legacy-compatible shell;
+      // a known legacy result is rejected server-side with structured 409.
+      const result = await saveAsgResult(sessionId, currentCycle ?? undefined, useRox, backgroundMode, resultRevision);
       if (saveRevision !== asgResultRevision.current) return;
       setAsgAnalysisId(result.analysis_run_id);
       setAsgSaveState("saved");
@@ -105,26 +140,79 @@ export function Header() {
 
   // Wrap export functions to show user-visible errors
   const safeExport = useCallback(
-    (fn: () => Promise<void>, label: string) => async () => {
+    (kind: ExportKind, fn: () => Promise<void>, label: string) => async () => {
+      const origin = { sessionId: useSessionStore.getState().sessionId, entry: useSessionStore.getState().entryGeneration,
+        ownerId: useAuthStore.getState().user?.id };
+      const ownsOrigin = () => useSessionStore.getState().sessionId === origin.sessionId
+        && useSessionStore.getState().entryGeneration === origin.entry && useAuthStore.getState().user?.id === origin.ownerId;
       try {
         await fn();
       } catch (err) {
+        if (!ownsOrigin()) return;
+        if (err instanceof ApiError && err.code === "EXPORT_CONDITION_MISMATCH") {
+          openMismatch(kind, label);
+          return;
+        }
+        if (err instanceof ApiError && err.code === "RESULT_REVISION_CONFLICT") {
+          const refreshed = await loadAnalysisSession();
+          if (refreshed) {
+            openMismatch(kind, label);
+            return;
+          }
+        }
         const msg = err instanceof Error ? err.message : "Unknown error";
         alert(t.exportFailed(label, msg));
       }
     },
-    [t]
+    [t, openMismatch]
   );
 
   const exportItems: MenuItem[] = [
-    { key: "csv", label: t.exportCSV, onSelect: () => void safeExport(downloadCSV, t.csvExportFailed)() },
-    { key: "png", label: t.exportPNG, onSelect: () => void safeExport(exportPNG, t.pngExportFailed)() },
+    { key: "csv", label: t.exportCSV, onSelect: () => void safeExport("csv", downloadCSV, t.csvExportFailed)() },
+    { key: "png", label: t.exportPNG, onSelect: () => void safeExport("png", exportPNG, t.pngExportFailed)() },
     { key: "print", label: t.exportPrint, onSelect: () => void printReport() },
-    { key: "pdf", label: t.exportPDF, onSelect: () => void safeExport(exportPDF, t.pdfExportFailed)() },
-    { key: "xlsx", label: t.exportXLSX, onSelect: () => void safeExport(exportXLSX, t.xlsxExportFailed)() },
+    { key: "pdf", label: t.exportPDF, onSelect: () => void safeExport("pdf", exportPDF, t.pdfExportFailed)() },
+    { key: "xlsx", label: t.exportXLSX, onSelect: () => void safeExport("xlsx", exportXLSX, t.xlsxExportFailed)() },
   ];
+  const keyboardExport = useEffectEvent(() => { void safeExport("csv", downloadCSV, t.csvExportFailed)(); });
+  useEffect(() => {
+    const listener = () => keyboardExport();
+    window.addEventListener('keyboard-export-csv', listener);
+    return () => window.removeEventListener('keyboard-export-csv', listener);
+  }, []);
+
+  const runMismatchReanalysis = async () => {
+    const pendingMismatch = exportMismatch;
+    const request = useAnalysisStore.getState().currentRequest;
+    if (!pendingMismatch || !request || mismatchBusy || !ownsMismatch(pendingMismatch)) return;
+    setMismatchBusy(true);
+    const accepted = await analyzeCurrent(request);
+    if (!accepted || !ownsMismatch(pendingMismatch, true)) { setMismatchBusy(false); return; }
+    closeMismatch();
+    const actions: Record<ExportKind, () => Promise<void>> = {
+      csv: downloadCSV, png: exportPNG, pdf: exportPDF, xlsx: exportXLSX,
+    };
+    try { await actions[pendingMismatch.kind](); }
+    catch (err) { alert(t.exportFailed(pendingMismatch.label, err instanceof Error ? err.message : "Unknown error")); }
+  };
+
+  const runStoredExport = async () => {
+    const pendingMismatch = exportMismatch;
+    if (!pendingMismatch || mismatchBusy || !ownsMismatch(pendingMismatch)) return;
+    setMismatchBusy(true);
+    try {
+      await exportStored(pendingMismatch.kind, mismatchAbort.current?.signal);
+      if (ownsMismatch(pendingMismatch)) closeMismatch();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      if (ownsMismatch(pendingMismatch)) alert(t.exportFailed(pendingMismatch.label, message));
+    } finally {
+      if (ownsMismatch(pendingMismatch)) setMismatchBusy(false);
+    }
+  };
 
   return (
+    <>
     <header className="bg-surface border-b border-border px-6 py-3 flex items-center gap-3">
       {/* Left region: brand + session context */}
       <h1 className="text-lg font-semibold text-text whitespace-nowrap">{t.appTitle}</h1>
@@ -239,5 +327,18 @@ export function Header() {
         </IconButton>
       </div>
     </header>
+    <Modal
+      open={exportMismatch !== null}
+      onClose={closeMismatch}
+      title={t.exportMismatchTitle}
+      description={t.exportMismatchDescription}
+      role="alertdialog"
+      footer={<>
+        <Button variant="secondary" onClick={closeMismatch}>{t.cancel}</Button>
+        <Button variant="secondary" disabled={mismatchBusy} onClick={() => void runStoredExport()}>{t.exportStoredResult}</Button>
+        <Button disabled={mismatchBusy} onClick={() => void runMismatchReanalysis()}>{t.exportReanalyzeCurrent}</Button>
+      </>}
+    />
+    </>
   );
 }

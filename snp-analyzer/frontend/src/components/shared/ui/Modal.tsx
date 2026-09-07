@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { IconButton } from "./IconButton";
@@ -74,20 +75,26 @@ export function Modal({
     if (!open) return;
     restoreFocusRef.current = document.activeElement as HTMLElement | null;
     const { overflow } = document.body.style;
+    const appRoot = document.getElementById("root");
+    const wasInert = appRoot?.hasAttribute("inert") ?? false;
     document.body.style.overflow = "hidden";
+    // The dialog is portalled to body, so inerting the application root blocks
+    // background pointer/focus access without making the dialog inert itself.
+    appRoot?.setAttribute("inert", "");
     // Initial focus: first focusable inside the dialog, else the dialog itself.
     const node = dialogRef.current;
     const first = node?.querySelector<HTMLElement>(FOCUSABLE);
     (first ?? node)?.focus();
     return () => {
       document.body.style.overflow = overflow;
+      if (!wasInert) appRoot?.removeAttribute("inert");
       restoreFocusRef.current?.focus?.();
     };
   }, [open]);
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.45)" }}
@@ -131,5 +138,5 @@ export function Modal({
         )}
       </div>
     </div>
-  );
+  , document.body);
 }

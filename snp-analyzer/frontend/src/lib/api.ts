@@ -200,7 +200,7 @@ export async function getScatter(
   useRox?: boolean,
   background?: BackgroundMode
 ): Promise<ScatterResponse> {
-  const query = buildQuery({ cycle, use_rox: useRox, background });
+  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background });
   return apiFetch<ScatterResponse>(`/api/data/${sid}/scatter${query}`);
 }
 
@@ -210,7 +210,7 @@ export async function getPlate(
   useRox?: boolean,
   background?: BackgroundMode
 ): Promise<PlateResponse> {
-  const query = buildQuery({ cycle, use_rox: useRox, background });
+  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background });
   return apiFetch<PlateResponse>(`/api/data/${sid}/plate${query}`);
 }
 
@@ -248,7 +248,7 @@ export async function exportPdf(
   cycle?: number,
   resultRevision?: string
 ): Promise<Blob> {
-  const query = buildQuery({ cycle, use_rox: useRox, background, result_revision: resultRevision });
+  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background, result_revision: resultRevision });
   return blobFetch(`/api/data/${sid}/export/pdf${query}`);
 }
 
@@ -259,7 +259,7 @@ export async function exportXlsx(
   cycle?: number,
   resultRevision?: string
 ): Promise<Blob> {
-  const query = buildQuery({ cycle, use_rox: useRox, background, result_revision: resultRevision });
+  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background, result_revision: resultRevision });
   return blobFetch(`/api/data/${sid}/export/xlsx${query}`);
 }
 
@@ -289,7 +289,7 @@ export async function runClustering(
   const response = parseClusterResponse(await apiFetch<unknown>(`/api/data/${sid}/cluster`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
+    body: JSON.stringify({ ...req, cycle_mode: 'absolute' }),
   }));
   if (response.algorithm === null) throw new Error('Invalid clustering response');
   return response;
@@ -588,7 +588,7 @@ export async function exportCsv(
   background?: BackgroundMode,
   resultRevision?: string
 ): Promise<Blob> {
-  const query = buildQuery({ cycle, use_rox: useRox, background, result_revision: resultRevision });
+  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background, result_revision: resultRevision });
   return blobFetch(`/api/data/${sid}/export/csv${query}`);
 }
 
@@ -602,7 +602,7 @@ export async function getQc(
   useRox?: boolean,
   background?: BackgroundMode
 ): Promise<QcResponse> {
-  const query = buildQuery({ cycle, use_rox: useRox, background });
+  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background });
   return apiFetch<QcResponse>(`/api/data/${sid}/qc${query}`);
 }
 
@@ -942,6 +942,7 @@ export async function saveAsgResult(
     body: JSON.stringify({
       session_id: sid,
       selected_cycle: selectedCycle,
+      cycle_mode: selectedCycle === undefined ? undefined : 'absolute',
       use_rox: useRox,
       background,
       result_revision: resultRevision,

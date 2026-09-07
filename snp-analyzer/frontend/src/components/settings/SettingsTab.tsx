@@ -9,10 +9,13 @@ import {
   getPresets,
   createPreset,
   deletePreset as apiDeletePreset,
-  runClustering as apiRunClustering,
 } from "@/lib/api";
 import type { BackgroundMode, PresetResponse } from "@/types/api";
+import { analyzeCurrent } from "@/lib/analysis-actions";
+import { useAnalysisStore } from "@/stores/analysis-store";
 import { applyPreset } from './apply-preset';
+import { useCurrentAnalysisRequest } from '@/hooks/use-current-analysis-request';
+import { useNavigationStore } from '@/stores/navigation-store';
 
 function PresetError({ message }: { message: string | null }) {
   if (!message) return null;
@@ -24,7 +27,8 @@ export function SettingsTab() {
   const [presets, setPresets] = useState<PresetResponse[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState("");
   const [newPresetName, setNewPresetName] = useState("");
-  const [clusterLoading, setClusterLoading] = useState(false);
+  const clusterLoading = useAnalysisStore(state => state.pending);
+  const analysisReady = useNavigationStore(state => state.status === 'ready');
   const [presetError, setPresetError] = useState<string | null>(null);
 
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
@@ -47,9 +51,10 @@ export function SettingsTab() {
   } = useSettingsStore();
 
   const currentCycle = useSelectionStore((s) => s.currentCycle);
-  const setClusterAssignments = useDataStore((s) => s.setClusterAssignments);
+  const ntcCorner = useDataStore(s => s.ntcCorner);
   const [showThresholdLines, setShowThresholdLines] = useState(false);
-  const [clusterError, setClusterError] = useState<string | null>(null);
+  const analysisError = useAnalysisStore(state => state.error);
+  const clusterError = analysisError instanceof Error ? analysisError.message : null;
 
   // Load presets on mount
   const loadPresetList = useCallback(async () => {
@@ -62,8 +67,10 @@ export function SettingsTab() {
   }, []);
 
   useEffect(() => {
-    loadPresetList();
-  }, [loadPresetList]);
+    let cancelled = false;
+    void getPresets().then(data => { if (!cancelled) setPresets(data.presets || []); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   // A mode absent from the run's own list is not offered. Until a session is
   // loaded there is nothing to constrain, so all three show.
@@ -134,21 +141,15 @@ export function SettingsTab() {
     }
   }, [selectedPresetId, loadPresetList]);
 
-  const handleRunClustering = useCallback(async () => {
-    if (!sessionId) return;
-
-    setClusterLoading(true);
-    setClusterError(null);
-    try {
-      const result = await apiRunClustering(sessionId, {
+  const currentRequest = useMemo(() => ({
         algorithm: clusterAlgorithm,
-        cycle: currentCycle || 0,
+        cycle: currentCycle,
         threshold_config:
           clusterAlgorithm === "threshold"
             ? {
                 ntc_threshold: ntcThreshold,
-                ntc_fam_max: useDataStore.getState().ntcCorner?.fam ?? null,
-                ntc_allele2_max: useDataStore.getState().ntcCorner?.allele2 ?? null,
+                ntc_fam_max: ntcCorner?.fam ?? null,
+                ntc_allele2_max: ntcCorner?.allele2 ?? null,
                 allele1_ratio_max: allele1RatioMax,
                 allele2_ratio_min: allele2RatioMin,
               }
@@ -156,17 +157,13 @@ export function SettingsTab() {
         n_clusters: nClusters,
         background: backgroundMode,
         use_rox: useRox,
-      });
-      setClusterAssignments(result.assignments);
-      window.dispatchEvent(new CustomEvent("asg-result-dirty"));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Clustering failed";
-      setClusterError(msg);
-      console.error("Clustering failed:", err);
-    } finally {
-      setClusterLoading(false);
-    }
-  }, [sessionId, clusterAlgorithm, currentCycle, ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters, backgroundMode, useRox, setClusterAssignments]);
+      }), [clusterAlgorithm, currentCycle, ntcThreshold, allele1RatioMax, allele2RatioMin, nClusters, backgroundMode, useRox, ntcCorner]);
+  useCurrentAnalysisRequest(currentRequest, 'settings');
+  const handleRunClustering = useCallback(async () => {
+    if (!sessionId || !analysisReady) return;
+    const accepted = await analyzeCurrent(currentRequest);
+    if (accepted) window.dispatchEvent(new CustomEvent("asg-result-dirty"));
+  }, [sessionId, currentRequest, analysisReady]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 sm:px-6">
@@ -439,7 +436,7 @@ export function SettingsTab() {
             id="run-clustering-btn"
             size="sm"
             onClick={handleRunClustering}
-            disabled={!sessionId || clusterLoading}
+            disabled={!sessionId || !analysisReady || clusterLoading}
           >
             {clusterLoading ? t.running : t.runAutoClustering}
           </Button>

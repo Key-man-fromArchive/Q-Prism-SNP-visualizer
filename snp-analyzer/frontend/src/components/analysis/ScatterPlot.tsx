@@ -2,10 +2,14 @@ import { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import Plotly from "plotly.js-dist-min";
 import type { Data, Layout, Config, Shape, PlotlyHTMLElement, PlotMouseEvent, PlotSelectionEvent } from "plotly.js";
 import { useSessionStore } from "@/stores/session-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
-import { getScatter, runClustering } from "@/lib/api";
+import { getScatter } from "@/lib/api";
+import { analyzeCurrent } from "@/lib/analysis-actions";
+import { useAnalysisStore } from '@/stores/analysis-store';
+import { ownsChartResult } from '@/lib/chart-export-owner';
 import { channelLabels, normalizationLabel, normalizedLabel } from "@/lib/channel-labels";
 import { WELL_TYPE_INFO } from "@/lib/constants";
 import { genotypeClasses, wellInfo, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
@@ -18,6 +22,7 @@ import { StatusState } from "@/components/shared/ui";
 import { ScatterViewControls } from "./ScatterViewControls";
 import type { ScatterPoint } from "@/types/api";
 import { clientPoint, textCustomdata, type PlotlyAxis } from "@/lib/plot-coordinates";
+import { clearActiveChart, setActiveChart } from "@/lib/chart-export-registry";
 
 type PlotlyGraphDiv = HTMLDivElement & {
   _fullLayout?: { xaxis?: PlotlyAxis; yaxis?: PlotlyAxis };
@@ -64,6 +69,7 @@ export function ScatterPlot() {
   const dark = useIsDarkMode();
   const plotRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
+  const exportRender = useRef(0);
 
   const sessionId = useSessionStore((s) => s.sessionId);
   const useRox = useSettingsStore((s) => s.useRox);
@@ -112,12 +118,9 @@ export function ScatterPlot() {
   }, [ratioOrigin]);
   const setScatterData = useDataStore((s) => s.setScatterData);
   const boundaries = useDataStore((s) => s.boundaries);
-  const setBoundaries = useDataStore((s) => s.setBoundaries);
   const offset = useDataStore((s) => s.offset);
-  const setOffset = useDataStore((s) => s.setOffset);
   const offsetUncertain = useDataStore((s) => s.offsetUncertain);
   const dosageMax = useDataStore((s) => s.dosageMax);
-  const setDosageMax = useDataStore((s) => s.setDosageMax);
   const ntcCorner = useDataStore((s) => s.ntcCorner);
   const setNtcCorner = useDataStore((s) => s.setNtcCorner);
   const { isWellVisible } = useWellFilter();
@@ -193,7 +196,11 @@ export function ScatterPlot() {
   useEffect(() => {
     const handler = () => setRefetchTrigger((n) => n + 1);
     window.addEventListener("welltypes-changed", handler);
-    return () => window.removeEventListener("welltypes-changed", handler);
+    window.addEventListener("analysis-result-changed", handler);
+    return () => {
+      window.removeEventListener("welltypes-changed", handler);
+      window.removeEventListener("analysis-result-changed", handler);
+    };
   }, []);
 
   // Request lifecycle so the panel shows loading/empty/error instead of a blank
@@ -202,13 +209,17 @@ export function ScatterPlot() {
   const fetchKey = JSON.stringify([sessionId, currentCycle, useRox, backgroundMode, refetchTrigger]);
   const { status, setStatus, fetchError, setFetchError } = useScatterStatus(fetchKey, sessionId);
   const fetchRevision = useRef(0);
+  const settledFetchKey = useRef<string | null>(null);
+  const settledResponse = useRef<{ cycle: number; useRox: boolean; backgroundMode: typeof backgroundMode } | null>(null);
 
   // Fetch scatter data
   const fetchData = useCallback(() => {
     const revision = ++fetchRevision.current;
-    if (!sessionId || !currentCycle) return;
+    if (!sessionId) return;
     return getScatter(sessionId, currentCycle, useRox, backgroundMode).then((res) => {
       if (revision !== fetchRevision.current) return;
+      settledFetchKey.current = fetchKey;
+      settledResponse.current = { cycle: res.cycle, useRox, backgroundMode: res.background_mode ?? backgroundMode };
       setScatterData(res.points, res.allele2_dye, res.channel_labels, res.ratio_origin, {
         applied: res.normalization_applied,
         roxOutlierWells: res.rox_outlier_wells,
@@ -220,7 +231,7 @@ export function ScatterPlot() {
       setFetchError(err instanceof Error ? err.message : String(err));
       setStatus("error");
     });
-  }, [sessionId, currentCycle, useRox, backgroundMode, setScatterData, setStatus, setFetchError]);
+  }, [sessionId, currentCycle, useRox, backgroundMode, fetchKey, setScatterData, setStatus, setFetchError]);
 
   useEffect(() => {
     void fetchData();
@@ -229,7 +240,19 @@ export function ScatterPlot() {
 
   // Build and render traces
   useEffect(() => {
-    if (!plotRef.current || scatterPoints.length === 0) return;
+    const token = ++exportRender.current;
+    if (!plotRef.current || scatterPoints.length === 0) {
+      if (plotRef.current) clearActiveChart(plotRef.current);
+      return;
+    }
+    // Do not relabel the previous response with controls whose request is
+    // still in flight. The chart becomes exportable only after this exact
+    // response has supplied the displayed points.
+    const responseIdentity = settledResponse.current;
+    if (settledFetchKey.current !== fetchKey || !responseIdentity) {
+      clearActiveChart(plotRef.current);
+      return;
+    }
 
     // Filter to only visible wells before grouping. Omitted wells are dropped
     // entirely (by manual_type, authoritative from the backend) so they never
@@ -466,12 +489,31 @@ export function ScatterPlot() {
       // individual well is impossible without being able to zoom in first.
       modeBarButtonsToRemove: ["toImage", "sendDataToCloud"],
     };
+    clearActiveChart(plotRef.current as HTMLDivElement);
+    const analysis = useAnalysisStore.getState();
+    const revision = analysis.result?.analysis_context?.result_revision;
+    const analysedAt = analysis.result?.analysis_context?.analysed_at;
+    const entry = useSessionStore.getState().entryGeneration;
+    const ownerId = useAuthStore.getState().user?.id;
+    const publishExport = (element: HTMLDivElement) => {
+      if (token !== exportRender.current || !sessionId || !revision
+        || !ownsChartResult(entry, ownerId, revision)) return;
+      setActiveChart({ element, sessionId, resultRevision: revision,
+        cycle: responseIdentity.cycle, useRox: responseIdentity.useRox, backgroundMode: responseIdentity.backgroundMode, entry, ownerId,
+        caption: `whole-run; cycle ${responseIdentity.cycle}; ${responseIdentity.useRox ? 'reference requested' : 'raw basis'}; background ${responseIdentity.backgroundMode}; visible wells ${visiblePoints.map(point => point.well).sort().join(',')}; revision ${revision}; analysed ${analysedAt ?? 'unknown'}`,
+        // A new Plotly render may alter filters, traces or layout even when the
+        // underlying response has the same wells. Bind the registry record to
+        // this render generation and exact visible scope so an in-flight PNG
+        // cannot pass its post-encode guard against replacement pixels.
+        identity: `whole-run:${sessionId}:${entry}:${revision}:${responseIdentity.cycle}:${responseIdentity.useRox}:${responseIdentity.backgroundMode}:${token}:${visiblePoints.map(point => point.well).sort().join(',')}` });
+    };
 
     if (!initialized.current) {
       const el = plotRef.current as HTMLDivElement & Pick<PlotlyHTMLElement, "on">;
       Plotly.newPlot(el, traces, layout, config).then(() => {
         if (el !== plotRef.current) return;
         initialized.current = true;
+        publishExport(el);
 
         // Selection modifiers, matching PlateView: ctrl/meta toggles one well
         // or unions a box into the current selection, shift unions, and a
@@ -502,7 +544,8 @@ export function ScatterPlot() {
         });
       });
     } else {
-      Plotly.react(plotRef.current, traces, layout, config);
+      const element = plotRef.current;
+      void Promise.resolve(Plotly.react(element, traces, layout, config)).then(() => publishExport(element));
     }
   }, [
     scatterPoints,
@@ -537,8 +580,14 @@ export function ScatterPlot() {
     lockAspect,
     editing,
     normalizationApplied,
+    backgroundMode,
+    sessionId,
+    fetchKey,
+    currentCycle,
     dark,
   ]);
+
+  useEffect(() => () => { if (plotRef.current) clearActiveChart(plotRef.current); }, []);
 
   // Declaring the assay's dosage ceiling. Re-clusters in AUTO mode with the
   // ceiling as a constraint rather than switching to a threshold override:
@@ -546,11 +595,10 @@ export function ScatterPlot() {
   // it how many there can be and how high they can go.
   const handleDosageMaxApply = useCallback(
     (next: number | null) => {
-      setDosageMax(next);
       if (!sessionId) return;
       void (async () => {
         try {
-          const result = await runClustering(sessionId, {
+          const accepted = await analyzeCurrent({
             algorithm: "auto",
             cycle: currentCycle ?? 0,
             threshold_config: {
@@ -570,19 +618,13 @@ export function ScatterPlot() {
             background: backgroundMode,
             use_rox: useRox,
           });
-          const store = useDataStore.getState();
-          store.setClusterAssignments(result.assignments);
-          store.setBoundaries(result.boundaries ?? null);
-          store.setOffset(result.offset ?? 0);
-          store.setOffsetUncertain(result.offset_uncertain ?? false);
-          store.setDosageMax(result.dosage_max ?? next);
-          window.dispatchEvent(new CustomEvent("welltypes-changed"));
+          if (accepted) window.dispatchEvent(new CustomEvent("analysis-result-changed"));
         } catch (error) {
           console.error("Failed to persist dosage ceiling:", error);
         }
       })();
     },
-    [sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setDosageMax]
+    [sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox]
   );
 
   // Highlight every selected well. Multi-selection is the normal plate-review
@@ -704,7 +746,7 @@ export function ScatterPlot() {
       if (!sessionId) return;
       const cuts = linesActive ? editRef.current : null;
       try {
-        const result = await runClustering(sessionId, {
+        const accepted = await analyzeCurrent({
           algorithm: cuts ? "threshold" : "auto",
           cycle: currentCycle ?? 0,
           threshold_config: {
@@ -721,8 +763,7 @@ export function ScatterPlot() {
           background: backgroundMode,
           use_rox: useRox,
         });
-        useDataStore.getState().setClusterAssignments(result.assignments);
-        window.dispatchEvent(new CustomEvent("welltypes-changed"));
+        if (accepted) window.dispatchEvent(new CustomEvent("analysis-result-changed"));
       } catch (error) {
         console.error("Failed to persist NTC quadrant:", error);
       }
@@ -757,12 +798,17 @@ export function ScatterPlot() {
       return Math.max(0, Math.min(1, fx / total));
     };
 
+    const restoreRejectedEdit = (cuts: number[]) => {
+      if (editRef.current !== cuts || useAnalysisStore.getState().sessionId !== sessionId) return;
+      const restored = useDataStore.getState().boundaries;
+      editRef.current = restored;
+      setEditBoundaries(restored);
+    };
+
     const persist = async (cuts: number[], off: number) => {
-      setBoundaries(cuts);
-      setOffset(off);
       if (!sessionId) return;
       try {
-        await runClustering(sessionId, {
+        const accepted = await analyzeCurrent({
           algorithm: "threshold",
           cycle: currentCycle ?? 0,
           threshold_config: {
@@ -779,7 +825,8 @@ export function ScatterPlot() {
           background: backgroundMode,
           use_rox: useRox,
         });
-        window.dispatchEvent(new CustomEvent("welltypes-changed"));
+        if (accepted) window.dispatchEvent(new CustomEvent("analysis-result-changed"));
+        else restoreRejectedEdit(cuts);
       } catch (err) {
         console.error("Failed to persist boundaries:", err);
       }
@@ -872,7 +919,7 @@ export function ScatterPlot() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [linesActive, editing, sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setBoundaries, setOffset, setEditBoundaries]);
+  }, [linesActive, editing, sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setEditBoundaries]);
 
   // Cleanup
   useEffect(() => {

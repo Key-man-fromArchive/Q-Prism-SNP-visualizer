@@ -2,7 +2,7 @@
 
 - Contract ID: qprism-ux-followup-20260907-v1
 - 작성일: 2026-09-07
-- 상태: IN PROGRESS — P0 로컬 통합 완료(0bd5090). P1 서버·계약 기반 게이트 통과. P2 분석·QC 화면 연결 대기.
+- 상태: IN PROGRESS — P1 서버·계약 기반 게이트 통과·로컬 통합 완료(83887a4). P2 분석·QC 화면 연결 진행 중.
 - 기준: [UI/UX 후속 개선 기획서 v0.2](ui-ux-overhaul/04-review-followup-prd.md)
 - 실행 기준 파일: docs/planning/06-tasks.md
 - 이전 계약: [qPCR Import Expansion 원문 보관](archive/06-tasks-qpcr-import-expansion.md). 보관본의 작업은 이번 실행 대상이 아니다.
@@ -262,29 +262,39 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P2-S1-T1: 단일·다중 마커 분석 상태 연결
 
-- Status: TODO
+- Status: DONE
 - 담당: frontend-specialist
 - Depends On: [P1-S0-V]
-- Write Scope: SRC/App.tsx, SRC/components/의 분석 Workspace·MultiMarker·CycleControl, 관련 stores/hooks 및 테스트
+- Write Scope: SRC/App.tsx, SRC/components/의 분석 Workspace·AnalysisTab·MultiMarker·CycleControl, 관련 stores/hooks·locales 및 테스트. 기존 SettingsTab·ScatterPlot 분석 진입점과 UploadZone·Batch의 신규/기존 세션 진입 구분도 공통 상태 연결에 필요한 범위만 포함한다(화면 재설계·과학 계산 변경 제외).
+- 계약 보완 범위: BE/app/routers/sample.py의 기존 세션 조회 응답에 `cycles: number[]`를 추가하고 focused backend 테스트 및 SRC/types/api.ts의 세션 조회 타입을 갱신한다. 실제 `unified.cycles`를 전달하며 `num_cycles`(개수)를 절대 사이클로 추정하거나 전체 곡선을 재조회하지 않는다. 인증·기존 필드·DB/계산 정책은 보존한다.
 - 구현: 분석 결과/입력 revision·pending·실패·불일치를 공통 상태로 표시한다. 단일 분석은 명시 실행/새 업로드 최초 자동 실행, 다중 마커는 입력 안정화 후 기존 220ms 자동 분석을 유지한다.
 - 구현: 현재 사이클 재분석과 추천 사이클 분석을 구분한다. 재생/복원 중 자동 분석을 막고 역순 응답을 폐기한다. 탐색 상태를 navigation-store로 이전하되 URL 복원 IO는 P3에서 연결한다.
 - 검증: 빠른 연속 변경, 늦은 응답, 실패 후 재실행, 보기 전용 변경, ROX/배경/마커 조건 변경의 컴포넌트 테스트. FE-ALL, FE-CHECK.
-- [ ] AC: 표시된 조건과 완료 결과의 관계가 명확하고, 오래된 응답이 최신 결과를 덮어쓰지 않음.
+- 추가 검증: 세션 조회의 sparse/zero 사이클 목록·접근 권한 backend 테스트와 실제 사이클 기반 초기화·복원 FE 테스트. 서버 응답 변경은 P2 게이트에서 BE-ALL로 재검증한다.
+- 호환성 보완: scatter/plate/clustering에 선택적 `cycle_mode=absolute`를 추가한다. P2 실제 선택 사이클은 절대 좌표로 전달하고 모드 생략은 기존 0→마지막 의미를 유지한다. 공통 cycle resolver·ClusteringRequest·data/clustering router·PlateView와 관련 테스트를 범위에 포함한다.
+- 검증 기록: [P2-S1-T1 evidence](ui-ux-overhaul/evidence/P2-S1-T1.md). 독립 코드 리뷰 및 Chromium P5 14/14·P2 smoke PASS.
+- [x] AC: 표시된 조건과 완료 결과의 관계가 명확하고, 오래된 응답이 최신 결과를 덮어쓰지 않음.
 
 ### P2-S2-T1: QC 상태·마커별 결과 표시
 
-- Status: TODO
+- P2-S1 후속 계약: 선택한 실제 cycle 0을 QC 요청에서도 `cycle_mode=absolute`로 전달하고 공유 resolver를 적용한다. 모드 생략 시 기존 0→마지막 cycle 호환성을 유지한다.
+
+- Status: DONE
+- Evidence: [P2-S2-T1](ui-ux-overhaul/evidence/P2-S2-T1.md). 독립 소스·브라우저 검증 PASS; 검증 계층별 한계는 evidence 참조.
 - 담당: frontend-specialist
 - Depends On: [P2-S1-T1]
 - Write Scope: SRC/components/의 Header·QC 표시/상세, 관련 hooks/locales, tests/19-qc-status.spec.ts
 - 구현: ok/warning/no_ntc/insufficient와 웰별 flagged/reason을 구분한다. NTC 전체 목록을 경고 목록으로 해석하지 않는다. 추천 사이클 미평가/검출 없음도 구분한다.
 - 구현: 선택 마커의 서버 QC와 전체 플레이트 NTC 범위를 표시하고, 이전 조건 QC를 현재 조건으로 오인하지 않도록 표시한다. 마커 없는 경우 임의 pooled separation을 만들지 않는다.
 - 검증: NTC 없음·정상·경고·부족, 일부 웰만 경고, 마커별 상이한 QC, stale/legacy 시나리오. FE-TEST, ROOT-E2E.
-- [ ] AC: UX-01 상태 행렬 전체를 KO/EN으로 확인하고 서버 판정과 화면이 일치함.
+- [x] AC: UX-01 상태 행렬 전체를 KO/EN으로 확인하고 서버 판정과 화면이 일치함.
 
 ### P2-S3-T1: 출력 버전 선택·활성 차트 PNG
 
-- Status: TODO
+- P2-S1 후속 계약: CSV/PDF/XLSX/ASG의 명시적 실제 cycle 0에도 `cycle_mode=absolute`를 연결한다. 모드 생략의 기존 0→마지막 cycle 의미는 유지하며, cycle 생략으로 저장된 context.cycle을 선택하는 출력은 이미 안전하다.
+
+- Status: DONE
+- Evidence: [P2-S3-T1](ui-ux-overhaul/evidence/P2-S3-T1.md). Independent source review and final Chromium gate PASS; layer-specific caveats are recorded in the evidence.
 - 담당: frontend-specialist
 - Depends On: [P2-S2-T1]
 - Write Scope: SRC/hooks/의 export, SRC/components/의 출력 메뉴·대화상자·ScatterPlot, 관련 lib/locales, tests/18-result-consistency.spec.ts
@@ -292,27 +302,29 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - 구현: 화면 20/결과 40 불일치에서 재분석 20 후 출력·저장 결과 40 출력·취소를 제공한다. 후자는 화면 20 유지, PNG만 확인 후 결과 40 화면을 렌더하고 출력한다. 입력 revision 변경/legacy에는 이전 결과 출력을 허용하지 않는다.
 - 구현: 계산 중 비활성화, 409 재확인, 다운로드 실패/재시도, 조건·버전·시각 metadata/caption을 연결한다.
 - 검증: 실제 다운로드 CSV/PDF/XLSX의 값·자료형·metadata, PNG 비어 있지 않음/활성 마커/caption. 단일·다중, ROX/배경, 20/40, pending/409/legacy를 테스트한다.
-- [ ] AC: UX-02 C의 선택별 화면·파일 동작이 일치하며 선택 웰 필터가 전체 런 출력을 축소하지 않음.
+- [x] AC: UX-02 C의 선택별 화면·파일 동작이 일치하며 선택 웰 필터가 전체 런 출력을 축소하지 않음.
 
 ### P2-S4-T1: 포커스별 키보드 계약
 
-- Status: TODO
+- Status: DONE
 - 담당: frontend-specialist
 - Depends On: [P2-S3-T1]
 - Write Scope: SRC/hooks/의 단축키, SRC/components/의 PlateView·결과 그리드·메뉴/대화상자, tests/20-keyboard.spec.ts 및 단위 테스트
 - 구현: defaultPrevented 우선 반환, 위젯 이벤트 소유권, 입력/editable에서 앱 단축키 차단을 적용한다. 일반 버튼/탭/메뉴/대화상자는 Space·Enter·방향키·Escape 기본 동작을 보존한다.
 - 구현: 그리드 방향키/Home/End/Shift 선택·Enter/Space 선택·Escape 해제와 유효한 1–7/Ctrl+E를 연결한다. 분석 바깥 재생/사이클/타입 변경을 차단하고 언어/테마/도움말 예외를 PRD대로 제한한다.
 - 검증: mouse 없이 포커스 순회, 버튼 Space가 재생하지 않음, 입력 Ctrl+Z는 브라우저 동작. undo/redo 실제 API 성공·실패 검증은 P3-S2-T1에서 완결한다.
-- [ ] AC: UX-03 키보드 행렬을 통과하고 기존 PlateView roving focus를 회귀시키지 않음.
+- [x] AC: UX-03 키보드 행렬을 통과하고 기존 PlateView roving focus를 회귀시키지 않음.
+- 증거: `ui-ux-overhaul/evidence/P2-S4-T1.md` — FE336, ROOT18+20 3/3, axe critical/serious0, 독립 소스·브라우저 리뷰 PASS. 96웰은 실제 서버, 384웰은 명시적 응답 fixture의 실제 16×24 DOM 검증이며 native384 파싱 검증이 아니다. Undo/CAS는 P3-S2, Omit 선택 정책은 P3-S4, 전체 반응형 레이아웃 검증은 P4에서 완결한다.
 
 ### P2-S0-V: 정확성 품질 게이트
 
-- Status: TODO
+- Status: DONE
+- Evidence: [P2-S0-V](ui-ux-overhaul/evidence/P2-S0-V.md). 최종 source 3edae4c: BE739+2 subtests, FE338, ROOT18–20 5/5, P5 14/14, 누적 변경 모듈58개 coverage·새 logical unit CC PASS. 기존 집계 복잡도·typing baseline·후속 범위는 evidence에 명시.
 - 담당: test-specialist
 - Depends On: [P2-S4-T1]
 - Write Scope: docs/planning/ui-ux-overhaul/evidence/P2-S0-V.md
 - 검증: BE-ALL, FE-ALL, FE-CHECK, ROOT-E2E 18–20, COVERAGE, 출력 실파일 증거와 frontend/code 리뷰.
-- [ ] AC: UX-01·02·03 통과. UX-03 undo 연결만 명시적으로 P3에 이관하며 나머지 미구현을 통과 처리하지 않음.
+- [x] AC: UX-01·02·03 통과. UX-03 undo 연결만 명시적으로 P3에 이관하며 나머지 미구현을 통과 처리하지 않음.
 
 ## Phase P3 — 복원·실패 복구·수동 편집
 

@@ -1,6 +1,7 @@
 import { MoreHorizontal } from 'lucide-react';
 import { useI18n } from '@/hooks/use-i18n';
 import { Menu, type MenuItem } from '@/components/shared/ui';
+import { navigateTabs } from '@/lib/tab-keyboard';
 
 export type TabId = 'analysis' | 'protocol' | 'settings' | 'quality' | 'statistics' | 'compare' | 'project' | 'users' | 'references' | 'library';
 
@@ -65,6 +66,7 @@ export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdm
 
   return (
     <nav className="flex items-center gap-0 border-b border-border px-6 bg-surface">
+      <div role="tablist" aria-label={t.navigation} onKeyDown={navigateTabs} className="flex">
       {primary.map((tab) => {
         const disabled = !hasSession && !tab.sessionFree;
         return (
@@ -72,6 +74,11 @@ export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdm
             key={tab.id}
             id={`tab-${tab.dataTab}`}
             data-tab={tab.dataTab}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={`main-panel-${tab.id}`}
+            tabIndex={activeTab === tab.id || (activeInOverflow && tab.id === 'analysis') ? 0 : -1}
             onClick={() => { if (!disabled) onTabChange(tab.id); }}
             disabled={disabled}
             className={`
@@ -88,6 +95,7 @@ export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdm
           </button>
         );
       })}
+      </div>
       {overflowItems.length > 0 && (
         <Menu
           label={t.tabMore}

@@ -151,7 +151,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         setUploadState("success");
 
         setTimeout(() => {
-          setSession(info.session_id, info);
+          setSession(info.session_id, info, 'fresh');
         }, 500);
       } catch (err) {
         if (isSpreadsheetImportFallbackFile(file)) {
@@ -375,7 +375,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         const info = await apiLoadExample(ploidy);
         setUploadState("success");
         setStatusMessage(t.parsed(info.instrument, info.num_wells, info.num_cycles));
-        setTimeout(() => setSession(info.session_id, info), 300);
+        setTimeout(() => setSession(info.session_id, info, 'fresh'), 300);
       } catch (err) {
         setUploadState("error");
         setStatusMessage(err instanceof Error ? err.message : t.errLoadExample);
@@ -593,7 +593,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
             setUploadState("success");
             setStatusMessage(t.parsed(info.instrument, info.num_wells, info.num_cycles));
             setTimeout(() => {
-              setSession(info.session_id, info);
+              setSession(info.session_id, info, 'fresh');
             }, 500);
           }}
         />

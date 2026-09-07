@@ -9,6 +9,7 @@ from app.asg_session import LinkedASGLaunch, get_session_asg_launch
 from app.auth import TokenData, check_session_access
 from app.processing.analysis_state import input_lock
 from app.processing.background import BackgroundMode
+from app.processing.cycle_selection import CycleMode
 from app.processing.ct_calculation import calculate_all_ct
 from app.processing.genotype import count_genotypes
 from app.processing.statistics import allele_frequencies, hwe_test
@@ -101,8 +102,9 @@ def build_result_snapshot(
     session_id: str, *, user: TokenData,
     selected_cycle: int | None = None, use_rox: bool | None = None,
     background: BackgroundMode | None = None, result_revision: UUID | None = None,
+    cycle_mode: CycleMode = "legacy_latest",
 ) -> dict:
     snapshot, launch = _capture_asg(
-        session_id, user, ExportOptions(result_revision, selected_cycle, use_rox, background),
+        session_id, user, ExportOptions(result_revision, selected_cycle, use_rox, background, cycle_mode),
     )
     return _render_asg(snapshot, launch)

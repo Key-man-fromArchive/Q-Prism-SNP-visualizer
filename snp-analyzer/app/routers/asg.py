@@ -3,20 +3,22 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.asg_client import ASGResultSaveError, post_analysis_result
 from app.asg_result import build_result_snapshot
 from app.auth import CurrentUser, check_session_access
 from app.config import is_asg_launch_mode
 from app.processing.background import BackgroundMode
+from app.processing.cycle_selection import CycleMode
 
 router = APIRouter(prefix="/api/asg", tags=["asg"])
 
 
 class SaveResultRequest(BaseModel):
     session_id: str
-    selected_cycle: int | None = None
+    selected_cycle: int | None = Field(default=None, ge=0)
+    cycle_mode: CycleMode = "legacy_latest"
     use_rox: bool | None = None
     background: BackgroundMode | None = None
     result_revision: UUID | None = None
@@ -32,6 +34,7 @@ async def save_result(body: SaveResultRequest, current_user: CurrentUser):
         body.session_id,
         user=current_user,
         selected_cycle=body.selected_cycle,
+        cycle_mode=body.cycle_mode,
         use_rox=body.use_rox,
         background=body.background,
         result_revision=body.result_revision,

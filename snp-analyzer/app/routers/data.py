@@ -10,6 +10,7 @@ from app.models import (
     UnifiedData,
 )
 from app.processing.background import BackgroundMode
+from app.processing.cycle_selection import CycleMode, resolve_cycle
 from app.processing.normalize import normalize_for_cycle, normalize, normalization_applies
 from app.processing.ratio_origin import rox_outlier_wells
 from app.role_labels import build_role_label_metadata
@@ -55,14 +56,14 @@ async def scatter_data(
     sid: str,
     current_user: CurrentUser,
     cycle: int = Query(default=0),
+    cycle_mode: CycleMode = Query(default="legacy_latest"),
     use_rox: bool = Query(default=True),
     background: BackgroundMode = Query(default="none"),
 ):
     check_session_access(sid, current_user)
     unified = _get_session(sid)
 
-    if cycle <= 0:
-        cycle = max(unified.cycles)
+    cycle = resolve_cycle(unified.cycles, cycle, cycle_mode)
 
     if cycle not in unified.cycles:
         raise HTTPException(400, f"Cycle {cycle} not available. Range: {unified.cycles[0]}-{unified.cycles[-1]}")
@@ -120,14 +121,14 @@ async def plate_data(
     sid: str,
     current_user: CurrentUser,
     cycle: int = Query(default=0),
+    cycle_mode: CycleMode = Query(default="legacy_latest"),
     use_rox: bool = Query(default=True),
     background: BackgroundMode = Query(default="none"),
 ):
     check_session_access(sid, current_user)
     unified = _get_session(sid)
 
-    if cycle <= 0:
-        cycle = max(unified.cycles)
+    cycle = resolve_cycle(unified.cycles, cycle, cycle_mode)
 
     points = normalize_for_cycle(unified, cycle, use_rox=use_rox, background=background)
     ratio_origin = ratio_origin_for(sid, unified, points)
@@ -284,6 +285,7 @@ async def export_pdf(
     use_rox: bool | None = Query(default=None),
     background: BackgroundMode | None = Query(default=None),
     cycle: int | None = Query(default=None, ge=0),
+    cycle_mode: CycleMode = Query(default="legacy_latest"),
     result_revision: UUID | None = Query(default=None),
 ):
     from fastapi.responses import Response
@@ -291,7 +293,7 @@ async def export_pdf(
     from app.reporting.snapshot_pdf import build_snapshot_pdf
 
     snapshot = capture_result_snapshot(
-        sid, current_user, ExportOptions(result_revision, cycle, use_rox, background),
+        sid, current_user, ExportOptions(result_revision, cycle, use_rox, background, cycle_mode),
     )
     return Response(
         build_snapshot_pdf(snapshot), media_type="application/pdf",

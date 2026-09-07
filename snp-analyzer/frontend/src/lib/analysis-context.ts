@@ -35,10 +35,15 @@ function resolveRegion(marker: MarkerRegion, request: ClusteringRequest): Analys
  * Empty request.regions falls back to stored markers, matching _capture_analysis.
  * Region algorithm is the requested setting for comparison, not the effective AUTO/threshold.
  */
-export function resolveAnalysisView(request: ClusteringRequest, session: AnalysisSessionDefaults): AnalysisView {
+function resolveViewCycle(requested: number, cycles: number[], mode: 'legacy_latest' | 'absolute'): number {
+  const cycle = mode === 'absolute' || requested > 0 ? requested : Math.max(...cycles);
+  if (!cycles.includes(cycle)) throw new Error('Current cycle is unavailable');
+  return cycle;
+}
+export function resolveAnalysisView(request: ClusteringRequest, session: AnalysisSessionDefaults,
+  cycleMode: 'legacy_latest' | 'absolute' = 'legacy_latest'): AnalysisView {
   const markers = request.regions?.length ? request.regions : session.markers;
-  const cycle = request.cycle > 0 ? request.cycle : Math.max(...session.cycles);
-  if (!session.cycles.includes(cycle)) throw new Error('Current cycle is unavailable');
+  const cycle = resolveViewCycle(request.cycle, session.cycles, cycleMode);
   return { cycle, use_rox: request.use_rox ?? true, background: request.background ?? 'none',
     algorithm: request.algorithm, n_clusters: request.n_clusters,
     ploidy: markers.length ? session.ploidy : (request.ploidy ?? session.ploidy),

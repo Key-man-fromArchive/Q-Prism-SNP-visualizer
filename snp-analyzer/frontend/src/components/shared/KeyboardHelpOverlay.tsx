@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { Modal } from './ui/Modal';
 import { useI18n } from '@/hooks/use-i18n';
 
 interface Props {
@@ -22,8 +22,6 @@ export function KeyboardHelpOverlay({ onClose }: Props) {
       shortcuts: [
         { key: "Ctrl+E", desc: t.exportResultsCSV },
         { key: "D", desc: t.toggleDarkMode },
-        { key: "Ctrl+Z", desc: t.undo },
-        { key: "Ctrl+Shift+Z", desc: t.redo },
       ],
     },
     {
@@ -48,26 +46,8 @@ export function KeyboardHelpOverlay({ onClose }: Props) {
   ];
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[10000]"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="bg-surface border border-border rounded-xl shadow-2xl max-w-[560px] w-[90%] max-h-[85vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface z-10">
-          <h2 className="text-lg font-semibold text-text m-0">
-            {t.keyboardShortcuts}
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label={t.close}
-            className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text hover:bg-bg rounded leading-none border-0 bg-transparent cursor-pointer"
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
-        </div>
-
+    <Modal open onClose={onClose} title={t.keyboardShortcuts} widthClassName="max-w-[560px]">
+      <div tabIndex={0} role="region" aria-label={t.keyboardShortcuts} className="max-h-[75vh] overflow-y-auto">
         <div className="p-6 space-y-6">
           {SECTIONS.map((section) => (
             <div key={section.title}>
@@ -97,6 +77,6 @@ export function KeyboardHelpOverlay({ onClose }: Props) {
           </p>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

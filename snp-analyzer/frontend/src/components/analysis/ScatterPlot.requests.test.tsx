@@ -1,17 +1,21 @@
-import { act, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { ScatterPlot } from './ScatterPlot';
-import { getScatter } from '@/lib/api';
+import { getScatter, runClustering } from '@/lib/api';
+import { useAnalysisStore } from '@/stores/analysis-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useDataStore } from '@/stores/data-store';
 import { useSettingsStore } from '@/stores/settings-store';
+import { useAuthStore } from '@/stores/auth-store';
+import { getActiveChart } from '@/lib/chart-export-registry';
 import Plotly from 'plotly.js-dist-min';
 import type { ScatterResponse } from '@/types/api';
 
 vi.mock('plotly.js-dist-min', () => ({ default: { newPlot: vi.fn().mockResolvedValue(undefined), react: vi.fn(), purge: vi.fn(), restyle: vi.fn() } }));
 vi.mock('@/lib/api', () => ({ getScatter: vi.fn(), runClustering: vi.fn() }));
-vi.mock('./ScatterViewControls', () => ({ ScatterViewControls: () => null }));
+vi.mock('./ScatterViewControls', () => ({ ScatterViewControls: ({ dosageCeiling }: { dosageCeiling: { onApply: (value: number) => void } }) =>
+  <button onClick={() => dosageCeiling.onApply(3)}>Apply synthetic dosage ceiling</button> }));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -22,9 +26,17 @@ const response = (dye: string): ScatterResponse => ({ cycle: 1, points: [], alle
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useAnalysisStore.getState().clear();
+  useAuthStore.setState({ user: null });
   useSessionStore.setState({ sessionId: 'run-a' });
   useSelectionStore.setState({ currentCycle: 1 });
   useDataStore.setState({ scatterPoints: [] });
+});
+it('fetches the actual zero cycle instead of suppressing the view', async () => {
+  useSelectionStore.setState({ currentCycle: 0 });
+  vi.mocked(getScatter).mockResolvedValue({ ...response('VIC'), cycle: 0 });
+  render(<ScatterPlot />);
+  await waitFor(() => expect(getScatter).toHaveBeenCalledWith('run-a', 0, expect.any(Boolean), expect.any(String)));
 });
 
 it('registers typed selection events and highlights a selected well', async () => {
@@ -62,4 +74,77 @@ it('does not publish a response after unmount', async () => {
   view.unmount();
   await act(async () => pending.resolve(response('HEX')));
   expect(useDataStore.getState().allele2Dye).toBe('VIC');
+});
+it.each(['revision', 'entry', 'owner'] as const)('does not publish a delayed Plotly render after %s identity drift', async (drift) => {
+  const rendered = deferred<void>();
+  vi.mocked(getScatter).mockResolvedValue({ ...response('VIC'), points: [{ well: 'A1', sample_name: null, raw_fam: 1, raw_allele2: 2, raw_rox: null, norm_fam: 1, norm_allele2: 2, auto_cluster: null, manual_type: null }] });
+  useAnalysisStore.getState().setSession('run-a', 'u');
+  useAnalysisStore.setState({ result: { algorithm: 'auto', cycle: 1, assignments: {}, analysis_context: { result_revision: 'rev-a' } } as never });
+  useAuthStore.setState({ user: { id: 'u', username: 'u', display_name: 'U', role: 'user' } });
+  vi.mocked(Plotly.newPlot).mockImplementationOnce((node) => {
+    Object.assign(node, { on: vi.fn() });
+    return rendered.promise;
+  });
+  render(<ScatterPlot />);
+  await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalled());
+  if (drift === 'revision') useAnalysisStore.setState({ result: { algorithm: 'auto', cycle: 1, assignments: {}, analysis_context: { result_revision: 'rev-b' } } as never });
+  if (drift === 'entry') useSessionStore.setState({ entryGeneration: useSessionStore.getState().entryGeneration + 1 });
+  if (drift === 'owner') useAuthStore.setState({ user: { id: 'other', username: 'other', display_name: 'Other', role: 'user' } });
+  await act(async () => rendered.resolve());
+  expect(getActiveChart('run-a', 'rev-a')).toBeNull();
+});
+it('publishes a new immutable export generation when selected-only changes the rendered wells', async () => {
+  const points = ['A1', 'A2'].map((well, index) => ({ well, sample_name: null, raw_fam: index + 1,
+    raw_allele2: 2, raw_rox: null, norm_fam: index + 1, norm_allele2: 2, auto_cluster: null, manual_type: null }));
+  useDataStore.setState({ plateWells: points.map((point, index) => ({ ...point, row: 0, col: index + 1, ratio: null })) });
+  useAnalysisStore.getState().setSession('run-a', 'u');
+  useAnalysisStore.setState({ result: { algorithm: 'auto', cycle: 1, assignments: {}, analysis_context: { result_revision: 'rev-a' } } as never });
+  useAuthStore.setState({ user: { id: 'u', username: 'u', display_name: 'U', role: 'user' } });
+  vi.mocked(getScatter).mockResolvedValue({ ...response('VIC'), points });
+  vi.mocked(Plotly.newPlot).mockImplementation(async node => { Object.assign(node, { on: vi.fn() }); });
+  vi.mocked(Plotly.react).mockResolvedValue(undefined);
+  render(<ScatterPlot />);
+  await waitFor(() => expect(getActiveChart('run-a', 'rev-a')).not.toBeNull());
+  const first = getActiveChart('run-a', 'rev-a')!;
+  act(() => useSelectionStore.setState({ selectedWells: ['A1'], focusSelectedWells: true }));
+  await waitFor(() => expect(getActiveChart('run-a', 'rev-a')?.identity).not.toBe(first.identity));
+  expect(getActiveChart('run-a', 'rev-a')?.caption).toContain('visible wells A1');
+  expect(getActiveChart('run-a', 'rev-a')?.caption).not.toContain('A2');
+});
+it('routes explicit dosage fitting through the shared owner without forcing manual boundaries', async () => {
+  useAnalysisStore.getState().setSession('run-a', 'u');
+  vi.mocked(getScatter).mockResolvedValue(response('VIC'));
+  vi.mocked(runClustering).mockResolvedValue({ algorithm: 'auto', cycle: 1, assignments: { A1: 'NTC' } });
+  render(<ScatterPlot />);
+  fireEvent.click(screen.getByRole('button', { name: 'Apply synthetic dosage ceiling' }));
+  await waitFor(() => expect(useAnalysisStore.getState().result?.assignments).toEqual({ A1: 'NTC' }));
+  expect(vi.mocked(runClustering).mock.calls.at(-1)?.[1]).toMatchObject({ algorithm: 'auto',
+    threshold_config: { boundaries: null, offset: 0, dosage_max: 3 } });
+});
+it('does not change accepted dosage metadata when fitting fails', async () => {
+  useAnalysisStore.getState().setSession('run-a', 'u');
+  useDataStore.setState({ dosageMax: 6 });
+  vi.mocked(getScatter).mockResolvedValue(response('VIC'));
+  vi.mocked(runClustering).mockRejectedValue(new Error('Synthetic fitting failure'));
+  render(<ScatterPlot />);
+  fireEvent.click(screen.getByRole('button', { name: 'Apply synthetic dosage ceiling' }));
+  await waitFor(() => expect(useAnalysisStore.getState().status).toBe('failed'));
+  expect(useDataStore.getState().dosageMax).toBe(6);
+});
+it('restores displayed boundary drafts after a failed manual edit', async () => {
+  useAnalysisStore.getState().setSession('run-a', 'u');
+  useSettingsStore.setState({ showBoundaryLines: true, showManualTypes: true, scatterTool: 'edit', ploidy: 4 });
+  useDataStore.setState({ boundaries: [0.7, 0.3], offset: 1 });
+  vi.mocked(getScatter).mockResolvedValue({ ...response('VIC'), points: [{ well: 'A1', sample_name: null, raw_fam: 1, raw_allele2: 2, raw_rox: null, norm_fam: 1, norm_allele2: 2, auto_cluster: null, manual_type: null }] });
+  vi.mocked(Plotly.newPlot).mockImplementation(async node => {
+    Object.assign(node, { on: vi.fn(), _fullLayout: { xaxis: { _length: 100, range: [0, 1] }, yaxis: { _length: 100, range: [0, 1] } } });
+  });
+  vi.mocked(runClustering).mockRejectedValue(new Error('Synthetic manual failure'));
+  const view = render(<ScatterPlot />);
+  await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalled());
+  const before = vi.mocked(Plotly.newPlot).mock.calls.at(-1)?.[2]?.shapes?.length;
+  fireEvent.doubleClick(view.container.querySelector('#scatter-plot')!, { clientX: 25, clientY: 25 });
+  await waitFor(() => expect(useAnalysisStore.getState().status).toBe('failed'));
+  expect(useDataStore.getState().boundaries).toEqual([0.7, 0.3]);
+  await waitFor(() => expect(vi.mocked(Plotly.react).mock.calls.at(-1)?.[2]?.shapes?.length).toBe(before));
 });

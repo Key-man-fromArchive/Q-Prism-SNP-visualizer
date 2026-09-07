@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CycleControl } from './CycleControl';
 import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
+import { useNavigationStore } from '@/stores/navigation-store';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -12,6 +13,11 @@ beforeEach(() => {
     suggested_cycle: 2, well_groups: null,
   } });
   useSelectionStore.setState({ currentCycle: 0, isPlaying: false });
+  const generation = useNavigationStore.getState().beginRestore('synthetic');
+  useNavigationStore.getState().setAvailableCycles([1, 2, 3]);
+  useNavigationStore.getState().complete(generation, { reasons: [], value: {
+    session: 'synthetic', tab: 'analysis', surface: 'analysis', marker: null, cycle: 2,
+  } });
 });
 afterEach(() => vi.useRealTimers());
 
