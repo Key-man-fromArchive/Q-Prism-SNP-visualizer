@@ -302,7 +302,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
           gridTemplateColumns: `auto repeat(${plateCols.length}, 1fr)`,
           gridTemplateRows: `auto repeat(${plateRows.length}, 1fr)`,
           gap: '2px',
-          maxWidth: isLargePlate ? '820px' : '500px',
+          maxWidth: isLargePlate ? '820px' : '380px',
           margin: '0 auto'
         }}
       >

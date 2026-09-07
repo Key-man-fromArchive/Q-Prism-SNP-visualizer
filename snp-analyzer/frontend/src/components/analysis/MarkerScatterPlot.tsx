@@ -709,7 +709,8 @@ export function MarkerScatterPlot({
         data-testid="marker-scatter"
         data-visible-wells={scopedPoints.length}
         ref={plotRef}
-        style={{ width: "100%", height: "440px" }}
+        className="analysis-scatter-canvas"
+        style={{ width: "100%" }}
       />
     </div>
   );

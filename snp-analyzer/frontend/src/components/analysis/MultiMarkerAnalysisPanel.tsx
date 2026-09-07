@@ -223,7 +223,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
       </div>
       </div>
       <div
-        className={`grid grid-cols-1 gap-4 p-4 sm:p-6 ${
+        className={`grid items-start grid-cols-1 gap-4 p-4 sm:p-6 ${
           useSidebar ? "xl:grid-cols-[260px_minmax(0,1fr)]" : ""
         }`}
       >
@@ -302,7 +302,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
 
         {selectedMarker && (
           <>
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="analysis-grid grid gap-4">
             <div className="panel min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <span
@@ -404,10 +404,10 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
               )}
             </div>
 
-            <PlateView
-              scopeWells={selectedMarker.wells}
-              ploidyOverride={selectedMarker.ploidy}
-            />
+            <div className="analysis-review-stack">
+              <PlateView scopeWells={selectedMarker.wells} ploidyOverride={selectedMarker.ploidy} />
+              <WellDetailPanel ploidyOverride={selectedMarker.ploidy} />
+            </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -450,7 +450,6 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                 </div>
               </div>
             </div>
-            <WellDetailPanel ploidyOverride={selectedMarker.ploidy} />
             </div>
 
             <ResultsTable ploidyOverride={selectedMarker.ploidy} />

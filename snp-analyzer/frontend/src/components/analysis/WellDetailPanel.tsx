@@ -200,34 +200,25 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
               <td className="text-text-muted pr-3 py-0.5">{t.well}</td>
               <td className="font-medium">{well}</td>
             </tr>
-            {sampleName && (
               <tr>
                 <td className="text-text-muted pr-3 py-0.5">{t.sample}</td>
-                <td>{sampleName}</td>
+                <td>{sampleName || '—'}</td>
               </tr>
-            )}
             <tr>
               <td className="text-text-muted pr-3 py-0.5">{t.genotype}</td>
               <td className="font-medium">{genotype}</td>
             </tr>
-            {autoCluster && (
-              <tr>
-                <td className="text-text-muted pr-3 py-0.5">{t.autoCluster}</td>
-                <td>{autoCluster}</td>
-              </tr>
-            )}
-            {manualType && (
-              <tr>
-                <td className="text-text-muted pr-3 py-0.5">{t.manualType}</td>
-                <td>{manualType}</td>
-              </tr>
-            )}
-            {confidence != null && (
               <tr>
                 <td className="text-text-muted pr-3 py-0.5">{t.confidence}</td>
-                <td>{Math.round(confidence * 100)}%</td>
+                <td>{confidence == null ? '—' : `${Math.round(confidence * 100)}%`}</td>
               </tr>
-            )}
+          </tbody>
+        </table>
+        <details className="well-detail-expanded" onToggle={event => { if (event.currentTarget.open && plotRef.current && plotInitRef.current) void Plotly.relayout(plotRef.current, { autosize: true }); }}>
+          <summary className="cursor-pointer text-xs text-primary py-2">{t.analysisNumericDetails}</summary>
+          <table className="detail-table w-full text-sm"><tbody>
+            {autoCluster && <tr><td className="text-text-muted pr-3 py-0.5">{t.autoCluster}</td><td>{autoCluster}</td></tr>}
+            {manualType && <tr><td className="text-text-muted pr-3 py-0.5">{t.manualType}</td><td>{manualType}</td></tr>}
             <tr>
               <td className="text-text-muted pr-3 py-0.5">{labels.fam}{normLabel}</td>
               <td>{normFam.toFixed(decimals)}</td>
@@ -266,6 +257,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
             style={{ width: "100%", height: "200px", marginTop: "12px" }}
           />
         )}
+        </details>
       </div>
     </div>
   );

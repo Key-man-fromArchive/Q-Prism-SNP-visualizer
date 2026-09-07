@@ -999,7 +999,7 @@ export function ScatterPlot() {
         {originNote} — {controlLabels.fam} {ratioOrigin.fam.toFixed(normalizationApplied ? 4 : 1)},{" "}
         {controlLabels.allele2} {ratioOrigin.allele2.toFixed(normalizationApplied ? 4 : 1)}
       </p>
-      <div className="relative" style={{ height: "560px" }}>
+      <div className="relative analysis-scatter-canvas">
         <div
           id="scatter-plot"
           data-visible-wells={

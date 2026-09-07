@@ -15,6 +15,7 @@ import { loadExample } from "./helpers/load-example";
 
 test.beforeEach(async ({ page }) => {
   await loadExample(page, 2);
+  await page.getByTestId('analysis-advanced-settings').locator('summary').click();
   await expect(page.getByTestId("scatter-view-controls")).toBeVisible({ timeout: 20_000 });
 });
 
@@ -145,6 +146,7 @@ test.describe("dosage ceiling", () => {
 test.describe("dosage ceiling (6x)", () => {
   test.beforeEach(async ({ page }) => {
     await loadExample(page, 6);
+    await page.getByTestId('analysis-advanced-settings').locator('summary').click();
     await expect(page.getByTestId("scatter-view-controls")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("dosage-ceiling")).toBeVisible({ timeout: 20_000 });
   });
@@ -213,6 +215,7 @@ test.describe("dosage ceiling in the marker form", () => {
     // "처음부터": the ceiling belongs with the assay definition, not only on
     // the analysis screen.
     await loadExample(page, 6);
+    await page.getByTestId('analysis-advanced-settings').locator('summary').click();
     await page.getByTestId("workspace-tab-plate").click();
     await page.getByTestId("add-marker-button").click();
 

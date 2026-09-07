@@ -1,6 +1,101 @@
 import { expect, test } from '@playwright/test';
 import { login } from './helpers';
 
+test('multi-marker 384 review keeps long context and warnings inside bounded regions', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await login(page);
+  await page.locator('#example-select').selectOption('2');
+  const names = ['Long marker identity '.repeat(4), 'Marker B', 'Marker C', 'Marker D'];
+  await page.getByTestId('workspace-tab-plate').click();
+  for (const [index, name] of names.entries()) {
+    await page.getByTestId('add-marker-button').click();
+    await page.getByTestId('marker-name-input').fill(name);
+    await page.getByTestId('marker-ploidy-select').selectOption('2');
+    await page.getByTestId('marker-form-save').click();
+    await page.getByTestId(`col-header-${index * 2 + 1}`).click();
+    await page.getByTestId(`col-header-${index * 2 + 2}`).click();
+    await page.getByTestId('selection-bar').getByTestId('marker-pick-button').filter({ hasText: name }).click();
+    await page.getByTestId('assign-button').click();
+  }
+  await page.getByTestId('workspace-tab-analysis').click();
+  await expect(page.getByTestId('marker-selector-sidebar')).toBeVisible();
+  await page.getByTestId('multi-analyze-current').click();
+  await expect(page.getByTestId('marker-scatter').locator('.scatterlayer .point').first()).toBeVisible();
+  // Presentation-only 384 geometry and warning fixture; saved scientific calls/context remain unchanged.
+  await page.route(/\/api\/data\/[^/]+\/(plate|scatter)(\?|$)/, async route => {
+    const response = await route.fetch(); const body = await response.json();
+    const key = new URL(route.request().url()).pathname.endsWith('/plate') ? 'wells' : 'points';
+    body[key] = [...'ABCDEFGHIJKLMNOP'].flatMap((row, r) => Array.from({ length: 24 }, (_, c) => ({
+      ...body[key][0], well: `${row}${c + 1}`, row: r, col: c, sample_name: `Synthetic ${row}${c + 1}`,
+    })));
+    await route.fulfill({ response, json: body });
+  });
+  await page.route(/\/api\/data\/[^/]+\/cluster$/, async route => {
+    const response = await route.fetch(); const body = await response.json();
+    if (body.regions) for (const region of body.regions) region.warnings = Array.from({ length: 40 }, (_, i) => `Synthetic warning ${i}: review this marker independently.`);
+    await route.fulfill({ response, json: body });
+  });
+  await page.reload();
+  await expect(page.locator('#plate-grid [role="gridcell"]')).toHaveCount(384);
+  await expect(page.getByTestId('marker-selector-sidebar')).toContainText(names[0]);
+  expect((await page.getByTestId('marker-selector-sidebar').boundingBox())!.height).toBeLessThanOrEqual(512);
+  await expect(page.getByTestId('marker-warnings')).toContainText('Synthetic warning');
+  await expect.poll(() => page.getByTestId('marker-warnings').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+  await expect.poll(() => page.getByTestId('plate-scroll-region').evaluate(node => node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight)).toBe(true);
+  await page.locator('#plate-grid [data-well="A1"]').click();
+  await expect(page.locator('.detail-panel')).toContainText('Synthetic A1');
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);
+  await page.screenshot({ path: test.info().outputPath('multi-marker-review.png'), fullPage: true });
+});
+
+test('result-first 96-well desktop keeps scatter, plate and selected summary in the initial viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.addInitScript(() => localStorage.setItem('snp-analyzer-language', JSON.stringify({ state: { language: 'en' }, version: 0 })));
+  await login(page);
+  const analyzed = page.waitForResponse(response => response.url().endsWith('/cluster') && response.request().method() === 'POST');
+  await page.locator('#example-select').selectOption('2'); await analyzed;
+  await expect(page.locator('#plate-grid [role="gridcell"]')).toHaveCount(96);
+  await expect(page.locator('#scatter-plot .scatterlayer .point').first()).toBeVisible();
+  await expect(page.getByTestId('analysis-result-status')).toContainText('Current conditions match');
+  const cell = page.locator('#plate-grid [role="gridcell"]').first();
+  await cell.focus(); await page.keyboard.press('Enter');
+  await expect(cell).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.detail-panel')).toContainText('A1');
+  for (const label of ['Sample', 'Genotype', 'Confidence']) {
+    await expect(page.locator('.detail-panel tr').filter({ hasText: label }).first()).toBeVisible();
+  }
+  await expect(page.locator('.well-detail-expanded')).not.toHaveAttribute('open', '');
+  for (const selector of ['#scatter-plot', '#plate-grid', '.detail-panel']) {
+    const bounds = await page.locator(selector).boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(1000);
+  }
+  await expect(page.locator('[data-testid="analysis-advanced-settings"]')).not.toHaveAttribute('open', '');
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await page.screenshot({ path: test.info().outputPath('selected-result-first.png') });
+  let analysisPosts = 0;
+  page.on('request', request => { if (request.method() === 'POST' && /\/(cluster|suggest-cycle)$/.test(request.url())) analysisPosts++; });
+  const plot = page.locator('#scatter-plot');
+  const originalPlot = await plot.elementHandle();
+  const settings = page.getByTestId('analysis-advanced-settings');
+  await settings.locator('summary').click();
+  await expect(page.getByTestId('scatter-view-controls')).toBeVisible();
+  await settings.locator('summary').click();
+  expect(await plot.evaluate((node, original) => node === original, originalPlot)).toBe(true);
+  await page.locator('.well-detail-expanded > summary').click();
+  await expect(page.locator('#amplification-plot .main-svg').first()).toBeVisible();
+  await page.locator('.well-detail-expanded > summary').click();
+  await page.setViewportSize({ width: 768, height: 1000 });
+  await expect.poll(() => plot.locator('.svg-container').evaluate(node => node.getBoundingClientRect().width)).toBeLessThan(768);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator('header').getByRole('button', { name: 'Export', exact: true }).click();
+  const download = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: /PNG/ }).click();
+  expect((await download).suggestedFilename()).toMatch(/\.png$/);
+  expect(analysisPosts).toBe(0);
+});
+
 for (const width of [390, 768, 1024, 1280, 1440]) {
   for (const language of ['ko', 'en']) {
     for (const dark of [false, true]) {
@@ -128,6 +223,7 @@ test('384-well internal scrolling and short-height project dialog stay within th
   await scroll.focus(); await expect(scroll).toBeFocused();
   const resultsScroll = page.getByTestId('results-scroll-region');
   await expect.poll(() => resultsScroll.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+  await expect.poll(() => resultsScroll.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   await resultsScroll.focus(); await expect(resultsScroll).toBeFocused();
   await resultsScroll.screenshot({ path: test.info().outputPath('384-results-scroll.png') });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);

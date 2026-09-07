@@ -162,7 +162,7 @@ export function AnalysisTab() {
     <div>
       {/* Single sticky analysis toolbar: cycle control + analyze/ploidy/boundary
           controls read as one bar and stay visible while scrolling (PRD FR-NAV-2). */}
-      <div className="sticky top-0 z-20 bg-surface border-b border-border">
+      <div className="analysis-primary-toolbar sticky top-0 z-20 bg-surface border-b border-border">
       {/* Cycle Control */}
       <CycleControl />
 
@@ -307,16 +307,13 @@ export function AnalysisTab() {
         {/* Scatter Plot - top left */}
         <ScatterPlot />
 
-        {/* Plate View - top right */}
-        <PlateView />
-
-        {/* Well Detail - bottom left */}
-        <WellDetailPanel />
-
-        {/* Results Table - bottom right */}
-        <ResultsTable />
+        <div className="analysis-review-stack">
+          <PlateView />
+          <WellDetailPanel />
+        </div>
       </div>
 
+      <div className="analysis-secondary px-4 pb-4 sm:px-6"><ResultsTable /></div>
       {/* Amplification Overlay - full width below grid */}
       <div style={{ padding: "0 24px 16px" }}>
         <AmplificationOverlay />

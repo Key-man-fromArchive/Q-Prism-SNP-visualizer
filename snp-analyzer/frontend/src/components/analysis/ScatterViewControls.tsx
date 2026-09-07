@@ -88,6 +88,7 @@ export function ScatterViewControls({
   const scatterTool = useSettingsStore((s) => s.scatterTool);
   const setScatterTool = useSettingsStore((s) => s.setScatterTool);
   const useRox = useSettingsStore((s) => s.useRox);
+  const backgroundMode = useSettingsStore((s) => s.backgroundMode);
   const setUseRox = useSettingsStore((s) => s.setUseRox);
   const xMin = useSettingsStore((s) => s.xMin);
   const xMax = useSettingsStore((s) => s.xMax);
@@ -142,6 +143,11 @@ export function ScatterViewControls({
   );
 
   return (
+    <details data-testid="analysis-advanced-settings" className="analysis-advanced-settings mb-2">
+      <summary className="cursor-pointer text-xs text-text rounded border border-border p-2">
+        {t.analysisAdvancedSettings} · {axisModeLabel(axisMode)} · {labels.fam}/{labels.allele2} · {t.qcReferenceRequested(useRox)} · {t.qcBasis(normalizationApplied, backgroundMode)}
+        {' · '}{t.analysisNtcMode(ntcCorner !== null)}: {labels.fam} ≤{roundBound(effectiveNtcCorner.fam)}, {labels.allele2} ≤{roundBound(effectiveNtcCorner.allele2)} · {t.analysisAspectState(lockAspect)}
+      </summary>
     <div
       data-testid="scatter-view-controls"
       className="flex flex-wrap items-end gap-x-4 gap-y-2 rounded-md border border-border bg-bg px-3 py-2"
@@ -367,5 +373,6 @@ export function ScatterViewControls({
         </div>
       </div>
     </div>
+    </details>
   );
 }
