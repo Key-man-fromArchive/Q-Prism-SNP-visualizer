@@ -266,9 +266,11 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - 담당: frontend-specialist
 - Depends On: [P1-S0-V]
 - Write Scope: SRC/App.tsx, SRC/components/의 분석 Workspace·AnalysisTab·MultiMarker·CycleControl, 관련 stores/hooks·locales 및 테스트. 기존 SettingsTab·ScatterPlot 분석 진입점과 UploadZone·Batch의 신규/기존 세션 진입 구분도 공통 상태 연결에 필요한 범위만 포함한다(화면 재설계·과학 계산 변경 제외).
+- 계약 보완 범위: BE/app/routers/sample.py의 기존 세션 조회 응답에 `cycles: number[]`를 추가하고 focused backend 테스트 및 SRC/types/api.ts의 세션 조회 타입을 갱신한다. 실제 `unified.cycles`를 전달하며 `num_cycles`(개수)를 절대 사이클로 추정하거나 전체 곡선을 재조회하지 않는다. 인증·기존 필드·DB/계산 정책은 보존한다.
 - 구현: 분석 결과/입력 revision·pending·실패·불일치를 공통 상태로 표시한다. 단일 분석은 명시 실행/새 업로드 최초 자동 실행, 다중 마커는 입력 안정화 후 기존 220ms 자동 분석을 유지한다.
 - 구현: 현재 사이클 재분석과 추천 사이클 분석을 구분한다. 재생/복원 중 자동 분석을 막고 역순 응답을 폐기한다. 탐색 상태를 navigation-store로 이전하되 URL 복원 IO는 P3에서 연결한다.
 - 검증: 빠른 연속 변경, 늦은 응답, 실패 후 재실행, 보기 전용 변경, ROX/배경/마커 조건 변경의 컴포넌트 테스트. FE-ALL, FE-CHECK.
+- 추가 검증: 세션 조회의 sparse/zero 사이클 목록·접근 권한 backend 테스트와 실제 사이클 기반 초기화·복원 FE 테스트. 서버 응답 변경은 P2 게이트에서 BE-ALL로 재검증한다.
 - [ ] AC: 표시된 조건과 완료 결과의 관계가 명확하고, 오래된 응답이 최신 결과를 덮어쓰지 않음.
 
 ### P2-S2-T1: QC 상태·마커별 결과 표시
