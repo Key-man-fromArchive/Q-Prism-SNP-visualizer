@@ -27,3 +27,6 @@ httpx==0.28.1
 pytest-cov==7.1.0
 pypdf==6.17.0
 radon==6.0.1
+pip-audit==2.10.0
+ruff==0.15.6
+mypy==1.19.1
