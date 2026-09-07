@@ -1,4 +1,14 @@
 const en = {
+  qualityJumpLoading: 'Locating the warning well…',
+  qualityJumpUnavailable: 'This warning target is no longer available. Refresh quality results and try again.',
+  qualityTemporaryReveal: (well: string) => `Temporary reveal: ${well}. Your display filters are unchanged.`,
+  qualityCurveBasis: 'Curve quality — unversioned measurement, separate from genotype QC.',
+  qualityCurveScope: (session: string, rox: boolean) => `Full-curve quality — unversioned; run ${session}; reference normalization ${rox ? 'requested' : 'off'}. Separate from genotype QC.`,
+  qualityNtcScope: (input: number, result: string | null, cycle: number, rox: boolean, background: string) =>
+    `Plate NTC check — cycle ${cycle}; reference normalization ${rox ? 'requested' : 'off'}; background ${{ none: 'none', pre_read: 'pre-read', channel_min: 'channel minimum' }[background] ?? 'unknown'}; input revision ${input}; stored result ${result ?? 'unavailable'}. Separate from genotype judgment.`,
+  qualityNtcBasis: 'Plate NTC check — current input revision, separate from stored genotype judgment.',
+  qualityReturn: 'Clear temporary reveal and return',
+  qualityDismiss: 'Dismiss navigation notice',
   keyboardTypeSaved: (count: number) => `Type updated for ${count} wells. Selection retained.`,
   keyboardTypeFailed: (reason: string) => `Type update failed; selection retained. ${reason}`,
   qcReferenceRequested: (requested: boolean) => 'Reference normalization requested: ' + (requested ? 'yes' : 'no'),

@@ -53,6 +53,9 @@ function countKeyToLabel(key: string, ploidy: number): string {
 type MultiMarkerAnalysisPanelProps = {
   markers: MarkerRegion[];
 };
+function settledAnalysisPaused(playing: boolean, unconfirmed: boolean, exporting: boolean, navigating: boolean) {
+  return playing || unconfirmed || exporting || navigating;
+}
 
 export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelProps) {
   const { t } = useI18n();
@@ -78,6 +81,8 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   const revisionUnconfirmed = useAnalysisStore(state => state.inputRevisionRefreshing || state.inputRevisionError !== null);
   const restoreStatus = useNavigationStore(state => state.status);
   const exportRestoring = useNavigationStore(state => state.exportRestoring);
+  const qualityNavigating = useNavigationStore(state => state.qualityNavigating);
+  const qualityEpoch = useNavigationStore(state => state.qualityEpoch);
   const entry = useSessionStore(state => state.entryGeneration);
   const scatterRequestRef = useRef(0);
   const skipAutoClusterCycleRef = useRef<number | null>(null);
@@ -111,7 +116,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     void analyzeCurrent(request);
   }, [request, currentCycle]);
   useSettledAnalysis(
-    `${sessionId}:${entry}`, inputKey, isPlaying || revisionUnconfirmed || exportRestoring,
+    `${sessionId}:${entry}:${qualityEpoch}`, inputKey, settledAnalysisPaused(isPlaying, revisionUnconfirmed, exportRestoring, qualityNavigating),
     runCluster, restoreStatus === 'ready', exportRestoring,
   );
 

@@ -1,6 +1,16 @@
 import type { Translations } from './en';
 
 const ko: Translations = {
+  qualityJumpLoading: '경고 대상 웰을 확인하고 있습니다…',
+  qualityJumpUnavailable: '이 경고 대상은 더 이상 확인할 수 없습니다. 품질 결과를 새로 고친 뒤 다시 시도하세요.',
+  qualityTemporaryReveal: (well: string) => `임시 표시: ${well}. 기존 표시 필터는 변경되지 않았습니다.`,
+  qualityCurveBasis: '곡선 품질 — 리비전이 없는 측정 평가이며 유전자형 QC와 별개입니다.',
+  qualityCurveScope: (session: string, rox: boolean) => `전체 곡선 품질 — 리비전 없음; 실행 ${session}; 참조 정규화 ${rox ? '요청됨' : '꺼짐'}. 유전자형 QC와 별개입니다.`,
+  qualityNtcScope: (input: number, result: string | null, cycle: number, rox: boolean, background: string) =>
+    `플레이트 NTC 점검 — 사이클 ${cycle}; 참조 정규화 ${rox ? '요청됨' : '꺼짐'}; 배경 보정 ${{ none: '없음', pre_read: '사전 읽기', channel_min: '채널 최솟값' }[background] ?? '확인 불가'}; 입력 리비전 ${input}; 저장 결과 ${result ?? '확인 불가'}. 유전자형 판정과 별개입니다.`,
+  qualityNtcBasis: '플레이트 NTC 점검 — 현재 입력 리비전 기준이며 저장된 유전자형 판정과 별개입니다.',
+  qualityReturn: '임시 표시 해제 후 돌아가기',
+  qualityDismiss: '이동 알림 닫기',
   keyboardTypeSaved: (count: number) => `${count}개 웰의 유형을 변경했습니다. 선택은 유지됩니다.`,
   keyboardTypeFailed: (reason: string) => `유형 변경에 실패했습니다. 선택은 유지됩니다. ${reason}`,
   qcReferenceRequested: (requested: boolean) => '기준 채널 정규화 요청: ' + (requested ? '예' : '아니요'),

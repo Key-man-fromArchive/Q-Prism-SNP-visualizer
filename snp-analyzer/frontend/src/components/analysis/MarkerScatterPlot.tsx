@@ -20,6 +20,9 @@ import { useDataStore, ZERO_ORIGIN } from "@/stores/data-store";
 import { useAnalysisStore } from "@/stores/analysis-store";
 import { ownsChartResult } from '@/lib/chart-export-owner';
 import { useSelectionStore } from "@/stores/selection-store";
+import { useQualityRevealedWell } from '@/hooks/use-quality-reveal';
+import { useWellFilter } from '@/hooks/use-well-filter';
+import { visibleQualityPoint } from '@/lib/quality-display';
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSessionStore } from "@/stores/session-store";
 import { useAuthStore } from "@/stores/auth-store";
@@ -90,6 +93,8 @@ export function MarkerScatterPlot({
   const clearSelection = useSelectionStore((s) => s.clearSelection);
   const selectedWellSet = useMemo(() => new Set(selectedWells), [selectedWells]);
   const focusActive = focusSelectedWells && selectedWells.length > 0;
+  const revealedWell = useQualityRevealedWell();
+  const { isWellVisible } = useWellFilter(points);
   const axisMode = useSettingsStore((s) => s.axisMode);
   const lockAspect = useSettingsStore((s) => s.lockAspect);
   const xMin = useSettingsStore((s) => s.xMin);
@@ -106,10 +111,8 @@ export function MarkerScatterPlot({
   const wellSet = useMemo(() => new Set(marker.wells), [marker.wells]);
   const scopedPoints = useMemo(() => {
     const markerPoints = points.filter((p) => wellSet.has(p.well));
-    return focusActive
-      ? markerPoints.filter((p) => selectedWellSet.has(p.well))
-      : markerPoints;
-  }, [points, wellSet, focusActive, selectedWellSet]);
+    return markerPoints.filter(point => visibleQualityPoint(point, revealedWell, isWellVisible(point.well), focusActive, selectedWellSet));
+  }, [points, wellSet, focusActive, selectedWellSet, revealedWell, isWellVisible]);
   const assignmentFor = useCallback(
     (well: string): string | null => region?.assignments?.[well] ?? null,
     [region]

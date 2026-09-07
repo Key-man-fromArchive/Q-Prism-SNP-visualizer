@@ -11,6 +11,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { getActiveChart } from '@/lib/chart-export-registry';
 import Plotly from 'plotly.js-dist-min';
 import type { ScatterResponse } from '@/types/api';
+import { useNavigationStore } from '@/stores/navigation-store';
 
 vi.mock('plotly.js-dist-min', () => ({ default: { newPlot: vi.fn().mockResolvedValue(undefined), react: vi.fn(), purge: vi.fn(), restyle: vi.fn() } }));
 vi.mock('@/lib/api', () => ({ getScatter: vi.fn(), runClustering: vi.fn() }));
@@ -23,14 +24,35 @@ function deferred<T>() {
   return { promise, resolve };
 }
 const response = (dye: string): ScatterResponse => ({ cycle: 1, points: [], allele2_dye: dye });
+it('uses the leased Omit reveal consistently for the rendered count without changing roles or filters', async () => {
+  useAuthStore.setState({ user: { id: 'u', username: 'u', display_name: null, role: 'user' } });
+  useSessionStore.setState({ sessionId: 'run-a', entryGeneration: 2, wellGroups: { other: ['B1'] } });
+  useSettingsStore.setState({ useRox: false });
+  useSelectionStore.setState({ selectedGroup: 'other', selectedWells: ['B1'], focusSelectedWells: true });
+  useDataStore.setState({ wellTypeAssignments: { A1: 'Omit' } });
+  useNavigationStore.setState({ qualityTarget: { session: 'run-a', well: 'A1', source: 'curve', basis: 'unversioned',
+    cycle: 1, useRox: false, marker: null, inputRevision: null, resultRevision: null },
+    qualityLease: { owner: 'u', auth: useAuthStore.getState().generation, entry: 2, token: 1 } });
+  vi.mocked(getScatter).mockResolvedValue({ ...response('VIC'), points: [{ well: 'A1', sample_name: null,
+    raw_fam: 0, raw_allele2: 0, raw_rox: null, norm_fam: 0, norm_allele2: 0, auto_cluster: null, manual_type: 'Omit' }] });
+  vi.mocked(Plotly.newPlot).mockImplementation(async node => { Object.assign(node, { on: vi.fn() }); });
+  const view = render(<ScatterPlot />);
+  await waitFor(() => expect(view.container.querySelector('#scatter-plot')).toHaveAttribute('data-visible-wells', '1'));
+  act(() => useNavigationStore.getState().setQualityTarget(null));
+  await waitFor(() => expect(view.container.querySelector('#scatter-plot')).toHaveAttribute('data-visible-wells', '0'));
+  expect(useSettingsStore.getState().useRox).toBe(false);
+  expect(useSelectionStore.getState().selectedGroup).toBe('other');
+  expect(useDataStore.getState().wellTypeAssignments.A1).toBe('Omit');
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
   useAnalysisStore.getState().clear();
   useAuthStore.setState({ user: null });
-  useSessionStore.setState({ sessionId: 'run-a' });
-  useSelectionStore.setState({ currentCycle: 1 });
-  useDataStore.setState({ scatterPoints: [] });
+  useSessionStore.setState({ sessionId: 'run-a', wellGroups: null });
+  useSelectionStore.setState({ currentCycle: 1, selectedGroup: null, selectedWells: [], focusSelectedWells: false });
+  useDataStore.setState({ scatterPoints: [], wellTypeAssignments: {} });
+  useNavigationStore.setState({ qualityTarget: null, qualityLease: null, qualityNavigating: false });
 });
 it('fetches the actual zero cycle instead of suppressing the view', async () => {
   useSelectionStore.setState({ currentCycle: 0 });

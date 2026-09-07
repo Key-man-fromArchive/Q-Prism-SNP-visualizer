@@ -16,6 +16,7 @@ import { useI18n } from '@/hooks/use-i18n';
 import { StatusState } from '@/components/shared/ui';
 import type { PlateWell } from '@/types/api';
 import { useIsDarkMode } from "@/hooks/use-dark-mode";
+import { useQualityFocus } from '@/hooks/use-quality-focus';
 
 interface DragRect {
   left: number;
@@ -35,6 +36,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   const panelRef = useRef<HTMLDivElement>(null);
   const requestSequence = useRef(0);
   const gridRef = useRef<HTMLDivElement>(null);
+  useQualityFocus(gridRef, 'analysis');
 
   // Stores
   const sessionId = useSessionStore((s) => s.sessionId);

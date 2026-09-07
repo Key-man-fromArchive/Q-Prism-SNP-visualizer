@@ -5,6 +5,58 @@ import { useSessionStore } from '@/stores/session-store';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { viewCacheKey } from './session-view-cache';
+import type { QualityTarget } from './quality-target';
+
+it('pushes distinct same-URL well targets and restores live history without session admission', async () => {
+  nav.setState({ session: 's', cycle: 0, surface: 'analysis' });
+  const target: QualityTarget = { session: 's', well: 'A1', source: 'curve', basis: 'unversioned',
+    cycle: 0, useRox: false, inputRevision: null, resultRevision: null, marker: null };
+  const admission = vi.fn();
+  const restoreTarget = vi.fn(async (value: QualityTarget | null) => { nav.getState().setQualityTarget(value); return true; });
+  const disconnect = connectWorkspaceHistory('u', admission, restoreTarget);
+  const push = vi.spyOn(history, 'pushState');
+  nav.getState().setQualityTarget(target);
+  const first: unknown = history.state;
+  nav.getState().setQualityTarget({ ...target, well: 'A2' });
+  expect(push).toHaveBeenCalledTimes(2);
+  expect(location.search).not.toContain('well');
+  window.dispatchEvent(new PopStateEvent('popstate', { state: first }));
+  await Promise.resolve();
+  expect(restoreTarget).toHaveBeenCalledWith(target, location.search);
+  expect(admission).not.toHaveBeenCalled();
+  expect(push).toHaveBeenCalledTimes(2);
+  disconnect();
+});
+it('does not restore ephemeral targets from a different entry or trust arbitrary history payloads', () => {
+  nav.setState({ session: 's', cycle: 0, surface: 'analysis' });
+  const restoreTarget = vi.fn();
+  const disconnect = connectWorkspaceHistory('u', vi.fn(), restoreTarget);
+  useSessionStore.setState({ entryGeneration: 2 });
+  window.dispatchEvent(new PopStateEvent('popstate', { state: { qualityTarget: { well: 'A1', token: 'secret' } } }));
+  expect(restoreTarget).not.toHaveBeenCalled();
+  disconnect();
+});
+it('does not lift history suppression when an older pop finishes before the latest pop', async () => {
+  nav.setState({ session: 's', cycle: 0, surface: 'analysis' });
+  const target: QualityTarget = { session: 's', well: 'A1', source: 'curve', basis: 'unversioned',
+    cycle: 0, useRox: false, inputRevision: null, resultRevision: null, marker: null };
+  const finishes: ((value: boolean) => void)[] = [];
+  const disconnect = connectWorkspaceHistory('u', vi.fn(), () => new Promise(done => finishes.push(done)));
+  nav.getState().setQualityTarget(target);
+  const first: unknown = history.state;
+  nav.getState().setQualityTarget({ ...target, well: 'A2' });
+  const second: unknown = history.state;
+  const push = vi.spyOn(history, 'pushState');
+  window.dispatchEvent(new PopStateEvent('popstate', { state: first }));
+  window.dispatchEvent(new PopStateEvent('popstate', { state: second }));
+  finishes[0](true);
+  await Promise.resolve();
+  nav.getState().setTab('quality');
+  expect(push).not.toHaveBeenCalled();
+  finishes[1](true);
+  await Promise.resolve();
+  disconnect();
+});
 
 beforeEach(() => { nav.getState().clear(); sessionStorage.clear();
   useAuthStore.setState({ user: { id: 'u', username: 'u', role: 'user', display_name: null } });

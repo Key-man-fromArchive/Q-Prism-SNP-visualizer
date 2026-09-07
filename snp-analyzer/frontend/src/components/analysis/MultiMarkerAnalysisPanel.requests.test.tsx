@@ -27,6 +27,22 @@ beforeEach(() => {
   useSelectionStore.getState().setCycle(20);
 });
 afterEach(() => vi.useRealTimers());
+it('a QC jump and Return establish baselines without automatic analysis, while later edits still run', async () => {
+  vi.useFakeTimers();
+  useNavigationStore.setState({ exportRestoring: false, qualityEpoch: 0, qualityNavigating: false });
+  render(<MultiMarkerAnalysisPanel markers={markers} />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  act(() => useNavigationStore.setState({ qualityNavigating: true }));
+  act(() => useNavigationStore.setState({ cycle: 0, qualityEpoch: 1, qualityNavigating: false }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+  expect(runClustering).not.toHaveBeenCalled();
+  act(() => useNavigationStore.setState({ cycle: 20, qualityEpoch: 2 }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+  expect(runClustering).not.toHaveBeenCalled();
+  act(() => useNavigationStore.setState({ cycle: 21 }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+  expect(runClustering).toHaveBeenCalledTimes(1);
+});
 it('does not publish detached scatter points after unmount and session replacement', async () => {
   let resolve!: (value: Awaited<ReturnType<typeof getScatter>>) => void;
   vi.mocked(getScatter).mockReturnValueOnce(new Promise(done => { resolve = done; }));

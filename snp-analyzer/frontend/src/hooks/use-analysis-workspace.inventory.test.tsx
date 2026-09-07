@@ -4,6 +4,7 @@ import { useAnalysisWorkspace } from './use-analysis-workspace';
 import { loadAnalysisSession, type ReadyAnalysisSession } from '@/lib/analysis-session';
 import { useSessionStore } from '@/stores/session-store';
 import { useAuthStore } from '@/stores/auth-store';
+import { publishQualityMetadata } from '@/lib/quality-metadata';
 vi.mock('@/lib/analysis-session', () => ({ loadAnalysisSession: vi.fn() }));
 vi.mock('@/lib/workspace-ready', () => ({ completeWorkspaceRestore: vi.fn().mockReturnValue({ accepted: true, cycle: 0 }) }));
 vi.mock('@/lib/api', () => ({ getMarkers: vi.fn(), getSessionInfo: vi.fn() }));
@@ -21,6 +22,19 @@ it('carries the fetched run inventory into reopened session metadata', async () 
   vi.mocked(loadAnalysisSession).mockResolvedValue(value);
   renderHook(() => useAnalysisWorkspace());
   await waitFor(() => expect(useSessionStore.getState().sessionInfo?.well_ids).toEqual(['A1', 'P24']));
+});
+it('publishes fresh QC marker scope to the mounted workspace without another analysis load', async () => {
+  vi.mocked(loadAnalysisSession).mockResolvedValue(value);
+  const hook = renderHook(useAnalysisWorkspace);
+  await waitFor(() => expect(hook.result.current.markersAvailable).toBe(true));
+  const markers = [{ id: 'fresh', name: 'Fresh', wells: ['P24'], ploidy: 2 }];
+  act(() => publishQualityMetadata({ owner: 'u', auth: useAuthStore.getState().generation,
+    entry: useSessionStore.getState().entryGeneration, session: 's', markers, info: value.info }));
+  expect(hook.result.current.markers).toEqual(markers);
+  expect(loadAnalysisSession).toHaveBeenCalledTimes(1);
+  act(() => publishQualityMetadata({ owner: 'other', auth: useAuthStore.getState().generation,
+    entry: useSessionStore.getState().entryGeneration, session: 's', markers: [], info: value.info }));
+  expect(hook.result.current.markers).toEqual(markers);
 });
 it('does not publish a departed session inventory when its response arrives late', async () => {
   let resolve!: (result: ReadyAnalysisSession) => void;

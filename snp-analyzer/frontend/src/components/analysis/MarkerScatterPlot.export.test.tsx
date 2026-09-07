@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useNavigationStore } from '@/stores/navigation-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useSelectionStore } from '@/stores/selection-store';
+import { useDataStore } from '@/stores/data-store';
 
 vi.mock('plotly.js-dist-min', () => ({ default: { newPlot: vi.fn(), react: vi.fn(), purge: vi.fn() } }));
 vi.mock('./ScatterViewControls', () => ({ ScatterViewControls: () => null }));
@@ -56,4 +57,20 @@ it('uses a fresh marker render identity when selected-only changes its scoped pi
   await waitFor(() => expect(getActiveChart('run-a', 'rev-a')?.identity).not.toBe(first.identity));
   expect(getActiveChart('run-a', 'rev-a')?.caption).toContain('visible wells A1');
   expect(getActiveChart('run-a', 'rev-a')?.caption).not.toContain('A2');
+});
+it('temporarily includes an existing scoped Omit point in pixels and caption but never an outside-marker target', async () => {
+  useSessionStore.setState({ wellGroups: { other: ['B1'] } });
+  useSelectionStore.setState({ selectedGroup: 'other', selectedWells: ['B1'], focusSelectedWells: true });
+  useDataStore.setState({ wellTypeAssignments: { A1: 'Omit' } });
+  useNavigationStore.setState({ qualityTarget: { session: 'run-a', well: 'A1', source: 'curve', basis: 'unversioned',
+    cycle: 20, useRox: false, marker: 'm1', inputRevision: null, resultRevision: null },
+    qualityLease: { owner: 'u', auth: useAuthStore.getState().generation, entry: 3, token: 1 } });
+  const view = render(<MarkerScatterPlot sessionId="run-a" marker={marker} region={undefined}
+    points={[{ ...point, manual_type: 'Omit' }, point2]} scatterProvenance={{ cycle: 20, useRox: false, backgroundMode: 'none' }} onBoundariesPersisted={vi.fn()} />);
+  await waitFor(() => expect(getActiveChart('run-a', 'rev-a')?.caption).toContain('visible wells A1'));
+  expect(view.container.querySelector('[data-visible-wells]')).toHaveAttribute('data-visible-wells', '1');
+  act(() => useNavigationStore.getState().setQualityTarget(null));
+  await waitFor(() => expect(view.container.querySelector('[data-visible-wells]')).toHaveAttribute('data-visible-wells', '0'));
+  expect(useSelectionStore.getState().selectedGroup).toBe('other');
+  expect(useDataStore.getState().wellTypeAssignments.A1).toBe('Omit');
 });

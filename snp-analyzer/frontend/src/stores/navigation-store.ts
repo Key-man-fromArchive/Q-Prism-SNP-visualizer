@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { DataWindow } from '@/types/api';
+import type { QualityTarget } from '@/lib/quality-target';
 
 export const navigationTabs = ['analysis', 'protocol', 'settings', 'quality', 'statistics', 'compare', 'project', 'users', 'references', 'library'] as const;
 export type NavigationTab = typeof navigationTabs[number];
@@ -77,6 +78,13 @@ export function parseNavigation(queryString: string, domain: NavigationDomain): 
 }
 
 interface NavigationState extends NavigationValue {
+  qualityEpoch: number;
+  qualityReturn: { view: NavigationValue; selection: string[] } | null;
+  qualityLease: { owner: string; auth: number; entry: number; token: number } | null;
+  qualityNavigating: boolean;
+  qualityError: 'unavailable' | null;
+  qualityTarget: QualityTarget | null;
+  setQualityTarget: (target: QualityTarget | null) => void;
   availableCycles: number[];
   setAvailableCycles: (cycles: number[]) => void;
   generation: number; status: 'restoring' | 'ready' | 'error'; reasons: string[]; error: string | null;
@@ -95,6 +103,8 @@ interface NavigationState extends NavigationValue {
 export function createNavigationStore() {
   return create<NavigationState>((set, get) => ({
     ...initial, generation: 0, status: 'ready', reasons: [], error: null, exportRestoring: false,
+    qualityTarget: null, qualityNavigating: false, qualityError: null, qualityLease: null, qualityReturn: null, qualityEpoch: 0,
+    setQualityTarget: target => set({ qualityTarget: target ? { ...target } : null }),
     availableCycles: [],
     setAvailableCycles: cycles => set({ availableCycles: [...cycles] }),
     setTab: tab => set({ tab }),
@@ -104,7 +114,7 @@ export function createNavigationStore() {
     setExportRestoring: value => set({ exportRestoring: value }),
     beginRestore: session => {
       const generation = get().generation + 1;
-      set({ ...initial, session, generation, status: 'restoring', reasons: [], error: null, availableCycles: [], exportRestoring: false });
+      set({ ...initial, session, generation, status: 'restoring', reasons: [], error: null, availableCycles: [], exportRestoring: false, qualityTarget: null, qualityNavigating: false, qualityError: null, qualityLease: null, qualityReturn: null, qualityEpoch: 0 });
       return generation;
     },
     complete: (generation, result) => {
@@ -116,7 +126,7 @@ export function createNavigationStore() {
       if (get().generation !== generation) return false;
       set({ status: 'error', error, generation: generation + 1 }); return true;
     },
-    clear: () => set({ ...initial, status: 'ready', reasons: [], error: null, availableCycles: [], exportRestoring: false, generation: get().generation + 1 }),
+    clear: () => set({ ...initial, status: 'ready', reasons: [], error: null, availableCycles: [], exportRestoring: false, qualityTarget: null, qualityNavigating: false, qualityError: null, qualityLease: null, qualityReturn: null, qualityEpoch: 0, generation: get().generation + 1 }),
   }));
 }
 export const useNavigationStore = createNavigationStore();

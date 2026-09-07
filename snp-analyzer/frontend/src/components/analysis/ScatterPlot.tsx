@@ -16,6 +16,8 @@ import { genotypeClasses, wellInfo, labelByRatio, defaultRatioCuts } from "@/lib
 import { plotlyColors } from "@/lib/plotly-theme";
 import { axisRangeLayout, dataBounds, visibleBounds } from "@/lib/scatter-axes";
 import { useWellFilter } from "@/hooks/use-well-filter";
+import { useQualityRevealedWell } from '@/hooks/use-quality-reveal';
+import { visibleQualityPoint } from '@/lib/quality-display';
 import { useI18n } from "@/hooks/use-i18n";
 import { useIsDarkMode } from "@/hooks/use-dark-mode";
 import { StatusState } from "@/components/shared/ui";
@@ -124,6 +126,9 @@ export function ScatterPlot() {
   const ntcCorner = useDataStore((s) => s.ntcCorner);
   const setNtcCorner = useDataStore((s) => s.setNtcCorner);
   const { isWellVisible } = useWellFilter();
+  const revealedWell = useQualityRevealedWell();
+  const visiblePoints = useMemo(() => scatterPoints.filter(point => visibleQualityPoint(point, revealedWell,
+    isWellVisible(point.well), focusActive, selectedWellSet)), [scatterPoints, revealedWell, isWellVisible, focusActive, selectedWellSet]);
 
   const inferredNtcCorner = useMemo(() => {
     // EFFECTIVE type, manual over auto -- not "manual OR auto is NTC". A well
@@ -257,12 +262,6 @@ export function ScatterPlot() {
     // Filter to only visible wells before grouping. Omitted wells are dropped
     // entirely (by manual_type, authoritative from the backend) so they never
     // become plot markers OR influence the auto-ranged x/y axes.
-    const visiblePoints = scatterPoints.filter(
-      (p) =>
-        p.manual_type !== "Omit" &&
-        isWellVisible(p.well) &&
-        (!focusActive || selectedWellSet.has(p.well))
-    );
 
     // In boundary mode the wedges between the radial lines define the genotype
     // live: relabel each well by its fam-fraction against the current cuts +
@@ -566,6 +565,7 @@ export function ScatterPlot() {
     offset,
     ratioOrigin,
     isWellVisible,
+    visiblePoints,
     focusActive,
     selectedWellSet,
     selectWell,
@@ -958,9 +958,7 @@ export function ScatterPlot() {
     allele2Dye
   );
   const controlBounds = dataBounds(
-    scatterPoints
-      .filter((p) => p.manual_type !== "Omit" && isWellVisible(p.well))
-      .map((p) => ({ fam: p.norm_fam, allele2: p.norm_allele2 })),
+    visiblePoints.map((p) => ({ fam: p.norm_fam, allele2: p.norm_allele2 })),
     effectiveNtcCorner
   );
   const originNote =
@@ -1002,11 +1000,7 @@ export function ScatterPlot() {
       <div className="relative analysis-scatter-canvas">
         <div
           id="scatter-plot"
-          data-visible-wells={
-            focusActive
-              ? scatterPoints.filter((p) => selectedWellSet.has(p.well)).length
-              : scatterPoints.length
-          }
+          data-visible-wells={visiblePoints.length}
           ref={plotRef}
           style={{ width: "100%", height: "100%" }}
         />

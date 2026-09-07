@@ -3,6 +3,7 @@ import { getMarkers } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
 import type { MarkerRegion } from '@/types/api';
+import { subscribeQualityMetadata } from '@/lib/quality-metadata';
 
 /** Latest reads only; local edits invalidate reads that began before the edit. */
 export function useMarkerScope() {
@@ -21,6 +22,12 @@ export function useMarkerScope() {
   useEffect(() => {
     if (!sid) return;
     let active = true;
+    const unsubscribeQuality = subscribeQualityMetadata(value => {
+      if (value.session !== sid || value.owner !== owner || value.entry !== entry) return;
+      sequence.current++;
+      updateMarkers(value.markers);
+      setRead({ identity, status: 'ready', known: true });
+    });
     const load = async () => {
       const ticket = ++sequence.current;
       setRead(previous => ({ identity, status: 'loading', known: previous.identity === identity && previous.known }));
@@ -35,7 +42,7 @@ export function useMarkerScope() {
     };
     void load();
     window.addEventListener('markers-changed', load);
-    return () => { active = false; window.removeEventListener('markers-changed', load); };
-  }, [sid, identity]);
+    return () => { active = false; unsubscribeQuality(); window.removeEventListener('markers-changed', load); };
+  }, [sid, identity, owner, entry]);
   return { markers: read.identity === identity ? markers : [], setMarkers, markerStatus: read.identity === identity ? read.status : 'loading' };
 }
