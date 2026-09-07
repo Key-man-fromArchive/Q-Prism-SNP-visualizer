@@ -15,8 +15,15 @@ import { useSettingsStore, type AxisMode } from "@/stores/settings-store";
 import { normalizationLabel } from "@/lib/channel-labels";
 import { roundBound, type AxisBounds } from "@/lib/scatter-axes";
 import type { ChannelLabels } from "@/types/api";
+import { useDataStore } from "@/stores/data-store";
 
 export type ScatterCorner = { fam: number; allele2: number };
+
+function ScatterReferenceBasis({ requested, applied }: { requested: boolean; applied: boolean }) {
+  const { t } = useI18n();
+  const reported = useDataStore(s => s.normalizationReported);
+  return <span data-testid="normalization-state" data-applied={applied} data-reported={reported}>{t.scatterReferenceBasis(requested, reported, applied)}</span>;
+}
 
 /** The highest allele dosage this assay can produce, declared by the operator.
  *
@@ -145,7 +152,7 @@ export function ScatterViewControls({
   return (
     <details data-testid="analysis-advanced-settings" className="analysis-advanced-settings mb-2">
       <summary className="cursor-pointer text-xs text-text rounded border border-border p-2">
-        {t.analysisAdvancedSettings} · {axisModeLabel(axisMode)} · {labels.fam}/{labels.allele2} · {t.qcReferenceRequested(useRox)} · {t.qcBasis(normalizationApplied, backgroundMode)}
+        {t.analysisAdvancedSettings} · {axisModeLabel(axisMode)} · {labels.fam}/{labels.allele2} · <ScatterReferenceBasis requested={useRox} applied={normalizationApplied} /> · {t.chartBackground(backgroundMode)}
         {' · '}{t.analysisNtcMode(ntcCorner !== null)}: {labels.fam} ≤{roundBound(effectiveNtcCorner.fam)}, {labels.allele2} ≤{roundBound(effectiveNtcCorner.allele2)} · {t.analysisAspectState(lockAspect)}
       </summary>
     <div
@@ -348,19 +355,6 @@ export function ScatterViewControls({
             />
             {t.normalizeByReference}
           </label>
-          <span
-            data-testid="normalization-state"
-            data-applied={normalizationApplied}
-            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-              normalizationApplied
-                ? "bg-primary/15 text-primary"
-                : "bg-surface text-text-muted"
-            }`}
-          >
-            {normalizationApplied
-              ? t.normalizationOn(normalizationLabel(labels))
-              : t.normalizationOffRaw}
-          </span>
           {roxOutlierWells.length > 0 && (
             <span
               data-testid="rox-outlier-warning"

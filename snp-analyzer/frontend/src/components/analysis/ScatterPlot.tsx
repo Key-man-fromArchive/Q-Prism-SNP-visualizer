@@ -12,7 +12,8 @@ import { useAnalysisStore } from '@/stores/analysis-store';
 import { ownsChartResult } from '@/lib/chart-export-owner';
 import { channelLabels, normalizationLabel, normalizedLabel } from "@/lib/channel-labels";
 import { WELL_TYPE_INFO } from "@/lib/constants";
-import { genotypeClasses, wellInfo, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
+import { genotypeClasses, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
+import { chartCategory, callLabel, chartPointState, chartStateText } from "@/lib/chart-semantics";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { axisRangeLayout, dataBounds, visibleBounds } from "@/lib/scatter-axes";
 import { useWellFilter } from "@/hooks/use-well-filter";
@@ -299,20 +300,6 @@ export function ScatterPlot() {
     const traces: Data[] = [];
     const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
 
-    // Localized genotype names for the plot legend
-    const typeLabels: Record<string, string> = {
-      NTC: t.wellTypeNTC,
-      Unknown: t.wellTypeUnknown,
-      "Positive Control": t.wellTypePositiveControl,
-      "Allele 1 Homo": t.wellTypeAllele1Homo,
-      "Allele 2 Homo": t.wellTypeAllele2Homo,
-      Heterozygous: t.wellTypeHeterozygous,
-      Undetermined: t.wellTypeUndetermined,
-      Empty: t.wellTypeEmpty,
-      Omit: t.wellTypeOmit,
-      Unassigned: t.wellTypeUnassigned,
-    };
-
     // Build traces in a deterministic order: dosage genotype classes (for the
     // current ploidy, highest dosage first), then control/non-genotype types,
     // then unassigned. WELL_TYPE_INFO keeps only the fixed control types here;
@@ -325,28 +312,29 @@ export function ScatterPlot() {
       const points = typeGroups.get(typeKey);
       if (!points || points.length === 0) continue;
 
-      const info = wellInfo(typeKey, ploidy, dark);
+      const info = chartCategory(typeKey, ploidy, dark);
 
       traces.push({
         x: points.map((p) => p.norm_fam),
         y: points.map((p) => p.norm_allele2),
         mode: "markers",
         type: "scattergl",
-        name: typeLabels[typeKey] || info.label,
+        name: callLabel(typeKey, t),
         customdata: points.map((p) => p.well),
         text: points.map((p) => {
           const normSuffix = normalizationApplied ? ` / ${normalizationLabel(labels)}` : "";
           return (
-            `<b>${p.well}</b>${p.sample_name ? " (" + p.sample_name + ")" : ""}<br>` +
+            `<b>${t.chartWellAddress}: ${p.well}</b>${p.sample_name ? " (" + p.sample_name + ")" : ""}<br>${t.chartCall}: ${callLabel(typeKey, t)}<br>` +
             `${labels.fam}${normSuffix}: ${p.norm_fam.toFixed(decimals)}<br>` +
             `${labels.allele2}${normSuffix}: ${p.norm_allele2.toFixed(decimals)}` +
             (normalizationApplied
-              ? `<br>Raw ${labels.fam}: ${p.raw_fam.toFixed(1)}<br>Raw ${labels.allele2}: ${p.raw_allele2.toFixed(1)}`
+              ? `<br>${t.raw} ${labels.fam}: ${p.raw_fam.toFixed(1)}<br>${t.raw} ${labels.allele2}: ${p.raw_allele2.toFixed(1)}`
               : "") +
             (p.raw_rox != null ? `<br>${normalizationLabel(labels)}: ${p.raw_rox.toFixed(1)}` : "") +
-            (p.auto_cluster ? `<br>Auto: ${p.auto_cluster}` : "") +
-            (p.manual_type ? `<br>Manual: ${p.manual_type}` : "") +
-            (p.confidence != null ? `<br>${t.confidence}: ${Math.round(p.confidence * 100)}%` : "")
+            (p.auto_cluster ? `<br>${t.chartAutoCall}: ${callLabel(p.auto_cluster, t)}` : "") +
+            (p.manual_type ? `<br>${t.chartManualCall}: ${callLabel(p.manual_type, t)}` : "") +
+            (p.confidence != null ? `<br>${t.confidence}: ${Math.round(p.confidence * 100)}%` : "") +
+            `<br>${chartStateText(selectedWellSet.has(p.well), roxOutlierWells.includes(p.well), t)}`
           );
         }),
         hoverinfo: "text",
@@ -355,8 +343,8 @@ export function ScatterPlot() {
           size: typeKey === "NTC" ? 10 : 12,
           color: info.color,
           symbol: info.symbol,
-          opacity: typeKey === "NTC" ? 1.0 : 0.8,
-          line: { width: 1, color: typeKey === "NTC" ? "#000000" : colors.markerLineColor },
+          opacity: info.opacity,
+          line: { width: points.map(p => chartPointState(selectedWellSet.has(p.well), roxOutlierWells.includes(p.well), dark).width), color: info.stroke },
         },
       });
     }
@@ -366,7 +354,8 @@ export function ScatterPlot() {
       y: [effectiveNtcCorner.allele2],
       mode: "markers",
       type: "scatter",
-      name: "NTC threshold",
+      uid: 'ntc-threshold',
+      name: t.chartNtcThreshold,
       showlegend: false,
       hovertemplate:
         `NTC: ${labels.fam} ≤ ${effectiveNtcCorner.fam.toFixed(2)}<br>` +
@@ -579,7 +568,7 @@ export function ScatterPlot() {
     axisMode,
     lockAspect,
     editing,
-    normalizationApplied,
+    normalizationApplied, roxOutlierWells,
     backgroundMode,
     sessionId,
     fetchKey,
@@ -635,16 +624,13 @@ export function ScatterPlot() {
     const data = el.data;
     if (!data || data.length === 0) return;
 
-    const colors = plotlyColors();
     for (let t = 0; t < data.length; t++) {
-      if (data[t].name === "NTC threshold") continue;
+      if (data[t].uid === 'ntc-threshold') continue;
       const rawCustomdata = data[t].customdata;
       const customdata: unknown[] = Array.isArray(rawCustomdata) ? rawCustomdata : [];
       const sizes = customdata.map((w: unknown) => (typeof w === "string" && selectedWellSet.has(w) ? 18 : 12));
-      const lineWidths = customdata.map((w: unknown) => (typeof w === "string" && selectedWellSet.has(w) ? 3 : 1));
-      const lineColors = customdata.map((w: unknown) =>
-        typeof w === "string" && selectedWellSet.has(w) ? colors.selectedLineColor : colors.markerLineColor
-      );
+      const lineWidths = customdata.map((w: unknown) => chartPointState(selectedWellSet.has(String(w)), roxOutlierWells.includes(String(w)), dark).width);
+      const lineColors = chartPointState(false, false, dark).stroke;
 
       Plotly.restyle(plotRef.current!, {
         "marker.size": [sizes],
@@ -652,7 +638,7 @@ export function ScatterPlot() {
         "marker.line.color": [lineColors],
       }, [t]);
     }
-  }, [selectedWells, selectedWellSet, scatterPoints]);
+  }, [selectedWells, selectedWellSet, scatterPoints, roxOutlierWells, dark]);
 
   // Listen for dark mode changes to update Plotly layout
   useEffect(() => {

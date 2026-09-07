@@ -10,6 +10,7 @@ import { useAnalysisStore } from '@/stores/analysis-store';
 import { getPlate } from '@/lib/api';
 import { WELL_TYPE_INFO } from '@/lib/constants';
 import { wellInfo, dosageOfLabel } from '@/lib/genotype';
+import { callAppearance, displayedCall, outsideDisplayScope } from '@/lib/chart-semantics';
 import { useWellFilter } from '@/hooks/use-well-filter';
 import { useWellGrid } from '@/hooks/use-well-grid';
 import { useI18n } from '@/hooks/use-i18n';
@@ -53,10 +54,6 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const plateWells = useDataStore((s) => s.plateWells);
   const setPlateData = useDataStore((s) => s.setPlateData);
-  const scopeSet = useMemo(
-    () => (scopeWells ? new Set(scopeWells) : null),
-    [scopeWells]
-  );
 
   // Drag selection state
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -368,9 +365,10 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
               const isEmpty = !hasData;
               // Has data but excluded from plots (omitted, group-filtered, or hidden Empty)
               const isExcluded = hasData && !isWellVisible(wellId);
-              const isOutOfScope = hasData && scopeSet !== null && !scopeSet.has(wellId);
+              const isOutOfScope = hasData && outsideDisplayScope(wellId, scopeWells);
 
               const wellColor = isEmpty ? '' : getWellColor(wellData);
+              const call = callAppearance(displayedCall(wellData, showManualTypes, showAutoCluster), ploidy, dark, t);
               const cellSize = isLargePlate ? '18px' : '28px';
 
               const stateSuffix = isSelected || isMultiSelected
@@ -378,7 +376,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
                 : isEmpty
                 ? `, ${t.wellEmptyState}`
                 : '';
-              const ariaLabel = `${wellId}${wellData?.sample_name ? `, ${wellData.sample_name}` : ''}${stateSuffix}`;
+              const ariaLabel = `${wellId}${wellData?.sample_name ? `, ${wellData.sample_name}` : ''}, ${call.description}${stateSuffix}`;
 
               return (
                 <button
@@ -414,10 +412,11 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
                   }}
                   title={
                     wellData
-                      ? `${wellId}: ${wellData.sample_name || 'No sample'}${isExcluded ? ' (excluded)' : ''}${isOutOfScope ? ' (outside marker)' : ''}`
+                      ? `${t.chartWellAddress}: ${wellId}; ${t.chartCall}: ${call.description}; ${wellData.sample_name || t.chartNoSample}${isExcluded ? ` (${t.chartExcluded})` : ''}${isOutOfScope ? ` (${t.chartOutsideMarker})` : ''}`
                       : wellId
                   }
                 >
+                  <span aria-hidden="true" style={{ color: call.textColor, fontSize: '10px', lineHeight: 1 }}>{call.glyph}</span>
                   {isAnySelected && (
                     <span
                       aria-hidden="true"

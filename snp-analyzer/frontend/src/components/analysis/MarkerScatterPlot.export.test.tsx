@@ -18,6 +18,21 @@ const marker = { id: 'm1', name: 'M1', wells: ['A1'], ploidy: 2 };
 const point = { well: 'A1', sample_name: null, raw_fam: 1, raw_allele2: 2, raw_rox: null, norm_fam: 1, norm_allele2: 2, auto_cluster: null, manual_type: null };
 const point2 = { ...point, well: 'A2', raw_fam: 2, norm_fam: 2 };
 
+it('renders dark NTC with a non-color symbol and visible outline', async () => {
+  document.body.classList.add('dark');
+  useDataStore.setState({ wellTypeAssignments: { A1: 'NTC' } });
+  useDataStore.setState({ roxOutlierWells: ['A1'] });
+  useSelectionStore.setState({ selectedWells: ['A1'] });
+  try {
+    render(<MarkerScatterPlot sessionId="run-a" marker={marker} region={{ ...marker, assignments: { A1: 'NTC' }, offset: 0, offset_uncertain: false, low_separation: false }}
+      points={[{ ...point, manual_type: 'NTC' }]} scatterProvenance={{ cycle: 20, useRox: false, backgroundMode: 'none' }} onBoundariesPersisted={vi.fn()} />);
+    await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalled());
+    expect(vi.mocked(Plotly.newPlot).mock.calls.at(-1)?.[1]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ customdata: ['A1'], marker: expect.objectContaining({ symbol: 'cross', line: expect.objectContaining({ color: '#f4f4f5', width: [3] }) }) }),
+    ]));
+  } finally { document.body.classList.remove('dark'); }
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   useSessionStore.setState({ sessionId: 'run-a', entryGeneration: 3 });

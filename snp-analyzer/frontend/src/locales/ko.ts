@@ -1,6 +1,21 @@
 import type { Translations } from './en';
 
 const ko: Translations = {
+  chartNoDisplayedCall: '표시된 판정 없음',
+  chartBackground: (mode: string) => `배경 보정: ${{ none: '없음', pre_read: '사전 측정', channel_min: '채널 최솟값' }[mode] ?? '미확인'}`,
+  chartReferenceFlagged: '참조 신호 경고',
+  analyzeRecommended: '추천 사이클 분석',
+  chartNtcThreshold: 'NTC 임계값',
+  chartAutoCall: '자동 판정',
+  chartManualCall: '수동 유형',
+  chartWellAddress: '웰 주소',
+  chartCall: '판정',
+  referenceBasisUnknown: '증폭 곡선의 정규화 적용 기준: 미확인 (곡선 응답에 기준이 없습니다).',
+  curveReportedSignal: '응답 곡선 신호 (정규화 적용 기준 미확인)',
+  scatterReferenceBasis: (requested: boolean, reported: boolean, applied: boolean) => `산점도 측정값 — 참조 정규화 요청: ${requested ? '예' : '아니오'}; 실제 적용: ${reported ? applied ? '예' : '아니오 (리포터 스케일)' : '미확인'}.`,
+  chartNoSample: '샘플 식별자 없음',
+  chartExcluded: '표시 필터로 숨김',
+  chartOutsideMarker: '마커 영역 밖',
   qualityJumpLoading: '경고 대상 웰을 확인하고 있습니다…',
   qualityJumpUnavailable: '이 경고 대상은 더 이상 확인할 수 없습니다. 품질 결과를 새로 고친 뒤 다시 시도하세요.',
   qualityTemporaryReveal: (well: string) => `임시 표시: ${well}. 기존 표시 필터는 변경되지 않았습니다.`,

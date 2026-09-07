@@ -22,7 +22,7 @@ import { useSettledAnalysis } from "@/hooks/use-settled-analysis";
 import { useCurrentAnalysisRequest } from '@/hooks/use-current-analysis-request';
 import { ClusteringAlgorithm } from "@/types/api";
 import type { MarkerCatalogEntry, MarkerRegion } from "@/types/api";
-import { genotypeShortLabel, wellInfo } from "@/lib/genotype";
+import { chartCategory, callAppearance } from "@/lib/chart-semantics";
 import { MARKER_PALETTE } from "@/lib/constants";
 import { dosageTrustForMarker } from "@/lib/marker-catalog";
 import { analysisWarningTexts } from "@/lib/analysis-warnings";
@@ -214,7 +214,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
       <div className="sticky top-0 z-20 border-b border-border bg-surface">
       <CycleControl />
       <div className="flex flex-wrap items-center justify-end gap-3 px-6 py-2">
-        <button type="button" data-testid="multi-analyze-recommended" onClick={handleRecommended} disabled={loading}>추천 사이클 분석</button>
+        <button type="button" data-testid="multi-analyze-recommended" onClick={handleRecommended} disabled={loading}>{t.analyzeRecommended}</button>
         <button
           type="button"
           data-testid="multi-analyze-current"
@@ -427,8 +427,8 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
               >
                 {countsEntries.map(([key, n]) => {
                   const label = countKeyToLabel(key, selectedMarker.ploidy);
-                  const info = wellInfo(label, selectedMarker.ploidy, dark);
-                  const short = genotypeShortLabel(label, selectedMarker.ploidy);
+                  const info = chartCategory(label, selectedMarker.ploidy, dark);
+                  const short = callAppearance(label, selectedMarker.ploidy, dark, t).label;
                   return (
                     <div
                       key={key}
@@ -437,7 +437,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                     >
                       <div
                         className="text-lg font-bold tabular-nums"
-                        style={{ color: info.color }}
+                        style={{ color: info.text }}
                       >
                         {n}
                       </div>

@@ -9,7 +9,9 @@
 // the single-marker default view) to avoid regressing S0/S1.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Plotly from "plotly.js-dist-min";
-import { dosageOfLabel, defaultRatioCuts, wellInfo } from "@/lib/genotype";
+import { dosageOfLabel, defaultRatioCuts } from "@/lib/genotype";
+import { chartCategory, callLabel, chartPointState, chartStateText } from "@/lib/chart-semantics";
+import { useI18n } from "@/hooks/use-i18n";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { channelLabels } from "@/lib/channel-labels";
 import { axisRangeLayout, dataBounds, visibleBounds } from "@/lib/scatter-axes";
@@ -89,6 +91,7 @@ export function MarkerScatterPlot({
   const selectWell = useSelectionStore((s) => s.selectWell);
   const selectWells = useSelectionStore((s) => s.selectWells);
   const addWells = useSelectionStore((s) => s.addWells);
+  const { t } = useI18n();
   const toggleWell = useSelectionStore((s) => s.toggleWell);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
   const selectedWellSet = useMemo(() => new Set(selectedWells), [selectedWells]);
@@ -292,21 +295,22 @@ export function MarkerScatterPlot({
     });
 
     const colors = plotlyColors();
+    const thresholdLabels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
     const traces: Record<string, unknown>[] = [];
     for (const typeKey of order) {
       const pts = typeGroups.get(typeKey)!;
-      const info = wellInfo(typeKey, ploidy, dark);
+      const info = chartCategory(typeKey, ploidy, dark);
       traces.push({
         x: pts.map((p) => p.norm_fam),
         y: pts.map((p) => p.norm_allele2),
         mode: "markers",
         type: "scattergl",
-        name: info.label,
+        name: callLabel(typeKey, t),
         customdata: pts.map((p) => p.well),
         text: pts.map(
           (p) =>
-            `<b>${p.well}</b>${p.sample_name ? " (" + p.sample_name + ")" : ""}<br>` +
-            `${info.label}`
+            `<b>${t.chartWellAddress}: ${p.well}</b>${p.sample_name ? " (" + p.sample_name + ")" : ""}<br>` +
+            `${t.chartCall}: ${callLabel(typeKey, t)}<br>${chartStateText(selectedWellSet.has(p.well), roxOutlierWells.includes(p.well), t)}`
         ),
         hoverinfo: "text",
         hovertemplate: "%{text}<extra></extra>",
@@ -316,14 +320,10 @@ export function MarkerScatterPlot({
           ),
           color: info.color,
           symbol: info.symbol,
-          opacity: typeKey === "NTC" ? 1.0 : 0.85,
+          opacity: info.opacity,
           line: {
-            width: pts.map((p) => (selectedWellSet.has(p.well) ? 3 : 1)),
-            color: pts.map((p) =>
-              selectedWellSet.has(p.well)
-                ? colors.selectedLineColor
-                : colors.markerLineColor
-            ),
+            width: pts.map((p) => chartPointState(selectedWellSet.has(p.well), roxOutlierWells.includes(p.well), dark).width),
+            color: info.stroke,
           },
         },
       });
@@ -334,11 +334,12 @@ export function MarkerScatterPlot({
       y: [effectiveNtc.corner.y],
       mode: "markers",
       type: "scatter",
-      name: "NTC threshold",
+      uid: 'ntc-threshold',
+      name: t.chartNtcThreshold,
       showlegend: false,
       hovertemplate:
-        `NTC: FAM ≤ ${effectiveNtc.corner.x.toFixed(2)}<br>` +
-        `${allele2Dye || "Allele 2"} ≤ ${effectiveNtc.corner.y.toFixed(2)}<extra></extra>`,
+        `${t.chartNtcThreshold}: ${thresholdLabels.fam} ≤ ${effectiveNtc.corner.x.toFixed(2)}<br>` +
+        `${thresholdLabels.allele2} ≤ ${effectiveNtc.corner.y.toFixed(2)}<extra></extra>`,
       marker: {
         size: 13,
         color: "#f59e0b",
@@ -507,7 +508,7 @@ export function MarkerScatterPlot({
     }
   }, [
     scopedPoints,
-    assignmentFor,
+    assignmentFor, t, roxOutlierWells,
     ploidy,
     editBoundaries,
     origin,

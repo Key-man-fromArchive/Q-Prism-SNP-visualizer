@@ -213,7 +213,7 @@ export function AnalysisTab() {
         >
           <Ruler size={14} aria-hidden="true" /> {t.boundaryLines}
         </button>
-        <button type="button" data-testid="analyze-recommended" onClick={handleRecommended} disabled={analyzing || !sessionId}>추천 사이클 분석</button>
+        <button type="button" data-testid="analyze-recommended" onClick={handleRecommended} disabled={analyzing || !sessionId}>{t.analyzeRecommended}</button>
         <button
           data-testid="analyze-current"
           onClick={handleAnalyze}

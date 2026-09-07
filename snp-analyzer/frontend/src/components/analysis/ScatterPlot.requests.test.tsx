@@ -54,6 +54,20 @@ beforeEach(() => {
   useDataStore.setState({ scatterPoints: [], wellTypeAssignments: {} });
   useNavigationStore.setState({ qualityTarget: null, qualityLease: null, qualityNavigating: false });
 });
+it('renders dark NTC with a non-color symbol and visible outline', async () => {
+  document.body.classList.add('dark');
+  useSettingsStore.setState({ showManualTypes: true, showBoundaryLines: false });
+  useDataStore.setState({ plateWells: [{ well: 'A1', row: 0, col: 0, norm_fam: 1, norm_allele2: 2, ratio: null, sample_name: null, auto_cluster: null, manual_type: 'NTC' }] });
+  vi.mocked(Plotly.newPlot).mockImplementation(async node => { Object.assign(node, { on: vi.fn() }); });
+  vi.mocked(getScatter).mockResolvedValue({ ...response('HEX'), points: [{ well: 'A1', sample_name: null, raw_fam: 1, raw_allele2: 2, raw_rox: null, norm_fam: 1, norm_allele2: 2, auto_cluster: null, manual_type: 'NTC' }] });
+  try {
+    render(<ScatterPlot />);
+    await waitFor(() => expect([...vi.mocked(Plotly.newPlot).mock.calls, ...vi.mocked(Plotly.react).mock.calls].flatMap(call => call[1] ?? [])).toEqual(expect.arrayContaining([
+      expect.objectContaining({ customdata: ['A1'], marker: expect.objectContaining({ symbol: 'cross', line: expect.objectContaining({ color: '#f4f4f5' }) }) }),
+    ])));
+  } finally { document.body.classList.remove('dark'); }
+});
+
 it('fetches the actual zero cycle instead of suppressing the view', async () => {
   useSelectionStore.setState({ currentCycle: 0 });
   vi.mocked(getScatter).mockResolvedValue({ ...response('VIC'), cycle: 0 });
@@ -80,12 +94,13 @@ it('registers typed selection events and highlights a selected well', async () =
 
 it('ignores a late response from the previous session', async () => {
   const old = deferred<ScatterResponse>();
-  vi.mocked(getScatter).mockReturnValueOnce(old.promise).mockResolvedValueOnce(response('VIC'));
+  vi.mocked(getScatter).mockReturnValueOnce(old.promise).mockResolvedValueOnce({ ...response('VIC'), normalization_applied: false });
   render(<ScatterPlot />);
   act(() => useSessionStore.setState({ sessionId: 'run-b' }));
   await waitFor(() => expect(useDataStore.getState().allele2Dye).toBe('VIC'));
-  await act(async () => old.resolve(response('HEX')));
+  await act(async () => old.resolve({ ...response('HEX'), normalization_applied: true }));
   expect(useDataStore.getState().allele2Dye).toBe('VIC');
+  expect(useDataStore.getState()).toMatchObject({ normalizationApplied: false, normalizationReported: true });
 });
 
 it('does not publish a response after unmount', async () => {
