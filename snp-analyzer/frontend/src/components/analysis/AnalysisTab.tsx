@@ -302,8 +302,8 @@ export function AnalysisTab() {
         <WellSelectionToolbar />
       </div>
 
-      {/* Analysis Grid - responsive (1 col narrow, 2 col >= lg) */}
-      <div className="analysis-grid grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 sm:px-6">
+      {/* Shared responsive foundation defines the 1280px two-column breakpoint. */}
+      <div className="analysis-grid grid gap-4 p-4 sm:px-6">
         {/* Scatter Plot - top left */}
         <ScatterPlot />
 

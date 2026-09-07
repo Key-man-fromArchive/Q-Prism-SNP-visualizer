@@ -1,98 +1,72 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useSessionStore } from '@/stores/session-store';
+import { useAuthStore } from '@/stores/auth-store';
 import { getProjects, addProjectSession } from '@/lib/api';
 import { useI18n } from '@/hooks/use-i18n';
+import { useOwnedOperation } from '@/hooks/use-owned-operation';
+import { Button, Modal } from '@/components/shared/ui';
 
 type ProjectItem = { id: string; name: string; session_count: number };
 
-export function AddToProjectButton() {
+function ProjectPicker({ sessionId }: { sessionId: string }) {
   const { t } = useI18n();
-  const sessionId = useSessionStore((s) => s.sessionId);
+  const owned = useOwnedOperation();
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
-  const [status, setStatus] = useState<string | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  const handleOpen = async () => {
-    if (open) { setOpen(false); return; }
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const close = () => { owned.begin(); setOpen(false); setBusy(false); };
+  const load = async () => {
+    const ticket = owned.begin();
+    setOpen(true); setBusy(true); setMessage(null); setError(null);
     try {
       const data = await getProjects();
-      setProjects(data.projects);
-      setStatus(null);
-      setOpen(true);
+      if (owned.current(ticket)) setProjects(data.projects);
     } catch {
-      setStatus(t.failedToLoadProjects);
-    }
+      if (owned.current(ticket)) setError(t.failedToLoadProjects);
+    } finally { if (owned.current(ticket)) setBusy(false); }
   };
-
-  const handleAdd = async (projectId: string, projectName: string) => {
-    if (!sessionId) return;
+  const add = async (project: ProjectItem) => {
+    if (busy) return;
+    const ticket = owned.begin();
+    setBusy(true); setMessage(null); setError(null);
     try {
-      await addProjectSession(projectId, sessionId);
-      setStatus(t.addedTo(projectName));
-      // Refresh project list to update counts
-      const data = await getProjects();
-      setProjects(data.projects);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed';
-      setStatus(msg);
-    }
+      await addProjectSession(project.id, sessionId);
+      if (!owned.current(ticket)) return;
+      setMessage(t.addedTo(project.name));
+      try {
+        const data = await getProjects();
+        if (owned.current(ticket)) setProjects(data.projects);
+      } catch {
+        if (owned.current(ticket)) setError(t.failedToLoadProjects);
+      }
+    } catch {
+      if (owned.current(ticket)) setError(t.projectActionFailed);
+    } finally { if (owned.current(ticket)) setBusy(false); }
   };
+  return <>
+    <button type="button" onClick={() => void load()} className="badge cursor-pointer hover:text-primary hover:border-primary transition-colors text-xs" title={t.addThisToProject}>
+      {t.plusProject}
+    </button>
+    <Modal open={open} onClose={close} title={t.addToProject}
+      footer={<><Button variant="secondary" disabled={busy} onClick={() => void load()}>{t.retry}</Button><Button variant="secondary" onClick={close}>{t.cancel}</Button></>}>
+      {busy && <p role="status">{t.loading}</p>}
+      {error && <p role="alert">{error}</p>}
+      {message && <p role="status">{message}</p>}
+      {!busy && projects.length === 0 && <p>{t.noProjectsCreate}</p>}
+      <div className="flex flex-col gap-1">
+        {projects.map(project => <Button key={project.id} variant="secondary" disabled={busy} onClick={() => void add(project)} className="justify-between whitespace-normal text-left">
+          <span className="min-w-0 wrap-anywhere">{project.name}</span><span className="shrink-0">{project.session_count}</span>
+        </Button>)}
+      </div>
+    </Modal>
+  </>;
+}
 
-  if (!sessionId) return null;
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={handleOpen}
-        className="badge cursor-pointer hover:text-primary hover:border-primary transition-all text-xs"
-        title={t.addThisToProject}
-      >
-        {t.plusProject}
-      </button>
-
-      {open && (
-        <div className="absolute top-full right-0 mt-1 w-56 bg-surface border border-border rounded shadow-lg z-50">
-          <div className="px-3 py-2 border-b border-border text-xs text-text-muted font-medium">
-            {t.addToProject}
-          </div>
-          {projects.length === 0 ? (
-            <div className="px-3 py-3 text-xs text-text-muted">
-              {t.noProjectsCreate}
-            </div>
-          ) : (
-            <div className="max-h-48 overflow-y-auto">
-              {projects.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => handleAdd(p.id, p.name)}
-                  className="w-full text-left px-3 py-2 text-sm text-text hover:bg-bg transition-colors flex justify-between items-center"
-                >
-                  <span className="truncate">{p.name}</span>
-                  <span className="text-xs text-text-muted ml-2">{p.session_count}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {status && (
-            <div className={`px-3 py-2 border-t border-border text-xs ${
-              status.startsWith('Added') ? 'text-success' : 'text-danger'
-            }`}>
-              {status}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
+export function AddToProjectButton() {
+  const sessionId = useSessionStore(state => state.sessionId);
+  const entry = useSessionStore(state => state.entryGeneration);
+  const owner = useAuthStore(state => state.user?.id);
+  return sessionId ? <ProjectPicker key={`${owner}:${sessionId}:${entry}`} sessionId={sessionId} /> : null;
 }

@@ -287,7 +287,9 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
         <StatusState variant="empty" message={t.plateEmpty} />
       )}
 
-      <div style={{ overflowX: 'auto', display: status === "ready" && plateWells.length > 0 ? undefined : 'none' }}>
+      <div role="region" aria-label={t.plateScrollHint} tabIndex={0} data-testid="plate-scroll-region"
+        style={{ overflowX: 'auto', display: status === "ready" && plateWells.length > 0 ? undefined : 'none' }}>
+      <p className="text-xs text-text-muted mb-2">{t.plateScrollHint}</p>
       <div
         id="plate-grid"
         role="grid"

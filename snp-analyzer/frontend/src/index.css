@@ -124,7 +124,26 @@ body.dark .panel {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
-/* Hidden utility (matching legacy) */
-.hidden {
-  display: none !important;
-}
+/* Tailwind owns .hidden so responsive display variants retain their cascade. */
+
+:root { --workspace-gutter: 1rem; --workspace-gap: 1rem; }
+#root, main, #analysis-panel { min-width: 0; max-width: 100%; }
+.app-header { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem; padding: .75rem var(--workspace-gutter); }
+.header-context { display: flex; flex: 1 1 30rem; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; min-width: 0; }
+.header-actions { display: flex; flex: 1 1 38rem; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; min-width: 0; }
+.header-account { min-width: 0; max-width: 100%; }
+.header-username, .header-linked-context, #instrument-badge { overflow-wrap: anywhere; min-width: 0; max-width: 100%; white-space: normal; }
+.header-username { flex: 1 1 10rem; max-width: 16rem; }
+.header-username, #instrument-badge { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.header-linked-values > * { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.header-linked-context > *, .app-header .qc-badge { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.app-header [data-testid="qc-details"] { position: static; min-width: 0; max-width: 100%; }
+.app-header [data-testid="qc-details"] > div { left: var(--workspace-gutter); max-width: calc(100% - 2 * var(--workspace-gutter)); overflow-wrap: anywhere; }
+.app-header button, .app-header a { flex-shrink: 0; }
+.app-header button { white-space: nowrap; }
+.app-navigation { padding-inline: var(--workspace-gutter); }
+.analysis-grid { grid-template-columns: minmax(0, 1fr); }
+.analysis-grid > *, .panel { min-width: 0; }
+@media (min-width: 768px) { :root { --workspace-gutter: 1.5rem; } }
+@media (min-width: 1280px) { .analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 767px) { .header-actions { justify-content: flex-start; } }

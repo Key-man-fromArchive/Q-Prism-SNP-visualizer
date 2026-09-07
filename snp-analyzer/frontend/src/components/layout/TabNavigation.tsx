@@ -65,8 +65,8 @@ export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdm
   const activeInOverflow = overflow.some((tab) => tab.id === activeTab);
 
   return (
-    <nav className="flex items-center gap-0 border-b border-border px-6 bg-surface">
-      <div role="tablist" aria-label={t.navigation} onKeyDown={navigateTabs} className="flex">
+    <nav className="app-navigation flex flex-wrap items-center gap-0 border-b border-border bg-surface">
+      <div role="tablist" aria-label={t.navigation} onKeyDown={navigateTabs} className="flex flex-wrap min-w-0">
       {primary.map((tab) => {
         const disabled = !hasSession && !tab.sessionFree;
         return (
@@ -82,7 +82,7 @@ export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdm
             onClick={() => { if (!disabled) onTabChange(tab.id); }}
             disabled={disabled}
             className={`
-              tab px-5 py-2.5 border-none bg-transparent text-sm transition-colors border-b-2
+              tab whitespace-nowrap px-3 py-2.5 border-none bg-transparent text-sm transition-colors border-b-2
               ${disabled
                 ? 'text-text-muted/40 border-b-transparent cursor-default'
                 : activeTab === tab.id

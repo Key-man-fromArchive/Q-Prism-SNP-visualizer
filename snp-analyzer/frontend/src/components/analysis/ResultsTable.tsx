@@ -82,6 +82,9 @@ export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
       {scatterPoints.length === 0 ? (
         <StatusState variant="empty" message={t.scatterEmpty} />
       ) : (
+      <div role="region" aria-label={t.resultsScrollHint} tabIndex={0} data-testid="results-scroll-region"
+        style={{ maxWidth: '100%', overflowX: 'auto' }}>
+      <p className="text-xs text-text-muted mb-2">{t.resultsScrollHint}</p>
       <div
         id="results-plate"
         role="grid"
@@ -190,6 +193,7 @@ export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
             })}
           </div>
         ))}
+      </div>
       </div>
       )}
     </div>
