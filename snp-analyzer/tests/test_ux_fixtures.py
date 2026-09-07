@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -119,3 +120,8 @@ def test_failure_schedules_are_named_and_ordered() -> None:
 def test_unsupported_plate_size_is_rejected() -> None:
     with pytest.raises(ValueError, match="96 or 384"):
         make_ux_plate(192)
+
+
+def test_unsupported_ntc_scenario_is_rejected() -> None:
+    with pytest.raises(ValueError, match="Unknown NTC scenario"):
+        make_ux_plate(ntc=cast(NtcScenario, "unsupported"))

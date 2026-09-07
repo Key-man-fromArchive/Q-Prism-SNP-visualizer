@@ -20,15 +20,9 @@ def make_ux_plate(
         raise ValueError("UX fixtures support only 96 or 384 wells")
     if ntc not in ("ok", "warning", "no_ntc", "missing_read", "zero_reference"):
         raise ValueError(f"Unknown NTC scenario: {ntc}")
-    rows, columns = (8, 12) if size == 96 else (16, 24)
-    wells = [f"{chr(65 + row)}{col}" for row in range(rows) for col in range(1, columns + 1)]
+    wells = _plate_wells(size)
     ntc_wells = [] if ntc == "no_ntc" else wells[-2:]
-    readings = [
-        _reading(well, index, cycle, ntc_wells, ntc, has_rox)
-        for index, well in enumerate(wells)
-        for cycle in range(42)
-        if not (ntc == "missing_read" and well == wells[-1] and cycle == 40)
-    ]
+    readings = _plate_readings(wells, ntc_wells, ntc, has_rox)
     return UnifiedData(
         instrument="Synthetic UX fixture", allele2_dye="HEX", wells=wells,
         cycles=list(range(42)), data=readings, has_rox=has_rox,
@@ -43,6 +37,22 @@ def make_ux_plate(
             DataWindow(name="Post-read", start_cycle=41, end_cycle=41),
         ],
     )
+
+
+def _plate_wells(size: int) -> list[str]:
+    rows, columns = (8, 12) if size == 96 else (16, 24)
+    return [f"{chr(65 + row)}{col}" for row in range(rows) for col in range(1, columns + 1)]
+
+
+def _plate_readings(
+    wells: list[str], ntc_wells: list[str], scenario: NtcScenario, has_rox: bool,
+) -> list[WellCycleData]:
+    return [
+        _reading(well, index, cycle, ntc_wells, scenario, has_rox)
+        for index, well in enumerate(wells)
+        for cycle in range(42)
+        if not (scenario == "missing_read" and well == wells[-1] and cycle == 40)
+    ]
 
 
 def _reading(
