@@ -2,18 +2,17 @@
 // @SPEC docs/multi-marker-ux-decision.md §0 (2-surface workspace, free navigation)
 // @TEST e2e/p4-s0-single-marker-default.spec.ts, e2e/p4-s1-plate-setup.spec.ts
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
-import { Callout } from "@/components/shared/ui";
+import { Callout, StatusState } from "@/components/shared/ui";
 import { useSessionStore } from "@/stores/session-store";
-import { getMarkers } from "@/lib/api";
-import type { MarkerRegion } from "@/types/api";
+import { useAnalysisWorkspace } from "@/hooks/use-analysis-workspace";
+import { useNavigationStore } from "@/stores/navigation-store";
 import { AnalysisTab } from "./AnalysisTab";
 import { PlateSetupTab } from "./PlateSetupTab";
 import { MultiMarkerAnalysisPanel } from "./MultiMarkerAnalysisPanel";
-
-type WorkspaceSurface = "plate" | "analysis";
+import { AnalysisResultStatus } from './AnalysisResultStatus';
 
 /**
  * Always-present 2-surface workspace (Plate Setup + Analysis), replacing the
@@ -29,7 +28,9 @@ type WorkspaceSurface = "plate" | "analysis";
 export function AnalysisWorkspace() {
   const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
-  const [activeSurface, setActiveSurface] = useState<WorkspaceSurface>("analysis");
+  const activeSurface = useNavigationStore(state => state.surface);
+  const setActiveSurface = useNavigationStore(state => state.setSurface);
+  const { ready, status, markers, retry } = useAnalysisWorkspace();
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // The session's saved marker (assay) set decides which Analysis surface
@@ -38,7 +39,6 @@ export function AnalysisWorkspace() {
   // (P4-S0). Re-fetched on session change and every time this surface is
   // updated through the markers-changed event, so merely switching surfaces
   // does not repeat an identical API request and analysis render.
-  const [markers, setMarkers] = useState<MarkerRegion[]>([]);
 
   // A freshly-loaded session starts back on the Analysis surface with the
   // banner re-offered (zero friction for the single-marker case, §0/Q1), and
@@ -48,34 +48,8 @@ export function AnalysisWorkspace() {
   const [prevSessionId, setPrevSessionId] = useState(sessionId);
   if (sessionId !== prevSessionId) {
     setPrevSessionId(sessionId);
-    setActiveSurface("analysis");
     setBannerDismissed(false);
-    setMarkers([]);
   }
-
-  useEffect(() => {
-    if (!sessionId) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await getMarkers(sessionId);
-        if (!cancelled) setMarkers(res.markers);
-      } catch {
-        if (!cancelled) setMarkers([]);
-      }
-    };
-    void load();
-    // A layout can also be applied to this session from the top-level
-    // Library tab's "레이아웃" sub-tab -- a component outside this workspace
-    // entirely, so switching back to the Analysis tab alone (without also
-    // toggling the plate/analysis surface, which the effect above already
-    // covers) wouldn't otherwise pick it up.
-    window.addEventListener("markers-changed", load);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("markers-changed", load);
-    };
-  }, [sessionId]);
 
   return (
     <div>
@@ -88,6 +62,7 @@ export function AnalysisWorkspace() {
           type="button"
           role="tab"
           id="workspace-tab-plate"
+          aria-controls="workspace-panel-plate"
           data-testid="workspace-tab-plate"
           aria-selected={activeSurface === "plate"}
           onClick={() => setActiveSurface("plate")}
@@ -103,6 +78,7 @@ export function AnalysisWorkspace() {
           type="button"
           role="tab"
           id="workspace-tab-analysis"
+          aria-controls="workspace-panel-analysis"
           data-testid="workspace-tab-analysis"
           aria-selected={activeSurface === "analysis"}
           onClick={() => setActiveSurface("analysis")}
@@ -118,16 +94,19 @@ export function AnalysisWorkspace() {
 
       <div
         data-testid="workspace-panel-plate"
+        id="workspace-panel-plate" role="tabpanel" aria-labelledby="workspace-tab-plate"
         className={activeSurface === "plate" ? "" : "hidden"}
       >
-        <PlateSetupTab />
+        {ready && <PlateSetupTab />}
       </div>
 
       <div
         data-testid="workspace-panel-analysis"
+        id="workspace-panel-analysis" role="tabpanel" aria-labelledby="workspace-tab-analysis"
         className={activeSurface === "analysis" ? "" : "hidden"}
       >
-        {markers.length > 0 ? (
+        {ready && <AnalysisResultStatus markers={markers} />}
+        {!ready ? <StatusState variant={status === 'error' ? 'error' : 'loading'} message={status === 'error' ? t.analysisLoadFailed : t.loading} action={status === 'error' ? { label: t.retry, onClick: retry } : undefined} /> : markers.length > 0 ? (
           <MultiMarkerAnalysisPanel markers={markers} />
         ) : (
           <div data-testid="single-marker-analysis-view">

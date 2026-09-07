@@ -406,7 +406,8 @@ def _capture_analysis(sid: str, req: ClusteringRequest) -> tuple[AnalysisTicket,
         unified = _get_session(sid)
         resolved = req.model_copy(deep=True)
         resolved.regions = [m.model_copy(deep=True) for m in (req.regions or marker_store.get(sid, []))]
-        cycle = req.cycle if req.cycle > 0 else max(unified.cycles)
+        from app.processing.cycle_selection import resolve_cycle
+        cycle = resolve_cycle(unified.cycles, req.cycle, req.cycle_mode)
         if cycle not in unified.cycles:
             raise HTTPException(400, f"Cycle {cycle} not available")
         _validate_analysis_request(resolved, [])

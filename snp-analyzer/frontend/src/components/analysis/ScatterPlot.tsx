@@ -5,7 +5,9 @@ import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
-import { getScatter, runClustering } from "@/lib/api";
+import { getScatter } from "@/lib/api";
+import { analyzeCurrent } from "@/lib/analysis-actions";
+import { useAnalysisStore } from '@/stores/analysis-store';
 import { channelLabels, normalizationLabel, normalizedLabel } from "@/lib/channel-labels";
 import { WELL_TYPE_INFO } from "@/lib/constants";
 import { genotypeClasses, wellInfo, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
@@ -112,12 +114,9 @@ export function ScatterPlot() {
   }, [ratioOrigin]);
   const setScatterData = useDataStore((s) => s.setScatterData);
   const boundaries = useDataStore((s) => s.boundaries);
-  const setBoundaries = useDataStore((s) => s.setBoundaries);
   const offset = useDataStore((s) => s.offset);
-  const setOffset = useDataStore((s) => s.setOffset);
   const offsetUncertain = useDataStore((s) => s.offsetUncertain);
   const dosageMax = useDataStore((s) => s.dosageMax);
-  const setDosageMax = useDataStore((s) => s.setDosageMax);
   const ntcCorner = useDataStore((s) => s.ntcCorner);
   const setNtcCorner = useDataStore((s) => s.setNtcCorner);
   const { isWellVisible } = useWellFilter();
@@ -193,7 +192,11 @@ export function ScatterPlot() {
   useEffect(() => {
     const handler = () => setRefetchTrigger((n) => n + 1);
     window.addEventListener("welltypes-changed", handler);
-    return () => window.removeEventListener("welltypes-changed", handler);
+    window.addEventListener("analysis-result-changed", handler);
+    return () => {
+      window.removeEventListener("welltypes-changed", handler);
+      window.removeEventListener("analysis-result-changed", handler);
+    };
   }, []);
 
   // Request lifecycle so the panel shows loading/empty/error instead of a blank
@@ -206,7 +209,7 @@ export function ScatterPlot() {
   // Fetch scatter data
   const fetchData = useCallback(() => {
     const revision = ++fetchRevision.current;
-    if (!sessionId || !currentCycle) return;
+    if (!sessionId) return;
     return getScatter(sessionId, currentCycle, useRox, backgroundMode).then((res) => {
       if (revision !== fetchRevision.current) return;
       setScatterData(res.points, res.allele2_dye, res.channel_labels, res.ratio_origin, {
@@ -546,11 +549,10 @@ export function ScatterPlot() {
   // it how many there can be and how high they can go.
   const handleDosageMaxApply = useCallback(
     (next: number | null) => {
-      setDosageMax(next);
       if (!sessionId) return;
       void (async () => {
         try {
-          const result = await runClustering(sessionId, {
+          const accepted = await analyzeCurrent({
             algorithm: "auto",
             cycle: currentCycle ?? 0,
             threshold_config: {
@@ -570,19 +572,13 @@ export function ScatterPlot() {
             background: backgroundMode,
             use_rox: useRox,
           });
-          const store = useDataStore.getState();
-          store.setClusterAssignments(result.assignments);
-          store.setBoundaries(result.boundaries ?? null);
-          store.setOffset(result.offset ?? 0);
-          store.setOffsetUncertain(result.offset_uncertain ?? false);
-          store.setDosageMax(result.dosage_max ?? next);
-          window.dispatchEvent(new CustomEvent("welltypes-changed"));
+          if (accepted) window.dispatchEvent(new CustomEvent("analysis-result-changed"));
         } catch (error) {
           console.error("Failed to persist dosage ceiling:", error);
         }
       })();
     },
-    [sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setDosageMax]
+    [sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox]
   );
 
   // Highlight every selected well. Multi-selection is the normal plate-review
@@ -704,7 +700,7 @@ export function ScatterPlot() {
       if (!sessionId) return;
       const cuts = linesActive ? editRef.current : null;
       try {
-        const result = await runClustering(sessionId, {
+        const accepted = await analyzeCurrent({
           algorithm: cuts ? "threshold" : "auto",
           cycle: currentCycle ?? 0,
           threshold_config: {
@@ -721,8 +717,7 @@ export function ScatterPlot() {
           background: backgroundMode,
           use_rox: useRox,
         });
-        useDataStore.getState().setClusterAssignments(result.assignments);
-        window.dispatchEvent(new CustomEvent("welltypes-changed"));
+        if (accepted) window.dispatchEvent(new CustomEvent("analysis-result-changed"));
       } catch (error) {
         console.error("Failed to persist NTC quadrant:", error);
       }
@@ -758,11 +753,9 @@ export function ScatterPlot() {
     };
 
     const persist = async (cuts: number[], off: number) => {
-      setBoundaries(cuts);
-      setOffset(off);
       if (!sessionId) return;
       try {
-        await runClustering(sessionId, {
+        const accepted = await analyzeCurrent({
           algorithm: "threshold",
           cycle: currentCycle ?? 0,
           threshold_config: {
@@ -779,7 +772,12 @@ export function ScatterPlot() {
           background: backgroundMode,
           use_rox: useRox,
         });
-        window.dispatchEvent(new CustomEvent("welltypes-changed"));
+        if (accepted) window.dispatchEvent(new CustomEvent("analysis-result-changed"));
+        else if (editRef.current === cuts && useAnalysisStore.getState().sessionId === sessionId) {
+          const restored = useDataStore.getState().boundaries;
+          editRef.current = restored;
+          setEditBoundaries(restored);
+        }
       } catch (err) {
         console.error("Failed to persist boundaries:", err);
       }
@@ -872,7 +870,7 @@ export function ScatterPlot() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [linesActive, editing, sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setBoundaries, setOffset, setEditBoundaries]);
+  }, [linesActive, editing, sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setEditBoundaries]);
 
   // Cleanup
   useEffect(() => {

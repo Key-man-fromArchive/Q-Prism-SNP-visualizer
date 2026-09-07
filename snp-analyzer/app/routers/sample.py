@@ -189,6 +189,7 @@ async def get_session_info(sid: str, current_user: CurrentUser):
         "allele2_dye": unified.allele2_dye,
         "num_wells": len(unified.wells),
         "num_cycles": len(unified.cycles),
+        "cycles": list(unified.cycles),
         "has_rox": unified.has_rox,
         "data_windows": [
             {"name": w.name, "start_cycle": w.start_cycle, "end_cycle": w.end_cycle}

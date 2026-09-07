@@ -336,6 +336,7 @@ class RegionResult(BaseModel):
 
 
 class ClusteringRequest(BaseModel):
+    cycle_mode: Literal["legacy_latest", "absolute"] = "legacy_latest"
     expected_input_revision: int | None = Field(default=None, ge=0)
     algorithm: ClusteringAlgorithm = ClusteringAlgorithm.THRESHOLD
     cycle: int = 0

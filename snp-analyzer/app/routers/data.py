@@ -10,6 +10,7 @@ from app.models import (
     UnifiedData,
 )
 from app.processing.background import BackgroundMode
+from app.processing.cycle_selection import CycleMode, resolve_cycle
 from app.processing.normalize import normalize_for_cycle, normalize, normalization_applies
 from app.processing.ratio_origin import rox_outlier_wells
 from app.role_labels import build_role_label_metadata
@@ -55,14 +56,14 @@ async def scatter_data(
     sid: str,
     current_user: CurrentUser,
     cycle: int = Query(default=0),
+    cycle_mode: CycleMode = Query(default="legacy_latest"),
     use_rox: bool = Query(default=True),
     background: BackgroundMode = Query(default="none"),
 ):
     check_session_access(sid, current_user)
     unified = _get_session(sid)
 
-    if cycle <= 0:
-        cycle = max(unified.cycles)
+    cycle = resolve_cycle(unified.cycles, cycle, cycle_mode)
 
     if cycle not in unified.cycles:
         raise HTTPException(400, f"Cycle {cycle} not available. Range: {unified.cycles[0]}-{unified.cycles[-1]}")
@@ -120,14 +121,14 @@ async def plate_data(
     sid: str,
     current_user: CurrentUser,
     cycle: int = Query(default=0),
+    cycle_mode: CycleMode = Query(default="legacy_latest"),
     use_rox: bool = Query(default=True),
     background: BackgroundMode = Query(default="none"),
 ):
     check_session_access(sid, current_user)
     unified = _get_session(sid)
 
-    if cycle <= 0:
-        cycle = max(unified.cycles)
+    cycle = resolve_cycle(unified.cycles, cycle, cycle_mode)
 
     points = normalize_for_cycle(unified, cycle, use_rox=use_rox, background=background)
     ratio_origin = ratio_origin_for(sid, unified, points)

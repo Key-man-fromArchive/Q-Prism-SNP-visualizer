@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useNavigationStore } from './navigation-store';
 
 interface SelectionState {
   selectedWell: string | null;
@@ -74,7 +75,12 @@ export const useSelectionStore = create<SelectionState>((set) => ({
     }),
   setGroup: (group) => set({ selectedGroup: group }),
   setFocusSelectedWells: (focus) => set({ focusSelectedWells: focus }),
-  setCycle: (cycle) => set({ currentCycle: cycle }),
+  setCycle: (cycle) => useNavigationStore.getState().setCycle(cycle),
   setDataWindow: (name) => set({ currentDataWindow: name }),
   setPlaying: (v) => set({ isPlaying: v }),
 }));
+
+// Compatibility projection; navigation owns the absolute cycle for all new consumers.
+useNavigationStore.subscribe((state, previous) => {
+  if (state.cycle !== previous.cycle) useSelectionStore.setState({ currentCycle: state.cycle ?? 0 });
+});

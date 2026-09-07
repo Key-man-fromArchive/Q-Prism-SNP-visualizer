@@ -1,9 +1,10 @@
 // @TASK Frontend - Cycle Control Component
 // @SPEC User can select data windows and navigate through cycles with play/pause
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
+import { useNavigationStore } from '@/stores/navigation-store';
 import { useI18n } from '@/hooks/use-i18n';
 
 export function CycleControl() {
@@ -14,128 +15,54 @@ export function CycleControl() {
   const setPlaying = useSelectionStore((s) => s.setPlaying);
   const setDataWindow = useSelectionStore((s) => s.setDataWindow);
 
-  const [activeWindowIdx, setActiveWindowIdx] = useState(0);
-  const [relativeValue, setRelativeValue] = useState(1);
-  const animRef = useRef<number | null>(null);
+  const currentCycle = useNavigationStore(state => state.cycle);
+  const availableCycles = useNavigationStore(state => state.availableCycles);
+  const ready = useNavigationStore(state => state.status === 'ready');
+  const entry = useSessionStore(state => state.entryGeneration);
+  const [draft, setDraft] = useState<{ entry: number; cycle: number | null; value: number } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const windows = sessionInfo?.data_windows ?? null;
+  const activeWindowIdx = windows?.findIndex(window => currentCycle !== null && currentCycle >= window.start_cycle && currentCycle <= window.end_cycle) ?? -1;
   const activeWindow = windows?.[activeWindowIdx] ?? null;
-  const windowCycles = activeWindow
-    ? activeWindow.end_cycle - activeWindow.start_cycle + 1
-    : sessionInfo?.num_cycles ?? 1;
-
-  // Initialize: select Amplification window by default
+  const cycles = useMemo(() => availableCycles.filter(cycle => !activeWindow || (cycle >= activeWindow.start_cycle && cycle <= activeWindow.end_cycle)), [availableCycles, activeWindow]);
+  const windowCycles = cycles.length;
+  const selectedIndex = currentCycle === null ? -1 : cycles.indexOf(currentCycle);
+  const relativeValue = draft?.entry === entry && draft.cycle === currentCycle ? draft.value : selectedIndex + 1;
   useEffect(() => {
-    if (!windows || windows.length <= 1) {
-      setActiveWindowIdx(0);
-      return;
-    }
-    const ampIdx = windows.findIndex((w) => w.name === 'Amplification');
-    setActiveWindowIdx(ampIdx >= 0 ? ampIdx : 0);
-  }, [windows]);
-
-  // When window changes, set initial cycle.
-  useEffect(() => {
-    const win = windows?.[activeWindowIdx];
-    const suggestedCycle = sessionInfo?.suggested_cycle;
-
-    // No data windows (e.g. synthetic examples / plain per-cycle imports): the
-    // store's currentCycle would otherwise stay at its initial 0, and every
-    // cycle-gated fetch (ScatterPlot guards `if (!currentCycle) return`) would
-    // silently skip — leaving the allele-discrimination plot blank. Initialise
-    // against the full cycle range so the analysis surface has data on load.
-    if (!win) {
-      const n = sessionInfo?.num_cycles ?? 1;
-      let initial = n;
-      if (suggestedCycle != null && suggestedCycle >= 1 && suggestedCycle <= n) {
-        initial = suggestedCycle;
-      }
-      setRelativeValue(initial);
-      setCycle(initial);
-      setDataWindow(null);
-      return;
-    }
-
-    const wCycles = win.end_cycle - win.start_cycle + 1;
-    let initial = wCycles;
-
-    if (suggestedCycle != null) {
-      const rel = suggestedCycle - win.start_cycle + 1;
-      if (rel >= 1 && rel <= wCycles) {
-        initial = rel;
-      }
-    }
-
-    setRelativeValue(initial);
-    setCycle(win.start_cycle + initial - 1);
-    setDataWindow(win.name);
-  }, [activeWindowIdx, windows, sessionInfo?.suggested_cycle, sessionInfo?.num_cycles, setCycle, setDataWindow]);
-
-  // Debounced slider change
-  const handleSliderChange = (val: number) => {
-    setRelativeValue(val);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
+    return () => { if (debounceRef.current !== null) clearTimeout(debounceRef.current); };
+  }, [entry, ready, activeWindow, isPlaying]);
+  const chooseCycle = (cycle: number) => {
+    if (!ready || !availableCycles.includes(cycle)) return;
+    setCycle(cycle);
+    setDataWindow(windows?.find(window => cycle >= window.start_cycle && cycle <= window.end_cycle)?.name ?? null);
+  };
+  const handleSliderChange = (value: number) => {
+    setDraft({ entry, cycle: currentCycle, value });
+    if (debounceRef.current !== null) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      const abs = activeWindow ? activeWindow.start_cycle + val - 1 : val;
-      setCycle(abs);
+      if (useSessionStore.getState().entryGeneration !== entry || useNavigationStore.getState().status !== 'ready') return;
+      const cycle = cycles[value - 1];
+      if (cycle !== undefined) chooseCycle(cycle);
     }, 150);
   };
-
-  // Play/Pause animation
   useEffect(() => {
-    if (!isPlaying) {
-      if (animRef.current) {
-        clearInterval(animRef.current);
-        animRef.current = null;
-      }
-      return;
-    }
-
-    let current = relativeValue;
-    animRef.current = window.setInterval(() => {
-      current++;
-      if (current > windowCycles) {
-        current = 1;
-      }
-      setRelativeValue(current);
-      const abs = activeWindow ? activeWindow.start_cycle + current - 1 : current;
-      setCycle(abs);
+    if (!isPlaying || !ready || cycles.length < 2) return;
+    const timer = window.setInterval(() => {
+      const index = cycles.indexOf(useNavigationStore.getState().cycle ?? NaN);
+      setCycle(cycles[(index + 1) % cycles.length]);
     }, 500);
-
-    return () => {
-      if (animRef.current) {
-        clearInterval(animRef.current);
-        animRef.current = null;
-      }
-    };
-  }, [isPlaying, relativeValue, windowCycles, activeWindow, setCycle]);
-
-  // External "go to cycle" (e.g. the Analyze button jumping to the suggested cycle)
+    return () => window.clearInterval(timer);
+  }, [isPlaying, ready, cycles, setCycle]);
   useEffect(() => {
-    const handler = (e: Event) => {
-      const raw = (e as CustomEvent<number>).detail;
-      if (typeof raw !== "number") return;
-      // Clamp to the session's valid cycle range so a stray/out-of-range target
-      // can never leave the scatter/plate requesting a non-existent cycle.
-      const maxCycle = sessionInfo?.num_cycles ?? raw;
-      const target = Math.min(Math.max(1, raw), maxCycle);
-      let idx = activeWindowIdx;
-      if (windows && windows.length > 0) {
-        const found = windows.findIndex(
-          (w) => target >= w.start_cycle && target <= w.end_cycle
-        );
-        if (found >= 0) idx = found;
-      }
-      const win = windows?.[idx];
-      setActiveWindowIdx(idx);
-      setRelativeValue(win ? target - win.start_cycle + 1 : target);
-      if (win) setDataWindow(win.name);
+    const handler = (event: Event) => {
+      const target: unknown = (event as CustomEvent<unknown>).detail;
+      if (!ready || typeof target !== 'number' || !availableCycles.includes(target)) return;
+      if (debounceRef.current !== null) clearTimeout(debounceRef.current);
       setCycle(target);
     };
-    window.addEventListener("goto-cycle", handler);
-    return () => window.removeEventListener("goto-cycle", handler);
-  }, [windows, activeWindowIdx, sessionInfo?.num_cycles, setCycle, setDataWindow]);
+    window.addEventListener('goto-cycle', handler);
+    return () => window.removeEventListener('goto-cycle', handler);
+  }, [ready, availableCycles, setCycle]);
 
   // Hide if single cycle and no multiple windows
   const shouldHide =
@@ -168,7 +95,9 @@ export function CycleControl() {
               }`}
               onClick={() => {
                 setPlaying(false);
-                setActiveWindowIdx(idx);
+                const candidates = availableCycles.filter(cycle => cycle >= w.start_cycle && cycle <= w.end_cycle);
+                const cycle = candidates.at(-1);
+                if (cycle !== undefined) chooseCycle(cycle);
               }}
             >
               {w.name}
@@ -180,7 +109,7 @@ export function CycleControl() {
       {/* Cycle label + slider (hidden if windowCycles <= 1) */}
       {windowCycles > 1 && (
         <>
-          <label id="cycle-label" className="text-sm text-text">
+          <label id="cycle-label" htmlFor="cycle-slider" className="text-sm text-text">
             {t.cycle}{' '}
             <span id="cycle-value" className="font-medium">
               {relativeValue}
@@ -191,6 +120,7 @@ export function CycleControl() {
             <button
               id="play-btn"
               className="w-8 h-8 flex items-center justify-center border border-border rounded bg-surface cursor-pointer text-text hover:bg-bg"
+              disabled={!ready}
               onClick={() => setPlaying(!isPlaying)}
               title={t.playPause}
               aria-label={t.playPause}
@@ -199,11 +129,13 @@ export function CycleControl() {
               {isPlaying ? <Pause size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
             </button>
             <input
+              disabled={!ready}
               type="range"
               id="cycle-slider"
               min={1}
               max={windowCycles}
               value={relativeValue}
+              aria-valuetext={String(cycles[relativeValue - 1] ?? currentCycle ?? '')}
               onChange={(e) => handleSliderChange(parseInt(e.target.value, 10))}
               className="flex-1"
             />

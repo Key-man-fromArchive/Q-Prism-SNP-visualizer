@@ -6,7 +6,9 @@ import { useAuthStore } from "@/stores/auth-store";
 import { asgLaunch, asgLaunchCookie, getAuthConfig, setWellTypes, getMe } from "@/lib/api";
 import { Header } from "@/components/layout/Header";
 import { UploadZone } from "@/components/upload/UploadZone";
-import { TabNavigation, type TabId } from "@/components/layout/TabNavigation";
+import { TabNavigation } from "@/components/layout/TabNavigation";
+import { useNavigationStore } from "@/stores/navigation-store";
+import { connectAnalysisProjection } from "@/lib/analysis-projection";
 import { SettingsTab } from "@/components/settings/SettingsTab";
 import { AnalysisWorkspace } from "@/components/analysis/AnalysisWorkspace";
 import { ProtocolTab } from "@/components/protocol/ProtocolTab";
@@ -35,7 +37,9 @@ declare global {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabId>("analysis");
+  const activeTab = useNavigationStore(state => state.tab);
+  const setActiveTab = useNavigationStore(state => state.setTab);
+  useEffect(connectAnalysisProjection, []);
 
   const sessionId = useSessionStore((s) => s.sessionId);
   const sessionInfo = useSessionStore((s) => s.sessionInfo);

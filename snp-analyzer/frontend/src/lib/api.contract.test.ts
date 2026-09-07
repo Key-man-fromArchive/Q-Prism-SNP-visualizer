@@ -5,6 +5,18 @@ import { useAuthStore } from '@/stores/auth-store';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('API error contract', () => {
+  it('sends absolute mode for selected zero but preserves omitted read defaults', async () => {
+    const fetcher = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ algorithm: 'auto', cycle: 0, assignments: {} }))));
+    vi.stubGlobal('fetch', fetcher);
+    await api.getScatter('s', 0);
+    await api.getPlate('s', 0);
+    await api.getScatter('s');
+    await api.runClustering('s', { algorithm: 'auto', cycle: 0, n_clusters: 4 });
+    expect(fetcher.mock.calls[0][0]).toContain('cycle=0&cycle_mode=absolute');
+    expect(fetcher.mock.calls[1][0]).toContain('cycle=0&cycle_mode=absolute');
+    expect(fetcher.mock.calls[2][0]).not.toContain('cycle_mode');
+    expect(JSON.parse(fetcher.mock.calls[3][1].body)).toMatchObject({ cycle: 0, cycle_mode: 'absolute' });
+  });
   const detail = { code: 'INPUT_REVISION_CONFLICT', message: 'Refresh', current_input_revision: 2 };
   it('rejects malformed result data instead of claiming a completed result', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ algorithm: 'auto', assignments: 'invalid', cycle: 20 }))));

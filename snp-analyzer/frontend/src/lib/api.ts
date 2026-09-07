@@ -200,7 +200,7 @@ export async function getScatter(
   useRox?: boolean,
   background?: BackgroundMode
 ): Promise<ScatterResponse> {
-  const query = buildQuery({ cycle, use_rox: useRox, background });
+  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background });
   return apiFetch<ScatterResponse>(`/api/data/${sid}/scatter${query}`);
 }
 
@@ -210,7 +210,7 @@ export async function getPlate(
   useRox?: boolean,
   background?: BackgroundMode
 ): Promise<PlateResponse> {
-  const query = buildQuery({ cycle, use_rox: useRox, background });
+  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background });
   return apiFetch<PlateResponse>(`/api/data/${sid}/plate${query}`);
 }
 
@@ -289,7 +289,7 @@ export async function runClustering(
   const response = parseClusterResponse(await apiFetch<unknown>(`/api/data/${sid}/cluster`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
+    body: JSON.stringify({ ...req, cycle_mode: 'absolute' }),
   }));
   if (response.algorithm === null) throw new Error('Invalid clustering response');
   return response;

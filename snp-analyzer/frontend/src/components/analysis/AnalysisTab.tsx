@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { AlertTriangle, Ruler, Target } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
@@ -9,12 +9,9 @@ import {
   setWellTypes,
   getWellGroups,
   getWellTypes,
-  getCluster,
-  getPloidy,
-  runClustering as apiRunClustering,
-  suggestCycle,
-  type CycleSuggestion,
 } from "@/lib/api";
+import { analyzeCurrent, analyzeRecommended } from "@/lib/analysis-actions";
+import { useAnalysisStore } from "@/stores/analysis-store";
 import { CycleControl } from "./CycleControl";
 import { ScatterPlot } from "./ScatterPlot";
 import { PlateView } from "./PlateView";
@@ -27,6 +24,7 @@ import { WellSelectionToolbar } from "./WellSelectionToolbar";
 import { Callout } from "@/components/shared/ui";
 import { analysisWarningTexts } from "@/lib/analysis-warnings";
 import { parseWellType } from "@/lib/well-type-input";
+import { useCurrentAnalysisRequest } from '@/hooks/use-current-analysis-request';
 
 export function AnalysisTab() {
   const { t } = useI18n();
@@ -43,39 +41,23 @@ export function AnalysisTab() {
 
   // Clustering / analysis
   const currentCycle = useSelectionStore((s) => s.currentCycle);
-  const setClusterAssignments = useDataStore((s) => s.setClusterAssignments);
-  const setBoundaries = useDataStore((s) => s.setBoundaries);
-  const setOffset = useDataStore((s) => s.setOffset);
-  const setOffsetUncertain = useDataStore((s) => s.setOffsetUncertain);
-  const setDosageMax = useDataStore((s) => s.setDosageMax);
-  const setLowSeparation = useDataStore((s) => s.setLowSeparation);
   const lowSeparation = useDataStore((s) => s.lowSeparation);
   const ntcThreshold = useSettingsStore((s) => s.ntcThreshold);
   const allele1RatioMax = useSettingsStore((s) => s.allele1RatioMax);
   const allele2RatioMin = useSettingsStore((s) => s.allele2RatioMin);
   const nClusters = useSettingsStore((s) => s.nClusters);
   const ploidy = useSettingsStore((s) => s.ploidy);
+  const useRox = useSettingsStore(s => s.useRox);
+  const backgroundMode = useSettingsStore(s => s.backgroundMode);
+  const ntcCorner = useDataStore(s => s.ntcCorner);
   const setPloidy = useSettingsStore((s) => s.setPloidy);
   const showManualTypes = useSettingsStore((s) => s.showManualTypes);
   const showBoundaryLines = useSettingsStore((s) => s.showBoundaryLines);
   const setShowBoundaryLines = useSettingsStore((s) => s.setShowBoundaryLines);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState<CycleSuggestion | null>(null);
-  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
-  // Diagnostics the run reported about itself. The whole-plate view previously
-  // dropped these on the floor, so a plate whose low-signal wells were
-  // deliberately left uncalled looked identical to a clean one.
-  const [analysisWarnings, setAnalysisWarnings] = useState<string[]>([]);
-  const autoRanSession = useRef<string | null>(null);
-
-  const stageLabel = (w: string) =>
-    w === "Pre-read"
-      ? t.stagePreRead
-      : w === "Amplification"
-      ? t.stageAmplification
-      : w === "Post-read"
-      ? t.stagePostRead
-      : w;
+  const analyzing = useAnalysisStore(state => state.pending);
+  const error = useAnalysisStore(state => state.error);
+  const analyzeError = error instanceof Error ? error.message : null;
+  const analysisWarnings = useAnalysisStore(state => state.result?.warnings) ?? [];
 
   const [showGroupManager, setShowGroupManager] = useState(false);
 
@@ -163,102 +145,17 @@ export function AnalysisTab() {
     return () => window.removeEventListener("welltypes-changed", load);
   }, [sessionId, setWellTypeAssignments]);
 
-  // Intelligent one-click analysis: suggest the best cycle (max separation
-  // before NTC background rises), jump the cycle control to it, and cluster.
-  const handleAnalyze = useCallback(async () => {
-    if (!sessionId) return;
-    setAnalyzing(true);
-    setAnalyzeError(null);
-    try {
-      const suggestion = await suggestCycle(sessionId);
-      const cycle = suggestion.suggested_cycle ?? currentCycle ?? 0;
-      if (suggestion.suggested_cycle) {
-        // Move the cycle control (and thus scatter/plate) to the suggested cycle.
-        window.dispatchEvent(
-          new CustomEvent("goto-cycle", { detail: suggestion.suggested_cycle })
-        );
-      }
-      // "auto" = data-driven, rank-based labeling (handles hets that lean to
-      // one allele instead of sitting at ratio 0.5).
-      const result = await apiRunClustering(sessionId, {
-        algorithm: "auto",
-        cycle,
-        threshold_config: {
-          ntc_threshold: ntcThreshold,
-          ntc_fam_max: useDataStore.getState().ntcCorner?.fam ?? null,
-          ntc_allele2_max: useDataStore.getState().ntcCorner?.allele2 ?? null,
-          allele1_ratio_max: allele1RatioMax,
-          allele2_ratio_min: allele2RatioMin,
-        },
-        n_clusters: nClusters,
-        ploidy: useSettingsStore.getState().ploidy,
-        background: useSettingsStore.getState().backgroundMode,
-        use_rox: useSettingsStore.getState().useRox,
-      });
-      setClusterAssignments(result.assignments);
-      setBoundaries(result.boundaries ?? null);
-      setOffset(result.offset ?? 0);
-      setOffsetUncertain(result.offset_uncertain ?? false);
-      setDosageMax(result.dosage_max ?? null);
-      setLowSeparation(result.low_separation ?? false);
-      setAnalysisWarnings(result.warnings ?? []);
-      setAnalysis(suggestion);
-      // Force scatter/plate to re-fetch so points pick up auto_cluster calls.
-      window.dispatchEvent(new CustomEvent("welltypes-changed"));
-    } catch (err) {
-      setAnalyzeError(err instanceof Error ? err.message : t.analyzeFailed);
-      console.error("Analysis failed:", err);
-    } finally {
-      setAnalyzing(false);
-    }
-  }, [
-    sessionId,
-    currentCycle,
-    ntcThreshold,
-    allele1RatioMax,
-    allele2RatioMin,
-    nClusters,
-    setClusterAssignments,
-    setBoundaries, setDosageMax, setLowSeparation, setOffset, setOffsetUncertain,
-    t,
-  ]);
-
-
-  // Run the analysis automatically the first time a session's data is ready, so
-  // the allele-discrimination plot opens already grouped instead of a raw mess.
-  // Skip if the session was already analysed (don't clobber an existing result).
-  useEffect(() => {
-    if (!sessionId || !currentCycle) return;
-    if (autoRanSession.current === sessionId) return;
-    autoRanSession.current = sessionId;
-    (async () => {
-      // Sync the ploidy selector to the session's stored ploidy so a polyploid
-      // session opens at its own ploidy instead of the default 2.
-      try {
-        const { ploidy: sessionPloidy } = await getPloidy(sessionId);
-        if (sessionPloidy) setPloidy(sessionPloidy);
-      } catch {
-        /* ignore — keep the current selector value */
-      }
-      try {
-        const existing = await getCluster(sessionId);
-        if (existing?.assignments && Object.keys(existing.assignments).length > 0) {
-          setClusterAssignments(existing.assignments);
-          setBoundaries(existing.boundaries ?? null);
-          setOffset(existing.offset ?? 0);
-          setOffsetUncertain(existing.offset_uncertain ?? false);
-          setDosageMax(existing.dosage_max ?? null);
-          setLowSeparation(existing.low_separation ?? false);
-          setAnalysisWarnings(existing.warnings ?? []);
-          if (existing.ploidy) setPloidy(existing.ploidy);
-          return;
-        }
-      } catch {
-        // no existing clustering — fall through to auto-analyse
-      }
-      handleAnalyze();
-    })();
-  }, [sessionId, currentCycle, handleAnalyze, setClusterAssignments, setPloidy, setBoundaries, setDosageMax, setLowSeparation, setOffset, setOffsetUncertain]);
+  const currentRequest = useMemo(() => ({
+    algorithm: "auto" as const, cycle: currentCycle, n_clusters: nClusters,
+    ploidy, background: backgroundMode, use_rox: useRox,
+    threshold_config: { ntc_threshold: ntcThreshold, allele1_ratio_max: allele1RatioMax,
+      allele2_ratio_min: allele2RatioMin, ntc_fam_max: ntcCorner?.fam ?? null,
+      ntc_allele2_max: ntcCorner?.allele2 ?? null },
+  }), [currentCycle, nClusters, ploidy, backgroundMode, useRox, ntcThreshold, allele1RatioMax, allele2RatioMin, ntcCorner]);
+  useCurrentAnalysisRequest(currentRequest, 'analysis');
+  const handleAnalyze = () => analyzeCurrent(currentRequest);
+  const handleRecommended = () => analyzeRecommended(currentRequest, cycle =>
+    window.dispatchEvent(new CustomEvent("goto-cycle", { detail: cycle })));
 
   // Check if any wells are typed as Empty
   const hasEmptyWells = useMemo(
@@ -293,24 +190,6 @@ export function AnalysisTab() {
       <div
         className="flex flex-wrap items-center justify-end gap-3 px-6 py-2"
       >
-        {analysis && !analyzeError && (
-          <span className="text-xs text-text-muted">
-            {analysis.suggested_cycle != null &&
-              t.analyzeSuggestedCycle(
-                (analysis.suggested_low != null &&
-                analysis.suggested_high != null &&
-                analysis.suggested_low !== analysis.suggested_high
-                  ? `${analysis.suggested_low}~${analysis.suggested_high}`
-                  : String(analysis.suggested_cycle)) +
-                  (analysis.suggested_window
-                    ? ` (${stageLabel(analysis.suggested_window)})`
-                    : "")
-              )}
-            {analysis.ntc_onset_cycle != null
-              ? ` · ${t.analyzeNtcOnset(analysis.ntc_onset_cycle)}`
-              : ` · ${t.analyzeNtcNone}`}
-          </span>
-        )}
         {analyzeError && <span className="text-xs text-danger">{analyzeError}</span>}
         <label className="flex items-center gap-1.5 text-xs text-text-muted" title={t.ploidyHint}>
           {t.ploidyLabel}
@@ -318,8 +197,6 @@ export function AnalysisTab() {
             value={ploidy}
             onChange={(e) => {
               setPloidy(Number(e.target.value));
-              // Re-cluster with the new ploidy (handleAnalyze reads it fresh).
-              handleAnalyze();
             }}
             disabled={analyzing || !sessionId}
             className="rounded-md border border-border px-1.5 py-1 text-sm bg-surface cursor-pointer"
@@ -341,7 +218,11 @@ export function AnalysisTab() {
         )}
         {/* Draggable genotype-boundary lines — only meaningful in manual mode */}
         <button
-          onClick={() => setShowBoundaryLines(!showBoundaryLines)}
+          onClick={() => {
+            if (showBoundaryLines) useAnalysisStore.getState().setCurrentRequest(currentRequest);
+            setShowBoundaryLines(!showBoundaryLines);
+          }}
+          data-testid="boundary-mode-toggle"
           disabled={!showManualTypes || !sessionId}
           title={showManualTypes ? t.boundaryLinesHint : t.boundaryLinesManualOnly}
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer disabled:opacity-50 ${
@@ -352,7 +233,9 @@ export function AnalysisTab() {
         >
           <Ruler size={14} aria-hidden="true" /> {t.boundaryLines}
         </button>
+        <button type="button" data-testid="analyze-recommended" onClick={handleRecommended} disabled={analyzing || !sessionId}>추천 사이클 분석</button>
         <button
+          data-testid="analyze-current"
           onClick={handleAnalyze}
           disabled={analyzing || !sessionId}
           title={t.analyzeHint}

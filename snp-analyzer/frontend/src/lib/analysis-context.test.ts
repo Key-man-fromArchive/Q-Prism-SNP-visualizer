@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { AnalysisContext, ResolvedThresholdConfig } from '@/types/api';
 import { compareAnalysisView, inspectResult, resolveAnalysisView } from './analysis-context';
 
+it('distinguishes absolute zero from legacy latest without changing omitted-mode defaults', () => {
+  const request = { algorithm: 'auto' as const, cycle: 0, n_clusters: 4 };
+  const session = { ploidy: 2, cycles: [0, 10, 40], markers: [] };
+  expect(resolveAnalysisView(request, session).cycle).toBe(40);
+  expect(resolveAnalysisView(request, session, 'absolute').cycle).toBe(0);
+});
+
 export const thresholds: ResolvedThresholdConfig = { ntc_threshold: 0.1, ntc_fam_max: null,
   ntc_allele2_max: null, allele1_ratio_max: 0.4, allele2_ratio_min: 0.6,
   boundaries: null, offset: 0, dosage_max: null };

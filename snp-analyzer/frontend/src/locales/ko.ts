@@ -1,6 +1,22 @@
 import type { Translations } from './en';
 
 const ko: Translations = {
+  resultPending: '분석 중 — 이전 완료 결과를 유지합니다.',
+  resultPendingOnly: '분석 중입니다.',
+  resultFailedOnly: '최근 분석에 실패했습니다.',
+  resultReason: (reason: string) => ({ cycle: '사이클', use_rox: '정규화', background: '배경 차감', algorithm: '알고리즘', ploidy: '배수성', n_clusters: '클러스터 수', threshold_config: '임계값 및 수동 경계', regions: '마커 배정 또는 조건' }[reason] ?? '분석 조건'),
+  resultFailed: '최근 분석 실패 — 이전 완료 결과를 유지합니다.',
+  resultMissing: '완료된 분석이 없습니다.',
+  resultLegacy: '이전 형식 결과 — 분석 조건을 알 수 없습니다. 재분석이 필요합니다.',
+  resultIncomplete: '분석 조건 기록이 불완전합니다. 재분석이 필요합니다.',
+  resultInputUnknown: '입력 버전을 확인하지 못했습니다.',
+  resultInputRefreshing: '입력 버전 확인 중…',
+  resultInputStale: '마지막 완료 분석 이후 입력이 변경되었습니다.',
+  resultViewMismatch: '현재 보기와 완료 분석의 조건이 다릅니다:',
+  resultViewUnknown: '현재 분석 조건을 비교할 수 없습니다.',
+  resultMatched: '현재 조건과 완료 분석의 조건이 일치합니다.',
+  resultCycle: (cycle: number) => `마지막 완료 사이클: ${cycle}`,
+  analysisLoadFailed: '분석 세션을 불러오지 못했습니다',
   // Common
   loading: '로딩 중...',
   error: '오류',

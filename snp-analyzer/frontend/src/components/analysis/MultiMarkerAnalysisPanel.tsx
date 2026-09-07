@@ -14,9 +14,14 @@ import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore, ZERO_ORIGIN } from "@/stores/data-store";
-import { getScatter, runClustering, listMarkerCatalog, suggestCycle, type CycleSuggestion } from "@/lib/api";
+import { getScatter, listMarkerCatalog } from "@/lib/api";
+import { analyzeCurrent, analyzeRecommended } from "@/lib/analysis-actions";
+import { useAnalysisStore } from "@/stores/analysis-store";
+import { useNavigationStore } from "@/stores/navigation-store";
+import { useSettledAnalysis } from "@/hooks/use-settled-analysis";
+import { useCurrentAnalysisRequest } from '@/hooks/use-current-analysis-request';
 import { ClusteringAlgorithm } from "@/types/api";
-import type { MarkerCatalogEntry, MarkerRegion, RegionResult } from "@/types/api";
+import type { MarkerCatalogEntry, MarkerRegion } from "@/types/api";
 import { genotypeShortLabel, wellInfo } from "@/lib/genotype";
 import { MARKER_PALETTE } from "@/lib/constants";
 import { dosageTrustForMarker } from "@/lib/marker-catalog";
@@ -55,22 +60,24 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   const sessionId = useSessionStore((s) => s.sessionId);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const isPlaying = useSelectionStore((s) => s.isPlaying);
-  const setClusterAssignments = useDataStore((s) => s.setClusterAssignments);
   const scatterPoints = useDataStore((s) => s.scatterPoints);
   const allele2Dye = useDataStore((s) => s.allele2Dye);
   const roleLabels = useDataStore((s) => s.channelLabels);
   const ratioOrigin = useDataStore((s) => s.ratioOrigin);
   const setScatterData = useDataStore((s) => s.setScatterData);
-  const [regionsById, setRegionsById] = useState<Record<string, RegionResult>>({});
+  const result = useAnalysisStore(state => state.result);
+  const regionsById = useMemo(() => Object.fromEntries((result?.regions ?? []).map(region => [region.id, region])), [result]);
   const useRox = useSettingsStore((s) => s.useRox);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
-  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(
-    markers[0]?.id ?? null
-  );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<CycleSuggestion | null>(null);
-  const clusterRequestRef = useRef(0);
+  const selectedMarkerId = useNavigationStore(state => state.marker);
+  const setSelectedMarkerId = useNavigationStore(state => state.setMarker);
+  const loading = useAnalysisStore(state => state.pending);
+  const analysisError = useAnalysisStore(state => state.error);
+  const error = analysisError instanceof Error ? analysisError.message : null;
+  const inputRevision = useAnalysisStore(state => state.currentInputRevision);
+  const revisionUnconfirmed = useAnalysisStore(state => state.inputRevisionRefreshing || state.inputRevisionError !== null);
+  const restoreStatus = useNavigationStore(state => state.status);
+  const entry = useSessionStore(state => state.entryGeneration);
   const scatterRequestRef = useRef(0);
   const skipAutoClusterCycleRef = useRef<number | null>(null);
   // Per-marker dosage-trust hedge (feat/marker-catalog): fetched once
@@ -92,46 +99,28 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [markers]);
 
-  const markerSignature = useMemo(
-    () => markers.map((m) => `${m.id}:${m.ploidy}:${m.wells.join(",")}`).join("|"),
-    [markers]
-  );
-
-  const runCluster = useCallback(async (cycleOverride?: number) => {
-    if (!sessionId || markers.length === 0) return;
-    const requestId = ++clusterRequestRef.current;
-    setLoading(true);
-    setError(null);
-    try {
-      // No `regions` on the request -> backend clusters the SAVED marker set
-      // (each marker independently, honoring any per-marker manual boundary
-      // override in threshold_config).
-      const result = await runClustering(sessionId, {
-        algorithm: ClusteringAlgorithm.AUTO,
-        cycle: cycleOverride ?? currentCycle ?? 0, // 0 only while CycleControl is initializing
-        n_clusters: 4,
-        background: backgroundMode,
-        use_rox: useRox,
-      });
-      if (requestId !== clusterRequestRef.current) return;
-      const byId: Record<string, RegionResult> = {};
-      for (const r of result.regions ?? []) byId[r.id] = r;
-      setRegionsById(byId);
-      setClusterAssignments(result.assignments ?? {});
-    } catch (err) {
-      if (requestId !== clusterRequestRef.current) return;
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      if (requestId === clusterRequestRef.current) setLoading(false);
-    }
-  }, [sessionId, markers.length, currentCycle, backgroundMode, useRox, setClusterAssignments]);
+  const request = useMemo(() => ({ algorithm: ClusteringAlgorithm.AUTO, cycle: currentCycle,
+    n_clusters: 4, background: backgroundMode, use_rox: useRox }), [currentCycle, backgroundMode, useRox]);
+  useCurrentAnalysisRequest(request, 'analysis');
+  const inputKey = JSON.stringify([request, inputRevision, markers.map(marker =>
+    [marker.id, marker.wells, marker.ploidy, marker.threshold_config])]);
+  const runCluster = useCallback(() => {
+    if (skipAutoClusterCycleRef.current === currentCycle) { skipAutoClusterCycleRef.current = null; return; }
+    void analyzeCurrent(request);
+  }, [request, currentCycle]);
+  useSettledAnalysis(`${sessionId}:${entry}`, inputKey, isPlaying || revisionUnconfirmed, runCluster, restoreStatus === 'ready');
 
   const fetchScatter = useCallback(async () => {
     if (!sessionId) return;
     const requestId = ++scatterRequestRef.current;
+    const ownership = useAnalysisStore.getState();
+    const sessionEntry = useSessionStore.getState().entryGeneration;
     try {
-      const res = await getScatter(sessionId, currentCycle || undefined, useRox, backgroundMode);
+      const res = await getScatter(sessionId, currentCycle, useRox, backgroundMode);
       if (requestId !== scatterRequestRef.current) return;
+      const current = useAnalysisStore.getState();
+      if (current.sessionId !== ownership.sessionId || current.ownerId !== ownership.ownerId
+        || useSessionStore.getState().entryGeneration !== sessionEntry) return;
       setScatterData(
         res.points,
         res.allele2_dye,
@@ -151,38 +140,14 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   // requests on every animation frame.
   useEffect(() => {
     void fetchScatter();
+    return () => { scatterRequestRef.current += 1; };
   }, [fetchScatter]);
 
-  useEffect(() => {
-    if (!currentCycle || isPlaying) return;
-    if (skipAutoClusterCycleRef.current === currentCycle) {
-      skipAutoClusterCycleRef.current = null;
-      return;
-    }
-    const timer = window.setTimeout(() => void runCluster(), 220);
-    return () => window.clearTimeout(timer);
-  }, [runCluster, currentCycle, isPlaying, markerSignature]);
-
-  const handleAnalyze = useCallback(async () => {
-    if (!sessionId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const suggestion = await suggestCycle(sessionId);
-      const cycle = suggestion.suggested_cycle ?? currentCycle;
-      setAnalysis(suggestion);
-      if (suggestion.suggested_cycle) {
-        if (suggestion.suggested_cycle !== currentCycle) {
-          skipAutoClusterCycleRef.current = suggestion.suggested_cycle;
-        }
-        window.dispatchEvent(new CustomEvent("goto-cycle", { detail: suggestion.suggested_cycle }));
-      }
-      await runCluster(cycle);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t.analyzeFailed);
-      setLoading(false);
-    }
-  }, [sessionId, currentCycle, runCluster, t.analyzeFailed]);
+  const handleAnalyze = () => analyzeCurrent(request);
+  const handleRecommended = () => analyzeRecommended(request, cycle => {
+    skipAutoClusterCycleRef.current = cycle;
+    window.dispatchEvent(new CustomEvent("goto-cycle", { detail: cycle }));
+  });
 
   useEffect(() => {
     (async () => {
@@ -238,16 +203,10 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
       <div className="sticky top-0 z-20 border-b border-border bg-surface">
       <CycleControl />
       <div className="flex flex-wrap items-center justify-end gap-3 px-6 py-2">
-        {analysis?.suggested_cycle != null && (
-          <span className="text-xs text-text-muted">
-            {t.analyzeSuggestedCycle(String(analysis.suggested_cycle))}
-            {analysis.ntc_onset_cycle != null
-              ? ` · ${t.analyzeNtcOnset(analysis.ntc_onset_cycle)}`
-              : ` · ${t.analyzeNtcNone}`}
-          </span>
-        )}
+        <button type="button" data-testid="multi-analyze-recommended" onClick={handleRecommended} disabled={loading}>추천 사이클 분석</button>
         <button
           type="button"
+          data-testid="multi-analyze-current"
           onClick={handleAnalyze}
           disabled={loading || !sessionId}
           title={t.analyzeHint}

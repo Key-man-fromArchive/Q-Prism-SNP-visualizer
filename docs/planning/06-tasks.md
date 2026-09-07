@@ -262,7 +262,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P2-S1-T1: 단일·다중 마커 분석 상태 연결
 
-- Status: IN_PROGRESS
+- Status: DONE
 - 담당: frontend-specialist
 - Depends On: [P1-S0-V]
 - Write Scope: SRC/App.tsx, SRC/components/의 분석 Workspace·AnalysisTab·MultiMarker·CycleControl, 관련 stores/hooks·locales 및 테스트. 기존 SettingsTab·ScatterPlot 분석 진입점과 UploadZone·Batch의 신규/기존 세션 진입 구분도 공통 상태 연결에 필요한 범위만 포함한다(화면 재설계·과학 계산 변경 제외).
@@ -271,9 +271,13 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - 구현: 현재 사이클 재분석과 추천 사이클 분석을 구분한다. 재생/복원 중 자동 분석을 막고 역순 응답을 폐기한다. 탐색 상태를 navigation-store로 이전하되 URL 복원 IO는 P3에서 연결한다.
 - 검증: 빠른 연속 변경, 늦은 응답, 실패 후 재실행, 보기 전용 변경, ROX/배경/마커 조건 변경의 컴포넌트 테스트. FE-ALL, FE-CHECK.
 - 추가 검증: 세션 조회의 sparse/zero 사이클 목록·접근 권한 backend 테스트와 실제 사이클 기반 초기화·복원 FE 테스트. 서버 응답 변경은 P2 게이트에서 BE-ALL로 재검증한다.
-- [ ] AC: 표시된 조건과 완료 결과의 관계가 명확하고, 오래된 응답이 최신 결과를 덮어쓰지 않음.
+- 호환성 보완: scatter/plate/clustering에 선택적 `cycle_mode=absolute`를 추가한다. P2 실제 선택 사이클은 절대 좌표로 전달하고 모드 생략은 기존 0→마지막 의미를 유지한다. 공통 cycle resolver·ClusteringRequest·data/clustering router·PlateView와 관련 테스트를 범위에 포함한다.
+- 검증 기록: [P2-S1-T1 evidence](ui-ux-overhaul/evidence/P2-S1-T1.md). 독립 코드 리뷰 및 Chromium P5 14/14·P2 smoke PASS.
+- [x] AC: 표시된 조건과 완료 결과의 관계가 명확하고, 오래된 응답이 최신 결과를 덮어쓰지 않음.
 
 ### P2-S2-T1: QC 상태·마커별 결과 표시
+
+- P2-S1 후속 계약: 선택한 실제 cycle 0을 QC 요청에서도 `cycle_mode=absolute`로 전달하고 공유 resolver를 적용한다. 모드 생략 시 기존 0→마지막 cycle 호환성을 유지한다.
 
 - Status: TODO
 - 담당: frontend-specialist
@@ -285,6 +289,8 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - [ ] AC: UX-01 상태 행렬 전체를 KO/EN으로 확인하고 서버 판정과 화면이 일치함.
 
 ### P2-S3-T1: 출력 버전 선택·활성 차트 PNG
+
+- P2-S1 후속 계약: CSV/PDF/XLSX/ASG의 명시적 실제 cycle 0에도 `cycle_mode=absolute`를 연결한다. 모드 생략의 기존 0→마지막 cycle 의미는 유지하며, cycle 생략으로 저장된 context.cycle을 선택하는 출력은 이미 안전하다.
 
 - Status: TODO
 - 담당: frontend-specialist

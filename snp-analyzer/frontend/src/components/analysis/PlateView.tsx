@@ -6,6 +6,7 @@ import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useDataStore } from '@/stores/data-store';
+import { useAnalysisStore } from '@/stores/analysis-store';
 import { getPlate } from '@/lib/api';
 import { WELL_TYPE_INFO } from '@/lib/constants';
 import { wellInfo, dosageOfLabel } from '@/lib/genotype';
@@ -31,6 +32,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   const { t } = useI18n();
   const dark = useIsDarkMode();
   const panelRef = useRef<HTMLDivElement>(null);
+  const requestSequence = useRef(0);
   const gridRef = useRef<HTMLDivElement>(null);
 
   // Stores
@@ -77,7 +79,14 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
 
   // Fetch plate data when dependencies change
   const fetchPlateData = useCallback(async () => {
-    if (!sessionId || !currentCycle) {
+    const sequence = ++requestSequence.current;
+    const owner = useAnalysisStore.getState();
+    const entry = useSessionStore.getState().entryGeneration;
+    const isCurrent = () => sequence === requestSequence.current
+      && entry === useSessionStore.getState().entryGeneration
+      && owner.ownerId === useAnalysisStore.getState().ownerId
+      && owner.sessionId === useAnalysisStore.getState().sessionId;
+    if (!sessionId) {
       setStatus("loading");
       return;
     }
@@ -85,9 +94,11 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
     setFetchError(null);
     try {
       const res = await getPlate(sessionId, currentCycle, useRox, backgroundMode);
+      if (!isCurrent()) return;
       setPlateData(res.wells);
       setStatus("ready");
     } catch (error) {
+      if (!isCurrent()) return;
       console.error('Failed to fetch plate data:', error);
       setFetchError(error instanceof Error ? error.message : String(error));
       setStatus("error");
@@ -98,6 +109,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
     // Network completion, not this effect body, performs the state update.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchPlateData();
+    return () => { requestSequence.current += 1; };
   }, [fetchPlateData, refetchTrigger]);
 
   const { plateRows, plateCols, isWellVisible } = useWellFilter();

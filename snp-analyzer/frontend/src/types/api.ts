@@ -356,6 +356,7 @@ export type AnalysisStatus = 'idle' | 'computing' | 'completed' | 'failed';
 export type InputRevision = { input_revision: number };
 export type ExpectedRevision = { expected_input_revision?: number };
 export type SessionInfoResponse = UploadResponse & InputRevision & {
+  cycles: number[];
   analysis_status: AnalysisStatus;
   analysis_pending: boolean;
 };
