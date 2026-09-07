@@ -15,6 +15,7 @@ from app.auth import CurrentUser
 from app.reporting.result_snapshot import (
     ExportOptions, ResultRow, ResultSnapshot, capture_result_snapshot, snapshot_rows,
 )
+from app.processing.cycle_selection import CycleMode
 
 router = APIRouter()
 
@@ -130,13 +131,14 @@ async def export_csv(
     sid: str,
     current_user: CurrentUser,
     cycle: int | None = Query(default=None, ge=0),
+    cycle_mode: CycleMode = Query(default="legacy_latest"),
     use_rox: bool | None = Query(default=None),
     background: BackgroundMode | None = Query(default=None),
     result_revision: UUID | None = Query(default=None),
 ) -> StreamingResponse:
     """Download the latest validated whole-run result, using stored conditions."""
     snapshot = capture_result_snapshot(
-        sid, current_user, ExportOptions(result_revision, cycle, use_rox, background),
+        sid, current_user, ExportOptions(result_revision, cycle, use_rox, background, cycle_mode),
     )
     content = render_snapshot_csv(snapshot)
     filename = f"snp_export_whole-run_cycle{snapshot.context.cycle}.csv"
@@ -153,13 +155,14 @@ async def export_xlsx(
     use_rox: bool | None = Query(default=None),
     background: BackgroundMode | None = Query(default=None),
     cycle: int | None = Query(default=None, ge=0),
+    cycle_mode: CycleMode = Query(default="legacy_latest"),
     result_revision: UUID | None = Query(default=None),
 ):
     from fastapi.responses import Response
     from app.reporting.snapshot_xlsx import build_snapshot_xlsx
 
     snapshot = capture_result_snapshot(
-        sid, current_user, ExportOptions(result_revision, cycle, use_rox, background),
+        sid, current_user, ExportOptions(result_revision, cycle, use_rox, background, cycle_mode),
     )
     return Response(
         build_snapshot_xlsx(snapshot),

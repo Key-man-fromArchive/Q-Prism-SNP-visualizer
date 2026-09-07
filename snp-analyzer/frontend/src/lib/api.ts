@@ -248,7 +248,7 @@ export async function exportPdf(
   cycle?: number,
   resultRevision?: string
 ): Promise<Blob> {
-  const query = buildQuery({ cycle, use_rox: useRox, background, result_revision: resultRevision });
+  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background, result_revision: resultRevision });
   return blobFetch(`/api/data/${sid}/export/pdf${query}`);
 }
 
@@ -259,7 +259,7 @@ export async function exportXlsx(
   cycle?: number,
   resultRevision?: string
 ): Promise<Blob> {
-  const query = buildQuery({ cycle, use_rox: useRox, background, result_revision: resultRevision });
+  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background, result_revision: resultRevision });
   return blobFetch(`/api/data/${sid}/export/xlsx${query}`);
 }
 
@@ -588,7 +588,7 @@ export async function exportCsv(
   background?: BackgroundMode,
   resultRevision?: string
 ): Promise<Blob> {
-  const query = buildQuery({ cycle, use_rox: useRox, background, result_revision: resultRevision });
+  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background, result_revision: resultRevision });
   return blobFetch(`/api/data/${sid}/export/csv${query}`);
 }
 
@@ -942,6 +942,7 @@ export async function saveAsgResult(
     body: JSON.stringify({
       session_id: sid,
       selected_cycle: selectedCycle,
+      cycle_mode: selectedCycle === undefined ? undefined : 'absolute',
       use_rox: useRox,
       background,
       result_revision: resultRevision,

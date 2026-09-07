@@ -14,10 +14,14 @@ import { plotlyColors } from "@/lib/plotly-theme";
 import { channelLabels } from "@/lib/channel-labels";
 import { axisRangeLayout, dataBounds, visibleBounds } from "@/lib/scatter-axes";
 import { updateMarker } from "@/lib/api";
+import { clearActiveChart, setActiveChart } from "@/lib/chart-export-registry";
 import { completeThresholdConfig } from "@/lib/threshold-config";
 import { useDataStore, ZERO_ORIGIN } from "@/stores/data-store";
+import { useAnalysisStore } from "@/stores/analysis-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useSessionStore } from "@/stores/session-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { useIsDarkMode } from "@/hooks/use-dark-mode";
 import { ScatterViewControls } from "./ScatterViewControls";
 import type {
@@ -43,6 +47,7 @@ type MarkerScatterPlotProps = {
   marker: MarkerRegion;
   region: RegionResult | undefined;
   points: ScatterPoint[]; // whole-plate scatter points (filtered internally to marker.wells)
+  scatterProvenance: { cycle: number; useRox: boolean; backgroundMode: 'none' | 'pre_read' | 'channel_min' } | null;
   // Origin the boundary rays and the drag math measure their fam-fraction
   // from. The points are raw RFU, so on endpoint data this is not (0, 0) --
   // see app/processing/ratio_origin.py.
@@ -57,6 +62,7 @@ export function MarkerScatterPlot({
   marker,
   region,
   points,
+  scatterProvenance,
   ratioOrigin,
   allele2Dye,
   roleLabels,
@@ -72,6 +78,7 @@ export function MarkerScatterPlot({
   }, [origin]);
   const plotRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
+  const exportRender = useRef(0);
   const eventsBound = useRef(false);
   const selectedWells = useSelectionStore((s) => s.selectedWells);
   const focusSelectedWells = useSelectionStore((s) => s.focusSelectedWells);
@@ -433,10 +440,31 @@ export function MarkerScatterPlot({
       // zoom first, whichever tool a drag is bound to.
       modeBarButtonsToRemove: ["toImage", "sendDataToCloud"],
     };
+    const token = ++exportRender.current;
+    clearActiveChart(plotRef.current as HTMLDivElement);
+    const revision = useAnalysisStore.getState().result?.analysis_context?.result_revision;
+    const analysedAt = useAnalysisStore.getState().result?.analysis_context?.analysed_at;
+    const entry = useSessionStore.getState().entryGeneration;
+    const ownerId = useAuthStore.getState().user?.id;
+    const publishExport = (element: HTMLDivElement) => {
+      if (token !== exportRender.current || !revision || !scatterProvenance
+        || useSessionStore.getState().entryGeneration !== entry
+        || useAuthStore.getState().user?.id !== ownerId
+        || useAnalysisStore.getState().result?.analysis_context?.result_revision !== revision) return;
+      const wells = scopedPoints.map(point => point.well).sort().join(',');
+      setActiveChart({ element, sessionId, resultRevision: revision,
+        cycle: scatterProvenance.cycle, useRox: scatterProvenance.useRox, backgroundMode: scatterProvenance.backgroundMode, entry, ownerId,
+        caption: `marker ${marker.name}; cycle ${scatterProvenance.cycle}; ${scatterProvenance.useRox ? 'reference requested' : 'raw basis'}; background ${scatterProvenance.backgroundMode}; visible wells ${wells}; revision ${revision}; analysed ${analysedAt ?? 'unknown'}`,
+        // The marker scope can be re-rendered by selected-only, boundaries,
+        // assignments or chart settings without a new result revision. A PNG
+        // must be tied to this immutable render, not just its result context.
+        identity: `marker:${sessionId}:${entry}:${revision}:${scatterProvenance.cycle}:${scatterProvenance.useRox}:${scatterProvenance.backgroundMode}:${marker.id}:${token}:${wells}` });
+    };
 
     if (!initialized.current) {
       Plotly.newPlot(plotRef.current, traces, layout, config).then(() => {
         initialized.current = true;
+        if (plotRef.current) publishExport(plotRef.current);
         const gd = plotRef.current as PlotlyGraphDiv & {
           on?: (
             name: string,
@@ -472,7 +500,8 @@ export function MarkerScatterPlot({
         });
       });
     } else {
-      Plotly.react(plotRef.current, traces, layout, config);
+      const element = plotRef.current;
+      void Promise.resolve(Plotly.react(element, traces, layout, config)).then(() => publishExport(element));
     }
   }, [
     scopedPoints,
@@ -483,6 +512,7 @@ export function MarkerScatterPlot({
     allele2Dye,
     roleLabels,
     marker.id,
+    marker.name,
     selectedWellSet,
     effectiveNtc,
     selectWell,
@@ -499,7 +529,11 @@ export function MarkerScatterPlot({
     yMin,
     yMax,
     dark,
+    sessionId,
+    scatterProvenance,
   ]);
+
+  useEffect(() => () => { if (plotRef.current) clearActiveChart(plotRef.current); }, []);
 
   // Drag a radial boundary line; persists to the marker's threshold_config on
   // release (PUT /markers/{id}) then asks the parent to re-cluster so the

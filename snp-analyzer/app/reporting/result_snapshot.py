@@ -21,6 +21,7 @@ from app.models import (
 from app.processing.analysis_state import analysis_status, input_lock
 from app.processing.background import BackgroundMode, available_background_modes
 from app.processing.normalize import normalize_for_cycle
+from app.processing.cycle_selection import CycleMode, resolve_cycle
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ class ExportOptions:
     cycle: int | None = None
     use_rox: bool | None = None
     background: BackgroundMode | None = None
+    cycle_mode: CycleMode = "legacy_latest"
 
 
 @dataclass(frozen=True)
@@ -117,8 +119,8 @@ def _conflict(code: str, message: str, revision: int) -> NoReturn:
 
 def _validate_domain(data: UnifiedData, options: ExportOptions) -> int | None:
     cycle = options.cycle
-    if cycle == 0:
-        cycle = max(data.cycles)
+    if cycle is not None:
+        cycle = resolve_cycle(data.cycles, cycle, options.cycle_mode)
     if cycle is not None and cycle not in data.cycles:
         raise HTTPException(400, "Cycle not available")
     if options.background is not None and options.background not in available_background_modes(data):

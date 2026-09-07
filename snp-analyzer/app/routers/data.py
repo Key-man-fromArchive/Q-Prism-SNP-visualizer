@@ -285,6 +285,7 @@ async def export_pdf(
     use_rox: bool | None = Query(default=None),
     background: BackgroundMode | None = Query(default=None),
     cycle: int | None = Query(default=None, ge=0),
+    cycle_mode: CycleMode = Query(default="legacy_latest"),
     result_revision: UUID | None = Query(default=None),
 ):
     from fastapi.responses import Response
@@ -292,7 +293,7 @@ async def export_pdf(
     from app.reporting.snapshot_pdf import build_snapshot_pdf
 
     snapshot = capture_result_snapshot(
-        sid, current_user, ExportOptions(result_revision, cycle, use_rox, background),
+        sid, current_user, ExportOptions(result_revision, cycle, use_rox, background, cycle_mode),
     )
     return Response(
         build_snapshot_pdf(snapshot), media_type="application/pdf",

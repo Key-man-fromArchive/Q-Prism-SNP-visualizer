@@ -2,6 +2,7 @@
 import csv
 import io
 import os
+from uuid import UUID
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -44,6 +45,48 @@ def test_report_rejects_unverified_conditions(plate: SimpleNamespace, extension:
     response = plate.client.get(f"/api/data/export/export/{extension}{query}")
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == code
+
+
+@pytest.mark.parametrize("extension", ["csv", "pdf", "xlsx"])
+def test_explicit_absolute_zero_is_not_legacy_latest(plate: SimpleNamespace, extension: str) -> None:
+    response = plate.client.get(f"/api/data/export/export/{extension}?cycle=0&cycle_mode=absolute")
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "EXPORT_CONDITION_MISMATCH"
+
+
+@pytest.mark.parametrize("extension", ["csv", "pdf", "xlsx"])
+def test_sparse_actual_zero_is_exported_with_absolute_mode(plate: SimpleNamespace, extension: str) -> None:
+    clustered = plate.client.post("/api/data/export/cluster", json={
+        "cycle": 0, "cycle_mode": "absolute", "use_rox": False, "algorithm": "threshold",
+    })
+    assert clustered.status_code == 200, clustered.text
+    revision = clustered.json()["analysis_context"]["result_revision"]
+    response = plate.client.get(
+        f"/api/data/export/export/{extension}?cycle=0&cycle_mode=absolute&result_revision={revision}"
+    )
+    assert response.status_code == 200, response.text
+    assert "cycle0" in response.headers["content-disposition"]
+
+
+def test_asg_snapshot_uses_sparse_actual_zero_with_absolute_mode(plate: SimpleNamespace) -> None:
+    from app.asg_result import build_result_snapshot
+    from app.auth import TokenData
+
+    clustered = plate.client.post("/api/data/export/cluster", json={
+        "cycle": 0, "cycle_mode": "absolute", "use_rox": False, "algorithm": "threshold",
+    })
+    assert clustered.status_code == 200, clustered.text
+    revision = clustered.json()["analysis_context"]["result_revision"]
+    _bind_report_asg()
+
+    payload = build_result_snapshot(
+        "export", user=TokenData(user_id="u", username="u", role="user"), selected_cycle=0,
+        cycle_mode="absolute", result_revision=UUID(revision),
+    )
+
+    assert payload["selected_cycle"] == 0
+    assert payload["result"]["analysis_context"]["cycle"] == 0
+    assert payload["result"]["analysis_context"]["result_revision"] == revision
 
 
 def test_xlsx_values_match_csv_and_contain_plot(plate: SimpleNamespace) -> None:

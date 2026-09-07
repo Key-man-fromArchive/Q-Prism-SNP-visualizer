@@ -124,6 +124,11 @@ const en = {
   pdfExportFailed: 'PDF export',
   xlsxExportFailed: 'XLSX export',
   exportFailed: (label: string, msg: string) => `${label} failed: ${msg}`,
+  exportMismatchTitle: 'Analysis conditions changed',
+  exportMismatchDescription: 'The current view differs from the completed result. Reanalyze current conditions, export the verified stored result, or cancel.',
+  exportReanalyzeCurrent: 'Reanalyze current',
+  exportStoredResult: 'Export stored result',
+  exportStoredPngUnavailable: 'PNG must be rendered for the stored view; reanalyze current conditions first.',
 
   // Login
   loginTitle: 'SNP Discrimination Analyzer',

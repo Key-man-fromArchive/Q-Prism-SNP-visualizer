@@ -95,7 +95,7 @@ describe('API error contract', () => {
     const fetcher = vi.fn().mockResolvedValue(new Response('csv'));
     vi.stubGlobal('fetch', fetcher);
     await api.exportCsv('s', 0, false, 'none', 'revision');
-    expect(fetcher.mock.calls[0][0]).toContain('cycle=0&use_rox=false&background=none&result_revision=revision');
+    expect(fetcher.mock.calls[0][0]).toContain('cycle=0&cycle_mode=absolute&use_rox=false&background=none&result_revision=revision');
   });
   it('sends mutation revisions in bodies and DELETE query', async () => {
     const fetcher = vi.fn().mockImplementation(() => Promise.resolve(new Response('{}')));
@@ -115,8 +115,8 @@ describe('API error contract', () => {
     vi.stubGlobal('fetch', fetcher);
     await api.exportPdf('s', false, 'none', 0, 'r');
     await api.exportXlsx('s', false, 'none', 0, 'r');
-    for (const call of fetcher.mock.calls) expect(call[0]).toContain('cycle=0&use_rox=false&background=none&result_revision=r');
+    for (const call of fetcher.mock.calls) expect(call[0]).toContain('cycle=0&cycle_mode=absolute&use_rox=false&background=none&result_revision=r');
     await api.saveAsgResult('s', 0, false, 'none', 'r');
-    expect(JSON.parse(fetcher.mock.calls[2][1].body)).toEqual({ session_id: 's', selected_cycle: 0, use_rox: false, background: 'none', result_revision: 'r' });
+    expect(JSON.parse(fetcher.mock.calls[2][1].body)).toEqual({ session_id: 's', selected_cycle: 0, cycle_mode: 'absolute', use_rox: false, background: 'none', result_revision: 'r' });
   });
 });

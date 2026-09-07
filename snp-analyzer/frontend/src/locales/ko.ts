@@ -126,6 +126,11 @@ const ko: Translations = {
   pdfExportFailed: 'PDF 내보내기',
   xlsxExportFailed: 'XLSX 내보내기',
   exportFailed: (label: string, msg: string) => `${label} 실패: ${msg}`,
+  exportMismatchTitle: '분석 조건이 변경되었습니다',
+  exportMismatchDescription: '현재 보기가 완료된 결과와 다릅니다. 현재 조건을 재분석하거나, 확인된 저장 결과를 내보내거나, 취소하세요.',
+  exportReanalyzeCurrent: '현재 조건 재분석',
+  exportStoredResult: '저장 결과 내보내기',
+  exportStoredPngUnavailable: 'PNG는 저장된 보기를 렌더링해야 합니다. 먼저 현재 조건을 재분석하세요.',
 
   // Login
   loginTitle: 'SNP 판별 분석기',

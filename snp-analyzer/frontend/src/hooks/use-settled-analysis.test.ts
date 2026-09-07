@@ -43,3 +43,22 @@ it('skips first ready, coalesces changes, pauses playback, and ignores the previ
   act(() => vi.advanceTimersByTime(220));
   expect(analyze).toHaveBeenCalledTimes(2);
 });
+
+it('consumes an export-restoration input change so unpausing cannot analyse the restored view', () => {
+  vi.useFakeTimers();
+  const analyze = vi.fn();
+  const { rerender } = renderHook(({ input, paused, consume }) =>
+    useSettledAnalysis('same-session', input, paused, analyze, true, consume), {
+    initialProps: { input: 'cycle:20', paused: true, consume: true },
+  });
+  // Stored PNG switches the view while automatic analysis is intentionally held.
+  rerender({ input: 'cycle:40', paused: true, consume: true });
+  rerender({ input: 'cycle:40', paused: false, consume: false });
+  act(() => { vi.advanceTimersByTime(260); });
+  expect(analyze).not.toHaveBeenCalled();
+
+  // A genuine later edit still uses the normal settled scheduler.
+  rerender({ input: 'cycle:41', paused: false, consume: false });
+  act(() => { vi.advanceTimersByTime(260); });
+  expect(analyze).toHaveBeenCalledTimes(1);
+});

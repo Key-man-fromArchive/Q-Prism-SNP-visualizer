@@ -77,6 +77,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   const inputRevision = useAnalysisStore(state => state.currentInputRevision);
   const revisionUnconfirmed = useAnalysisStore(state => state.inputRevisionRefreshing || state.inputRevisionError !== null);
   const restoreStatus = useNavigationStore(state => state.status);
+  const exportRestoring = useNavigationStore(state => state.exportRestoring);
   const entry = useSessionStore(state => state.entryGeneration);
   const scatterRequestRef = useRef(0);
   const skipAutoClusterCycleRef = useRef<number | null>(null);
@@ -85,6 +86,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   // PlateSetupTab.tsx. A fetch failure never blocks analysis -- an unknown
   // catalog state just falls back to the honest "putative" default.
   const [catalogEntries, setCatalogEntries] = useState<MarkerCatalogEntry[]>([]);
+  const [scatterProvenance, setScatterProvenance] = useState<{ cycle: number; useRox: boolean; backgroundMode: typeof backgroundMode } | null>(null);
 
   // Keep the selection valid if the marker set changes (e.g. a marker is
   // renamed/removed on the Plate Setup surface).
@@ -108,7 +110,10 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     if (skipAutoClusterCycleRef.current === currentCycle) { skipAutoClusterCycleRef.current = null; return; }
     void analyzeCurrent(request);
   }, [request, currentCycle]);
-  useSettledAnalysis(`${sessionId}:${entry}`, inputKey, isPlaying || revisionUnconfirmed, runCluster, restoreStatus === 'ready');
+  useSettledAnalysis(
+    `${sessionId}:${entry}`, inputKey, isPlaying || revisionUnconfirmed || exportRestoring,
+    runCluster, restoreStatus === 'ready', exportRestoring,
+  );
 
   const fetchScatter = useCallback(async () => {
     if (!sessionId) return;
@@ -130,6 +135,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
         // The plot titles its axes off this, not off the `use_rox` request.
         { applied: res.normalization_applied, roxOutlierWells: res.rox_outlier_wells }
       );
+      setScatterProvenance({ cycle: res.cycle, useRox, backgroundMode: res.background_mode ?? backgroundMode });
     } catch (err) {
       console.error("Failed to fetch scatter data:", err);
     }
@@ -369,6 +375,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                   marker={selectedMarker}
                   region={selectedRegion}
                   points={scatterPoints}
+                  scatterProvenance={scatterProvenance}
                   ratioOrigin={ratioOrigin}
                   allele2Dye={allele2Dye}
                   roleLabels={roleLabels}

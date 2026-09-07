@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MultiMarkerAnalysisPanel } from './MultiMarkerAnalysisPanel';
 import { getScatter, runClustering, suggestCycle } from '@/lib/api';
 import { useDataStore } from '@/stores/data-store';
@@ -26,6 +26,7 @@ beforeEach(() => {
   useNavigationStore.setState({ status: 'ready' });
   useSelectionStore.getState().setCycle(20);
 });
+afterEach(() => vi.useRealTimers());
 it('does not publish detached scatter points after unmount and session replacement', async () => {
   let resolve!: (value: Awaited<ReturnType<typeof getScatter>>) => void;
   vi.mocked(getScatter).mockReturnValueOnce(new Promise(done => { resolve = done; }));
@@ -49,4 +50,26 @@ it('requests zero without replacing it with an omitted cycle', async () => {
   useSelectionStore.setState({ currentCycle: 0 });
   render(<MultiMarkerAnalysisPanel markers={markers} />);
   await waitFor(() => expect(getScatter).toHaveBeenCalledWith('multi', 0, expect.any(Boolean), expect.any(String)));
+});
+it('keeps scatter rendering live, consumes the restored cycle, and only analyses a later genuine edit', async () => {
+  vi.useFakeTimers();
+  useNavigationStore.getState().setExportRestoring(true);
+  render(<MultiMarkerAnalysisPanel markers={markers} />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(260); });
+  expect(getScatter).toHaveBeenCalled();
+  expect(runClustering).not.toHaveBeenCalled();
+  // The stored result moves 20 -> 40 while export suppression is active.
+  act(() => useSelectionStore.getState().setCycle(40));
+  await act(async () => { await vi.advanceTimersByTimeAsync(260); });
+  expect(runClustering).not.toHaveBeenCalled();
+  useNavigationStore.getState().setExportRestoring(false);
+  await act(async () => { await vi.advanceTimersByTimeAsync(260); });
+  expect(runClustering).not.toHaveBeenCalled();
+  // Only a later operator change is a new automatic-analysis request.
+  act(() => useSelectionStore.getState().setCycle(21));
+  await act(async () => { await vi.advanceTimersByTimeAsync(260); });
+  expect(runClustering).toHaveBeenCalled();
+  useNavigationStore.getState().setExportRestoring(true);
+  useNavigationStore.getState().beginRestore('replacement');
+  expect(useNavigationStore.getState().exportRestoring).toBe(false);
 });

@@ -293,7 +293,8 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 - P2-S1 후속 계약: CSV/PDF/XLSX/ASG의 명시적 실제 cycle 0에도 `cycle_mode=absolute`를 연결한다. 모드 생략의 기존 0→마지막 cycle 의미는 유지하며, cycle 생략으로 저장된 context.cycle을 선택하는 출력은 이미 안전하다.
 
-- Status: TODO
+- Status: DONE
+- Evidence: [P2-S3-T1](ui-ux-overhaul/evidence/P2-S3-T1.md). Independent source review and final Chromium gate PASS; layer-specific caveats are recorded in the evidence.
 - 담당: frontend-specialist
 - Depends On: [P2-S2-T1]
 - Write Scope: SRC/hooks/의 export, SRC/components/의 출력 메뉴·대화상자·ScatterPlot, 관련 lib/locales, tests/18-result-consistency.spec.ts
@@ -301,7 +302,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - 구현: 화면 20/결과 40 불일치에서 재분석 20 후 출력·저장 결과 40 출력·취소를 제공한다. 후자는 화면 20 유지, PNG만 확인 후 결과 40 화면을 렌더하고 출력한다. 입력 revision 변경/legacy에는 이전 결과 출력을 허용하지 않는다.
 - 구현: 계산 중 비활성화, 409 재확인, 다운로드 실패/재시도, 조건·버전·시각 metadata/caption을 연결한다.
 - 검증: 실제 다운로드 CSV/PDF/XLSX의 값·자료형·metadata, PNG 비어 있지 않음/활성 마커/caption. 단일·다중, ROX/배경, 20/40, pending/409/legacy를 테스트한다.
-- [ ] AC: UX-02 C의 선택별 화면·파일 동작이 일치하며 선택 웰 필터가 전체 런 출력을 축소하지 않음.
+- [x] AC: UX-02 C의 선택별 화면·파일 동작이 일치하며 선택 웰 필터가 전체 런 출력을 축소하지 않음.
 
 ### P2-S4-T1: 포커스별 키보드 계약
 

@@ -251,6 +251,9 @@ class ASGResultSaveTest(unittest.TestCase):
                 client.cookies.set("snp_auth", create_access_token("asg-1", "owner@example.com", "user"))
                 _verified_asg_result("sid-1")
                 response = client.post("/api/asg/save-result", json={"session_id": "sid-1", "selected_cycle": 2})
+                negative = client.post("/api/asg/save-result", json={"session_id": "sid-1", "selected_cycle": -1})
+                self.assertEqual(negative.status_code, 422)
+                self.assertEqual(mock_post.call_count, 1)
 
             posted_payloads.append(mock_post.call_args.args[0])
 

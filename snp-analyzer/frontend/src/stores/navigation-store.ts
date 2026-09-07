@@ -80,6 +80,8 @@ interface NavigationState extends NavigationValue {
   availableCycles: number[];
   setAvailableCycles: (cycles: number[]) => void;
   generation: number; status: 'restoring' | 'ready' | 'error'; reasons: string[]; error: string | null;
+  exportRestoring: boolean;
+  setExportRestoring: (value: boolean) => void;
   beginRestore: (session: string) => number;
   complete: (generation: number, result: ValidatedNavigation) => boolean;
   fail: (generation: number, error: string) => boolean;
@@ -92,16 +94,17 @@ interface NavigationState extends NavigationValue {
 /** Foundation only: no location/sessionStorage effects and no analysis side effects. */
 export function createNavigationStore() {
   return create<NavigationState>((set, get) => ({
-    ...initial, generation: 0, status: 'ready', reasons: [], error: null,
+    ...initial, generation: 0, status: 'ready', reasons: [], error: null, exportRestoring: false,
     availableCycles: [],
     setAvailableCycles: cycles => set({ availableCycles: [...cycles] }),
     setTab: tab => set({ tab }),
     setSurface: surface => set({ surface }),
     setCycle: cycle => set({ cycle }),
     setMarker: marker => set({ marker }),
+    setExportRestoring: value => set({ exportRestoring: value }),
     beginRestore: session => {
       const generation = get().generation + 1;
-      set({ ...initial, session, generation, status: 'restoring', reasons: [], error: null, availableCycles: [] });
+      set({ ...initial, session, generation, status: 'restoring', reasons: [], error: null, availableCycles: [], exportRestoring: false });
       return generation;
     },
     complete: (generation, result) => {
@@ -113,7 +116,7 @@ export function createNavigationStore() {
       if (get().generation !== generation) return false;
       set({ status: 'error', error, generation: generation + 1 }); return true;
     },
-    clear: () => set({ ...initial, status: 'ready', reasons: [], error: null, availableCycles: [], generation: get().generation + 1 }),
+    clear: () => set({ ...initial, status: 'ready', reasons: [], error: null, availableCycles: [], exportRestoring: false, generation: get().generation + 1 }),
   }));
 }
 export const useNavigationStore = createNavigationStore();

@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import Plotly from "plotly.js-dist-min";
 import type { Data, Layout, Config, Shape, PlotlyHTMLElement, PlotMouseEvent, PlotSelectionEvent } from "plotly.js";
 import { useSessionStore } from "@/stores/session-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
@@ -20,6 +21,7 @@ import { StatusState } from "@/components/shared/ui";
 import { ScatterViewControls } from "./ScatterViewControls";
 import type { ScatterPoint } from "@/types/api";
 import { clientPoint, textCustomdata, type PlotlyAxis } from "@/lib/plot-coordinates";
+import { clearActiveChart, setActiveChart } from "@/lib/chart-export-registry";
 
 type PlotlyGraphDiv = HTMLDivElement & {
   _fullLayout?: { xaxis?: PlotlyAxis; yaxis?: PlotlyAxis };
@@ -66,6 +68,7 @@ export function ScatterPlot() {
   const dark = useIsDarkMode();
   const plotRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
+  const exportRender = useRef(0);
 
   const sessionId = useSessionStore((s) => s.sessionId);
   const useRox = useSettingsStore((s) => s.useRox);
@@ -205,6 +208,8 @@ export function ScatterPlot() {
   const fetchKey = JSON.stringify([sessionId, currentCycle, useRox, backgroundMode, refetchTrigger]);
   const { status, setStatus, fetchError, setFetchError } = useScatterStatus(fetchKey, sessionId);
   const fetchRevision = useRef(0);
+  const settledFetchKey = useRef<string | null>(null);
+  const settledResponse = useRef<{ cycle: number; useRox: boolean; backgroundMode: typeof backgroundMode } | null>(null);
 
   // Fetch scatter data
   const fetchData = useCallback(() => {
@@ -212,6 +217,8 @@ export function ScatterPlot() {
     if (!sessionId) return;
     return getScatter(sessionId, currentCycle, useRox, backgroundMode).then((res) => {
       if (revision !== fetchRevision.current) return;
+      settledFetchKey.current = fetchKey;
+      settledResponse.current = { cycle: res.cycle, useRox, backgroundMode: res.background_mode ?? backgroundMode };
       setScatterData(res.points, res.allele2_dye, res.channel_labels, res.ratio_origin, {
         applied: res.normalization_applied,
         roxOutlierWells: res.rox_outlier_wells,
@@ -223,7 +230,7 @@ export function ScatterPlot() {
       setFetchError(err instanceof Error ? err.message : String(err));
       setStatus("error");
     });
-  }, [sessionId, currentCycle, useRox, backgroundMode, setScatterData, setStatus, setFetchError]);
+  }, [sessionId, currentCycle, useRox, backgroundMode, fetchKey, setScatterData, setStatus, setFetchError]);
 
   useEffect(() => {
     void fetchData();
@@ -232,7 +239,19 @@ export function ScatterPlot() {
 
   // Build and render traces
   useEffect(() => {
-    if (!plotRef.current || scatterPoints.length === 0) return;
+    const token = ++exportRender.current;
+    if (!plotRef.current || scatterPoints.length === 0) {
+      if (plotRef.current) clearActiveChart(plotRef.current);
+      return;
+    }
+    // Do not relabel the previous response with controls whose request is
+    // still in flight. The chart becomes exportable only after this exact
+    // response has supplied the displayed points.
+    const responseIdentity = settledResponse.current;
+    if (settledFetchKey.current !== fetchKey || !responseIdentity) {
+      clearActiveChart(plotRef.current);
+      return;
+    }
 
     // Filter to only visible wells before grouping. Omitted wells are dropped
     // entirely (by manual_type, authoritative from the backend) so they never
@@ -469,12 +488,33 @@ export function ScatterPlot() {
       // individual well is impossible without being able to zoom in first.
       modeBarButtonsToRemove: ["toImage", "sendDataToCloud"],
     };
+    clearActiveChart(plotRef.current as HTMLDivElement);
+    const analysis = useAnalysisStore.getState();
+    const revision = analysis.result?.analysis_context?.result_revision;
+    const analysedAt = analysis.result?.analysis_context?.analysed_at;
+    const entry = useSessionStore.getState().entryGeneration;
+    const ownerId = useAuthStore.getState().user?.id;
+    const publishExport = (element: HTMLDivElement) => {
+      if (token !== exportRender.current || !sessionId || !revision
+        || useSessionStore.getState().entryGeneration !== entry
+        || useAuthStore.getState().user?.id !== ownerId
+        || useAnalysisStore.getState().result?.analysis_context?.result_revision !== revision) return;
+      setActiveChart({ element, sessionId, resultRevision: revision,
+        cycle: responseIdentity.cycle, useRox: responseIdentity.useRox, backgroundMode: responseIdentity.backgroundMode, entry, ownerId,
+        caption: `whole-run; cycle ${responseIdentity.cycle}; ${responseIdentity.useRox ? 'reference requested' : 'raw basis'}; background ${responseIdentity.backgroundMode}; visible wells ${visiblePoints.map(point => point.well).sort().join(',')}; revision ${revision}; analysed ${analysedAt ?? 'unknown'}`,
+        // A new Plotly render may alter filters, traces or layout even when the
+        // underlying response has the same wells. Bind the registry record to
+        // this render generation and exact visible scope so an in-flight PNG
+        // cannot pass its post-encode guard against replacement pixels.
+        identity: `whole-run:${sessionId}:${entry}:${revision}:${responseIdentity.cycle}:${responseIdentity.useRox}:${responseIdentity.backgroundMode}:${token}:${visiblePoints.map(point => point.well).sort().join(',')}` });
+    };
 
     if (!initialized.current) {
       const el = plotRef.current as HTMLDivElement & Pick<PlotlyHTMLElement, "on">;
       Plotly.newPlot(el, traces, layout, config).then(() => {
         if (el !== plotRef.current) return;
         initialized.current = true;
+        publishExport(el);
 
         // Selection modifiers, matching PlateView: ctrl/meta toggles one well
         // or unions a box into the current selection, shift unions, and a
@@ -505,7 +545,8 @@ export function ScatterPlot() {
         });
       });
     } else {
-      Plotly.react(plotRef.current, traces, layout, config);
+      const element = plotRef.current;
+      void Promise.resolve(Plotly.react(element, traces, layout, config)).then(() => publishExport(element));
     }
   }, [
     scatterPoints,
@@ -540,8 +581,14 @@ export function ScatterPlot() {
     lockAspect,
     editing,
     normalizationApplied,
+    backgroundMode,
+    sessionId,
+    fetchKey,
+    currentCycle,
     dark,
   ]);
+
+  useEffect(() => () => { if (plotRef.current) clearActiveChart(plotRef.current); }, []);
 
   // Declaring the assay's dosage ceiling. Re-clusters in AUTO mode with the
   // ceiling as a constraint rather than switching to a threshold override:
