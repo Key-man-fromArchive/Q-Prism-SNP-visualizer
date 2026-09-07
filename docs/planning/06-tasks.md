@@ -169,7 +169,9 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P1-R1-T2: 입력 revision·변경 명령 일원화
 
-- Status: IN_PROGRESS
+- Status: DONE
+- Commit: da35b12c01b16c7df75d5eabaee0e0ca9e300f7f
+- Evidence: [P1-R1-T2](ui-ux-overhaul/evidence/P1-R1-T2.md). 독립 BE 552 passed + 2 subtests, 변경 실행 줄 91.67–100%, 새 논리 복잡도 최대 8.
 - 담당: backend-specialist
 - Depends On: [P1-R1-T1]
 - Write Scope: BE/app/routers/clustering.py·layouts.py·sample.py·marker_catalog.py, BE/app/models.py·db.py, 신규 BE/app/processing/analysis_state.py, BE/tests/test_analysis_input_revision.py 및 기존 mutation/marker 계약 회귀 테스트
@@ -177,14 +179,14 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - 구현: mutation 응답 input_revision, undo용 선택적 expected revision·409를 추가한다. 보기·언어·축 변경은 제외하고 stale 결과 정책을 보존한다.
 - 접점 확인: 공용 mutation body는 models.py에 있고 session 삭제/정보는 sample.py에 있다. 요청에 포함된 ploidy 변경도 숨은 입력 변경으로 조사한다. 세션 삭제는 결과/마커/진행 요청 상태를 함께 정리하고, 마커 변경 시 결과 삭제를 요구하던 기존 테스트는 새 retained-stale 계약의 명시적 기대값으로 갱신한다.
 - 검증: 경로별 증가, 실패/no-op, 권한, stale expected revision, layout/bulk 누락 검사.
-- [ ] AC: API 직접 변경도 결과를 무효화하고 실패 mutation은 버전을 전진시키지 않음.
+- [x] AC: API 직접 변경도 결과를 무효화하고 실패 mutation은 버전을 전진시키지 않음.
 
 ### P1-R1-T3: 결과 원자 게시·동시성 제어
 
-- Status: TODO
+- Status: IN_PROGRESS
 - 담당: backend-specialist
 - Depends On: [P1-R1-T2]
-- Write Scope: BE/app/routers/clustering.py, BE/app/processing/analysis_state.py, BE/app/db.py, BE/tests/test_analysis_revision_races.py
+- Write Scope: BE/app/routers/clustering.py, BE/app/processing/analysis_state.py, BE/app/models.py·db.py, BE/tests/test_analysis_revision_races.py
 - 구현: 계산 시작 입력/parameters를 고정하고 완료 시 input revision·요청 순서를 검증해 게시한다. DB와 cluster_store가 다른 버전을 가리키지 않게 한다.
 - 구현: 계산 중 mutation·늦은 완료·저장 실패·조회 상태를 다룬다. 현재 동기/비동기·프로세스 범위에 맞는 lock/CAS를 기록하고 최신 결과 한 건만 유지한다.
 - 검증: A/B 역순 완료, 계산 중 marker/welltype 변경, 저장 실패, 독립 세션 동시 처리.
@@ -217,7 +219,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - Status: TODO
 - 담당: backend-specialist
 - Depends On: [P1-R3-T1]
-- Write Scope: BE/app/routers/data.py·export.py·asg.py, BE/app/reporting/*, BE/tests/test_export_snapshot_reports.py·test_asg_result_save.py
+- Write Scope: BE/app/routers/data.py·export.py·asg.py, BE/app/asg_result.py, BE/app/reporting/*, BE/tests/test_export_snapshot_reports.py·test_asg_result_save.py
 - 구현: PDF max(cycles)·XLSX 독자 조건 선택을 공통 snapshot으로 연결한다. 그림·판정·신뢰도는 같은 결과, Ct 등 전체 곡선 값은 별도 계산 범위를 명시한다.
 - 구현: ASG 등 결과 소비자의 추가 필드/오류를 점검하고 필요한 adapter만 적용한다. 스코프·저장 상태 정책은 보존한다.
 - 검증: 실제 CSV/PDF/XLSX의 공통 웰·판정·수치·metadata 비교. PDF metadata만이 아니라 렌더에 전달된 수치도 검증. 기존 보고서/ASG 회귀.
@@ -503,4 +505,4 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 4. 각 작업은 승인된 scope에서 RED → GREEN → REFACTOR → 검증 → 로컬 commit → 증거 보고 순으로 진행한다. 게이트 실패 시 후속 작업을 시작하지 않는다.
 5. 재개 시 계획 hash·branch/commit·상태·증거를 대조한다. 문서의 TODO를 추측으로 DONE 처리하거나 이전 작업서의 상태를 재사용하지 않는다.
 
-현재 상태: **2026-09-07 6/33 완료, P1 입력 revision 구현 중**. P0 독립 게이트 통과·로컬 통합 후 P1-R1-T1도 독립 검증했다. 사용자가 lint·도구·런타임/인증 의존성 보완과 완료까지 자율 진행을 승인했다. 로컬 Phase 통합·자동 진행하며 원격 push·배포·외부 알림은 제외한다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.
+현재 상태: **2026-09-07 7/33 완료, P1 결과 게시·동시성 구현 중**. P0 독립 게이트 통과·로컬 통합 후 P1-R1-T1/T2도 독립 검증했다. 사용자가 lint·도구·런타임/인증 의존성 보완과 완료까지 자율 진행을 승인했다. 로컬 Phase 통합·자동 진행하며 원격 push·배포·외부 알림은 제외한다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.

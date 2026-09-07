@@ -15,14 +15,16 @@ This is the P1 implementation contract, not a claim that these fields already ex
 | analysed_at | timezone-aware ISO-8601 UTC completion timestamp |
 | cycle | actual absolute acquisition cycle present in unified.cycles, including 0 when supported by that data window; resolve request cycle=0 sentinel before storing the actual value |
 | use_rox | requested boolean |
-| normalization_applied | actual boolean, never inferred from instrument name |
+| normalization_applied | true only when normalization is enabled and at least one captured-cycle reading has a positive effective reference; not a claim that every reading was normalized. Missing/nonpositive references retain existing raw fallback behavior |
 | background | `none`, `pre_read`, or `channel_min`, resolved before storing |
-| algorithm | actual existing algorithm identifier |
+| algorithm | actual existing algorithm identifier; context-only `mixed` when marker regions actually used different algorithms. Each region retains its actual identifier; this does not add a calculation algorithm or alter the legacy result.algorithm echo |
 | parameters | JSON object of resolved ploidy, n_clusters, threshold_config and all algorithm-specific inputs, including manual boundaries/dosage configuration; defaults must be explicit, never copied from a later request |
 | regions | array of marker snapshots: marker_id, name, wells, ploidy, algorithm, parameters; empty for whole-plate mode; resolve inherited defaults independently per marker |
 | input_revision | nonnegative integer captured before calculation |
 
 Persist context, assignments, confidences and existing result fields together. Initialize each new or migrated session input revision to 0 without assigning a verified context to legacy results. Increment once per effective atomic input mutation; failed and no-op operations do not increment. Revisions survive restart. A result publication does not increment input_revision.
+
+P1 source review clarified two provenance cases: manual boundaries execute threshold even when another algorithm was requested, and marker runs may combine threshold with auto. Record the actual region algorithms and use the context-only aggregate label above, keeping the requested algorithm in `parameters.requested_algorithm`. Client setting comparison/restoration uses that request value, not a misleading comparison against the effective `mixed`/threshold label. Preserve the existing cycle=0 last-cycle request sentinel; this phase does not introduce a new transport mechanism for selecting absolute zero in a multi-cycle run. Store the actual resolved cycle (which can be zero for a zero-only acquisition).
 
 All computation starts by capturing immutable input/parameter copies plus a monotonically increasing per-session request sequence. Publish only if input_revision still matches and no newer request has been accepted. A newer failed request also prevents an older request from publishing. DB commit must succeed before replacing in-memory result; calculation/save failures retain the previous completed result. Use a per-session serialization/CAS boundary, not a global lock. Record whether deployment supports one process only; an in-process lock is not a multi-worker guarantee. Restart must restore identical DB/memory state. Do not use `INSERT OR REPLACE sessions` for a revision bump: it may cascade-delete dependent data.
 
@@ -32,8 +34,9 @@ Existing mutation request bodies gain optional `expected_input_revision: int`; D
 
 | Existing surface | Revision policy |
 | --- | --- |
-| POST/DELETE welltypes; PUT welltypes/bulk | Increment for effective override change, including clear; preserve imported type fallback |
+| POST/DELETE welltypes; PUT welltypes/bulk | Increment when the explicit override map changes, including clear; preserve imported type fallback. An explicit override equal to its imported fallback still changes manual command state; repeating the identical override or clearing an already empty map is a no-op |
 | POST ploidy | Increment for changed session ploidy |
+| POST cluster with explicit session ploidy | Preserve the existing persisted-ploidy behavior through the same input command. A successful input commit remains effective if subsequent calculation fails; the retained previous result is stale. Invalid input or a failed input transaction does not advance the revision |
 | POST/PUT/DELETE markers | Increment for changed assignments or effective marker analysis configuration; marker set deletion also invalidates results |
 | POST layouts/{id}/apply | Atomically apply all affected marker/type/ploidy inputs and increment once |
 | POST data/{sid}/markers/{id}/attach-catalog | Increment when applied calibration/marker configuration changes; include routers/marker_catalog.py in P1-R1-T2 scope |
