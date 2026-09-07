@@ -143,6 +143,10 @@ body.dark .panel {
 .app-header button { white-space: nowrap; }
 .app-navigation { padding-inline: var(--workspace-gutter); }
 .analysis-grid { grid-template-columns: minmax(0, 1fr); }
+.template-tooltip { width: min(24rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; overflow-wrap: anywhere; }
+.protocol-editor { width: 100%; min-width: 0; }
+.protocol-editor table { min-width: 36rem; }
+.protocol-editor td { overflow-wrap: anywhere; }
 .analysis-grid > *, .panel { min-width: 0; }
 .analysis-review-stack { display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
 .analysis-scatter-canvas { height: 420px; }

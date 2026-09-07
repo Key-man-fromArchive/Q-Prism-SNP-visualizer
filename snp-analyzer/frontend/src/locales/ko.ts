@@ -1,6 +1,8 @@
 import type { Translations } from './en';
 
 const ko: Translations = {
+  protocolSaved: '프로토콜을 저장했습니다.',
+  protocolEmpty: '프로토콜 단계가 없습니다. 단계를 추가하세요.',
   chartNoDisplayedCall: '표시된 판정 없음',
   chartBackground: (mode: string) => `배경 보정: ${{ none: '없음', pre_read: '사전 측정', channel_min: '채널 최솟값' }[mode] ?? '미확인'}`,
   chartReferenceFlagged: '참조 신호 경고',

@@ -18,6 +18,12 @@ beforeEach(() => {
   useLanguageStore.setState({ language: 'en' });
   useSettingsStore.setState({ clusterAlgorithm: 'threshold', useRox: true });
 });
+it('provides names for preset selection and preset creation', async () => {
+  render(<SettingsTab />);
+  expect(screen.getByRole('combobox', { name: /Select Preset/ })).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'New preset name' })).toBeInTheDocument();
+  await screen.findByRole('option', { name: /synthetic/i });
+});
 it('disables analysis during session restoration without invalidating its load', async () => {
   useSessionStore.setState({ sessionId: 'restoring' });
   useAnalysisStore.getState().setSession('restoring', 'u');

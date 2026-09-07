@@ -1,8 +1,10 @@
 // @TASK Protocol Tab Component
 // @SPEC Editable PCR protocol table
 
-import { Fragment, useEffect, useEffectEvent, useState } from 'react';
-import { getProtocol, updateProtocol } from '@/lib/api';
+import { Fragment } from 'react';
+import { AlertTriangle } from 'lucide-react';
+import { useProtocolEditor } from './use-protocol-editor';
+import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useI18n } from '@/hooks/use-i18n';
 import type { ProtocolStep } from '@/types/api';
@@ -34,43 +36,18 @@ function isReadingStep(label: string): boolean {
 }
 
 export function ProtocolTab() {
+  const sessionId = useSessionStore(s => s.sessionId);
+  const entry = useSessionStore(s => s.entryGeneration);
+  const owner = useAuthStore(s => s.generation);
   const { t } = useI18n();
-  const sessionId = useSessionStore((s) => s.sessionId);
-  const [steps, setSteps] = useState<ProtocolStep[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const loadErrorMessage = useEffectEvent(() => t.errLoadProtocol);
+  if (!sessionId) return <p role="status" className="p-6">{t.noData}</p>;
+  return <ProtocolEditor key={`${owner}:${entry}:${sessionId}`} sessionId={sessionId} />;
+}
 
-  // Load protocol on mount
-  useEffect(() => {
-    if (!sessionId) return;
-    setLoading(true);
-    getProtocol(sessionId)
-      .then((res) => {
-        setSteps(res.steps);
-        setError(null);
-      })
-      .catch((err) => {
-        console.error('Failed to load protocol:', err);
-        setError(loadErrorMessage());
-      })
-      .finally(() => setLoading(false));
-  }, [sessionId]);
-
-  const handleSave = async () => {
-    if (!sessionId) return;
-    setLoading(true);
-    try {
-      await updateProtocol(sessionId, steps);
-      setError(null);
-      window.dispatchEvent(new CustomEvent("asg-result-dirty"));
-    } catch (err) {
-      console.error('Failed to save protocol:', err);
-      setError(t.errSaveProtocol);
-    } finally {
-      setLoading(false);
-    }
-  };
+function ProtocolEditor({ sessionId }: { sessionId: string }) {
+  const { t } = useI18n();
+  const { steps, setSteps, phase, save: handleSave, cancel, retry } = useProtocolEditor(sessionId);
+  const loading = phase === 'loading' || phase === 'saving';
 
   const handleStepChange = <K extends keyof ProtocolStep,>(index: number, field: K, value: ProtocolStep[K]) => {
     setSteps((prev) =>
@@ -100,19 +77,17 @@ export function ProtocolTab() {
   };
 
   return (
-    <div style={{ padding: '16px 24px', maxWidth: '800px' }}>
+    <form onSubmit={event => { event.preventDefault(); void handleSave(); }} className="protocol-editor p-4 sm:px-6 max-w-[800px]" aria-busy={loading}>
       <div className="panel" style={{ borderRadius: '8px', padding: '20px' }}>
         <h3 className="text-lg font-semibold text-text" style={{ margin: '0 0 16px 0' }}>
           {t.pcrProtocolSteps}
         </h3>
 
-        {error && (
-          <div style={{ padding: '8px 12px', background: '#fef2f2', color: '#dc2626', borderRadius: '6px', marginBottom: '12px', fontSize: '14px' }}>
-            {error}
-          </div>
-        )}
+        <ProtocolFeedback phase={phase} retry={retry} />
 
-        <div style={{ overflowY: 'auto', maxHeight: '500px', marginBottom: '16px' }}>
+        <ProtocolStatus phase={phase} empty={steps.length === 0} />
+        <fieldset disabled={loading || phase === 'load-error'} className="min-w-0">
+        <div role="region" aria-label={t.pcrProtocolSteps} tabIndex={0} style={{ overflow: 'auto', maxHeight: '500px', marginBottom: '16px' }}>
           <table id="protocol-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
               <tr className="border-b-2 border-border bg-bg">
@@ -143,6 +118,7 @@ export function ProtocolTab() {
                       <td style={{ padding: '8px' }}>
                         <input
                           type="text"
+                          aria-label={`${t.label} ${step.step}`}
                           value={step.label}
                           onChange={(e) => handleStepChange(stepIndex, 'label', e.target.value)}
                           className="border border-border rounded bg-surface text-text"
@@ -156,6 +132,7 @@ export function ProtocolTab() {
                         <input
                           type="number"
                           value={step.temperature}
+                          aria-label={`${t.tempC} ${step.step}`}
                           onChange={(e) => handleStepChange(stepIndex, 'temperature', parseFloat(e.target.value) || 0)}
                           className="border border-border rounded bg-surface text-text"
                           style={{ width: '70px', padding: '4px 8px', fontSize: '13px' }}
@@ -165,6 +142,7 @@ export function ProtocolTab() {
                         <input
                           type="number"
                           value={step.duration_sec}
+                          aria-label={`${t.durationS} ${step.step}`}
                           onChange={(e) => handleStepChange(stepIndex, 'duration_sec', parseInt(e.target.value) || 0)}
                           className="border border-border rounded bg-surface text-text"
                           style={{ width: '70px', padding: '4px 8px', fontSize: '13px' }}
@@ -174,6 +152,7 @@ export function ProtocolTab() {
                         <input
                           type="number"
                           value={step.cycles}
+                          aria-label={`${t.cycles} ${step.step}`}
                           onChange={(e) => handleStepChange(stepIndex, 'cycles', parseInt(e.target.value) || 1)}
                           className="border border-border rounded bg-surface text-text"
                           style={{ width: '60px', padding: '4px 8px', fontSize: '13px' }}
@@ -181,6 +160,8 @@ export function ProtocolTab() {
                       </td>
                       <td style={{ padding: '8px', textAlign: 'center' }}>
                         <button
+                          type="button"
+                          aria-label={`${t.delete} ${step.step}`}
                           className="del-btn"
                           onClick={() => handleDeleteStep(stepIndex)}
                           style={{
@@ -214,8 +195,9 @@ export function ProtocolTab() {
           </table>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           <button
+            type="button"
             id="add-step-btn"
             onClick={handleAddStep}
             disabled={loading}
@@ -234,8 +216,8 @@ export function ProtocolTab() {
             {t.addStep}
           </button>
           <button
+            type="submit"
             id="save-protocol-btn"
-            onClick={handleSave}
             disabled={loading}
             style={{
               padding: '8px 16px',
@@ -249,10 +231,30 @@ export function ProtocolTab() {
               opacity: loading ? 0.6 : 1,
             }}
           >
-            {loading ? t.saving : t.saveProtocol}
+            {phase === 'saving' ? t.saving : t.saveProtocol}
           </button>
+          <button type="button" onClick={cancel} className="px-4 py-2 border border-border rounded">{t.cancel}</button>
         </div>
+        </fieldset>
       </div>
-    </div>
+    </form>
   );
+}
+
+function ProtocolStatus({ phase, empty }: { phase: string; empty: boolean }) {
+  const { t } = useI18n();
+  const messages: Record<string, string> = { loading: t.loading, saving: t.saving, saved: t.protocolSaved };
+  const message = messages[phase] ?? (phase === 'ready' && empty ? t.protocolEmpty : '');
+  return <p role="status" aria-live="polite" className="text-sm text-text-muted mb-2">{message}</p>;
+}
+
+function ProtocolFeedback({ phase, retry }: { phase: string; retry: () => void }) {
+  const { t } = useI18n();
+  const messages: Record<string, string> = { 'load-error': t.errLoadProtocol, 'save-error': t.errSaveProtocol };
+  if (!messages[phase]) return null;
+  return <div role="alert" className="p-3 border border-danger bg-danger/10 rounded mb-3 text-text">
+    <AlertTriangle size={18} aria-hidden="true" className="inline-block mr-2" />
+    {messages[phase]}
+    {phase === 'load-error' && <button type="button" onClick={retry} className="ml-2 underline">{t.retry}</button>}
+  </div>;
 }

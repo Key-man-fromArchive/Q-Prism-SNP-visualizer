@@ -1,5 +1,72 @@
 import { expect, test, type Page } from '@playwright/test';
-import { login } from './helpers';
+import { login, ADMIN_USERNAME, ADMIN_PASSWORD } from './helpers';
+import en from '../snp-analyzer/frontend/src/locales/en';
+import ko from '../snp-analyzer/frontend/src/locales/ko';
+
+for (const width of [390, 1024, 1440]) for (const language of ['en', 'ko'] as const) for (const theme of ['light', 'dark']) {
+  test(`secondary forms ${width} ${language} ${theme}`, async ({ page }, testInfo) => {
+    const t = language === 'en' ? en : ko;
+    await page.setViewportSize({ width, height: 700 });
+    await page.addInitScript(({ language, theme }) => {
+      localStorage.setItem('snp-analyzer-language', JSON.stringify({ state: { language }, version: 0 }));
+      localStorage.setItem('snp-analyzer-dark-mode', String(theme === 'dark'));
+    }, { language, theme });
+    await page.goto('/');
+    await expect(page.locator('#username')).toHaveAttribute('autocomplete', 'username');
+    await page.locator('#username').fill(ADMIN_USERNAME);
+    await page.locator('#password').fill(ADMIN_PASSWORD);
+    await page.locator('#password').press('Enter');
+    await expect(page.locator('#file-input')).toBeAttached();
+    await expect(page.getByTestId('quick-start-steps')).toBeVisible();
+    const bounded = async () => expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await bounded();
+    const help = page.getByRole('button', { name: t.importTemplatesHelpLabel });
+    await help.click(); await expect(page.getByRole('tooltip')).toBeVisible();
+    await help.focus(); await page.keyboard.press('Escape'); await page.keyboard.press('Space');
+    await expect(page.getByRole('tooltip')).toBeVisible();
+    const box = await page.getByRole('tooltip').boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0); expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+    await page.keyboard.press('Escape'); await expect(page.getByRole('tooltip')).toHaveCount(0);
+    await expect(help).toBeFocused();
+    if (width === 390) {
+      await page.setViewportSize({ width, height: 360 });
+      await help.scrollIntoViewIfNeeded(); await help.press('Space');
+      const shortBox = await page.getByRole('tooltip').boundingBox();
+      expect(shortBox!.y).toBeGreaterThanOrEqual(0); expect(shortBox!.y + shortBox!.height).toBeLessThanOrEqual(360);
+      await page.keyboard.press('Escape'); await expect(help).toBeFocused();
+      await page.setViewportSize({ width, height: 700 });
+    }
+    await page.screenshot({ path: testInfo.outputPath('upload.png'), fullPage: true });
+    const analyzed = page.waitForResponse(response => response.url().endsWith('/cluster') && response.request().method() === 'POST');
+    await page.locator('#example-select').selectOption('2'); await analyzed;
+    await page.route('**/api/presets', route => route.fulfill({ json: { presets: [{ id: 'long', name: 'Synthetic long preset '.repeat(12), builtin: true, settings: {} }] } }));
+    await page.locator('#tab-settings').click();
+    await expect(page.getByRole('combobox', { name: t.selectPreset })).toBeVisible();
+    await page.locator('#preset-select').selectOption('long'); await bounded();
+    await page.getByRole('textbox', { name: t.newPresetName }).fill('Synthetic long draft '.repeat(10));
+    await page.screenshot({ path: testInfo.outputPath('settings.png'), fullPage: true });
+    await page.locator('#tab-protocol').click();
+    await expect(page.locator('#protocol-table input').first()).toBeVisible();
+    await page.locator('#protocol-table input').first().fill('Long synthetic protocol label '.repeat(12));
+    await page.getByRole('button', { name: t.cancel, exact: true }).click();
+    await expect(page.locator('#protocol-table input').first()).not.toHaveValue(/Long synthetic/);
+    await page.locator('#protocol-table input').first().press('Enter');
+    await expect(page.getByRole('status').filter({ hasText: t.protocolSaved })).toBeVisible();
+    await page.route(/\/api\/data\/[^/]+\/protocol$/, route => route.fulfill({ status: 500, json: { detail: 'private diagnostic must not render' } }), { times: 1 });
+    await page.locator('#protocol-table input').first().press('Enter');
+    await expect(page.getByRole('alert')).toContainText(t.errSaveProtocol);
+    await expect(page.getByRole('alert')).not.toContainText('private diagnostic');
+    await bounded();
+    await page.screenshot({ path: testInfo.outputPath('protocol-error.png'), fullPage: true });
+    await page.locator('#protocol-table input').first().press('Enter');
+    await expect(page.getByRole('status').filter({ hasText: t.protocolSaved })).toBeVisible();
+    await bounded();
+    const region = page.getByRole('region', { name: t.pcrProtocolSteps });
+    await region.focus(); await expect(region).toBeFocused();
+    if (width === 390) expect(await region.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath('protocol.png'), fullPage: true });
+  });
+}
 
 async function curveFixture(page: Page) {
   // Deterministic warning transport only: the live example/session/plots remain real.

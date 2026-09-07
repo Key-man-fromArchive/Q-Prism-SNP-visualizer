@@ -6,10 +6,44 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useUploadJobStore } from '@/stores/upload-job-store';
 import { useLanguageStore } from '@/stores/language-store';
+import en from '@/locales/en';
+import userEvent from '@testing-library/user-event';
 vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), getSessions: vi.fn(), uploadFile: vi.fn(), loadExample: vi.fn(), previewImportFile: vi.fn() }));
 const info = { session_id: 'synthetic', instrument: 'Synthetic', allele2_dye: 'VIC', num_wells: 96,
   num_cycles: 40, has_rox: false, data_windows: null, suggested_cycle: 40, well_groups: null };
 afterEach(() => vi.useRealTimers());
+it('keeps template help open after a real pointer focus and click sequence', async () => {
+  const user = userEvent.setup();
+  render(<UploadZone />);
+  await user.click(screen.getByRole('button', { name: en.importTemplatesHelpLabel }));
+  expect(screen.getByRole('tooltip')).toBeVisible();
+});
+it('provides help button expansion and dismissible keyboard template descriptions', async () => {
+  render(<UploadZone />);
+  const help = screen.getByRole('button', { name: en.importTemplatesHelpLabel });
+  fireEvent.focus(help);
+  expect(help).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByRole('tooltip')).toHaveTextContent(en.importTemplatesHelp);
+  fireEvent.keyDown(help, { key: 'Escape' });
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  fireEvent.click(help);
+  expect(help).toHaveAttribute('aria-expanded', 'true');
+  fireEvent.blur(help);
+  const template = screen.getByRole('link', { name: en.templateRdes });
+  fireEvent.focus(template);
+  expect(screen.getByRole('tooltip')).toBeInTheDocument();
+  fireEvent.keyDown(template, { key: 'Escape' });
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  expect(template.getAttribute('href')).toContain('/templates/');
+  await act(async () => {});
+});
+it('labels example selection and exposes upload progress without replacing retained jobs', async () => {
+  useSessionStore.setState({ uploadState: 'uploading', uploadProgress: 35 });
+  render(<UploadZone />);
+  expect(screen.getByRole('combobox', { name: /Load example/ })).toBeInTheDocument();
+  expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '35');
+  await act(async () => {});
+});
 it('ignores a preview failure after logout without restoring upload state or leaking details', async () => {
   let reject!: (error: Error) => void;
   vi.mocked(previewImportFile).mockReturnValue(new Promise((_, fail) => { reject = fail; }));

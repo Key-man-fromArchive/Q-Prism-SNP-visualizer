@@ -45,6 +45,10 @@ type UploadZoneProps = {
   onGoToProject?: () => void;
 };
 
+function tooltipId(open: boolean, id: string) {
+  return open ? id : undefined;
+}
+
 export function UploadZone({ onGoToProject }: UploadZoneProps) {
   const { t } = useI18n();
   const operation = useOwnedOperation();
@@ -385,6 +389,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           {/* Load a synthetic example dataset at a chosen ploidy (2x–8x) */}
           <select
             id="example-select"
+            aria-label={t.exampleLoad}
             defaultValue=""
             onClick={(e) => e.stopPropagation()}
             onChange={(e) => {
@@ -432,23 +437,27 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           <div>
             <div className="flex items-center gap-1.5">
               <h3 className="text-sm font-semibold">{t.importTemplatesTitle}</h3>
-              <span
+              <button
+                type="button"
                 className="relative inline-flex h-5 w-5 items-center justify-center rounded-full text-text-muted hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
-                tabIndex={0}
-                role="img"
                 aria-label={t.importTemplatesHelpLabel}
+                aria-expanded={showTemplateHelp}
+                aria-describedby={tooltipId(showTemplateHelp, 'template-help-tooltip')}
+                aria-controls={tooltipId(showTemplateHelp, 'template-help-tooltip')}
+                onClick={() => setShowTemplateHelp(true)}
                 onMouseEnter={() => setShowTemplateHelp(true)}
                 onMouseLeave={() => setShowTemplateHelp(false)}
                 onFocus={() => setShowTemplateHelp(true)}
                 onBlur={() => setShowTemplateHelp(false)}
+                onKeyDown={event => { if (event.key === 'Escape') setShowTemplateHelp(false); }}
               >
                 <CircleHelp size={15} />
                 {showTemplateHelp && (
-                  <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-72 -translate-x-1/2 rounded-md border border-border bg-surface px-3 py-2 text-left text-[12px] font-normal leading-snug text-text shadow-lg">
+                  <span id="template-help-tooltip" role="tooltip" className="template-tooltip pointer-events-none fixed bottom-4 left-4 z-50 rounded-md border border-border bg-surface px-3 py-2 text-left text-[12px] font-normal leading-snug text-text shadow-lg">
                     {t.importTemplatesHelp}
                   </span>
                 )}
-              </span>
+              </button>
             </div>
             <p className="text-[12px] text-text-muted">
               {t.importTemplatesDescription}
@@ -463,11 +472,12 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
                 onMouseLeave={() => setActiveTemplateTooltip(null)}
                 onFocus={() => setActiveTemplateTooltip(template.labelKey)}
                 onBlur={() => setActiveTemplateTooltip(null)}
+                onKeyDown={event => { if (event.key === 'Escape') setActiveTemplateTooltip(null); }}
               >
                 <a
                   href={runtimeAssetPath(template.href)}
                   download
-                  aria-describedby={`${template.labelKey}-tooltip`}
+                  aria-describedby={activeTemplateTooltip === template.labelKey ? `${template.labelKey}-tooltip` : undefined}
                   className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-[12px] hover:bg-bg focus:outline-none focus:ring-2 focus:ring-primary/40"
                 >
                   <Download size={14} />
@@ -476,7 +486,8 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
                 {activeTemplateTooltip === template.labelKey && (
                   <span
                     id={`${template.labelKey}-tooltip`}
-                    className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-72 -translate-x-1/2 rounded-md border border-border bg-surface px-3 py-2 text-left text-[12px] leading-snug text-text shadow-lg"
+                    role="tooltip"
+                    className="template-tooltip pointer-events-none fixed bottom-4 left-4 z-50 rounded-md border border-border bg-surface px-3 py-2 text-left text-[12px] leading-snug text-text shadow-lg"
                   >
                     {t[template.helpKey]}
                   </span>
@@ -489,7 +500,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
 
       {uploadState !== "idle" && (
         <div id="upload-progress" className="mt-4">
-          <div className="h-1 bg-border rounded-sm overflow-hidden">
+          <div role="progressbar" aria-label={t.uploading} aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadProgress} className="h-1 bg-border rounded-sm overflow-hidden">
             <div
               className="h-full bg-primary transition-all duration-300"
               style={{ width: `${uploadProgress}%` }}
@@ -497,6 +508,8 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           </div>
           <p
             id="upload-status"
+            role="status"
+            aria-live="polite"
             className={`text-[13px] text-center mt-2 ${
               uploadState === "error" ? "text-danger" : "text-text-muted"
             }`}
@@ -594,7 +607,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
         {showGuide && (
           <div className="px-4 pb-4 space-y-4 border-t border-border pt-4">
             {/* 4-step workflow */}
-            <div className="grid grid-cols-4 gap-2">
+            <div data-testid="quick-start-steps" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
               {([
                 { icon: "1", title: t.guideStep1Title, desc: t.guideStep1Desc },
                 { icon: "2", title: t.guideStep2Title, desc: t.guideStep2Desc },
@@ -603,10 +616,10 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
               ] as const).map((step, i) => (
                 <div
                   key={step.icon}
-                  className="relative text-center p-3 rounded-lg bg-bg"
+                  className="relative min-w-0 break-words text-center p-3 rounded-lg bg-bg"
                 >
                   {i < 3 && (
-                    <span className="absolute right-[-10px] top-1/2 -translate-y-1/2 text-text-muted z-10">
+                    <span className="hidden xl:block absolute right-[-10px] top-1/2 -translate-y-1/2 text-text-muted z-10">
                       <ArrowRight size={14} aria-hidden="true" />
                     </span>
                   )}
@@ -620,7 +633,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
             </div>
 
             {/* Supported Formats + Tips side by side */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 break-words">
               <div>
                 <h4 className="text-[12px] font-semibold mb-1.5">{t.guideSupportedFormats}</h4>
                 <div className="space-y-1.5 text-[11px]">

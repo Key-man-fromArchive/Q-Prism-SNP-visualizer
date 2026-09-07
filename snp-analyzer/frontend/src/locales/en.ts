@@ -1,4 +1,6 @@
 const en = {
+  protocolSaved: 'Protocol saved.',
+  protocolEmpty: 'No protocol steps. Add a step to begin.',
   chartNoDisplayedCall: 'No displayed call',
   chartBackground: (mode: string) => `Background: ${{ none: 'none', pre_read: 'pre-read', channel_min: 'channel minimum' }[mode] ?? 'unknown'}`,
   chartReferenceFlagged: 'Reference-signal warning',
