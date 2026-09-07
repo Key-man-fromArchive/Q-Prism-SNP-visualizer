@@ -384,12 +384,14 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P3-S0-V: 연속성 품질 게이트
 
-- Status: TODO
+- Status: DONE
+- Gate Commit: d288b0b0f7fa97fca31823f66ec6cf6f8fe2936b
+- Evidence: [P3-S0-V](ui-ux-overhaul/evidence/P3-S0-V.md). BE 743개+2 subtests, FE 481개, ROOT18–23 13개, 기존 E2E 52개, 누적 변경 coverage 725/760·모든 모듈 70% 이상, 새 CC 10 이하, 독립 게이트 리뷰 PASS.
 - 담당: test-specialist
 - Depends On: [P3-S4-T1]
 - Write Scope: docs/planning/ui-ux-overhaul/evidence/P3-S0-V.md
 - 검증: BE-ALL, FE-ALL, FE-CHECK, ROOT-E2E 18–23, EXISTING-E2E, COVERAGE, 복원 순서/사용자 격리/오류 복구 리뷰.
-- [ ] AC: UX-04·05·06·10 및 UX-03 전체 통과. DB 유지와 화면 복원의 차이를 증거로 설명함.
+- [x] AC: UX-04·05·06·10 및 UX-03 전체 통과. DB 유지와 화면 복원의 차이를 증거로 설명함.
 
 ## Phase P4 — 반응형 레이아웃·탐색·접근성
 
