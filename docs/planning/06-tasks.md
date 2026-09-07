@@ -209,24 +209,27 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P1-R3-T1: 출력 스냅샷 계약·CSV
 
-- Status: IN_PROGRESS
+- Status: DONE
+- Commit: 991dabad1142f7df4a311162eed9077a0014ba74
+- Evidence: [P1-R3-T1](ui-ux-overhaul/evidence/P1-R3-T1.md). 최종 BE 678 passed + 2 subtests, 독립 집중 85 passed, 신규 스냅샷 98.34%·CSV 추가 실행 줄 100%.
 - 담당: backend-specialist
 - Depends On: [P1-R2-T1]
-- Write Scope: 신규 BE/app/reporting/result_snapshot.py, BE/app/routers/export.py, BE/app/processing/analysis_state.py, BE/tests/test_export_snapshot_csv.py 및 기존 CSV/마커 출력 테스트의 계약·setup 갱신
+- Write Scope: 신규 BE/app/reporting/result_snapshot.py, BE/app/routers/export.py, BE/app/processing/analysis_state.py, BE/tests/test_export_snapshot_csv.py 및 기존 CSV/마커 출력 테스트의 계약·setup 갱신. 같은 export.py의 기존 XLSX QC dict 타입 불변성 오류는 주석만 보완하며 XLSX 동작 연결은 다음 작업에 둔다.
 - 구현: result_revision 지정/생략, input revision/legacy 검증, 409를 공통 snapshot 서비스로 구현한다. 수락 이후 판정·신뢰도·manual 유형·표시 metadata·계산 조건을 고정한다.
 - 구현: 전체 실행 CSV의 마커 열·기존 데이터 열을 유지하고 조건 metadata 열을 추가한다. 임의 cycle/ROX/background와 저장 조건 불일치는 명시 오류로 전환한다.
 - 검증: 20/40·ROX/background만 차이, legacy/missing/stale, 결과 교체·수락 후 mutation·권한.
-- [ ] AC: CSV에 혼합 조건이 없고 수락된 snapshot을 끝까지 사용하며 버전/조건을 파일에서 읽을 수 있음.
+- [x] AC: CSV에 혼합 조건이 없고 수락된 snapshot을 끝까지 사용하며 버전/조건을 파일에서 읽을 수 있음.
 
 ### P1-R3-T2: PDF·XLSX 일치·연결 소비자 호환
 
-- Status: TODO
+- Status: IN_PROGRESS
 - 담당: backend-specialist
 - Depends On: [P1-R3-T1]
-- Write Scope: BE/app/routers/data.py·export.py·asg.py, BE/app/asg_result.py, BE/app/reporting/*, BE/tests/test_export_snapshot_reports.py·test_asg_result_save.py 및 기존 PDF/XLSX/ASG 출력 테스트의 계약·setup 갱신
+- Write Scope: BE/app/routers/data.py·export.py·asg.py, BE/app/asg_result.py, BE/app/reporting/* (한글 TrueType 글꼴·라이선스·출처 포함), BE/requirements-dev.txt의 PDF 렌더 검증 도구, BE/tests/test_export_snapshot_reports.py·test_asg_result_save.py 및 기존 PDF/XLSX/ASG 출력 테스트의 계약·setup 갱신
 - 구현: PDF max(cycles)·XLSX 독자 조건 선택을 공통 snapshot으로 연결한다. 그림·판정·신뢰도는 같은 결과, Ct 등 전체 곡선 값은 별도 계산 범위를 명시한다.
 - 구현: ASG 등 결과 소비자의 추가 필드/오류를 점검하고 필요한 adapter만 적용한다. 스코프·저장 상태 정책은 보존한다.
 - 검증: 실제 CSV/PDF/XLSX의 공통 웰·판정·수치·metadata 비교. PDF metadata만이 아니라 렌더에 전달된 수치도 검증. 기존 보고서/ASG 회귀.
+- 검증 준비: pypdfium2는 검증된 wheel 버전을 개발 의존성에만 고정하고 audit한다. 한글 TrueType 글꼴은 원본·재배포 라이선스·upstream commit/SHA-256을 함께 보관하고 PDF에 포함한다. 호스트 전용 글꼴 경로나 뷰어의 CJK 대체 글꼴을 배포 검증으로 간주하지 않는다. 긴 한글 이름·모든 페이지의 렌더링과 텍스트를 확인한다.
 - [ ] AC: 형식별 묵시적 사이클 대체가 없고 정상/legacy/stale·소비자 호환성이 확인됨.
 
 ### P1-S0-T1: 프론트 API·분석/탐색 상태 기반
@@ -509,4 +512,4 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 4. 각 작업은 승인된 scope에서 RED → GREEN → REFACTOR → 검증 → 로컬 commit → 증거 보고 순으로 진행한다. 게이트 실패 시 후속 작업을 시작하지 않는다.
 5. 재개 시 계획 hash·branch/commit·상태·증거를 대조한다. 문서의 TODO를 추측으로 DONE 처리하거나 이전 작업서의 상태를 재사용하지 않는다.
 
-현재 상태: **2026-09-07 9/33 완료, P1 출력 스냅샷·CSV 구현 중**. P0 독립 게이트 통과·로컬 통합 후 P1-R1-T1/T2/T3 및 P1-R2-T1도 독립 검증했다. 사용자가 lint·도구·런타임/인증 의존성 보완과 완료까지 자율 진행을 승인했다. 로컬 Phase 통합·자동 진행하며 원격 push·배포·외부 알림은 제외한다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.
+현재 상태: **2026-09-07 10/33 완료, P1 PDF·XLSX·ASG 연결 구현 중**. P0 독립 게이트 통과·로컬 통합 후 P1-R1-T1/T2/T3, P1-R2-T1, P1-R3-T1도 독립 검증했다. 사용자가 lint·도구·런타임/인증 의존성 보완과 완료까지 자율 진행을 승인했다. 로컬 Phase 통합·자동 진행하며 원격 push·배포·외부 알림은 제외한다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.
