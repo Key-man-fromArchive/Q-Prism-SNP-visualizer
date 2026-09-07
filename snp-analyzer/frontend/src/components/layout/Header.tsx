@@ -12,6 +12,7 @@ import { useUndoRedo } from "@/hooks/use-undo-redo";
 import { useI18n } from "@/hooks/use-i18n";
 import { useLanguageStore } from "@/stores/language-store";
 import { QcBadges } from "@/components/shared/QcBadges";
+import { ManualEditStatus } from "@/components/shared/ManualEditStatus";
 import { AddToProjectButton } from "@/components/analysis/AddToProjectButton";
 import { Button, IconButton, Menu, Modal, type MenuItem } from "@/components/shared/ui";
 import { ApiError, logout, saveAsgResult } from "@/lib/api";
@@ -47,7 +48,7 @@ export function Header() {
   const analysisPending = useAnalysisStore((s) => s.pending);
   const { isDark, toggle: toggleDarkMode } = useDarkMode();
   const { downloadCSV, exportPNG, exportPDF, exportXLSX, exportStored, printReport } = useExports();
-  const { undo, redo, canUndo, canRedo } = useUndoRedo();
+  const { undo, redo, canUndo, canRedo, pending: manualPending, error: manualError } = useUndoRedo();
   const { t } = useI18n();
   const { language, setLanguage } = useLanguageStore();
 
@@ -327,6 +328,7 @@ export function Header() {
         </IconButton>
       </div>
     </header>
+    <ManualEditStatus pending={manualPending} error={manualError} />
     <Modal
       open={exportMismatch !== null}
       onClose={closeMismatch}

@@ -701,6 +701,8 @@ export type MarkerQc = {
 export type WellTypesResponse = {
   assignments: Record<string, string>;
   imported_assignments?: Record<string, string>;
+  manual_assignments: Record<string, string>;
+  input_revision: number;
 };
 
 export type WellGroupsResponse = {

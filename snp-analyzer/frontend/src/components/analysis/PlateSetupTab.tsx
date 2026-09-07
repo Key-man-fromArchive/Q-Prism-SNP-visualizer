@@ -10,8 +10,6 @@ import { useDataStore } from "@/stores/data-store";
 import {
   getMarkers,
   saveMarkers,
-  getWellTypes,
-  setWellTypes as apiSetWellTypes,
   getSamples,
   updateSamples,
   listLayouts,
@@ -23,6 +21,9 @@ import {
 } from "@/lib/api";
 import type { MarkerRegion, SavedLayout, LayoutApplyConflict, MarkerCatalogEntry } from "@/types/api";
 import { WellType } from "@/types/api";
+import { assignManualWells } from "@/lib/manual-commands";
+import { parseWellType } from "@/lib/well-type-input";
+import { useWellTypeAssignments } from "@/hooks/use-well-type-assignments";
 import { MARKER_PALETTE } from "@/lib/constants";
 import { withDosageMax } from "@/lib/threshold-config";
 import { extractLayoutConflict, extractLayoutMissingWellsMessage } from "@/lib/layout-conflict";
@@ -48,7 +49,6 @@ export function PlateSetupTab() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const wellTypeAssignments = useDataStore((s) => s.wellTypeAssignments);
-  const setWellTypeAssignments = useDataStore((s) => s.setWellTypeAssignments);
 
   // Physical plate layout (96 = 8x12, 384 = 16x24) -- derived from the
   // session's own well count so this surface never has to wait on the
@@ -151,23 +151,7 @@ export function PlateSetupTab() {
     };
   }, [sessionId]);
 
-  // Keep the well-type store in sync with the backend (shared with
-  // AnalysisTab's own listener -- both read/write the same source of truth).
-  useEffect(() => {
-    if (!sessionId) return;
-    const load = async () => {
-      try {
-        const res = await getWellTypes(sessionId);
-        setWellTypeAssignments(res.assignments || {});
-        setImportedWellTypes(res.imported_assignments || {});
-      } catch {
-        // welltypes endpoint may be empty for a fresh session
-      }
-    };
-    load();
-    window.addEventListener("welltypes-changed", load);
-    return () => window.removeEventListener("welltypes-changed", load);
-  }, [sessionId, setWellTypeAssignments]);
+  useWellTypeAssignments(response => setImportedWellTypes(response.imported_assignments ?? {}));
 
   // Sample names parsed from PCRD/EDS are already mergeable with manual
   // overrides in the backend. Plate Setup is where the operator needs them,
@@ -510,22 +494,10 @@ export function PlateSetupTab() {
 
   async function setWellType(value: string) {
     if (!sessionId || selectedWells.length === 0) return;
-    const prevAssignments = wellTypeAssignments;
-    const optimistic = { ...prevAssignments };
-    selectedWells.forEach((w) => {
-      optimistic[w] = value;
-    });
-    setWellTypeAssignments(optimistic);
-    try {
-      await apiSetWellTypes(sessionId, {
-        wells: selectedWells,
-        well_type: value as WellType,
-      });
-      window.dispatchEvent(new CustomEvent("welltypes-changed"));
-    } catch (err) {
-      setWellTypeAssignments(prevAssignments);
-      setSaveError(err instanceof Error ? err.message : String(err));
-    }
+    const type = parseWellType(value);
+    if (!type) return;
+    setSaveError(null);
+    await assignManualWells([...selectedWells], type);
   }
 
   async function saveSampleName(well: string, name: string) {

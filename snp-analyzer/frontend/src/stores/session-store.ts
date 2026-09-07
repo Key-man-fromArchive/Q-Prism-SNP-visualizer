@@ -4,8 +4,10 @@ import type { UploadResponse } from '@/types/api';
 import { useAnalysisStore } from './analysis-store';
 import { useNavigationStore } from './navigation-store';
 import { useSelectionStore } from './selection-store';
+import { useUndoStore } from './undo-store';
 
 function invalidateSession() {
+  useUndoStore.getState().reset();
   useAnalysisStore.getState().clear();
   useNavigationStore.getState().clear();
   useSelectionStore.getState().setPlaying(false);

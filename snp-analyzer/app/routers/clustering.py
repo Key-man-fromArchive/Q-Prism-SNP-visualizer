@@ -573,32 +573,32 @@ async def get_clustering(sid: str, current_user: CurrentUser):
 @router.post("/api/data/{sid}/welltypes")
 async def set_well_types(sid: str, update: ManualWellTypeUpdate, current_user: CurrentUser):
     check_session_access(sid, current_user)
-    _get_session(sid)
-    proposed = {**welltype_store.get(sid, {}),
-                **dict.fromkeys(update.wells, update.well_type.value)}
-    revision = mutate_inputs(sid, update.expected_input_revision, welltypes=proposed)
+    with input_lock:
+        _get_session(sid)
+        proposed = {**welltype_store.get(sid, {}),
+                    **dict.fromkeys(update.wells, update.well_type.value)}
+        mutate_inputs(sid, update.expected_input_revision, welltypes=proposed)
+        return {"status": "ok", **_well_type_snapshot(sid)}
 
+
+def _well_type_snapshot(sid: str) -> dict[str, object]:
+    """Copy exact overrides and their revision while the caller holds input_lock."""
     unified = _get_session(sid)
-    assignments = dict(unified.imported_well_types or {})
-    assignments.update(welltype_store.get(sid, {}))
+    imported = dict(unified.imported_well_types or {})
+    manual = dict(welltype_store.get(sid, {}))
     return {
-        "status": "ok",
-        "input_revision": revision,
-        "assignments": assignments,
-        "imported_assignments": unified.imported_well_types or {},
+        "input_revision": unified.input_revision,
+        "assignments": {**imported, **manual},
+        "imported_assignments": imported,
+        "manual_assignments": manual,
     }
 
 
 @router.get("/api/data/{sid}/welltypes")
 async def get_well_types(sid: str, current_user: CurrentUser):
     check_session_access(sid, current_user)
-    unified = _get_session(sid)
-    assignments = dict(unified.imported_well_types or {})
-    assignments.update(welltype_store.get(sid, {}))
-    return {
-        "assignments": assignments,
-        "imported_assignments": unified.imported_well_types or {},
-    }
+    with input_lock:
+        return _well_type_snapshot(sid)
 
 
 @router.delete("/api/data/{sid}/welltypes")
@@ -613,18 +613,10 @@ async def clear_well_types(sid: str, current_user: CurrentUser, expected_input_r
 async def bulk_replace_well_types(sid: str, body: BulkWellTypeReplace, current_user: CurrentUser):
     """Replace all manual welltypes with the given snapshot (for undo/redo)."""
     check_session_access(sid, current_user)
-    _get_session(sid)
-    revision = mutate_inputs(sid, body.expected_input_revision, welltypes=dict(body.assignments))
-
-    unified = _get_session(sid)
-    assignments = dict(unified.imported_well_types or {})
-    assignments.update(welltype_store.get(sid, {}))
-    return {
-        "status": "ok",
-        "assignments": assignments,
-        "input_revision": revision,
-        "imported_assignments": unified.imported_well_types or {},
-    }
+    with input_lock:
+        _get_session(sid)
+        mutate_inputs(sid, body.expected_input_revision, welltypes=dict(body.assignments))
+        return {"status": "ok", **_well_type_snapshot(sid)}
 
 
 # ============================================================================

@@ -49,6 +49,35 @@ def test_override_noop_conflict_and_fallback(plate: SimpleNamespace) -> None:
     assert plate.client.delete(url).json()["input_revision"] == 2
 
 
+def test_exact_manual_snapshot_preserves_equal_imported_override(plate: SimpleNamespace) -> None:
+    plate.upload.sessions["s1"].imported_well_types = {"A1": "Unknown"}
+    url = "/api/data/s1/welltypes"
+    initial = plate.client.get(url).json()
+    assert initial["manual_assignments"] == {}
+    assert initial["input_revision"] == 0
+    edited = plate.client.post(url, json={
+        "wells": ["A1"], "well_type": "Unknown", "expected_input_revision": 0,
+    }).json()
+    assert edited["assignments"] == initial["assignments"]
+    assert edited["manual_assignments"] == {"A1": "Unknown"}
+    assert edited["input_revision"] == 1
+    noop = plate.client.put(url + "/bulk", json={
+        "assignments": edited["manual_assignments"], "expected_input_revision": 1,
+    }).json()
+    assert noop["manual_assignments"] == edited["manual_assignments"]
+    assert noop["input_revision"] == 1
+    restored = plate.client.put(url + "/bulk", json={
+        "assignments": initial["manual_assignments"], "expected_input_revision": 1,
+    }).json()
+    assert restored["manual_assignments"] == {}
+    assert restored["assignments"] == initial["assignments"]
+    assert restored["input_revision"] == 2
+    assert plate.client.post(url, json={
+        "wells": ["A1"], "well_type": "Omit", "expected_input_revision": 1,
+    }).status_code == 409
+    assert plate.client.get(url).json() == {k: v for k, v in restored.items() if k != "status"}
+
+
 def test_marker_edit_retains_previous_result_and_noop(plate: SimpleNamespace) -> None:
     assert (
         plate.client.post("/api/data/s1/cluster", json={"cycle": 1}).status_code == 200
@@ -143,6 +172,9 @@ def test_bulk_failure_preserves_db_memory_revision(plate: SimpleNamespace) -> No
         "A1": "NTC"
     }
     assert not conn.in_transaction
+    snapshot = plate.client.get("/api/data/s1/welltypes").json()
+    assert snapshot["manual_assignments"] == {"A1": "NTC"}
+    assert snapshot["input_revision"] == 1
 
 
 def test_invalid_inputs_and_metadata_do_not_increment(plate: SimpleNamespace) -> None:

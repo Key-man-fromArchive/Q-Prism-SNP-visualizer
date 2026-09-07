@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSessionStore } from "@/stores/session-store";
+import { undoManual, redoManual } from "@/lib/manual-commands";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { bootstrapAuth } from '@/lib/auth-bootstrap';
@@ -104,6 +105,8 @@ export default function App() {
       exportCSV: () => window.dispatchEvent(new CustomEvent('keyboard-export-csv')),
       toggleDarkMode,
       assignWellType: assign,
+      undo: undoManual,
+      redo: redoManual,
     }),
     [toggleDarkMode, assign]
   );
