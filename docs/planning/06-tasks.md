@@ -236,18 +236,20 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P1-S0-T1: 프론트 API·분석/탐색 상태 기반
 
-- Status: IN_PROGRESS
+- Status: DONE
+- Commit: c880b0a803aa41635237ed9cd0609431670c001a
+- Evidence: [P1-S0-T1](ui-ux-overhaul/evidence/P1-S0-T1.md). FE 167개·독립 집중 62개, lint/build/type 통과. 신규 모듈 및 API 변경 실행 줄 각각 100%, 복잡도 ≤10. 실제 화면 연결은 P2/P3 범위.
 - 담당: frontend-specialist
 - Depends On: [P1-R3-T2]
 - Write Scope: SRC/types/api.ts, SRC/lib/api.ts, 신규 SRC/stores/analysis-store.ts·navigation-store.ts, SRC/lib/analysis-context.ts 및 단위 테스트
 - 구현: context/QC/revision/409 타입·API를 연결하고 런타임 경계에서 missing/legacy/error를 구분한다. analysis-store에 결과·pending/current/mismatch/error·요청 ID를 둔다.
 - 구현: navigation-store와 URL 직렬화/유효성 순수 함수를 정의한다. 실제 App 마운트·URL 복원은 후속 작업에서 연결한다.
 - 검증: parameters별 불일치/보기 변경, 구응답·역순 응답, URL 왕복·잘못된 값, 409. FE-TEST, FE-CHECK.
-- [ ] AC: 소비 화면이 값을 추정하지 않고 조건/버전/탐색의 단일 소유자를 사용할 수 있음.
+- [x] AC: 소비 화면이 값을 추정하지 않고 조건/버전/탐색의 단일 소유자를 사용할 수 있음.
 
 ### P1-S0-V: 계약·서버 품질 게이트
 
-- Status: TODO
+- Status: IN_PROGRESS
 - 담당: test-specialist
 - Depends On: [P1-S0-T1]
 - Write Scope: docs/planning/ui-ux-overhaul/evidence/P1-S0-V.md
