@@ -1,6 +1,7 @@
 // @TASK References Tab Component
 // @SPEC Scientific / literature basis for the polyploid genotyping method
 // @TEST none yet (E2E to be added; data-testid="references-tab" reserved for it)
+import { useI18n } from '@/hooks/use-i18n';
 
 type ReferenceEntry = {
   citation: string;
@@ -101,26 +102,27 @@ const GROUPS: ReferenceGroup[] = [
 ];
 
 function ReferenceCard({ entry, index }: { entry: ReferenceEntry; index: number }) {
+  const { t, language } = useI18n();
   return (
     <li className="border border-border rounded-md bg-bg p-3.5">
       <div className="flex gap-2.5">
         <span className="text-xs font-semibold text-text-muted mt-0.5 shrink-0">[{index}]</span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm text-text leading-relaxed">{entry.citation}</p>
+          <p className="text-sm text-text leading-relaxed break-words">{entry.citation}</p>
           <a
             href={`https://doi.org/${entry.doi}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block mt-1 text-xs text-primary hover:text-primary-hover hover:underline"
+            aria-label={`doi:${entry.doi} — ${t.externalLinkNotice}`}
+            className="inline-block max-w-full break-all mt-1 text-xs text-primary hover:text-primary-hover hover:underline"
           >
             doi:{entry.doi}
           </a>
           <div className="mt-2 pt-2 border-t border-border/60">
             <p className="text-xs text-text">
-              <span className="font-semibold text-text-muted">이 도구에서의 근거: </span>
-              {entry.groundsKo}
+              <span className="font-semibold text-text-muted">{language === 'ko' ? '이 도구에서의 근거: ' : 'Basis in this tool: '}</span>
+              {language === 'ko' ? entry.groundsKo : entry.groundsEn}
             </p>
-            <p className="text-xs text-text-muted italic mt-0.5">{entry.groundsEn}</p>
           </div>
         </div>
       </div>
@@ -134,32 +136,25 @@ const ENTRY_INDEX: ReadonlyMap<string, number> = new Map(
 );
 
 export function ReferencesTab() {
+  const { t, language } = useI18n();
+  const ko = language === 'ko';
   return (
-    <div style={{ padding: '16px 24px', maxWidth: '860px' }} data-testid="references-tab">
+    <div className="p-4 sm:px-6 max-w-[860px] min-w-0 break-words" data-testid="references-tab">
       <div className="panel" style={{ borderRadius: '8px', padding: '20px' }}>
-        <h3 className="text-lg font-semibold text-text mb-1">참고문헌 / References</h3>
+        <h3 className="text-lg font-semibold text-text mb-1">{t.tabReferences}</h3>
         <p className="text-sm text-text-muted mb-1">
-          이 도구의 폴리플로이드(다배체) 유전형 판별 방법은 이대립(bi-allelic) 마커 dosage 판별을 위한
-          혼합모델/대립유전자 비율 계보를 따릅니다.
-        </p>
-        <p className="text-xs text-text-muted mb-5 italic">
-          This tool&apos;s polyploid genotyping follows the established mixture-model / allelic-ratio
-          lineage for bi-allelic marker dosage calling.
+          {ko
+            ? '이 도구의 폴리플로이드(다배체) 유전형 판별 방법은 이대립 마커 dosage 판별을 위한 혼합모델·대립유전자 비율 계보를 따릅니다.'
+            : 'This tool’s polyploid genotyping follows the established mixture-model and allelic-ratio lineage for bi-allelic marker dosage calling.'}
         </p>
 
         {/* Scope & validation note */}
         <div className="mb-6 rounded-md border border-l-4 border-primary bg-primary/5 p-4">
-          <h4 className="text-sm font-semibold text-text mb-1.5">적용 범위 / Validation status</h4>
+          <h4 className="text-sm font-semibold text-text mb-1.5">{ko ? '적용 범위와 검증 상태' : 'Scope and validation status'}</h4>
           <p className="text-sm text-text leading-relaxed">
-            이 도구는 상대 클러스터링과 이배체 대립판별(AA/AB/BB)에 견고합니다. 절대 배수성 dosage(예:
-            AAAAAB)는 assay별 상대증폭 안정성 검증(정의비율 대조/보정) 없이는 잠정값이며(Cuenca et al.
-            2013), 독립 검증(sequencing/KASP 패널)으로 확인이 필요합니다.
-          </p>
-          <p className="text-xs text-text-muted italic mt-2 leading-relaxed">
-            This tool is robust for relative clustering and diploid allele calling (AA/AB/BB). Absolute
-            polyploid dosage calls (e.g., AAAAAB) remain provisional without assay-specific validation of
-            relative amplification stability (defined-ratio controls/calibration) (Cuenca et al. 2013),
-            and require independent confirmation (sequencing/KASP panels).
+            {ko
+              ? '이 도구는 상대 클러스터링과 이배체 대립판별(AA/AB/BB)에 견고합니다. 절대 배수성 dosage(예: AAAAAB)는 assay별 상대증폭 안정성 검증 없이는 잠정값이며, 독립 검증이 필요합니다.'
+              : 'This tool is robust for relative clustering and diploid allele calling (AA/AB/BB). Absolute polyploid dosage calls (for example, AAAAAB) remain provisional without assay-specific relative-amplification validation and require independent confirmation.'}
           </p>
         </div>
 
@@ -167,9 +162,8 @@ export function ReferencesTab() {
         <div className="flex flex-col gap-6">
           {GROUPS.map((group) => (
             <section key={group.id}>
-              <h4 className="text-sm font-semibold text-text mb-0.5">{group.titleKo}</h4>
-              <p className="text-xs text-text-muted mb-0.5">{group.titleEn}</p>
-              <p className="text-xs text-text-muted mb-2.5">{group.descKo}</p>
+              <h4 className="text-sm font-semibold text-text mb-0.5">{ko ? group.titleKo : group.titleEn}</h4>
+              <p className="text-xs text-text-muted mb-2.5">{ko ? group.descKo : group.descEn}</p>
               <ul className="flex flex-col gap-2.5 list-none p-0 m-0">
                 {group.entries.map((entry) => (
                   <ReferenceCard key={entry.doi} entry={entry} index={ENTRY_INDEX.get(entry.doi) ?? 0} />

@@ -17,6 +17,8 @@ export type ModalProps = {
   hideClose?: boolean;
   /** Optional aria role override (e.g. "alertdialog" for destructive confirms). */
   role?: "dialog" | "alertdialog";
+  /** Localized accessible name for the header close button. */
+  closeLabel?: string;
 };
 
 const FOCUSABLE =
@@ -38,6 +40,7 @@ export function Modal({
   widthClassName = "max-w-md",
   hideClose,
   role = "dialog",
+  closeLabel = "Close",
 }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
@@ -127,7 +130,7 @@ export function Modal({
             )}
           </div>
           {!hideClose && (
-            <IconButton size="sm" aria-label="Close" onClick={onClose}>
+            <IconButton size="sm" aria-label={closeLabel} onClick={onClose}>
               <X size={16} aria-hidden="true" />
             </IconButton>
           )}

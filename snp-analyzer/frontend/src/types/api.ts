@@ -738,7 +738,7 @@ export type CompareRunStats = RoleLabelMetadata & {
   session_id: string;
   instrument: string;
   allele2_dye: string;
-  num_wells: number;
+  n_wells: number;
   mean_fam: number;
   mean_allele2: number;
   std_fam: number;
@@ -749,8 +749,8 @@ export type CompareStatsResponse = {
   run1: CompareRunStats;
   run2: CompareRunStats;
   correlation: {
-    fam_r: number;
-    allele2_r: number;
+    fam_r: number | null;
+    allele2_r: number | null;
     n_matched_wells: number;
   };
 };
@@ -851,6 +851,6 @@ export type ProjectSummaryResponse = {
   concordance: {
     concordant_wells: number;
     total_compared: number;
-    percentage: number;
+    percentage: number | null;
   };
 };

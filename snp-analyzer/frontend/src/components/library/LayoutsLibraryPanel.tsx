@@ -12,43 +12,57 @@ import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
-import { listLayouts, saveLayout, deleteLayout, copyLayout, applyLayout, ApiError } from "@/lib/api";
-import type { SavedLayout, LayoutApplyConflict } from "@/types/api";
-import { extractLayoutConflict, extractLayoutMissingWellsMessage } from "@/lib/layout-conflict";
+import { listLayouts, saveLayout, deleteLayout, copyLayout } from "@/lib/api";
+import type { SavedLayout } from "@/types/api";
+import { useAuthStore } from '@/stores/auth-store';
+import { Modal } from '@/components/shared/ui/Modal';
+import { useLayoutApply } from './use-layout-apply';
+import { useOwnedOperation } from '@/hooks/use-owned-operation';
+import { useConfirm } from '@/hooks/use-confirm';
+import { validLayoutList } from '@/lib/management-payload';
 
 export function LayoutsLibraryPanel() {
+  const generation = useAuthStore(s => s.generation);
+  const entry = useSessionStore(s => s.entryGeneration);
+  const sid = useSessionStore(s => s.sessionId);
+  return <LayoutsWorkspace key={`${generation}:${entry}:${sid}`} />;
+}
+
+function LayoutsWorkspace() {
   const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
+  const readOwner = useOwnedOperation();
+  const mutationOwner = useOwnedOperation();
+  const confirmationOwner = useOwnedOperation();
+  const { confirm: confirmDelete, confirmDialog } = useConfirm();
 
   const [layouts, setLayouts] = useState<SavedLayout[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [applyingId, setApplyingId] = useState<string | null>(null);
-  const [conflict, setConflict] = useState<{
-    layoutId: string;
-    layoutName: string;
-    conflict: LayoutApplyConflict;
-  } | null>(null);
+  const { applyingId, conflict, load, confirm, cancel } = useLayoutApply(sessionId, () => setError(t.libraryActionFailed));
 
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [saving, setSaving] = useState(false);
 
   const refresh = useMemo(
-    () => async () => {
+    () => async (afterChange = false) => {
+      const ticket = readOwner.begin();
       setLoading(true);
       setError(null);
       try {
-        const res = await listLayouts();
-        setLayouts(res.layouts);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+      const res = await listLayouts();
+      if (!readOwner.current(ticket)) return;
+      if (!validLayoutList(res)) throw new Error('Invalid layout response');
+      setLayouts(res.layouts);
+      } catch {
+        if (readOwner.current(ticket)) setError(afterChange ? t.libraryRefreshFailed : t.statusLoadFailed);
       } finally {
-        setLoading(false);
+        if (readOwner.current(ticket)) setLoading(false);
       }
     },
-    []
+    [readOwner, t]
   );
 
   useEffect(() => {
@@ -56,74 +70,31 @@ export function LayoutsLibraryPanel() {
   }, [refresh]);
 
   async function handleCopy(layout: SavedLayout) {
+    const ticket = mutationOwner.begin();
     setError(null);
     try {
       await copyLayout(layout.id);
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (mutationOwner.current(ticket)) await refresh(true);
+    } catch {
+      if (mutationOwner.current(ticket)) setError(t.libraryActionFailed);
     }
   }
 
   async function handleDelete(layout: SavedLayout) {
+    const confirmationTicket = confirmationOwner.begin();
+    if (!(await confirmDelete({ title: t.delete, message: t.layoutDeleteConfirm(layout.name), danger: true }))) return;
+    if (!confirmationOwner.current(confirmationTicket)) return;
+    const ticket = mutationOwner.begin();
+    if (!mutationOwner.current(ticket)) return;
     setError(null);
     try {
       await deleteLayout(layout.id);
+      if (!mutationOwner.current(ticket)) return;
       setLayouts((prev) => prev.filter((l) => l.id !== layout.id));
-      if (conflict?.layoutId === layout.id) setConflict(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (conflict?.layout.id === layout.id) cancel();
+    } catch {
+      if (mutationOwner.current(ticket)) setError(t.libraryActionFailed);
     }
-  }
-
-  /** Loads a saved layout onto the CURRENT session's plate. Never blind --
-   * a 409 (ploidy conflict, L2) stops here and requires an explicit
-   * second confirmation via `confirmConflictForce`, mirroring the same
-   * `/api/layouts/{id}/apply` contract the Plate Setup surface's own
-   * "레이아웃 적용" quick action uses. */
-  async function handleLoad(layout: SavedLayout, force: boolean) {
-    if (!sessionId) return;
-    setError(null);
-    setApplyingId(layout.id);
-    try {
-      await applyLayout(layout.id, { sid: sessionId, force });
-      setConflict(null);
-      // Neither AnalysisWorkspace nor PlateSetupTab re-fetch their own
-      // (locally-held) marker/well-type state on a top-level tab switch --
-      // only on session change or plate/analysis surface toggles -- so a
-      // Library-triggered apply must announce itself explicitly.
-      window.dispatchEvent(new CustomEvent("markers-changed"));
-      window.dispatchEvent(new CustomEvent("welltypes-changed"));
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        const c = extractLayoutConflict(err);
-        if (c) {
-          setConflict({ layoutId: layout.id, layoutName: layout.name, conflict: c });
-          return;
-        }
-      }
-      if (err instanceof ApiError && err.status === 400) {
-        setError(extractLayoutMissingWellsMessage(err));
-        return;
-      }
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setApplyingId(null);
-    }
-  }
-
-  function cancelConflict() {
-    setConflict(null);
-  }
-
-  async function confirmConflictForce() {
-    if (!conflict) return;
-    const layout = layouts.find((l) => l.id === conflict.layoutId);
-    if (!layout) {
-      setConflict(null);
-      return;
-    }
-    await handleLoad(layout, true);
   }
 
   function openSaveForm() {
@@ -140,26 +111,29 @@ export function LayoutsLibraryPanel() {
   async function confirmSave() {
     const name = saveName.trim();
     if (!name || !sessionId) return;
+    const ticket = mutationOwner.begin();
     setSaving(true);
     setError(null);
     try {
       await saveLayout(name, sessionId);
+      if (!mutationOwner.current(ticket)) return;
       setShowSaveForm(false);
       setSaveName("");
-      await refresh();
+      await refresh(true);
       // PlateSetupTab's own "레이아웃 적용" quick action reads its cached
       // layout list to find the most-recently-saved one -- keep it fresh
       // even though the save happened from this (Library) surface.
-      window.dispatchEvent(new CustomEvent("layouts-changed"));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (mutationOwner.current(ticket)) window.dispatchEvent(new CustomEvent("layouts-changed"));
+    } catch {
+      if (mutationOwner.current(ticket)) setError(t.libraryActionFailed);
     } finally {
-      setSaving(false);
+      if (mutationOwner.current(ticket)) setSaving(false);
     }
   }
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-4 sm:p-6 max-w-2xl min-w-0">
+      {confirmDialog}
       <div className="panel mb-4">
         <h2 className="text-lg font-semibold text-text mb-1">{t.wsLayoutLibraryTitle}</h2>
 
@@ -173,14 +147,14 @@ export function LayoutsLibraryPanel() {
         )}
 
         {error && (
-          <div className="mt-3 px-3 py-2 rounded-md text-sm text-danger bg-danger/10">{error}</div>
+          <div role="alert" className="mt-3 px-3 py-2 rounded-md text-sm text-danger bg-danger/10">{error} <button type="button" onClick={() => void refresh()}>{t.retry}</button></div>
         )}
       </div>
 
       <div className="panel">
         {loading ? (
-          <p className="text-sm text-text-muted py-6 text-center">{t.loading}</p>
-        ) : layouts.length === 0 ? (
+          <p role="status" className="text-sm text-text-muted py-6 text-center">{t.loading}</p>
+        ) : layouts.length === 0 && !error ? (
           <p className="text-sm text-text-muted py-6 text-center whitespace-pre-line">
             {t.wsLayoutEmpty}
           </p>
@@ -190,10 +164,10 @@ export function LayoutsLibraryPanel() {
               <div key={l.id}>
                 <div
                   data-testid="layout-row"
-                  className="flex items-center gap-2 border border-border bg-bg rounded-md p-3"
+                  className="flex flex-wrap items-center gap-2 border border-border bg-bg rounded-md p-3"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm text-text truncate">{l.name}</div>
+                    <div title={l.name} className="font-semibold text-sm text-text break-words">{l.name}</div>
                     <div className="text-xs text-text-muted font-mono mt-0.5">
                       {t.wsLayoutMeta(
                         l.snapshot.markers.length,
@@ -201,13 +175,13 @@ export function LayoutsLibraryPanel() {
                       )}
                     </div>
                   </div>
-                  <div className="flex-none flex gap-2">
+                  <div className="flex-none flex flex-wrap gap-2">
                     {sessionId && (
                       <button
                         type="button"
                         data-testid="layout-load-button"
-                        disabled={applyingId === l.id}
-                        onClick={() => handleLoad(l, false)}
+                        disabled={applyingId !== null}
+                        onClick={() => load(l)}
                         className="border border-primary text-primary rounded-md px-2.5 py-1 text-xs font-semibold hover:bg-primary hover:text-white disabled:opacity-40 cursor-pointer"
                       >
                         {t.libLoadOntoCurrentButton}
@@ -234,23 +208,22 @@ export function LayoutsLibraryPanel() {
                   </div>
                 </div>
 
-                {conflict?.layoutId === l.id && (
+                {conflict?.layout.id === l.id && (
+                  <Modal open onClose={cancel} title={t.wsLayoutPloidyConflictTitle} closeLabel={t.close} role="alertdialog">
                   <div
                     data-testid="layout-load-conflict-dialog"
-                    role="alertdialog"
-                    aria-modal="true"
                     className="mt-1 px-2.5 py-2 rounded-md text-xs border"
                     style={{ background: "rgba(217,119,6,0.12)", borderColor: "rgba(217,119,6,0.35)" }}
                   >
                     <p className="font-semibold text-text mb-1">{t.wsLayoutPloidyConflictTitle}</p>
                     <p className="text-text-muted mb-2">
-                      {t.wsLayoutPloidyConflictBody(conflict.conflict.conflicting_marker_ids.join(", "))}
+                      {t.wsLayoutPloidyConflictBody(conflict.ids.join(", "))}
                     </p>
                     <div className="flex gap-1.5 justify-end">
                       <button
                         type="button"
                         data-testid="layout-load-conflict-cancel"
-                        onClick={cancelConflict}
+                        onClick={cancel}
                         className="px-2.5 py-1 rounded-md text-xs font-medium bg-bg text-text-muted cursor-pointer"
                       >
                         {t.cancel}
@@ -258,13 +231,15 @@ export function LayoutsLibraryPanel() {
                       <button
                         type="button"
                         data-testid="layout-load-conflict-confirm"
-                        onClick={confirmConflictForce}
+                        disabled={applyingId !== null}
+                        onClick={confirm}
                         className="px-2.5 py-1 rounded-md text-xs font-semibold bg-danger text-white cursor-pointer"
                       >
                         {t.wsLayoutForceApplyButton}
                       </button>
                     </div>
                   </div>
+                  </Modal>
                 )}
               </div>
             ))}
@@ -277,11 +252,13 @@ export function LayoutsLibraryPanel() {
               <div className="flex gap-1.5">
                 <input
                   data-testid="library-layout-save-name-input"
+                  aria-label={t.wsLayoutSaveNamePlaceholder}
                   type="text"
                   value={saveName}
                   onChange={(e) => setSaveName(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") void confirmSave();
+                    if (e.key === "Escape") cancelSaveForm();
                   }}
                   placeholder={t.wsLayoutSaveNamePlaceholder}
                   className="flex-1 min-w-0 border border-primary rounded-md px-2 py-1.5 text-xs bg-surface text-text"

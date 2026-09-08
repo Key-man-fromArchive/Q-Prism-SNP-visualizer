@@ -1,6 +1,11 @@
 import type { Translations } from './en';
 
 const ko: Translations = {
+  externalLinkNotice: '외부 사이트, 새 탭에서 열림',
+  compareUnavailable: '산출 불가',
+  layoutDeleteConfirm: (name: string) => `저장된 레이아웃 "${name}"을 삭제할까요? 되돌릴 수 없습니다.`,
+  libraryActionFailed: '변경을 완료하지 못했습니다. 현재 화면은 유지됩니다. 다시 시도하세요.',
+  libraryRefreshFailed: '변경은 완료되었지만 최신 목록을 불러오지 못했습니다. 목록 조회를 다시 시도하세요.',
   protocolSaved: '프로토콜을 저장했습니다.',
   protocolEmpty: '프로토콜 단계가 없습니다. 단계를 추가하세요.',
   chartNoDisplayedCall: '표시된 판정 없음',
@@ -422,6 +427,8 @@ const ko: Translations = {
   dataPoints: '데이터 포인트',
   noSessionsYet: '세션 없음',
   noProjectsForUser: '프로젝트 없음',
+  noMembers: '멤버가 없습니다.',
+  noUsers: '사용자가 없습니다.',
   lastUploaded: '마지막 업로드',
   memberDetail: '멤버 상세',
   ownedSessions: '세션',
@@ -441,6 +448,9 @@ const ko: Translations = {
   uploaded: '업로드 일시',
   noProjectsYet: '프로젝트가 없습니다.',
   noSessions: '세션이 없습니다. 파일을 먼저 업로드하세요.',
+  selectAllSessions: '모든 세션 선택',
+  selectAllProjectSessions: '이 프로젝트의 모든 세션 선택',
+  selectSession: (name: string) => `세션 ${name} 선택`,
   deleteProjectConfirm: (name: string) => `프로젝트 "${name}"을(를) 삭제하시겠습니까?`,
   deleteSessionConfirm: (name: string) => `세션 "${name}"을(를) 영구 삭제하시겠습니까?\n모든 프로젝트에서 제거됩니다.`,
   bulkDeleteConfirm: (n: number) => `${n}개 세션을 영구 삭제하시겠습니까?\n모든 프로젝트에서 제거되며 되돌릴 수 없습니다.`,

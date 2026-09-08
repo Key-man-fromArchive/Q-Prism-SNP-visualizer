@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useI18n } from "@/hooks/use-i18n";
 import { MarkerCatalogTab } from "@/components/catalog/MarkerCatalogTab";
 import { LayoutsLibraryPanel } from "@/components/library/LayoutsLibraryPanel";
+import { navigateTabs } from '@/lib/tab-keyboard';
 
 type LibrarySurface = "catalog" | "layouts";
 
@@ -20,6 +21,7 @@ export function LibraryTab() {
     <div>
       <div
         role="tablist"
+        onKeyDown={navigateTabs}
         aria-label={t.tabLibrary}
         className="flex gap-1 px-6 pt-3 border-b border-border bg-surface"
       >
@@ -29,6 +31,8 @@ export function LibraryTab() {
           id="library-subtab-catalog"
           data-testid="library-subtab-catalog"
           aria-selected={activeSurface === "catalog"}
+          aria-controls="library-panel-catalog"
+          tabIndex={activeSurface === 'catalog' ? 0 : -1}
           onClick={() => setActiveSurface("catalog")}
           className={`px-4 py-2 rounded-t-md text-sm font-medium cursor-pointer ${
             activeSurface === "catalog"
@@ -44,6 +48,8 @@ export function LibraryTab() {
           id="library-subtab-layouts"
           data-testid="library-subtab-layouts"
           aria-selected={activeSurface === "layouts"}
+          aria-controls="library-panel-layouts"
+          tabIndex={activeSurface === 'layouts' ? 0 : -1}
           onClick={() => setActiveSurface("layouts")}
           className={`px-4 py-2 rounded-t-md text-sm font-medium cursor-pointer ${
             activeSurface === "layouts"
@@ -57,6 +63,9 @@ export function LibraryTab() {
 
       <div
         data-testid="library-panel-catalog"
+        id="library-panel-catalog"
+        role="tabpanel"
+        aria-labelledby="library-subtab-catalog"
         className={activeSurface === "catalog" ? "" : "hidden"}
       >
         <MarkerCatalogTab />
@@ -64,9 +73,12 @@ export function LibraryTab() {
 
       <div
         data-testid="library-panel-layouts"
+        id="library-panel-layouts"
+        role="tabpanel"
+        aria-labelledby="library-subtab-layouts"
         className={activeSurface === "layouts" ? "" : "hidden"}
       >
-        <LayoutsLibraryPanel />
+        {activeSurface === 'layouts' && <LayoutsLibraryPanel />}
       </div>
     </div>
   );
