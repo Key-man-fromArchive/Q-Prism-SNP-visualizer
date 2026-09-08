@@ -102,6 +102,18 @@ export function ScatterViewControls({
   const yMin = useSettingsStore((s) => s.yMin);
   const yMax = useSettingsStore((s) => s.yMax);
   const setAxisRange = useSettingsStore((s) => s.setAxisRange);
+  const xNtcOffsetRaw = useSettingsStore((s) => s.xNtcOffsetRaw);
+  const yNtcOffsetRaw = useSettingsStore((s) => s.yNtcOffsetRaw);
+  const xNtcOffsetNormalized = useSettingsStore((s) => s.xNtcOffsetNormalized);
+  const yNtcOffsetNormalized = useSettingsStore((s) => s.yNtcOffsetNormalized);
+  const setNtcAxisOffset = useSettingsStore((s) => s.setNtcAxisOffset);
+  const resetNtcAxisOffsets = useSettingsStore((s) => s.resetNtcAxisOffsets);
+  const offsetBasis: "raw" | "normalized" = normalizationApplied ? "normalized" : "raw";
+  const ntcOffsets = normalizationApplied
+    ? { x: xNtcOffsetNormalized, y: yNtcOffsetNormalized }
+    : { x: xNtcOffsetRaw, y: yNtcOffsetRaw };
+  const defaultOffsets = normalizationApplied ? { x: 0.1, y: 0.1 } : { x: 100, y: 100 };
+  const offsetsAtDefault = ntcOffsets.x === defaultOffsets.x && ntcOffsets.y === defaultOffsets.y;
 
   // The dropdown is a DRAFT until Apply -- the operator asked for an explicit
   // commit, and re-clustering on every dropdown change would fire a request
@@ -133,13 +145,19 @@ export function ScatterViewControls({
     testId: string,
     value: number,
     onChange: (v: number) => void,
-    disabled: boolean
+    disabled: boolean,
+    inputStep = step,
+    ariaLabel?: string,
+    minValue?: number,
   ) => (
     <input
       type="number"
+      id={testId}
       data-testid={testId}
       value={Number.isFinite(value) ? value : 0}
-      step={step}
+      step={inputStep}
+      min={minValue}
+      aria-label={ariaLabel}
       disabled={disabled}
       onChange={(event) => {
         const next = Number(event.target.value);
@@ -153,6 +171,7 @@ export function ScatterViewControls({
     <details data-testid="analysis-advanced-settings" className="analysis-advanced-settings mb-2">
       <summary className="cursor-pointer text-xs text-text rounded border border-border p-2">
         {t.analysisAdvancedSettings} · {axisModeLabel(axisMode)} · {labels.fam}/{labels.allele2} · <ScatterReferenceBasis requested={useRox} applied={normalizationApplied} /> · {t.chartBackground(backgroundMode)}
+        {' · '}{t.ntcAxisOffsetLabel}: {ntcOffsets.x}, {ntcOffsets.y}
         {' · '}{t.analysisNtcMode(ntcCorner !== null)}: {labels.fam} ≤{roundBound(effectiveNtcCorner.fam)}, {labels.allele2} ≤{roundBound(effectiveNtcCorner.allele2)} · {t.analysisAspectState(lockAspect)}
       </summary>
     <div
@@ -237,6 +256,45 @@ export function ScatterViewControls({
           {numberInput("axis-y-min", yMin, (v) => setAxisRange({ xMin, xMax, yMin: v, yMax }), !manual)}
           <span>–</span>
           {numberInput("axis-y-max", yMax, (v) => setAxisRange({ xMin, xMax, yMin, yMax: v }), !manual)}
+        </div>
+      </div>
+
+      {/* The default range starts a small, operator-controlled distance before
+          the NTC ratio origin. Raw RFU and normalized values have different
+          units, so each basis has its own persisted pair. */}
+      <div className="flex flex-col gap-1" data-testid="ntc-axis-offsets">
+        <span className="text-xs font-medium text-text-muted">{t.ntcAxisOffsetLabel}</span>
+        <div className="flex flex-wrap items-center gap-1 text-xs text-text-muted">
+          <label htmlFor="ntc-axis-x-offset">{labels.fam}</label>
+          {numberInput(
+            "ntc-axis-x-offset",
+            ntcOffsets.x,
+            (v) => setNtcAxisOffset(offsetBasis, "x", v),
+            axisMode !== "zero",
+            normalizationApplied ? 0.01 : 10,
+            `${labels.fam} ${t.ntcAxisOffsetLabel}`,
+            0,
+          )}
+          <label htmlFor="ntc-axis-y-offset" className="ml-1">{labels.allele2}</label>
+          {numberInput(
+            "ntc-axis-y-offset",
+            ntcOffsets.y,
+            (v) => setNtcAxisOffset(offsetBasis, "y", v),
+            axisMode !== "zero",
+            normalizationApplied ? 0.01 : 10,
+            `${labels.allele2} ${t.ntcAxisOffsetLabel}`,
+            0,
+          )}
+          <button
+            type="button"
+            data-testid="ntc-axis-offset-reset"
+            disabled={offsetsAtDefault}
+            onClick={() => resetNtcAxisOffsets(offsetBasis)}
+            title={t.ntcAxisOffsetReset}
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary disabled:opacity-40"
+          >
+            <RotateCcw size={12} aria-hidden="true" /> {t.ntcAxisOffsetReset}
+          </button>
         </div>
       </div>
 

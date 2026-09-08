@@ -33,6 +33,25 @@ it('renders dark NTC with a non-color symbol and visible outline', async () => {
   } finally { document.body.classList.remove('dark'); }
 });
 
+it('revisions the Plotly view when NTC origin offsets change', async () => {
+  useSettingsStore.setState({ axisMode: 'zero', lockAspect: false, xNtcOffsetRaw: 100, yNtcOffsetRaw: 100 });
+  useDataStore.setState({ normalizationApplied: false });
+  render(<MarkerScatterPlot sessionId="run-a" marker={marker} region={undefined}
+    ratioOrigin={{ fam: 1000, allele2: 2000, source: 'ntc' }}
+    points={[{ ...point, norm_fam: 1000, norm_allele2: 2000, raw_fam: 1000, raw_allele2: 2000 }]}
+    scatterProvenance={{ cycle: 20, useRox: false, backgroundMode: 'none' }} onBoundariesPersisted={vi.fn()} />);
+  await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalled());
+  const initialLayout = vi.mocked(Plotly.newPlot).mock.calls.at(-1)?.[2] as { xaxis?: { range?: number[] }; uirevision?: string };
+  expect(initialLayout.xaxis?.range?.[0]).toBe(900);
+  const initialRevision = initialLayout.uirevision;
+
+  act(() => useSettingsStore.setState({ xNtcOffsetRaw: 250 }));
+  await waitFor(() => expect(Plotly.react).toHaveBeenCalled());
+  const updatedLayout = vi.mocked(Plotly.react).mock.calls.at(-1)?.[2] as { xaxis?: { range?: number[] }; uirevision?: string };
+  expect(updatedLayout.xaxis?.range?.[0]).toBe(750);
+  expect(updatedLayout.uirevision).not.toBe(initialRevision);
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   useSessionStore.setState({ sessionId: 'run-a', entryGeneration: 3 });

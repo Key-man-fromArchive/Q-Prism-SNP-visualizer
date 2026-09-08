@@ -83,6 +83,10 @@ export function ScatterPlot() {
   const xMax = useSettingsStore((s) => s.xMax);
   const yMin = useSettingsStore((s) => s.yMin);
   const yMax = useSettingsStore((s) => s.yMax);
+  const xNtcOffsetRaw = useSettingsStore((s) => s.xNtcOffsetRaw);
+  const yNtcOffsetRaw = useSettingsStore((s) => s.yNtcOffsetRaw);
+  const xNtcOffsetNormalized = useSettingsStore((s) => s.xNtcOffsetNormalized);
+  const yNtcOffsetNormalized = useSettingsStore((s) => s.yNtcOffsetNormalized);
   const showAutoCluster = useSettingsStore((s) => s.showAutoCluster);
   const showManualTypes = useSettingsStore((s) => s.showManualTypes);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
@@ -112,6 +116,12 @@ export function ScatterPlot() {
   // the `useRox` request: a run with no reference comes back raw either way,
   // and titling the axis "FAM / ROX" over raw RFU misreports the data.
   const normalizationApplied = useDataStore((s) => s.normalizationApplied);
+  const ntcAxisOffsets = useMemo(
+    () => normalizationApplied
+      ? { x: xNtcOffsetNormalized, y: yNtcOffsetNormalized }
+      : { x: xNtcOffsetRaw, y: yNtcOffsetRaw },
+    [normalizationApplied, xNtcOffsetNormalized, yNtcOffsetNormalized, xNtcOffsetRaw, yNtcOffsetRaw]
+  );
   const roxOutlierWells = useDataStore((s) => s.roxOutlierWells);
   // The drag handlers are registered once per tool-open, so they read the
   // origin through a ref rather than re-binding every time it changes.
@@ -412,7 +422,9 @@ export function ScatterPlot() {
         visiblePoints.map((point) => ({ fam: point.norm_fam, allele2: point.norm_allele2 })),
         effectiveNtcCorner
       ),
-      { xMin, xMax, yMin, yMax }
+      { xMin, xMax, yMin, yMax },
+      ratioOrigin,
+      ntcAxisOffsets
     );
     shapes.push(
       {
@@ -461,6 +473,9 @@ export function ScatterPlot() {
       plot_bgcolor: colors.plot_bgcolor,
       font: { color: colors.fontColor },
       hovermode: "closest",
+      // Keep Plotly's preserved interaction state in sync with the explicit
+      // NTC-origin range and its unit basis.
+      uirevision: `plate-${axisMode}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${ratioOrigin.fam}-${ratioOrigin.allele2}`,
       // Box-select while selecting, zoom while editing thresholds -- and the
       // modebar below keeps both reachable either way, because picking one
       // well out of a dense cluster needs a zoom first.
@@ -544,6 +559,7 @@ export function ScatterPlot() {
     xMax,
     yMin,
     yMax,
+    ntcAxisOffsets,
     showAutoCluster,
     showManualTypes,
     clusterAssignments,

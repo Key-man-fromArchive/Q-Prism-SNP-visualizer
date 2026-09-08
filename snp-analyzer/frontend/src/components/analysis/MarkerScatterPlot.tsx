@@ -104,10 +104,20 @@ export function MarkerScatterPlot({
   const xMax = useSettingsStore((s) => s.xMax);
   const yMin = useSettingsStore((s) => s.yMin);
   const yMax = useSettingsStore((s) => s.yMax);
+  const xNtcOffsetRaw = useSettingsStore((s) => s.xNtcOffsetRaw);
+  const yNtcOffsetRaw = useSettingsStore((s) => s.yNtcOffsetRaw);
+  const xNtcOffsetNormalized = useSettingsStore((s) => s.xNtcOffsetNormalized);
+  const yNtcOffsetNormalized = useSettingsStore((s) => s.yNtcOffsetNormalized);
   // A drag either selects wells or moves a threshold; both at once made the
   // plot unselectable wherever a threshold happened to lie. See ScatterTool.
   const editing = useSettingsStore((s) => s.scatterTool) === "edit";
   const normalizationApplied = useDataStore((s) => s.normalizationApplied);
+  const ntcAxisOffsets = useMemo(
+    () => normalizationApplied
+      ? { x: xNtcOffsetNormalized, y: yNtcOffsetNormalized }
+      : { x: xNtcOffsetRaw, y: yNtcOffsetRaw },
+    [normalizationApplied, xNtcOffsetNormalized, yNtcOffsetNormalized, xNtcOffsetRaw, yNtcOffsetRaw]
+  );
   const roxOutlierWells = useDataStore((s) => s.roxOutlierWells);
 
   const ploidy = marker.ploidy;
@@ -376,7 +386,9 @@ export function MarkerScatterPlot({
         scopedPoints.map((p) => ({ fam: p.norm_fam, allele2: p.norm_allele2 })),
         { fam: effectiveNtc.corner.x, allele2: effectiveNtc.corner.y }
       ),
-      { xMin, xMax, yMin, yMax }
+      { xMin, xMax, yMin, yMax },
+      origin,
+      ntcAxisOffsets
     );
     shapes.push(
       {
@@ -432,7 +444,9 @@ export function MarkerScatterPlot({
       // uirevision that otherwise preserves the user's pan/zoom across
       // re-renders -- without it, switching mode would leave the old range in
       // place until the marker changed.
-      uirevision: `marker-${marker.id}-${axisMode}-${lockAspect ? "aspect" : "free"}`,
+      // Offset/origin changes must invalidate Plotly's preserved pan/zoom;
+      // otherwise an explicit new range can be hidden behind the old UI state.
+      uirevision: `marker-${marker.id}-${axisMode}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${origin.fam}-${origin.allele2}`,
       shapes,
       margin: { t: 10, r: 10, b: 46, l: 56 },
       legend: { orientation: "h", y: -0.2 },
@@ -531,6 +545,7 @@ export function MarkerScatterPlot({
     xMax,
     yMin,
     yMax,
+    ntcAxisOffsets,
     dark,
     sessionId,
     scatterProvenance,

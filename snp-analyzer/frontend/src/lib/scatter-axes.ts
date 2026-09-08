@@ -26,14 +26,18 @@ export type AxisBounds = {
 
 type Extent = { fam: number; allele2: number };
 
+/** Per-axis space to show below/left of the ratio origin in NTC mode. */
+export type AxisOffsets = { x: number; y: number };
+
 const PAD = 1.05;
 
 /** Where the data actually lies, including the NTC corner marker so it can
  *  never sit outside the plot the operator has to grab it in. */
 export function dataBounds(points: Extent[], ntcCorner?: Extent | null): AxisBounds {
-  const xs = points.map((p) => p.fam);
-  const ys = points.map((p) => p.allele2);
-  if (ntcCorner) {
+  const finitePoints = points.filter((p) => Number.isFinite(p.fam) && Number.isFinite(p.allele2));
+  const xs = finitePoints.map((p) => p.fam);
+  const ys = finitePoints.map((p) => p.allele2);
+  if (ntcCorner && Number.isFinite(ntcCorner.fam) && Number.isFinite(ntcCorner.allele2)) {
     xs.push(ntcCorner.fam);
     ys.push(ntcCorner.allele2);
   }
@@ -64,18 +68,28 @@ export function dataBounds(points: Extent[], ntcCorner?: Extent | null): AxisBou
 export function visibleBounds(
   mode: AxisMode,
   data: AxisBounds,
-  manual: AxisBounds
+  manual: AxisBounds,
+  ratioOrigin?: Extent | null,
+  offsets: AxisOffsets = { x: 0, y: 0 }
 ): AxisBounds {
   if (mode === 'manual') return manual;
   if (mode === 'auto') return data;
-  // 'zero': the drawn origin is the origin. Negative data (possible after a
-  // background subtraction) still has to be visible, so zero is a floor to
-  // include, not a floor to clamp to.
+  // `zero` is retained as the persisted mode name for compatibility. Its UI
+  // meaning is now NTC-origin mode: leave the configured amount of space
+  // below/left of the ratio origin. Negative optical values still win over
+  // this floor so they remain visible.
+  const safeOffset = (value: number) => Number.isFinite(value) && value >= 0 ? value : 0;
+  const originX = ratioOrigin && Number.isFinite(ratioOrigin.fam)
+    ? ratioOrigin.fam - safeOffset(offsets.x)
+    : 0;
+  const originY = ratioOrigin && Number.isFinite(ratioOrigin.allele2)
+    ? ratioOrigin.allele2 - safeOffset(offsets.y)
+    : 0;
   return {
-    xMin: Math.min(0, data.xMin),
-    xMax: Math.max(0, data.xMax),
-    yMin: Math.min(0, data.yMin),
-    yMax: Math.max(0, data.yMax),
+    xMin: Math.min(originX, data.xMin),
+    xMax: Math.max(0, data.xMax, originX),
+    yMin: Math.min(originY, data.yMin),
+    yMax: Math.max(0, data.yMax, originY),
   };
 }
 
@@ -90,7 +104,7 @@ export function axisRangeLayout(
   bounds: AxisBounds
 ): { xaxis: Record<string, unknown>; yaxis: Record<string, unknown> } {
   const aspect = lockAspect && mode !== 'manual'
-    ? { scaleanchor: 'x', scaleratio: 1 }
+    ? { scaleanchor: 'x', scaleratio: 1, constrain: 'domain' }
     : { scaleanchor: undefined, scaleratio: undefined };
 
   if (mode === 'manual') {
@@ -106,8 +120,8 @@ export function axisRangeLayout(
     };
   }
   return {
-    xaxis: { autorange: true, range: undefined, rangemode: 'tozero' },
-    yaxis: { autorange: true, range: undefined, rangemode: 'tozero', ...aspect },
+    xaxis: { autorange: false, range: [bounds.xMin, bounds.xMax], rangemode: 'normal' },
+    yaxis: { autorange: false, range: [bounds.yMin, bounds.yMax], rangemode: 'normal', ...aspect },
   };
 }
 

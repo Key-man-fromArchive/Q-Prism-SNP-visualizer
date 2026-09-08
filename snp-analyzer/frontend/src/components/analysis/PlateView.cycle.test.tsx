@@ -22,6 +22,73 @@ it('does not retarget native well clicks by capturing the pointer before a drag 
   expect(capture).toHaveBeenCalledTimes(1);
 });
 
+it('uses a desktop-style blue marquee without enabling text selection', async () => {
+  useSessionStore.setState({ sessionId: 'marquee' });
+  const view = render(<PlateView />);
+  await act(async () => { await Promise.resolve(); });
+  const panel = view.container.querySelector<HTMLElement>('.plate-panel')!;
+  const overlay = view.container.querySelector<HTMLElement>('.drag-selection-rect')!;
+
+  expect(panel).toHaveClass('select-none');
+  fireEvent.pointerDown(panel, { button: 0, pointerId: 7, clientX: 10, clientY: 20 });
+  fireEvent.pointerMove(panel, { pointerId: 7, clientX: 40, clientY: 60 });
+  expect(overlay).toHaveStyle({ display: 'block' });
+  expect(overlay.style.border).toContain('rgb(37, 99, 235)');
+  expect(overlay.style.background).toContain('rgba(37, 99, 235');
+});
+
+it('selects by actual well centers in forward, reverse, additive, and empty drags', async () => {
+  vi.mocked(getPlate).mockResolvedValueOnce({ cycle: 0, allele2_dye: 'VIC', wells: [
+    'A1', 'A2', 'B1', 'B2',
+  ].map((well) => ({ well, row: 0, col: 0, norm_fam: 1, norm_allele2: 2, ratio: 0.5, sample_name: well, auto_cluster: null, manual_type: null })) });
+  useSessionStore.setState({ sessionId: 'geometry' });
+  act(() => useSelectionStore.getState().clearSelection());
+  const view = render(<PlateView />);
+  await act(async () => { await Promise.resolve(); });
+  const panel = view.container.querySelector<HTMLElement>('.plate-panel')!;
+  for (const [index, id] of ['A1', 'A2', 'B1', 'B2'].entries()) {
+    const well = view.container.querySelector<HTMLElement>(`[data-well="${id}"]`)!;
+    const left = index % 2 * 20;
+    const top = Math.floor(index / 2) * 20;
+    vi.spyOn(well, 'getBoundingClientRect').mockReturnValue({
+      left, top, width: 18, height: 18, right: left + 18, bottom: top + 18,
+      x: left, y: top, toJSON: () => ({}),
+    } as DOMRect);
+  }
+
+  const drag = (startX: number, startY: number, endX: number, endY: number, modifiers = {}) => {
+    fireEvent.pointerDown(panel, { button: 0, pointerId: 21, pointerType: 'mouse', clientX: startX, clientY: startY, ...modifiers });
+    fireEvent.pointerMove(panel, { pointerId: 21, pointerType: 'mouse', clientX: endX, clientY: endY, ...modifiers });
+    fireEvent.pointerUp(panel, { pointerId: 21, pointerType: 'mouse', clientX: endX, clientY: endY, ...modifiers });
+  };
+
+  drag(5, 5, 42, 42);
+  expect(useSelectionStore.getState().selectedWells).toEqual(['A1', 'A2', 'B1', 'B2']);
+  act(() => useSelectionStore.getState().clearSelection());
+  drag(42, 42, 5, 5);
+  expect(useSelectionStore.getState().selectedWells).toEqual(['A1', 'A2', 'B1', 'B2']);
+  act(() => useSelectionStore.getState().selectWells(['A1']));
+  drag(25, 25, 42, 42, { ctrlKey: true });
+  expect(useSelectionStore.getState().selectedWells).toEqual(['A1', 'B2']);
+  act(() => useSelectionStore.getState().selectWells(['A1']));
+  drag(90, 90, 100, 100, { ctrlKey: true });
+  expect(useSelectionStore.getState().selectedWells).toEqual(['A1']);
+  act(() => useSelectionStore.getState().clearSelection());
+  drag(90, 90, 100, 100);
+  expect(useSelectionStore.getState().selectedWells).toEqual([]);
+  drag(5, 5, 9, 9);
+  expect(useSelectionStore.getState().selectedWells).toEqual([]);
+
+  fireEvent.pointerDown(panel, { button: 0, pointerId: 22, pointerType: 'touch', clientX: 5, clientY: 5 });
+  fireEvent.pointerMove(panel, { pointerId: 22, pointerType: 'touch', clientX: 42, clientY: 42 });
+  expect(view.container.querySelector<HTMLElement>('.drag-selection-rect')).toHaveStyle({ display: 'none' });
+  fireEvent.pointerDown(panel, { button: 0, pointerId: 23, pointerType: 'mouse', clientX: 5, clientY: 5 });
+  fireEvent.pointerMove(panel, { pointerId: 23, pointerType: 'mouse', clientX: 42, clientY: 42 });
+  fireEvent.pointerCancel(panel, { pointerId: 23, pointerType: 'mouse' });
+  expect(view.container.querySelector<HTMLElement>('.drag-selection-rect')).toHaveStyle({ display: 'none' });
+  expect(useSelectionStore.getState().selectedWells).toEqual([]);
+});
+
 it('requests a selected actual zero cycle', async () => {
   useSessionStore.setState({ sessionId: 'zero' });
   useSelectionStore.setState({ currentCycle: 0 });
