@@ -485,13 +485,15 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P5-R0-T1: 보안·ASG·경로 호환성 검증
 
-- Status: TODO
+- Status: DONE
+- Commit: c54495eebd0232e9ce723d4441d5ead699c6fc9b
+- Evidence: [P5-R0-T1](ui-ux-overhaul/evidence/P5-R0-T1.md). Backend focused 12개, BE-ALL 755개+subtest 2개, ROOT-E2E 26 5/5, 실제 prefix proxy·재시작·legacy migration·권한/ASG·업로드/ZIP 회귀, 독립 보안 리뷰 PASS.
 - 담당: security-specialist
 - Depends On: [P4-S0-V]
 - Write Scope: BE/tests/의 auth·ASG·export·startup 회귀 테스트, tests/26-asg-compatibility.spec.ts, docs/planning/ui-ux-overhaul/evidence/P5-R0-T1.md
 - 구현: 테스트만 보강한다. 인증 모드/ASG scope·만료·결과 저장, path-prefix, 다른 사용자/세션 snapshot 접근 차단, DB 재시작·legacy migration을 확인한다.
 - 검증: BE-ALL, ROOT-E2E 26, 권한별 정상/실패 응답, 기존 업로드 제한·ZIP hardening 회귀. 개인정보/토큰 없는 fixtures와 증거를 사용한다.
-- [ ] AC: 권한 우회/데이터 누출/기존 소비자 파손 없음. 발견한 구현 결함은 해당 원 작업을 BLOCKED로 되돌려 담당자가 수정하고 관련 게이트를 재실행함.
+- [x] AC: 권한 우회/데이터 누출/기존 소비자 파손 없음. 발견한 구현 결함은 해당 원 작업을 BLOCKED로 되돌려 담당자가 수정하고 관련 게이트를 재실행함.
 
 ### P5-S0-V: 전체 회귀·수용 기준 인수
 
