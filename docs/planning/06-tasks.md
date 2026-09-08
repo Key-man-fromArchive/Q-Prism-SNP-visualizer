@@ -524,7 +524,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 ### P6-S1-T1: 대립유전자 산점도 NTC 기준 offset 설정
 
 - Status: DONE
-- Commit: 8d7a58831c2f525b65b0f86c7e9817d2e9587c1f
+- Commit: 8d7a58831c2f525b65b0f86c7e9817d2e9587c1f, ebd06565bc71c9b56fef00f832cfb1f3a3fe9941
 - Evidence: [P6-S1-T1](ui-ux-overhaul/evidence/P6-S1-T1.md)
 - 담당: frontend-specialist
 - Depends On: [P5-T0.1]
