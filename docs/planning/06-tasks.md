@@ -462,7 +462,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 - Status: DONE
 - Commit: 65e6bafd1bf38310f7e993d11334455ed49ba4e2
-- Evidence: [P4-S4-T2](ui-ux-overhaul/evidence/P4-S4-T2.md). FE 632개, ROOT22·24·25 53/53, 390/1024/1440×KO/EN×양 테마, 변경 실행 라인 82.4%·적용 모듈 모두 70% 이상·새 CC 10 이하, 감사 0건, 독립 보안/UI 리뷰 PASS.
+- Evidence: [P4-S4-T2](ui-ux-overhaul/evidence/P4-S4-T2.md). FE 632개, ROOT22·24·25 53/53, 390/1024/1440×KO/EN×양 테마, 변경 실행 라인 82.4%·적용 모듈 모두 70% 이상·새 CC 10 이하, 감사 0건, 독립 보안/UI 리뷰 PASS. Existing-E2E 확인 대화상자 정합성 repair: 18fca63, evidence 보강: 5f33813.
 - 담당: frontend-specialist
 - Depends On: [P4-S4-T1]
 - Write Scope: SRC/components/의 Library·Project·Users·Reference·Compare 관련 화면, 관련 locales/CSS, tests/25-secondary-flows.spec.ts
@@ -472,12 +472,14 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P4-S0-V: UI/UX 품질 게이트
 
-- Status: TODO
+- Status: DONE
+- Commit: fd94306913da7a7c6d316ec7e34833ec3a41950b
+- Evidence: [P4-S0-V](ui-ux-overhaul/evidence/P4-S0-V.md). FE 632/96, ROOT18–26 68/68, EXISTING-E2E 52/52, ROOT22·24·25 focused 53/53, 양 테마·KO/EN·반응형 시각 행렬, 감사 0건·신규/증가 CC 없음, 독립 UI/보안 리뷰 PASS.
 - 담당: test-specialist
 - Depends On: [P4-S4-T2]
 - Write Scope: docs/planning/ui-ux-overhaul/evidence/P4-S0-V.md
 - 검증: FE-ALL, FE-CHECK, ROOT-E2E 18–25, EXISTING-E2E, COVERAGE, 아래 시각 매트릭스 및 frontend/code 리뷰.
-- [ ] AC: UX-07·08·09 통과, 주요 정확성·복원·키보드 동작 유지. 브라우저 실측/스크린샷 없는 시각 항목은 미검증으로 남김.
+- [x] AC: UX-07·08·09 통과, 주요 정확성·복원·키보드 동작 유지. 브라우저 실측/스크린샷 없는 시각 항목은 미검증으로 남김.
 
 ## Phase P5 — 통합 검증·인수
 
