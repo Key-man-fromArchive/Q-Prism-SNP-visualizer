@@ -154,7 +154,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
 
   // Handle drag start
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || event.pointerType === "touch") return;
     // The plate surface is a selection canvas. Preserve the button's focus
     // affordance while preventing the browser from starting a text selection
     // when the pointer travels across labels or empty panel space.
@@ -211,7 +211,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   // Handle drag end
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     const dragRect = dragRectRef.current;
-    if (didDragRef.current && dragRect && gridRef.current) {
+    if (event.type !== "pointercancel" && didDragRef.current && dragRect && gridRef.current) {
       // Find wells within selection rectangle
       const wellElements = gridRef.current.querySelectorAll('.plate-well[data-well]');
       const selectedWellIds: string[] = [];
@@ -234,12 +234,10 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
         }
       });
 
-      if (selectedWellIds.length > 0) {
-        if (dragAdditiveRef.current) {
-          selectWells(Array.from(new Set([...selectedWells, ...selectedWellIds])));
-        } else {
-          selectWells(selectedWellIds);
-        }
+      if (dragAdditiveRef.current) {
+        selectWells(Array.from(new Set([...selectedWells, ...selectedWellIds])));
+      } else {
+        selectWells(selectedWellIds);
       }
     }
 
@@ -251,6 +249,8 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
       && typeof event.currentTarget.releasePointerCapture === "function") {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+    // Do not let the drag guard swallow the next keyboard or pointer action.
+    didDragRef.current = false;
   };
 
   // ── Keyboard grid navigation (roving tabindex, PRD FR-X-3) ─────────────────
@@ -284,10 +284,6 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
-      onMouseDown={(event) => {
-        if (event.button === 0 && !(event.target instanceof HTMLElement
-          && event.target.closest('button'))) event.preventDefault();
-      }}
     >
       <h3 className="text-sm font-semibold mb-3 text-text">{t.plateView} ({plateRows.length}×{plateCols.length})</h3>
       <p role="status" aria-live="polite" className="sr-only">{t.selectedWellCount(selectedWells.length)}</p>

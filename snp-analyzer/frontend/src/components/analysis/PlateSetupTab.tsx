@@ -261,6 +261,14 @@ export function PlateSetupTab() {
   }
 
   function beginWellSelection(id: string, event: ReactPointerEvent<HTMLButtonElement>) {
+    if (event.button !== 0 && event.pointerType !== "touch") return;
+    // Touch is reserved for tapping and page/plate scrolling. A touch tap
+    // keeps the existing single-well toggle without taking pointer capture.
+    if (event.pointerType === "touch") {
+      if (event.shiftKey) selectWellRange(id, event.ctrlKey || event.metaKey);
+      else toggleWell(id);
+      return;
+    }
     // Keep pointer drags from selecting well labels/sample text. Focus is
     // restored explicitly because cancelling pointerdown's default otherwise
     // suppresses the browser's normal button focus step.
@@ -274,6 +282,19 @@ export function PlateSetupTab() {
     }
 
     toggleWell(id);
+    dragSelection.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      initialWells: selectedWells,
+      additive: event.ctrlKey || event.metaKey,
+    };
+    didDragRef.current = false;
+  }
+
+  function beginGridSelection(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || event.pointerType === "touch") return;
+    if (event.target instanceof HTMLElement && event.target.closest("button")) return;
+    event.preventDefault();
     dragSelection.current = {
       startX: event.clientX,
       startY: event.clientY,
@@ -314,11 +335,9 @@ export function PlateSetupTab() {
       .map((well) => well.dataset.wellId)
       .filter((well): well is string => Boolean(well));
 
-    if (selected.length > 0) {
-      setSelectedWells(
-        drag.additive ? Array.from(new Set([...drag.initialWells, ...selected])) : selected
-      );
-    }
+    setSelectedWells(
+      drag.additive ? Array.from(new Set([...drag.initialWells, ...selected])) : selected
+    );
   }
 
   function handleGridPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
@@ -336,6 +355,10 @@ export function PlateSetupTab() {
   }
 
   function endWellSelection(event?: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragSelection.current;
+    if (event?.type === "pointercancel" && drag) {
+      setSelectedWells(drag.initialWells);
+    }
     dragSelection.current = null;
     if (event && typeof event.currentTarget.hasPointerCapture === "function"
       && event.currentTarget.hasPointerCapture(event.pointerId)
@@ -1087,13 +1110,10 @@ export function PlateSetupTab() {
               ref={selectionGridRef}
               data-testid="plate-setup-grid"
               className="select-none"
+              onPointerDown={beginGridSelection}
               onPointerMove={handleGridPointerMove}
               onPointerUp={endWellSelection}
               onPointerCancel={endWellSelection}
-              onMouseDown={(event) => {
-                if (event.button === 0 && !(event.target instanceof HTMLElement
-                  && event.target.closest('button'))) event.preventDefault();
-              }}
               style={{
                 display: "grid",
                 gridTemplateColumns: `auto repeat(${plateCols.length}, 1fr)`,

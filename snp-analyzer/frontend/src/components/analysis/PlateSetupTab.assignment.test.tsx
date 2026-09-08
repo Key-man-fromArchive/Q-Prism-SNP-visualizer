@@ -96,20 +96,103 @@ it('keeps Omit focusable and restores its type through the shared command', asyn
   await waitFor(() => expect(screen.getByTestId('analysis-scope-counts')).toHaveTextContent('Eligible by marker/type: 1 · Empty: 0 · Omit: 0'));
 });
 
-it('shows a blue marquee and selects wells by pointer rectangle without text selection', async () => {
+function stubPlateGeometry() {
+  for (let row = 0; row < 8; row += 1) {
+    for (let col = 0; col < 12; col += 1) {
+      const id = `${String.fromCharCode(65 + row)}${col + 1}`;
+      const well = screen.getByTestId(`well-${id}`);
+      vi.spyOn(well, 'getBoundingClientRect').mockReturnValue({
+        left: col * 20, top: row * 20, width: 18, height: 18,
+        right: col * 20 + 18, bottom: row * 20 + 18,
+        x: col * 20, y: row * 20, toJSON: () => ({}),
+      } as DOMRect);
+    }
+  }
+}
+
+it('shows a blue marquee and selects wells by forward pointer rectangle without text selection', async () => {
   render(<PlateSetupTab />);
   await waitFor(() => expect(screen.getByTestId('well-A1')).toBeVisible());
+  stubPlateGeometry();
 
   const grid = screen.getByTestId('plate-setup-grid');
   expect(grid).toHaveClass('select-none');
   const firstWell = screen.getByTestId('well-A1');
-  fireEvent.pointerDown(firstWell, { button: 0, pointerId: 11, clientX: 0, clientY: 0 });
-  fireEvent.pointerMove(grid, { pointerId: 11, clientX: 100, clientY: 100 });
+  fireEvent.pointerDown(firstWell, { button: 0, pointerId: 11, pointerType: 'mouse', clientX: 5, clientY: 5 });
+  fireEvent.pointerMove(grid, { pointerId: 11, pointerType: 'mouse', clientX: 42, clientY: 42 });
 
   const marquee = screen.getByTestId('plate-setup-marquee');
   expect(marquee).toHaveStyle({ display: 'block' });
   expect(marquee.style.border).toContain('rgb(37, 99, 235)');
 
-  fireEvent.pointerUp(grid, { pointerId: 11, clientX: 100, clientY: 100 });
-  expect(screen.getByTestId('selection-count')).toHaveTextContent('96');
+  fireEvent.pointerUp(grid, { pointerId: 11, pointerType: 'mouse', clientX: 42, clientY: 42 });
+  expect(screen.getByTestId('selection-count')).toHaveTextContent('4');
+});
+
+it('starts in grid whitespace, supports reverse selection, and clears on an empty marquee', async () => {
+  render(<PlateSetupTab />);
+  await waitFor(() => expect(screen.getByTestId('well-A1')).toBeVisible());
+  stubPlateGeometry();
+  const grid = screen.getByTestId('plate-setup-grid');
+
+  fireEvent.pointerDown(grid, { button: 0, pointerId: 12, pointerType: 'mouse', clientX: 42, clientY: 42 });
+  fireEvent.pointerMove(grid, { pointerId: 12, pointerType: 'mouse', clientX: 5, clientY: 5 });
+  fireEvent.pointerUp(grid, { pointerId: 12, pointerType: 'mouse', clientX: 5, clientY: 5 });
+  expect(screen.getByTestId('selection-count')).toHaveTextContent('4');
+
+  fireEvent.pointerDown(grid, { button: 0, pointerId: 13, pointerType: 'mouse', clientX: 90, clientY: 90 });
+  fireEvent.pointerMove(grid, { pointerId: 13, pointerType: 'mouse', clientX: 100, clientY: 100 });
+  fireEvent.pointerUp(grid, { pointerId: 13, pointerType: 'mouse', clientX: 100, clientY: 100 });
+  expect(screen.queryByTestId('selection-count')).not.toBeInTheDocument();
+});
+
+it('preserves the baseline for an empty Ctrl marquee and cancels cleanly after capture', async () => {
+  render(<PlateSetupTab />);
+  await waitFor(() => expect(screen.getByTestId('well-A1')).toBeVisible());
+  stubPlateGeometry();
+  const grid = screen.getByTestId('plate-setup-grid') as HTMLDivElement;
+  const capture = vi.fn();
+  const hasCapture = vi.fn().mockReturnValue(true);
+  const releaseCapture = vi.fn();
+  grid.setPointerCapture = capture;
+  grid.hasPointerCapture = hasCapture;
+  grid.releasePointerCapture = releaseCapture;
+  const firstWell = screen.getByTestId('well-A1');
+  fireEvent.pointerDown(firstWell, { button: 0, pointerId: 14, pointerType: 'mouse', clientX: 5, clientY: 5 });
+  fireEvent.pointerUp(grid, { pointerId: 14, pointerType: 'mouse', clientX: 5, clientY: 5 });
+
+  fireEvent.pointerDown(grid, { button: 0, pointerId: 18, pointerType: 'mouse', clientX: 5, clientY: 5 });
+  fireEvent.pointerMove(grid, { pointerId: 18, pointerType: 'mouse', clientX: 42, clientY: 42 });
+  expect(screen.getByTestId('selection-count')).toHaveTextContent('4');
+  fireEvent.pointerCancel(grid, { pointerId: 18, pointerType: 'mouse' });
+  expect(screen.getByTestId('selection-count')).toHaveTextContent('1');
+
+  fireEvent.pointerDown(grid, { button: 0, ctrlKey: true, pointerId: 15, pointerType: 'mouse', clientX: 90, clientY: 90 });
+  fireEvent.pointerMove(grid, { pointerId: 15, pointerType: 'mouse', clientX: 100, clientY: 100 });
+  expect(capture).toHaveBeenCalledWith(15);
+  expect(screen.getByTestId('selection-count')).toHaveTextContent('1');
+  fireEvent.pointerCancel(grid, { pointerId: 15, pointerType: 'mouse' });
+  expect(releaseCapture).toHaveBeenCalledWith(15);
+  expect(screen.getByTestId('plate-setup-marquee')).toHaveStyle({ display: 'none' });
+});
+
+it('does not arm selection from a right-click on a well', async () => {
+  render(<PlateSetupTab />);
+  await waitFor(() => expect(screen.getByTestId('well-A1')).toBeVisible());
+  const well = screen.getByTestId('well-A1');
+  fireEvent.pointerDown(well, { button: 2, pointerId: 16, pointerType: 'mouse', clientX: 5, clientY: 5 });
+  fireEvent.pointerMove(screen.getByTestId('plate-setup-grid'), { pointerId: 16, pointerType: 'mouse', clientX: 42, clientY: 42 });
+  expect(screen.queryByTestId('selection-count')).not.toBeInTheDocument();
+  expect(screen.getByTestId('plate-setup-marquee')).toHaveStyle({ display: 'none' });
+});
+
+it('keeps touch wells tap-and-scroll friendly instead of taking marquee capture', async () => {
+  render(<PlateSetupTab />);
+  await waitFor(() => expect(screen.getByTestId('well-A1')).toBeVisible());
+  const well = screen.getByTestId('well-A1');
+  const grid = screen.getByTestId('plate-setup-grid');
+  fireEvent.pointerDown(well, { button: 0, pointerId: 17, pointerType: 'touch', clientX: 5, clientY: 5 });
+  fireEvent.pointerMove(grid, { pointerId: 17, pointerType: 'touch', clientX: 100, clientY: 100 });
+  expect(screen.getByTestId('selection-count')).toHaveTextContent('1');
+  expect(screen.getByTestId('plate-setup-marquee')).toHaveStyle({ display: 'none' });
 });
