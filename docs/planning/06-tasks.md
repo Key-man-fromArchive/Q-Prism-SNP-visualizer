@@ -561,12 +561,14 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P7-S0-V: 웰 선택 UX 품질 게이트
 
-- Status: TODO
+- Status: DONE
+- Commit: 05b60bcf7571324142dee5157e5910044fd8615f
+- Evidence: [P7-S0-V](ui-ux-overhaul/evidence/P7-S0-V.md)
 - 담당: test-specialist
 - Depends On: [P7-S1-T1]
 - Write Scope: docs/planning/ui-ux-overhaul/evidence/P7-S0-V.md 및 필요한 회귀 테스트
 - 검증: P7-S1-T1 집중 테스트, FE-CHECK/FE-ALL, 96/384웰·데스크톱/모바일 대표 브라우저 검증, 세로 스크롤바 부재와 가로 overflow, native text selection 부재, marquee 가시성·선택 결과·키보드/접근성·양 언어/테마를 확인한다. P6 기준선과 신규 실패를 분리 기록한다.
-- [ ] AC: 두 웰 선택 화면에서 요구된 스크롤·marquee·modifier·접근성 동작의 증거가 연결되고 치명/높음 회귀가 없음.
+- [x] AC: 두 웰 선택 화면에서 요구된 스크롤·marquee·modifier·접근성 동작의 증거가 연결되고 치명/높음 회귀가 없음.
 
 ## 수용 기준 추적표
 
@@ -610,4 +612,4 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 4. 각 작업은 승인된 scope에서 RED → GREEN → REFACTOR → 검증 → 로컬 commit → 증거 보고 순으로 진행한다. 게이트 실패 시 후속 작업을 시작하지 않는다.
 5. 재개 시 계획 hash·branch/commit·상태·증거를 대조한다. 문서의 TODO를 추측으로 DONE 처리하거나 이전 작업서의 상태를 재사용하지 않는다.
 
-현재 상태: **2026-09-08 35/37 완료, P6-S0-V PASS, P7 TODO**. 동일 accepted source head에서 BE 755, 기존 FE 632/96, canonical ROOT18–26 73/73, EXISTING-E2E 52/52와 독립 인수 리뷰를 통과했고 P6-S1-T1/P6-S0-V는 각각 FE 638/96 및 build/lint/typecheck/browser smoke를 통과했다. Legacy ROOT01–03의 구형 인증/DOM 실패는 현재 범위의 통과로 표시하지 않는다. 로컬 Phase 통합은 허용되지만 원격 push·배포·외부 알림은 제외한다. 전용 whole-plot range assertion과 normalized Reset wiring 테스트는 후속 보강 항목이다. 재현 절차와 제한은 [운영 인수 문서](ui-ux-overhaul/06-operations-handoff.md), 실행 상태는 루트 `.claude/orchestrate-state.json`에 기록한다.
+현재 상태: **2026-09-08 37/37 완료, P6-S0-V/P7-S0-V PASS**. 동일 accepted source head에서 BE 755, 기존 FE 632/96, canonical ROOT18–26 73/73, EXISTING-E2E 52/52와 독립 인수 리뷰를 통과했고 P6-S1-T1/P6-S0-V/P7-S0-V는 각각 FE 테스트 및 build/lint/typecheck/browser smoke를 통과했다. Legacy ROOT01–03의 구형 인증/DOM 실패와 P7 브라우저 fixture 제한은 현재 범위의 통과로 표시하지 않고 각 증적에 기록했다. 로컬 Phase 통합은 허용되지만 원격 push·배포·외부 알림은 제외한다. 전용 whole-plot range assertion과 normalized Reset wiring 테스트는 후속 보강 항목이다. 재현 절차와 제한은 [운영 인수 문서](ui-ux-overhaul/06-operations-handoff.md), 실행 상태는 루트 `.claude/orchestrate-state.json`에 기록한다.
