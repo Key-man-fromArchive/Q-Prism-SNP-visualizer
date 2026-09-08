@@ -50,6 +50,13 @@ it('keeps call rate visible in the compact summary without claiming missing judg
   expect(await screen.findByTestId('ntc-status')).toHaveTextContent('Call 75%');
 });
 
+it('exposes flagged and unevaluable wells as keyboard-operable navigation actions', async () => {
+  render(<QcBadges />);
+  fireEvent.click(await screen.findByTestId('ntc-status'));
+  expect(within(screen.getByRole('group', { name: 'Flagged NTC wells' })).getByRole('button', { name: 'A1' })).toBeEnabled();
+  expect(within(screen.getByRole('group', { name: 'Unevaluable NTC wells' })).getByRole('button', { name: 'A3' })).toBeEnabled();
+});
+
 it.each(['ok', 'warning', 'no_ntc', 'insufficient'] as const)('renders distinct NTC state %s', async status => {
   const data = qcFixture(); data.ntc_check.status = status;
   vi.mocked(getQc).mockResolvedValue(data);

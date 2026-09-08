@@ -17,6 +17,8 @@ export type ModalProps = {
   hideClose?: boolean;
   /** Optional aria role override (e.g. "alertdialog" for destructive confirms). */
   role?: "dialog" | "alertdialog";
+  /** Localized accessible name for the header close button. */
+  closeLabel?: string;
 };
 
 const FOCUSABLE =
@@ -38,6 +40,7 @@ export function Modal({
   widthClassName = "max-w-md",
   hideClose,
   role = "dialog",
+  closeLabel = "Close",
 }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
@@ -111,12 +114,12 @@ export function Modal({
         tabIndex={-1}
         onKeyDown={handleKeyDown}
         className={cn(
-          "w-full rounded-lg border border-border bg-surface shadow-xl outline-none",
+          "w-full min-w-0 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg border border-border bg-surface shadow-xl outline-none",
           widthClassName
         )}
       >
         <div className="flex items-start justify-between gap-4 px-4 py-3 border-b border-border">
-          <div>
+          <div className="min-w-0 wrap-anywhere">
             <h2 id={titleId} className="text-sm font-semibold text-text">
               {title}
             </h2>
@@ -127,14 +130,14 @@ export function Modal({
             )}
           </div>
           {!hideClose && (
-            <IconButton size="sm" aria-label="Close" onClick={onClose}>
+            <IconButton size="sm" aria-label={closeLabel} onClick={onClose}>
               <X size={16} aria-hidden="true" />
             </IconButton>
           )}
         </div>
         {children && <div className="px-4 py-3">{children}</div>}
         {footer && (
-          <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">{footer}</div>
+          <div className="flex flex-wrap justify-end gap-2 px-4 py-3 border-t border-border">{footer}</div>
         )}
       </div>
     </div>

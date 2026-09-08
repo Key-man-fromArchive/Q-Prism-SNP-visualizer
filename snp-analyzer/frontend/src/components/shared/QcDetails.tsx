@@ -3,6 +3,8 @@ import { useNavigationStore } from '@/stores/navigation-store';
 import type { QcResponse } from '@/types/api';
 import { QcOnset } from './QcOnset';
 import { useAnalysisStore } from '@/stores/analysis-store';
+import { useSessionStore } from '@/stores/session-store';
+import { QualityWellLink } from './QualityWellLink';
 
 function QcLifecycle({ data }: { data: QcResponse }) {
   const state = useAnalysisStore();
@@ -48,13 +50,19 @@ function Judgment({ data }: { data: QcResponse }) {
 }
 function NtcWells({ data }: { data: QcResponse }) {
   const { t } = useI18n();
+  const session = useSessionStore(state => state.sessionId);
   const groups = [
     { label: t.qcFlagged, wells: data.ntc_check.wells.filter(well => well.flagged === true) },
     { label: t.qcUnevaluable, wells: data.ntc_check.wells.filter(well => well.flagged === null) },
   ];
   return <>{groups.map(group => <section role="group" aria-label={group.label} key={group.label}>
     <h4>{group.label} ({group.wells.length})</h4>
-    <ul>{group.wells.map(well => <li key={well.well}>{well.well}: {t.qcReason(well.reason)}
+    <ul>{group.wells.map(well => <li key={well.well}>{session ? <QualityWellLink target={{
+      session, well: well.well, source: 'ntc', basis: 'current-input', marker: null,
+      cycle: data.ntc_check.cycle, useRox: data.ntc_check.use_rox,
+      background: data.ntc_check.background,
+      inputRevision: data.current_input_revision, resultRevision: data.result_revision,
+    }} /> : well.well}: {t.qcReason(well.reason)}
       {well.signal !== null && <> · {well.signal.toFixed(2)}</>}</li>)}</ul>
   </section>)}</>;
 }

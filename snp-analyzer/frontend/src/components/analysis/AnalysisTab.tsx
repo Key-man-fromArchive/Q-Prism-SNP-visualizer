@@ -162,7 +162,7 @@ export function AnalysisTab() {
     <div>
       {/* Single sticky analysis toolbar: cycle control + analyze/ploidy/boundary
           controls read as one bar and stay visible while scrolling (PRD FR-NAV-2). */}
-      <div className="sticky top-0 z-20 bg-surface border-b border-border">
+      <div className="analysis-primary-toolbar sticky top-0 z-20 bg-surface border-b border-border">
       {/* Cycle Control */}
       <CycleControl />
 
@@ -213,7 +213,7 @@ export function AnalysisTab() {
         >
           <Ruler size={14} aria-hidden="true" /> {t.boundaryLines}
         </button>
-        <button type="button" data-testid="analyze-recommended" onClick={handleRecommended} disabled={analyzing || !sessionId}>추천 사이클 분석</button>
+        <button type="button" data-testid="analyze-recommended" onClick={handleRecommended} disabled={analyzing || !sessionId}>{t.analyzeRecommended}</button>
         <button
           data-testid="analyze-current"
           onClick={handleAnalyze}
@@ -302,21 +302,18 @@ export function AnalysisTab() {
         <WellSelectionToolbar />
       </div>
 
-      {/* Analysis Grid - responsive (1 col narrow, 2 col >= lg) */}
-      <div className="analysis-grid grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 sm:px-6">
+      {/* Shared responsive foundation defines the 1280px two-column breakpoint. */}
+      <div className="analysis-grid grid gap-4 p-4 sm:px-6">
         {/* Scatter Plot - top left */}
         <ScatterPlot />
 
-        {/* Plate View - top right */}
-        <PlateView />
-
-        {/* Well Detail - bottom left */}
-        <WellDetailPanel />
-
-        {/* Results Table - bottom right */}
-        <ResultsTable />
+        <div className="analysis-review-stack">
+          <PlateView />
+          <WellDetailPanel />
+        </div>
       </div>
 
+      <div className="analysis-secondary px-4 pb-4 sm:px-6"><ResultsTable /></div>
       {/* Amplification Overlay - full width below grid */}
       <div style={{ padding: "0 24px 16px" }}>
         <AmplificationOverlay />

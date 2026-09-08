@@ -3,8 +3,10 @@ import { useSelectionStore } from '@/stores/selection-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useDataStore } from '@/stores/data-store';
+import { useQualityReveal } from './use-quality-reveal';
 
-export function useWellFilter() {
+export function useWellFilter(availablePoints?: readonly { well: string }[]) {
+  const revealedWell = useQualityReveal()?.well;
   const selectedGroup = useSelectionStore((s) => s.selectedGroup);
   const wellGroups = useSessionStore((s) => s.wellGroups);
   const showEmptyWells = useSettingsStore((s) => s.showEmptyWells);
@@ -13,12 +15,13 @@ export function useWellFilter() {
 
   // Set of wells that have data (from parser)
   const dataWells = useMemo(
-    () => new Set(plateWells.map((w) => w.well)),
-    [plateWells]
+    () => new Set((availablePoints ?? plateWells).map((w) => w.well)),
+    [plateWells, availablePoints]
   );
 
   const isWellVisible = useCallback(
     (wellId: string) => {
+      if (wellId === revealedWell) return true;
       // 1. Omit: manually excluded (bad/spiked reading) → always hidden from plots
       if (wellTypeAssignments[wellId] === 'Omit') return false;
       // 2. Empty check: manually typed as Empty → hidden unless showEmptyWells
@@ -31,13 +34,14 @@ export function useWellFilter() {
       }
       return true;
     },
-    [selectedGroup, wellGroups, showEmptyWells, wellTypeAssignments, dataWells]
+    [selectedGroup, wellGroups, showEmptyWells, wellTypeAssignments, dataWells, revealedWell]
   );
 
   // Compute visible rows and columns from wells that pass filter
   const { visibleRows, visibleCols } = useMemo(() => {
     const rows = new Set<string>();
     const cols = new Set<number>();
+    if (revealedWell) { rows.add(revealedWell[0]); cols.add(Number(revealedWell.slice(1))); }
 
     for (const w of plateWells) {
       if (isWellVisible(w.well)) {
@@ -50,7 +54,7 @@ export function useWellFilter() {
     const sortedCols = [...cols].sort((a, b) => a - b);
 
     return { visibleRows: sortedRows, visibleCols: sortedCols };
-  }, [plateWells, isWellVisible]);
+  }, [plateWells, isWellVisible, revealedWell]);
 
   // Detect the full physical plate layout (96 = 8×12, 384 = 16×24, 1536 = 32×48)
   // from the highest occupied row/column, so the plate view can render every
@@ -58,10 +62,12 @@ export function useWellFilter() {
   const { plateRows, plateCols } = useMemo(() => {
     let maxRowIdx = 0;
     let maxCol = 1;
-    for (const w of plateWells) {
-      const rowIdx = ROW_ALPHABET.indexOf(w.well[0]);
+    const wellIds = plateWells.map(well => well.well);
+    if (revealedWell) wellIds.push(revealedWell);
+    for (const well of wellIds) {
+      const rowIdx = ROW_ALPHABET.indexOf(well[0]);
       if (rowIdx > maxRowIdx) maxRowIdx = rowIdx;
-      const col = parseInt(w.well.slice(1), 10);
+      const col = parseInt(well.slice(1), 10);
       if (col > maxCol) maxCol = col;
     }
 
@@ -79,7 +85,7 @@ export function useWellFilter() {
       plateRows: ROW_ALPHABET.slice(0, rows).split(''),
       plateCols: Array.from({ length: cols }, (_, i) => i + 1),
     };
-  }, [plateWells]);
+  }, [plateWells, revealedWell]);
 
   return { isWellVisible, visibleRows, visibleCols, plateRows, plateCols, dataWells };
 }

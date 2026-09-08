@@ -17,6 +17,7 @@ interface DataState {
    *  Read off the response, never off the `useRox` toggle — a run with no
    *  reference comes back raw either way, and the axes must say so. */
   normalizationApplied: boolean;
+  normalizationReported: boolean;
   /** Wells whose passive reference is too far from the plate median to trust;
    *  excluded from the ratio-origin estimate by the backend. */
   roxOutlierWells: string[];
@@ -59,6 +60,7 @@ export const useDataStore = create<DataState>((set) => ({
   channelLabels: null,
   ratioOrigin: ZERO_ORIGIN,
   normalizationApplied: false,
+  normalizationReported: false,
   roxOutlierWells: [],
   clusterAssignments: {},
   wellTypeAssignments: {},
@@ -76,6 +78,7 @@ export const useDataStore = create<DataState>((set) => ({
       channelLabels: channelLabels ?? null,
       ratioOrigin: ratioOrigin ?? ZERO_ORIGIN,
       normalizationApplied: normalization?.applied ?? false,
+      normalizationReported: typeof normalization?.applied === 'boolean',
       roxOutlierWells: normalization?.roxOutlierWells ?? [],
     }),
   setPlateData: (wells) => set({ plateWells: wells }),
@@ -106,6 +109,7 @@ export const useDataStore = create<DataState>((set) => ({
       channelLabels: null,
       ratioOrigin: ZERO_ORIGIN,
       normalizationApplied: false,
+      normalizationReported: false,
       roxOutlierWells: [],
       clusterAssignments: {},
       wellTypeAssignments: {},

@@ -88,6 +88,10 @@ test.describe("P4-S3: Layout save/load/delete", () => {
   test("deleting a saved layout (from the Library tab) removes it from the list", async ({
     page,
   }) => {
+    let deleteCalls = 0;
+    page.on("request", (request) => {
+      if (request.method() === "DELETE" && request.url().includes("/api/layouts/")) deleteCalls += 1;
+    });
     await page.getByTestId("layout-save-open").click();
     await page.getByTestId("layout-save-name-input").fill("삭제될 레이아웃");
     await page.getByTestId("layout-save-confirm").click();
@@ -99,9 +103,20 @@ test.describe("P4-S3: Layout save/load/delete", () => {
     await expect(row).toBeVisible();
 
     await row.getByTestId("layout-delete-button").click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: /취소|cancel/i }).click();
+    await expect(dialog).toBeHidden();
+    await expect(row).toHaveCount(1);
+    expect(deleteCalls).toBe(0);
+
+    await row.getByTestId("layout-delete-button").click();
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: /삭제|delete/i }).click();
     await expect(page.getByTestId("layout-row").filter({ hasText: "삭제될 레이아웃" })).toHaveCount(
       0,
     );
+    expect(deleteCalls).toBe(1);
   });
 
   test('"apply previous layout" (Plate Setup quick action) requires explicit confirmation before overwriting', async ({

@@ -4,6 +4,7 @@ import { ResultsTable } from './ResultsTable';
 import { useDataStore } from '@/stores/data-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import * as genotype from '@/lib/genotype';
+import { useLanguageStore } from '@/stores/language-store';
 vi.mock('@/hooks/use-well-filter', () => ({ useWellFilter: () => ({ visibleRows: ['A'], visibleCols: [1, 2] }) }));
 it('exposes result cells as a roving grid with names, selection and a live count', () => {
   useDataStore.setState({ scatterPoints: [{ well: 'A1', norm_fam: 1, norm_allele2: 2, raw_fam: 1, raw_allele2: 2, raw_rox: null, sample_name: null, auto_cluster: 'NTC', manual_type: null, confidence: 0.9 }] });
@@ -20,6 +21,7 @@ it('exposes result cells as a roving grid with names, selection and a live count
   expect(useSelectionStore.getState().selectedWells).toEqual([]);
 });
 it('uses black text on exact Het green #10b981 without changing the genotype background', () => {
+  useLanguageStore.getState().setLanguage('en');
   const info = genotype.wellInfo('Heterozygous', 2, false);
   vi.spyOn(genotype, 'wellInfo').mockReturnValue({ ...info, color: '#10b981' });
   useDataStore.setState({ scatterPoints: [{ well: 'A1', norm_fam: 1, norm_allele2: 2,

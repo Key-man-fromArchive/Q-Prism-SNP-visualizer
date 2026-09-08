@@ -124,7 +124,59 @@ body.dark .panel {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
-/* Hidden utility (matching legacy) */
-.hidden {
-  display: none !important;
+/* Tailwind owns .hidden so responsive display variants retain their cascade. */
+
+:root { --workspace-gutter: 1rem; --workspace-gap: 1rem; }
+#root, main, #analysis-panel { min-width: 0; max-width: 100%; }
+.app-header { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem; padding: .75rem var(--workspace-gutter); }
+.header-context { display: flex; flex: 1 1 30rem; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; min-width: 0; }
+.header-actions { display: flex; flex: 1 1 38rem; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; min-width: 0; }
+.header-account { min-width: 0; max-width: 100%; }
+.header-username, .header-linked-context, #instrument-badge { overflow-wrap: anywhere; min-width: 0; max-width: 100%; white-space: normal; }
+.header-username { flex: 1 1 10rem; max-width: 16rem; }
+.header-username, #instrument-badge { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.header-linked-values > * { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.header-linked-context > *, .app-header .qc-badge { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.app-header [data-testid="qc-details"] { position: static; min-width: 0; max-width: 100%; }
+.app-header [data-testid="qc-details"] > div { left: var(--workspace-gutter); max-width: calc(100% - 2 * var(--workspace-gutter)); overflow-wrap: anywhere; }
+.app-header button, .app-header a { flex-shrink: 0; }
+.app-header button { white-space: nowrap; }
+.app-navigation { padding-inline: var(--workspace-gutter); }
+.analysis-grid { grid-template-columns: minmax(0, 1fr); }
+.template-tooltip { width: min(24rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; overflow-wrap: anywhere; }
+.protocol-editor { width: 100%; min-width: 0; }
+.protocol-editor table { min-width: 36rem; }
+.protocol-editor td { overflow-wrap: anywhere; }
+.analysis-grid > *, .panel { min-width: 0; }
+.analysis-review-stack { display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
+.analysis-scatter-canvas { height: 420px; }
+.analysis-advanced-settings > div { max-height: 18rem; overflow: auto; }
+.well-detail-expanded { max-height: 22rem; overflow: auto; }
+.analysis-secondary { min-width: 0; }
+[data-testid="results-scroll-region"] { max-height: 24rem; overflow-y: auto; }
+@media (min-width: 1280px) {
+  [data-testid="analysis-selection-toolbar"] > span:first-child { width: auto; }
+  .analysis-grid { padding-top: .5rem; }
+  .analysis-review-stack .detail-panel { padding: 8px 12px; }
+  .detail-panel #detail-content > table > tbody { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .25rem .5rem; }
+  .detail-panel #detail-content > table tr { display: flex; flex-wrap: wrap; gap: .25rem; }
+  .detail-panel #detail-content > table td { overflow-wrap: anywhere; }
+  [data-testid="marker-selector-sidebar"] { max-height: 32rem; overflow: auto; }
+  [data-testid="marker-warnings"] { max-height: 5rem; overflow: auto; }
+  .analysis-scatter-canvas { max-height: 300px; }
+  .analysis-primary-toolbar { display: flex; align-items: center; }
+  .analysis-primary-toolbar > * { flex: 1; min-width: 0; }
+  .analysis-primary-toolbar #cycle-control { flex: .8; }
+  .analysis-review-stack [data-testid="plate-scroll-region"] { max-height: 290px; overflow: auto; }
+  .analysis-context-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; padding: .5rem 1.5rem 0; }
+  .analysis-context-summary > section { margin: 0; padding: .5rem; font-size: .75rem; }
+  .analysis-grid { align-items: start; }
+  .analysis-grid .panel { padding: 12px; }
+  .analysis-scatter-canvas { height: 360px; }
+  [data-testid="analysis-warnings"] { max-height: 5rem; overflow: auto; }
+  [data-testid="split-marker-banner"] { margin-top: .5rem; }
+  [data-testid="analysis-result-status"] { padding: .5rem .75rem; }
 }
+@media (min-width: 768px) { :root { --workspace-gutter: 1.5rem; } }
+@media (min-width: 1280px) { .analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 767px) { .header-actions { justify-content: flex-start; } }

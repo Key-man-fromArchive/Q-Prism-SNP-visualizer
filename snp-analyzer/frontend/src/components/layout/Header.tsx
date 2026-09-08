@@ -18,6 +18,25 @@ import { Button, IconButton, Menu, Modal, type MenuItem } from "@/components/sha
 import { ApiError, logout, saveAsgResult } from "@/lib/api";
 import { analyzeCurrent } from "@/lib/analysis-actions";
 import { loadAnalysisSession } from "@/lib/analysis-session";
+import type { LinkedASGContext } from '@/types/auth';
+
+function LinkedIdentity({ context }: { context: LinkedASGContext }) {
+  return <>
+    <span>{context.target_type}</span><span className="text-text">{context.target_id}</span>
+    {typeof context.context.tag_alias === 'string' && <span className="badge">{context.context.tag_alias}</span>}
+    {typeof context.context.marker_id === 'string' && <span>{context.context.marker_id}</span>}
+  </>;
+}
+function HeaderLinkedContext({ context }: { context: LinkedASGContext }) {
+  const { t } = useI18n();
+  return <div className="header-linked-context text-xs text-text-muted border border-border rounded px-2 py-1">
+    <details className="xl:hidden">
+      <summary aria-label={t.asgContext} className="cursor-pointer">ASG · {context.target_type}</summary>
+      <div className="header-linked-values flex flex-wrap gap-1"><LinkedIdentity context={context} /></div>
+    </details>
+    <div className="header-linked-values hidden xl:flex flex-wrap gap-1"><LinkedIdentity context={context} /></div>
+  </div>;
+}
 
 function useAsgSavePresentation(sessionId: string | null, currentCycle: number | null, useRox: boolean) {
   const [asgSaveState, setAsgSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -214,45 +233,36 @@ export function Header() {
 
   return (
     <>
-    <header className="bg-surface border-b border-border px-6 py-3 flex items-center gap-3">
+    <header className="app-header bg-surface border-b border-border">
       {/* Left region: brand + session context */}
-      <h1 className="text-lg font-semibold text-text whitespace-nowrap">{t.appTitle}</h1>
+      <div className="header-context">
+      <h1 className="text-lg font-semibold text-text">{t.appTitle}</h1>
 
-      {linkedContext && (
-        <div className="hidden lg:flex items-center gap-1 text-xs text-text-muted border border-border rounded px-2 py-1">
-          <span>{linkedContext.target_type}</span>
-          <span className="text-text">{linkedContext.target_id}</span>
-          {typeof linkedContext.context.tag_alias === "string" && linkedContext.context.tag_alias && (
-            <span className="badge">{linkedContext.context.tag_alias}</span>
-          )}
-          {typeof linkedContext.context.marker_id === "string" && (
-            <span>{linkedContext.context.marker_id}</span>
-          )}
-        </div>
-      )}
+      {linkedContext && <HeaderLinkedContext context={linkedContext} />}
 
       {sessionInfo && (
-        <div id="session-info" className="flex gap-2 items-center">
-          <span id="instrument-badge" className="badge">{sessionInfo.instrument}</span>
+        <div id="session-info" className="flex flex-wrap gap-2 items-center min-w-0">
+          <span id="instrument-badge" className="badge" title={sessionInfo.instrument}>{sessionInfo.instrument}</span>
           <span id="wells-badge" className="badge">{sessionInfo.num_wells} {t.wells}</span>
           <span id="cycles-badge" className="badge">{sessionInfo.num_cycles} {t.cycles}</span>
           <QcBadges />
         </div>
       )}
+      </div>
 
       {/* Right region: actions + user + locale + theme */}
-      <div className="ml-auto flex items-center gap-2">
+      <div className="header-actions">
         <a
           href="https://www.invirustech.com"
           target="_blank"
           rel="noopener"
-          className="hidden md:inline-block text-xs text-text-muted border border-border rounded-xl px-2.5 py-0.5 hover:text-primary hover:border-primary transition-colors no-underline"
+          className="text-xs text-text-muted border border-border rounded-xl px-2.5 py-0.5 hover:text-primary hover:border-primary transition-colors no-underline"
         >
           {t.poweredBy}
         </a>
 
         {sessionId && (
-          <div id="export-buttons" className="flex items-center gap-1">
+          <div id="export-buttons" className="flex flex-wrap items-center gap-1">
             <IconButton size="sm" aria-label={t.undo} title={t.undoTooltip} onClick={undo} disabled={!canUndo}>
               <Undo2 size={16} aria-hidden="true" />
             </IconButton>
@@ -292,8 +302,8 @@ export function Header() {
         )}
 
         {user && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-text whitespace-nowrap">{user.display_name || user.username}</span>
+          <div className="header-account flex items-center flex-wrap gap-2">
+            <span className="header-username text-xs text-text" title={user.display_name || user.username}>{user.display_name || user.username}</span>
             <span className={`text-xs px-1.5 py-0.5 rounded-full border ${
               user.role === "admin" ? "border-primary text-primary" : "border-border text-text-muted"
             }`}>
@@ -301,7 +311,7 @@ export function Header() {
             </span>
             <button
               onClick={handleLogout}
-              className="text-xs text-text-muted hover:text-danger cursor-pointer transition-colors"
+              className="shrink-0 whitespace-nowrap text-xs text-text-muted hover:text-danger cursor-pointer transition-colors"
               title={t.signOut}
             >
               {t.logout}

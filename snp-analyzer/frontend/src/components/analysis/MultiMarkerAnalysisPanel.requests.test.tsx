@@ -27,6 +27,35 @@ beforeEach(() => {
   useSelectionStore.getState().setCycle(20);
 });
 afterEach(() => vi.useRealTimers());
+it('renders count cards with unambiguous call labels and preserved numeric counts', async () => {
+  const result = { algorithm: 'auto', cycle: 20, assignments: {}, regions: [{ ...markers[0], assignments: {}, offset: 0, offset_uncertain: false, low_separation: false, genotype_counts: { AA: 2, BB: 3, AB: 4, excluded: 1 } }] };
+  useAnalysisStore.setState({ result });
+  render(<MultiMarkerAnalysisPanel markers={markers} />);
+  const counts = await screen.findByTestId('genotype-counts');
+  expect(counts).toHaveTextContent('Hom-1');
+  expect(counts).toHaveTextContent('Hom-2');
+  expect(counts).toHaveTextContent('2');
+  expect(counts).toHaveTextContent('3');
+  expect(counts).toHaveTextContent('4');
+  expect(counts).not.toHaveTextContent('excluded');
+  expect(useAnalysisStore.getState().result).toEqual(result);
+});
+it('a QC jump and Return establish baselines without automatic analysis, while later edits still run', async () => {
+  vi.useFakeTimers();
+  useNavigationStore.setState({ exportRestoring: false, qualityEpoch: 0, qualityNavigating: false });
+  render(<MultiMarkerAnalysisPanel markers={markers} />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  act(() => useNavigationStore.setState({ qualityNavigating: true }));
+  act(() => useNavigationStore.setState({ cycle: 0, qualityEpoch: 1, qualityNavigating: false }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+  expect(runClustering).not.toHaveBeenCalled();
+  act(() => useNavigationStore.setState({ cycle: 20, qualityEpoch: 2 }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+  expect(runClustering).not.toHaveBeenCalled();
+  act(() => useNavigationStore.setState({ cycle: 21 }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+  expect(runClustering).toHaveBeenCalledTimes(1);
+});
 it('does not publish detached scatter points after unmount and session replacement', async () => {
   let resolve!: (value: Awaited<ReturnType<typeof getScatter>>) => void;
   vi.mocked(getScatter).mockReturnValueOnce(new Promise(done => { resolve = done; }));

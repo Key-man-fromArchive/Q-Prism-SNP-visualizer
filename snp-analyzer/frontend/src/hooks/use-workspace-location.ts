@@ -3,6 +3,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
 import { createLocationRestore } from '@/lib/workspace-location';
 import { connectWorkspaceHistory } from '@/lib/workspace-history';
+import { restoreQualityNavigation } from '@/lib/quality-navigation';
 
 /** URL admission owns only session identity; the existing workspace owns the single result load. */
 export function useWorkspaceLocation() {
@@ -20,6 +21,6 @@ export function useWorkspaceLocation() {
   }, [controller, loading]);
   useEffect(() => {
     if (!controller || !owner || loading) return;
-    return connectWorkspaceHistory(owner, () => { void controller.run(); });
+    return connectWorkspaceHistory(owner, () => { void controller.run(); }, restoreQualityNavigation);
   }, [controller, owner, loading, entry]);
 }

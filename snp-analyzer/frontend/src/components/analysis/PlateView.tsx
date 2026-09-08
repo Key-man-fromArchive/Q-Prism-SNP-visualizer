@@ -10,12 +10,14 @@ import { useAnalysisStore } from '@/stores/analysis-store';
 import { getPlate } from '@/lib/api';
 import { WELL_TYPE_INFO } from '@/lib/constants';
 import { wellInfo, dosageOfLabel } from '@/lib/genotype';
+import { callAppearance, displayedCall, outsideDisplayScope } from '@/lib/chart-semantics';
 import { useWellFilter } from '@/hooks/use-well-filter';
 import { useWellGrid } from '@/hooks/use-well-grid';
 import { useI18n } from '@/hooks/use-i18n';
 import { StatusState } from '@/components/shared/ui';
 import type { PlateWell } from '@/types/api';
 import { useIsDarkMode } from "@/hooks/use-dark-mode";
+import { useQualityFocus } from '@/hooks/use-quality-focus';
 
 interface DragRect {
   left: number;
@@ -35,6 +37,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   const panelRef = useRef<HTMLDivElement>(null);
   const requestSequence = useRef(0);
   const gridRef = useRef<HTMLDivElement>(null);
+  useQualityFocus(gridRef, 'analysis');
 
   // Stores
   const sessionId = useSessionStore((s) => s.sessionId);
@@ -51,10 +54,6 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const plateWells = useDataStore((s) => s.plateWells);
   const setPlateData = useDataStore((s) => s.setPlateData);
-  const scopeSet = useMemo(
-    () => (scopeWells ? new Set(scopeWells) : null),
-    [scopeWells]
-  );
 
   // Drag selection state
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -287,7 +286,9 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
         <StatusState variant="empty" message={t.plateEmpty} />
       )}
 
-      <div style={{ overflowX: 'auto', display: status === "ready" && plateWells.length > 0 ? undefined : 'none' }}>
+      <div role="region" aria-label={t.plateScrollHint} tabIndex={0} data-testid="plate-scroll-region"
+        style={{ overflowX: 'auto', display: status === "ready" && plateWells.length > 0 ? undefined : 'none' }}>
+      <p className="text-xs text-text-muted mb-2">{t.plateScrollHint}</p>
       <div
         id="plate-grid"
         role="grid"
@@ -300,7 +301,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
           gridTemplateColumns: `auto repeat(${plateCols.length}, 1fr)`,
           gridTemplateRows: `auto repeat(${plateRows.length}, 1fr)`,
           gap: '2px',
-          maxWidth: isLargePlate ? '820px' : '500px',
+          maxWidth: isLargePlate ? '820px' : '380px',
           margin: '0 auto'
         }}
       >
@@ -364,9 +365,10 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
               const isEmpty = !hasData;
               // Has data but excluded from plots (omitted, group-filtered, or hidden Empty)
               const isExcluded = hasData && !isWellVisible(wellId);
-              const isOutOfScope = hasData && scopeSet !== null && !scopeSet.has(wellId);
+              const isOutOfScope = hasData && outsideDisplayScope(wellId, scopeWells);
 
               const wellColor = isEmpty ? '' : getWellColor(wellData);
+              const call = callAppearance(displayedCall(wellData, showManualTypes, showAutoCluster), ploidy, dark, t);
               const cellSize = isLargePlate ? '18px' : '28px';
 
               const stateSuffix = isSelected || isMultiSelected
@@ -374,7 +376,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
                 : isEmpty
                 ? `, ${t.wellEmptyState}`
                 : '';
-              const ariaLabel = `${wellId}${wellData?.sample_name ? `, ${wellData.sample_name}` : ''}${stateSuffix}`;
+              const ariaLabel = `${wellId}${wellData?.sample_name ? `, ${wellData.sample_name}` : ''}, ${call.description}${stateSuffix}`;
 
               return (
                 <button
@@ -410,10 +412,11 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
                   }}
                   title={
                     wellData
-                      ? `${wellId}: ${wellData.sample_name || 'No sample'}${isExcluded ? ' (excluded)' : ''}${isOutOfScope ? ' (outside marker)' : ''}`
+                      ? `${t.chartWellAddress}: ${wellId}; ${t.chartCall}: ${call.description}; ${wellData.sample_name || t.chartNoSample}${isExcluded ? ` (${t.chartExcluded})` : ''}${isOutOfScope ? ` (${t.chartOutsideMarker})` : ''}`
                       : wellId
                   }
                 >
+                  <span aria-hidden="true" style={{ color: call.textColor, fontSize: '10px', lineHeight: 1 }}>{call.glyph}</span>
                   {isAnySelected && (
                     <span
                       aria-hidden="true"

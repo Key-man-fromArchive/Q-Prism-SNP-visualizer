@@ -1,36 +1,23 @@
 import { useState } from 'react';
 import { Dna } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth-store';
-import { login } from '@/lib/api';
+import { useLoginAttempt } from './use-login-attempt';
 import { useI18n } from '@/hooks/use-i18n';
 import { useLanguageStore } from '@/stores/language-store';
 
 export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const setUser = useAuthStore((s) => s.setUser);
   const { t } = useI18n();
+  const { error, loading, submit } = useLoginAttempt(t.loginFailed);
   const { language, setLanguage } = useLanguageStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      const res = await login({ username, password });
-      setUser(res.user);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t.loginFailed);
-    } finally {
-      setLoading(false);
-    }
+    await submit(username, password);
   };
 
   return (
-    <div className="min-h-screen bg-bg flex items-center justify-center">
+    <div className="min-h-screen bg-bg flex items-center justify-center p-4">
       <div className="bg-surface border border-border rounded-lg p-8 w-full max-w-sm shadow-lg">
         <div className="flex justify-center mb-3">
           <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary">
@@ -42,11 +29,13 @@ export function LoginPage() {
         </h1>
         <p className="text-sm text-text-muted text-center mb-6">{t.loginSubtitle}</p>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} aria-busy={loading} className="flex flex-col gap-4">
           <div>
             <label htmlFor="username" className="block text-sm text-text mb-1">{t.username}</label>
             <input
               id="username"
+              name="username"
+              autoComplete="username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -60,6 +49,8 @@ export function LoginPage() {
             <label htmlFor="password" className="block text-sm text-text mb-1">{t.password}</label>
             <input
               id="password"
+              name="password"
+              autoComplete="current-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

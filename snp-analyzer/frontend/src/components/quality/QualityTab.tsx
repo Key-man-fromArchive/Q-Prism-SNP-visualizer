@@ -1,9 +1,13 @@
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { getQuality } from '@/lib/api';
 import { useI18n } from '@/hooks/use-i18n';
 import type { QualityResponse, QualityResult } from '@/types/api';
+import { useAuthStore } from '@/stores/auth-store';
+import { useNavigationStore } from '@/stores/navigation-store';
+import { QualityWellLink } from '@/components/shared/QualityWellLink';
+import { StatusState } from '@/components/shared/ui';
 
 type ScoreBucket = {
   range: string;
@@ -16,18 +20,21 @@ export function QualityTab() {
   const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
   const useRox = useSettingsStore((s) => s.useRox);
+  const entry = useSessionStore(state => state.entryGeneration);
+  const auth = useAuthStore(state => state.generation);
 
   if (!sessionId) return <div className="p-6 text-text-muted">{t.noQualityData}</div>;
-  return <SessionQuality key={`${sessionId}:${useRox}`} sessionId={sessionId} useRox={useRox} />;
+  return <SessionQuality key={`${sessionId}:${useRox}:${entry}:${auth}`} sessionId={sessionId} useRox={useRox} />;
 }
 
 function SessionQuality({ sessionId, useRox }: { sessionId: string; useRox: boolean }) {
   const { t } = useI18n();
-  const errorMessage = useEffectEvent((err: unknown) => err instanceof Error ? err.message : t.errLoadQuality);
+  const cycle = useNavigationStore(state => state.cycle);
+  const [attempt, setAttempt] = useState(0);
 
   const [data, setData] = useState<QualityResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -41,9 +48,9 @@ function SessionQuality({ sessionId, useRox }: { sessionId: string; useRox: bool
           setLoading(false);
         }
       })
-      .catch((err) => {
+      .catch(() => {
         if (mounted) {
-          setError(errorMessage(err));
+          setError(true);
           setLoading(false);
         }
       });
@@ -51,7 +58,7 @@ function SessionQuality({ sessionId, useRox }: { sessionId: string; useRox: bool
     return () => {
       mounted = false;
     };
-  }, [sessionId, useRox]);
+  }, [sessionId, useRox, attempt]);
 
   const getScoreColor = (score: number): string => {
     if (score >= 80) return 'text-success';
@@ -122,7 +129,8 @@ function SessionQuality({ sessionId, useRox }: { sessionId: string; useRox: bool
   if (error) {
     return (
       <div className="p-6">
-        <div className="text-danger">Error: {error}</div>
+        <StatusState variant="error" message={t.errLoadQuality} action={{ label: t.retry,
+          onClick: () => { setError(false); setLoading(true); setAttempt(value => value + 1); } }} />
       </div>
     );
   }
@@ -137,6 +145,9 @@ function SessionQuality({ sessionId, useRox }: { sessionId: string; useRox: bool
 
   return (
     <div className="p-6">
+      <p className="mb-4 text-sm text-text-muted break-all" data-testid="curve-quality-scope">
+        {t.qualityCurveScope(sessionId, useRox)}
+      </p>
       {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="panel">
@@ -238,7 +249,10 @@ function SessionQuality({ sessionId, useRox }: { sessionId: string; useRox: bool
               <tbody>
                 {flaggedWells.map((well) => (
                   <tr key={well.well} className="border-b border-border">
-                    <td className="py-2 font-mono text-text">{well.well}</td>
+                    <td className="py-2 font-mono text-text">{cycle === null ? well.well : <QualityWellLink target={{
+                      session: sessionId, well: well.well, source: 'curve', basis: 'unversioned', cycle,
+                      useRox, marker: null, inputRevision: null, resultRevision: null,
+                    }} />}</td>
                     <td className={`py-2 font-semibold ${getScoreColor(well.score)}`}>
                       {well.score.toFixed(0)}
                     </td>

@@ -7,6 +7,7 @@ import { bootstrapAuth } from '@/lib/auth-bootstrap';
 import { Header } from "@/components/layout/Header";
 import { UploadZone } from "@/components/upload/UploadZone";
 import { TabNavigation } from "@/components/layout/TabNavigation";
+import { QualityNavigationNotice } from '@/components/shared/QualityNavigationNotice';
 import { useNavigationStore } from "@/stores/navigation-store";
 import { connectAnalysisProjection } from "@/lib/analysis-projection";
 import { SettingsTab } from "@/components/settings/SettingsTab";
@@ -165,6 +166,7 @@ export default function App() {
         {/* Session-dependent tabs */}
         <div id="analysis-panel" className={visibility.panels ? "" : "hidden"}>
           <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} hasSession={!!sessionId} isAdmin={isAdmin} />
+          <QualityNavigationNotice />
 
           {/* Keep Analysis mounted across tab switches so the analysed cycle,
               clustering and view state persist (and it isn't re-initialised to

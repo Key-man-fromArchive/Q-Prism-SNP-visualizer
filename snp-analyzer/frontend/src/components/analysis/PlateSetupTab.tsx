@@ -23,6 +23,7 @@ import { WellType } from "@/types/api";
 import { assignManualWells } from "@/lib/manual-commands";
 import { parseWellType } from "@/lib/well-type-input";
 import { useWellTypeAssignments } from "@/hooks/use-well-type-assignments";
+import { useQualityFocus } from '@/hooks/use-quality-focus';
 import { MARKER_PALETTE } from "@/lib/constants";
 import { withDosageMax } from "@/lib/threshold-config";
 import { extractLayoutConflict, extractLayoutMissingWellsMessage } from "@/lib/layout-conflict";
@@ -43,6 +44,10 @@ function genMarkerId(): string {
     return crypto.randomUUID();
   }
   return `m_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function WellInspectorAddress({ well }: { well: string | null }) {
+  return well ? <div className="font-mono font-semibold mb-2">{well}</div> : null;
 }
 
 export function PlateSetupTab() {
@@ -75,6 +80,8 @@ export function PlateSetupTab() {
   const [importedWellTypes, setImportedWellTypes] = useState<Record<string, string>>({});
 
   const [selectedWells, setSelectedWells] = useState<string[]>([]);
+  const qualityRoot = useRef<HTMLDivElement>(null);
+  useQualityFocus(qualityRoot, 'plate', well => setSelectedWells([well]));
   const [pickMarkerId, setPickMarkerId] = useState<string | null>(null);
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
   const dragSelection = useRef<DragSelection | null>(null);
@@ -605,7 +612,7 @@ export function PlateSetupTab() {
   const importedMarkerCount = markers.filter((marker) => marker.id.startsWith("imported-")).length;
 
   return (
-    <div className="p-6">
+    <div className="p-6" ref={qualityRoot}>
       {saveError && (
         <div className="mb-3 px-3 py-2 rounded-md text-sm text-danger bg-danger/10">
           {saveError}
@@ -1106,6 +1113,7 @@ export function PlateSetupTab() {
           <h3 className="text-sm font-semibold mb-3 text-text">{t.wsWellInspectorTitle}</h3>
           {selectedWells.length > 0 ? (
             <div data-testid="well-inspector">
+              <WellInspectorAddress well={singleWell} />
               {singleWell && (
                 <div className="mb-3">
                   <div className="flex items-center gap-2 mb-1.5">

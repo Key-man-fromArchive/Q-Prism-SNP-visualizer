@@ -7,7 +7,7 @@
 // durable, plate-independent registry entry (name/target/chemistry) plus
 // calibration/validation evidence, from which the derived `dosage_trust`
 // badge (validated=green / putative=amber) is shown.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useConfirm } from "@/hooks/use-confirm";
 import {
@@ -24,6 +24,10 @@ import type {
 } from "@/types/api";
 import { computeDosageTrust } from "@/lib/marker-catalog";
 import { MARKER_PALETTE } from "@/lib/constants";
+import { useOwnedOperation } from '@/hooks/use-owned-operation';
+import { useAuthStore } from '@/stores/auth-store';
+import { useSessionStore } from '@/stores/session-store';
+import { validCatalogEntry, validManagementList } from '@/lib/management-payload';
 
 const PLOIDY_OPTIONS = [2, 3, 4, 5, 6, 7, 8];
 const VALIDATION_STATUSES: MarkerValidation["status"][] = ["none", "provisional", "validated"];
@@ -158,7 +162,14 @@ function DosageTrustBadge({ trust }: { trust: "putative" | "validated" }) {
 }
 
 export function MarkerCatalogTab() {
+  const generation = useAuthStore(s => s.generation);
+  const entry = useSessionStore(s => s.entryGeneration);
+  return <CatalogWorkspace key={`${generation}:${entry}`} />;
+}
+
+function CatalogWorkspace() {
   const { t } = useI18n();
+  const readOwner = useOwnedOperation(), actionOwner = useOwnedOperation(), confirmationOwner = useOwnedOperation();
   const { confirm, confirmDialog } = useConfirm();
   const [entries, setEntries] = useState<MarkerCatalogEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -173,22 +184,24 @@ export function MarkerCatalogTab() {
     [editing, entries]
   );
 
-  async function refresh() {
+  async function refresh(afterChange = false) {
+    const ticket = readOwner.begin();
     setLoading(true);
     setError(null);
     try {
       const res = await listMarkerCatalog();
+      if (!readOwner.current(ticket)) return;
+      if (!validManagementList(res, 'entries', validCatalogEntry)) throw new Error('Invalid catalog response');
       setEntries(res.entries);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch {
+      if (readOwner.current(ticket)) setError(afterChange ? t.libraryRefreshFailed : t.statusLoadFailed);
     } finally {
-      setLoading(false);
+      if (readOwner.current(ticket)) setLoading(false);
     }
   }
 
-  useEffect(() => {
-    void refresh();
-  }, []);
+  const initialLoad = useEffectEvent(() => { void refresh(); });
+  useEffect(() => { initialLoad(); }, []);
 
   function openNew() {
     setDraft(emptyDraft());
@@ -206,6 +219,7 @@ export function MarkerCatalogTab() {
 
   async function handleSave() {
     if (!draft.name.trim()) return;
+    const ticket = actionOwner.begin();
     setSaving(true);
     setError(null);
     try {
@@ -215,43 +229,50 @@ export function MarkerCatalogTab() {
       } else if (typeof editing === "string") {
         await updateMarkerCatalogEntry(editing, body);
       }
+      if (!actionOwner.current(ticket)) return;
       setEditing(null);
-      await refresh();
-    } catch (err) {
-      setError(t.mcatSaveError(err instanceof Error ? err.message : String(err)));
+      await refresh(true);
+    } catch {
+      if (actionOwner.current(ticket)) setError(t.libraryActionFailed);
     } finally {
-      setSaving(false);
+      if (actionOwner.current(ticket)) setSaving(false);
     }
   }
 
   async function handleDelete(entry: MarkerCatalogEntry) {
+    const confirmationTicket = confirmationOwner.begin();
     if (!(await confirm({ title: t.delete, message: t.mcatDeleteConfirm(entry.name), danger: true }))) return;
+    if (!confirmationOwner.current(confirmationTicket)) return;
+    const ticket = actionOwner.begin();
+    if (!actionOwner.current(ticket)) return;
     setError(null);
     try {
       await deleteMarkerCatalogEntry(entry.id);
+      if (!actionOwner.current(ticket)) return;
       if (editing === entry.id) setEditing(null);
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      await refresh(true);
+    } catch {
+      if (actionOwner.current(ticket)) setError(t.libraryActionFailed);
     }
   }
 
   async function handleCopy(entry: MarkerCatalogEntry) {
+    const ticket = actionOwner.begin();
     setError(null);
     try {
       await copyMarkerCatalogEntry(entry.id);
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (actionOwner.current(ticket)) await refresh(true);
+    } catch {
+      if (actionOwner.current(ticket)) setError(t.libraryActionFailed);
     }
   }
 
   const previewTrust = computeDosageTrust(draft.validationStatus, draft.amplificationVerified);
 
   return (
-    <div className="p-6" data-testid="marker-catalog-tab">
+    <div className="p-4 sm:p-6 min-w-0" data-testid="marker-catalog-tab">
       <div className="panel mb-4">
-        <div className="flex items-start justify-between gap-3 mb-1">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
           <div>
             <h2 className="text-lg font-semibold text-text">{t.mcatTitle}</h2>
             <p className="text-sm text-text-muted mt-1 max-w-xl">{t.mcatSubtitle}</p>
@@ -267,7 +288,7 @@ export function MarkerCatalogTab() {
         </div>
 
         {error && (
-          <div className="mt-3 px-3 py-2 rounded-md text-sm text-danger bg-danger/10">{error}</div>
+          <div role="alert" className="mt-3 px-3 py-2 rounded-md text-sm text-danger bg-danger/10">{error} <button type="button" onClick={() => void refresh()}>{t.retry}</button></div>
         )}
       </div>
 
@@ -277,7 +298,7 @@ export function MarkerCatalogTab() {
             {editing === "new" ? t.mcatFormTitleNew : t.mcatFormTitleEdit}
           </h3>
 
-          <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">
               {t.mcatNameLabel}
               <input
@@ -458,7 +479,7 @@ export function MarkerCatalogTab() {
           {/* Ground-truth validation */}
           <div className="mt-4 pt-3 border-t border-border">
             <h4 className="text-xs font-bold text-text-muted mb-2">{t.mcatValidationTitle}</h4>
-            <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">
                 {t.mcatValidationStatusLabel}
                 <select
@@ -563,8 +584,8 @@ export function MarkerCatalogTab() {
 
       <div className="panel">
         {loading ? (
-          <p className="text-sm text-text-muted py-6 text-center">{t.loading}</p>
-        ) : entries.length === 0 ? (
+          <p role="status" className="text-sm text-text-muted py-6 text-center">{t.loading}</p>
+        ) : entries.length === 0 && !error ? (
           <p className="text-sm text-text-muted py-6 text-center">{t.mcatEmpty}</p>
         ) : (
           <div className="flex flex-col gap-2">
@@ -572,7 +593,7 @@ export function MarkerCatalogTab() {
               <div
                 key={entry.id}
                 data-testid="catalog-entry-row"
-                className="flex items-center gap-3 border border-border bg-bg rounded-md p-3"
+                className="flex flex-wrap items-center gap-3 border border-border bg-bg rounded-md p-3"
               >
                 <span
                   className="inline-block w-3 h-3 rounded-sm flex-none"
@@ -580,7 +601,7 @@ export function MarkerCatalogTab() {
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-sm text-text truncate">{entry.name}</span>
+                    <span title={entry.name} className="font-semibold text-sm text-text break-words">{entry.name}</span>
                     <span className="text-xs font-bold text-primary bg-surface rounded px-1.5 py-0.5">
                       {t.wsMarkerPloidyUnit(entry.default_ploidy)}
                     </span>

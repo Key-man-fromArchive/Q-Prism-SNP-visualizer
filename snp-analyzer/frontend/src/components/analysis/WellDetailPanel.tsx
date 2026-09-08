@@ -9,6 +9,7 @@ import { useDataStore } from "@/stores/data-store";
 import { getAmplification } from "@/lib/api";
 import { channelLabels, normalizationLabel } from "@/lib/channel-labels";
 import { plotlyColors } from "@/lib/plotly-theme";
+import { callLabel } from "@/lib/chart-semantics";
 import type { AmplificationCurve } from "@/types/api";
 
 type WellDetailPanelProps = { ploidyOverride?: number };
@@ -30,6 +31,8 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   const sessionId = useSessionStore((s) => s.sessionId);
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const useRox = useSettingsStore((s) => s.useRox);
+  const normalizationApplied = useDataStore((s) => s.normalizationApplied);
+  const normalizationReported = useDataStore((s) => s.normalizationReported);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
   const storedPloidy = useSettingsStore((s) => s.ploidy);
   const ploidy = ploidyOverride ?? storedPloidy;
@@ -102,7 +105,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
         const c = plotlyColors();
         const layout: Partial<Layout> = {
           xaxis: { title: { text: t.axisCycle }, gridcolor: c.gridColor },
-          yaxis: { title: { text: t.axisNormRFU }, gridcolor: c.gridColor },
+          yaxis: { title: { text: t.curveReportedSignal }, gridcolor: c.gridColor },
           paper_bgcolor: c.paper_bgcolor,
           plot_bgcolor: c.plot_bgcolor,
           font: { color: c.fontColor },
@@ -124,7 +127,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [selectedWell, sessionId, useRox, backgroundMode, currentCycle, allele2Dye, roleLabels, numCycles, t.axisCycle, t.axisNormRFU]);
+  }, [selectedWell, sessionId, useRox, backgroundMode, currentCycle, allele2Dye, roleLabels, numCycles, t.axisCycle, t.curveReportedSignal]);
 
   if (!selectedWell) {
     return (
@@ -177,7 +180,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
     if (effectiveCall === "Allele 1 Homo") genotype = t.genotypeAllele1;
     else if (effectiveCall === "Allele 2 Homo") genotype = t.genotypeAllele2(allele2Dye ?? "Allele2");
     else if (effectiveCall === "Heterozygous") genotype = t.genotypeHeterozygous;
-    else genotype = effectiveCall; // polyploid dosage label or control type
+    else genotype = callLabel(effectiveCall, t);
   } else if (ploidy === 2 && total > 0) {
     const r = normFam / total;
     if (r > 0.6) genotype = t.genotypeAllele1;
@@ -185,9 +188,9 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
     else genotype = t.genotypeHeterozygous;
   }
 
-  const decimals = useRox ? 4 : 1;
+  const decimals = normalizationApplied ? 4 : 1;
   const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
-  const normLabel = useRox ? ` / ${normalizationLabel(labels)}` : "";
+  const normLabel = normalizationApplied ? ` / ${normalizationLabel(labels)}` : "";
 
   return (
     <div className="panel detail-panel">
@@ -200,34 +203,26 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
               <td className="text-text-muted pr-3 py-0.5">{t.well}</td>
               <td className="font-medium">{well}</td>
             </tr>
-            {sampleName && (
               <tr>
                 <td className="text-text-muted pr-3 py-0.5">{t.sample}</td>
-                <td>{sampleName}</td>
+                <td>{sampleName || '—'}</td>
               </tr>
-            )}
             <tr>
               <td className="text-text-muted pr-3 py-0.5">{t.genotype}</td>
               <td className="font-medium">{genotype}</td>
             </tr>
-            {autoCluster && (
-              <tr>
-                <td className="text-text-muted pr-3 py-0.5">{t.autoCluster}</td>
-                <td>{autoCluster}</td>
-              </tr>
-            )}
-            {manualType && (
-              <tr>
-                <td className="text-text-muted pr-3 py-0.5">{t.manualType}</td>
-                <td>{manualType}</td>
-              </tr>
-            )}
-            {confidence != null && (
               <tr>
                 <td className="text-text-muted pr-3 py-0.5">{t.confidence}</td>
-                <td>{Math.round(confidence * 100)}%</td>
+                <td>{confidence == null ? '—' : `${Math.round(confidence * 100)}%`}</td>
               </tr>
-            )}
+          </tbody>
+        </table>
+        <details className="well-detail-expanded" onToggle={event => { if (event.currentTarget.open && plotRef.current && plotInitRef.current) void Plotly.relayout(plotRef.current, { autosize: true }); }}>
+          <summary className="cursor-pointer text-xs text-primary py-2">{t.analysisNumericDetails}</summary>
+          <p className="text-xs text-text-muted" data-testid="scatter-reading-basis">{t.scatterReferenceBasis(useRox, normalizationReported, normalizationApplied)}</p>
+          <table className="detail-table w-full text-sm"><tbody>
+            {autoCluster && <tr><td className="text-text-muted pr-3 py-0.5">{t.autoCluster}</td><td>{callLabel(autoCluster, t)}</td></tr>}
+            {manualType && <tr><td className="text-text-muted pr-3 py-0.5">{t.manualType}</td><td>{callLabel(manualType, t)}</td></tr>}
             <tr>
               <td className="text-text-muted pr-3 py-0.5">{labels.fam}{normLabel}</td>
               <td>{normFam.toFixed(decimals)}</td>
@@ -260,12 +255,16 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
         </table>
 
         {numCycles > 1 && (
+          <>
+          <p className="text-xs text-text-muted">{t.referenceBasisUnknown}</p>
           <div
             id="amplification-plot"
             ref={attachPlot}
             style={{ width: "100%", height: "200px", marginTop: "12px" }}
           />
+          </>
         )}
+        </details>
       </div>
     </div>
   );

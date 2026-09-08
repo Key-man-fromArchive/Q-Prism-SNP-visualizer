@@ -128,10 +128,11 @@ export function SettingsTab() {
         <PresetFeedback state={presetOperations} />
         <PresetError message={presetError} />
         <div className="mb-4">
-          <div className="flex gap-2 items-center">
+          <div className="flex flex-wrap gap-2 items-center">
             <select
               id="preset-select"
-              className="flex-1 px-2 py-1.5 border border-border rounded text-sm bg-surface text-text"
+              aria-label={t.selectPreset}
+              className="flex-1 min-w-0 max-w-full px-2 py-1.5 border border-border rounded text-sm bg-surface text-text"
               value={selectedPresetId}
               onChange={(e) => setSelectedPresetId(e.target.value)}
             >
@@ -163,24 +164,26 @@ export function SettingsTab() {
           </div>
         </div>
 
-        <div className="flex gap-2 items-center">
+        <form onSubmit={event => { event.preventDefault(); void handleSavePreset(); }} className="flex gap-2 items-center">
           <input
             id="preset-name-input"
+            aria-label={t.newPresetName}
+            autoComplete="off"
             type="text"
-            className="flex-1 px-2 py-1.5 border border-border rounded text-sm bg-surface text-text"
+            className="flex-1 min-w-0 px-2 py-1.5 border border-border rounded text-sm bg-surface text-text"
             placeholder={t.newPresetName}
             value={newPresetName}
             onChange={(e) => setNewPresetName(e.target.value)}
           />
           <Button
             id="save-preset-btn"
+            type="submit"
             size="sm"
-            onClick={handleSavePreset}
             disabled={presetOperations.saveDisabled}
           >
             {t.save}
           </Button>
-        </div>
+        </form>
       </Card>
 
       {/* Panel 2a: Background subtraction — raw RFU by default. Only the modes

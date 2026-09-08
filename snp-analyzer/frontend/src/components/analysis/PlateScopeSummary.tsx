@@ -15,7 +15,7 @@ export function PlateScopeSummary({ markers }: { markers: readonly { wells: read
     {!scope ? <p>{t.wsInventoryUnknown}</p> : <>
       {scope.unassigned > 0 && <p data-testid="unassigned-banner"><span data-testid="unassigned-count">{t.wsUnassignedBanner(scope.unassigned)}</span></p>}
       <p data-testid="analysis-scope-counts">{t.wsScopeCounts(scope.total, scope.eligible, scope.empty, scope.omit)}</p>
-      <p className="text-xs text-text-muted">{t.wsScopeIndependent}</p>
+      <details className="text-xs text-text-muted"><summary className="cursor-pointer">{t.analysisScopeDetails}</summary><p>{t.wsScopeIndependent}</p></details>
     </>}
   </section>;
 }

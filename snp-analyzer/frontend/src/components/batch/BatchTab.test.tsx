@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { BatchTab } from './BatchTab';
 import { useLanguageStore } from '@/stores/language-store';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUploadJobStore } from '@/stores/upload-job-store';
-import { getSessions } from '@/lib/api';
+import { getSessions, getProjects } from '@/lib/api';
 
 vi.mock('@/lib/api', () => ({
   getSessions: vi.fn().mockResolvedValue([]),
@@ -14,7 +14,7 @@ vi.mock('@/lib/api', () => ({
     project_id: 'p', project_name: 'Synthetic project',
     plates: [{ session_id: 'synthetic', instrument: 'Synthetic', raw_filename: 'synthetic.csv', num_wells: 30,
       genotypes: { AA: 12, AB: 7, BB: 8, excluded: 3 }, ntc_count: 2, unknown_count: 1, mean_quality: 90 }],
-    concordance: { concordant_wells: 0, total_compared: 0, percentage: 0 },
+    concordance: { concordant_wells: 0, total_compared: 0, percentage: null },
   }),
 }));
 
@@ -33,6 +33,19 @@ it('keeps upload outcomes visible and checks the session list only on the explic
     expect(getSessions).toHaveBeenCalledTimes(before + 1);
   } finally { store.reset(); }
 });
+it('renders a safe retryable project-list failure instead of raw server details', async () => {
+  vi.mocked(getProjects).mockRejectedValueOnce(new Error('private project detail'));
+  render(<BatchTab />);
+  expect(await screen.findByRole('alert')).not.toHaveTextContent('private project detail');
+  expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+});
+it('discards held project lists when the owner changes', async () => {
+  let resolve!: (value: Awaited<ReturnType<typeof getProjects>>) => void;
+  vi.mocked(getProjects).mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  render(<BatchTab />);
+  await act(async () => { useAuthStore.getState().clearAuth(); resolve({ projects: [{ id: 'old', name: 'Old private project', created_at: '', session_count: 0 }] }); });
+  expect(screen.queryByText('Old private project')).not.toBeInTheDocument();
+});
 
 it('renders the actual server counts in the project plate row', async () => {
   useLanguageStore.setState({ language: 'en' });
@@ -44,6 +57,7 @@ it('renders the actual server counts in the project plate row', async () => {
   expect(row).not.toBeNull();
   const cells = within(row!).getAllByRole('cell').map((cell) => cell.textContent);
   expect(cells.slice(4, 9)).toEqual(['12', '7', '8', '2', '1']);
+  expect(screen.getByText(/Concordance: 0\/0 \(Unavailable\)/)).toBeVisible();
 });
 
 it('downloads the same nonzero counts and totals in the actual CSV blob', async () => {
@@ -68,6 +82,7 @@ it('downloads the same nonzero counts and totals in the actual CSV blob', async 
     });
     expect(csv).toContain('synthetic,synthetic.csv,Synthetic,30,12,7,8,2,1,90.0');
     expect(csv).toContain('TOTAL,,,30,12,7,8,2,1,90.0');
+    expect(csv).toContain('Concordance: 0/0 (Unavailable)');
     expect(click).toHaveBeenCalledOnce();
   } finally {
     click.mockRestore();

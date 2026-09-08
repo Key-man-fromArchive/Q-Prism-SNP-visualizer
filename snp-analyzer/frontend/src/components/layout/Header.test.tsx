@@ -34,6 +34,20 @@ beforeEach(() => {
   } });
 });
 
+it('keeps full linked identities in a keyboard disclosure and exposes the complete user name', () => {
+  const alias = 'LongUnbrokenAlias'.repeat(20);
+  const name = 'Long operator name '.repeat(10);
+  useAuthStore.setState({ user: { id: 'u', username: 'u', display_name: name, role: 'admin' },
+    linkedContext: { target_type: 'marker', target_id: 'Synthetic target', context: { tag_alias: alias, marker_id: 'Synthetic marker' }, scope: [], expires_at: null } });
+  render(<Header />);
+  expect(document.querySelector('.header-username')).toHaveAttribute('title', name);
+  expect(document.querySelector('.header-username')).toHaveTextContent(name.trim());
+  expect(screen.getAllByText(alias)).toHaveLength(2); // CSS selects one presentation; no duplicated actions.
+  const disclosure = document.querySelector('.header-linked-context details');
+  expect(disclosure?.querySelector('summary')).toHaveAttribute('aria-label');
+  expect(screen.getByRole('button', { name: /^(ASG)$/ })).toBeDisabled();
+});
+
 it('opens a decision dialog for a structured export mismatch and cancel prevents the stored action', async () => {
   exportFns.csv.mockRejectedValue(new ApiError('mismatch', 409, { detail: { code: 'EXPORT_CONDITION_MISMATCH' } }));
   render(<Header />);

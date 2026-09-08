@@ -10,6 +10,7 @@ import { loadAnalysisSession, type ReadyAnalysisSession } from '@/lib/analysis-s
 import { analyzeCurrent } from '@/lib/analysis-actions';
 import { getMarkers, getSessionInfo } from '@/lib/api';
 import { isRevision } from '@/lib/analysis-context';
+import { subscribeQualityMetadata } from '@/lib/quality-metadata';
 
 function analyzeFreshSession(cycle: number | null, value: ReadyAnalysisSession) {
   if (cycle === null || value.hasCompletedResult || !useSessionStore.getState().consumeInitialAnalysis()) return;
@@ -63,6 +64,12 @@ export function useAnalysisWorkspace() {
   useEffect(() => {
     if (!session || !owner) return;
     let sequence = 0;
+    const unsubscribeQuality = subscribeQualityMetadata(value => {
+      if (value.session !== session || value.owner !== owner || value.entry !== entry) return;
+      sequence++;
+      setLoaded(previous => previous ? { entry, value: { ...previous.value, markers: value.markers, info: value.info } } : null);
+      setMarkerEntry(entry);
+    });
     const refresh = async () => {
       const request = ++sequence;
       useAnalysisStore.getState().beginInputRefresh();
@@ -82,6 +89,7 @@ export function useAnalysisWorkspace() {
     window.addEventListener('welltypes-changed', refresh);
     return () => {
       sequence++;
+      unsubscribeQuality();
       window.removeEventListener('markers-changed', refreshMarkers);
       window.removeEventListener('welltypes-changed', refresh);
     };

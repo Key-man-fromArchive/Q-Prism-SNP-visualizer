@@ -98,10 +98,10 @@ export function AnalysisWorkspace() {
         id="workspace-panel-analysis" role="tabpanel" aria-labelledby="workspace-tab-analysis"
         className={panelClass(activeSurface, 'analysis')}
       >
-        {ready && <>
+        {ready && <div className="analysis-context-summary">
           <AnalysisResultStatus markers={availableScope(markers, markersAvailable)} />
           <PlateScopeSummary markers={availableScope(markers, markersAvailable)} />
-        </>}
+        </div>}
         {!ready ? <StatusState variant={status === 'error' ? 'error' : 'loading'} message={status === 'error' ? t.analysisLoadFailed : t.loading} action={status === 'error' ? { label: t.retry, onClick: retry } : undefined} /> : <MarkerAvailability available={markersAvailable}>{markers.length > 0 ? (
           <MultiMarkerAnalysisPanel markers={markers} />
         ) : (

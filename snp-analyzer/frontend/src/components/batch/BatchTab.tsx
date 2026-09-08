@@ -1,19 +1,20 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { UploadJobSummary } from '@/components/upload/UploadJobSummary';
 import { SessionEmptyState, SessionRecoveryFeedback } from '@/components/upload/SessionRecoveryFeedback';
 import { useRecentSessions } from '@/hooks/use-recent-sessions';
 import { projectGenotypeCounts } from './project-summary';
+import { projectCsv, projectDownloadName } from './project-export';
+import { readProject } from './project-read';
 import { ArrowLeft, X } from 'lucide-react';
 import { useI18n } from '@/hooks/use-i18n';
 import { useConfirm } from '@/hooks/use-confirm';
+import { Modal } from '@/components/shared/ui/Modal';
 import {
   getProjects,
   createProject,
-  getProject,
   deleteProject,
   addProjectSession,
   removeProjectSession,
-  getProjectSummary,
   deleteSession,
   bulkDeleteSessions,
   bulkAddProjectSessions,
@@ -25,6 +26,9 @@ import type {
   ProjectSummaryResponse,
 } from '@/types/api';
 import { useSessionStore } from '@/stores/session-store';
+import { useAuthStore } from '@/stores/auth-store';
+import { useOwnedOperation } from '@/hooks/use-owned-operation';
+import { validManagementList, validProjectListItem } from '@/lib/management-payload';
 
 type View = 'list' | 'detail';
 type BatchTabProps = { onLoadSession?: () => void };
@@ -47,23 +51,13 @@ function ProjectPicker({ projects, onSelect, disabled, label }: ProjectPickerPro
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
 
   const filtered = query
     ? projects.filter((p) => p.name.toLowerCase().includes(query.toLowerCase()))
     : projects;
 
   return (
-    <div ref={ref} className="relative inline-block">
+    <div className="relative inline-block">
       <button
         onClick={() => { if (!disabled) setOpen(!open); }}
         disabled={disabled}
@@ -72,10 +66,11 @@ function ProjectPicker({ projects, onSelect, disabled, label }: ProjectPickerPro
         {label || t.plusProject}
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-52 bg-surface border border-border rounded shadow-lg z-50">
+        <Modal open onClose={() => setOpen(false)} title={t.searchProject} closeLabel={t.close}>
           <div className="p-1.5">
             <input
               type="text"
+              aria-label={t.searchProject}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t.searchProject}
@@ -100,7 +95,7 @@ function ProjectPicker({ projects, onSelect, disabled, label }: ProjectPickerPro
               ))
             )}
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
@@ -108,7 +103,14 @@ function ProjectPicker({ projects, onSelect, disabled, label }: ProjectPickerPro
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 export function BatchTab({ onLoadSession }: BatchTabProps) {
+  const generation = useAuthStore(s => s.generation);
+  const entry = useSessionStore(s => s.entryGeneration);
+  return <ProjectWorkspace key={`${generation}:${entry}`} onLoadSession={onLoadSession} />;
+}
+
+function ProjectWorkspace({ onLoadSession }: BatchTabProps) {
   const { t } = useI18n();
+  const listOwner = useOwnedOperation(), detailOwner = useOwnedOperation(), actionOwner = useOwnedOperation(), confirmationOwner = useOwnedOperation();
   const { confirm, confirmDialog } = useConfirm();
   const [view, setView] = useState<View>('list');
   const [projects, setProjects] = useState<ProjectListResponse['projects']>([]);
@@ -133,8 +135,13 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   useEffect(() => { loadInitialData(); }, []);
 
   const loadProjects = async () => {
-    try { setProjects((await getProjects()).projects); }
-    catch (err) { setError(err instanceof Error ? err.message : t.errLoadProjects); }
+    const ticket = listOwner.begin();
+    try {
+      const response = await getProjects();
+      if (!validManagementList(response, 'projects', validProjectListItem)) throw new Error('Invalid project list');
+      if (listOwner.current(ticket)) setProjects(response.projects);
+    }
+    catch { if (listOwner.current(ticket)) setError(t.errLoadProjects); }
   };
 
   const loadSessions = async () => {
@@ -144,32 +151,43 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   // ── Project CRUD ───────────────────────────────────────────────────────────
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
+    const ticket = actionOwner.begin();
     try {
       setLoading(true);
       await createProject(newProjectName.trim());
+      if (!actionOwner.current(ticket)) return;
       setNewProjectName('');
       await loadProjects();
-    } catch (err) { setError(err instanceof Error ? err.message : t.errCreateProject); }
-    finally { setLoading(false); }
+    } catch { if (actionOwner.current(ticket)) setError(t.errCreateProject); }
+    finally { if (actionOwner.current(ticket)) setLoading(false); }
   };
 
   const handleDeleteProject = async (id: string, name: string) => {
+    const confirmationTicket = confirmationOwner.begin();
     if (!(await confirm({ title: t.delete, message: t.deleteProjectConfirm(name), danger: true }))) return;
-    try { setLoading(true); await deleteProject(id); await loadProjects(); }
-    catch (err) { setError(err instanceof Error ? err.message : t.errDeleteProject); }
-    finally { setLoading(false); }
+    if (!confirmationOwner.current(confirmationTicket)) return;
+    const ticket = actionOwner.begin();
+    if (!actionOwner.current(ticket)) return;
+    try { setLoading(true); await deleteProject(id); if (actionOwner.current(ticket)) await loadProjects(); }
+    catch { if (actionOwner.current(ticket)) setError(t.errDeleteProject); }
+    finally { if (actionOwner.current(ticket)) setLoading(false); }
   };
 
   const handleViewProject = async (id: string) => {
+    actionOwner.begin();
+    const ticket = detailOwner.begin();
     try {
       setLoading(true); setError(null);
-      const [pd, sd] = await Promise.all([getProject(id), getProjectSummary(id)]);
+      const [pd, sd] = await readProject(id);
+      if (!detailOwner.current(ticket)) return;
       setCurrentProject(pd); setSummary(sd); setView('detail');
-    } catch (err) { setError(err instanceof Error ? err.message : t.errLoadProjectDetails); }
-    finally { setLoading(false); }
+    } catch { if (detailOwner.current(ticket)) setError(t.errLoadProjectDetails); }
+    finally { if (detailOwner.current(ticket)) setLoading(false); }
   };
 
   const handleBackToList = () => {
+    detailOwner.begin();
+    actionOwner.begin();
     setView('list'); setCurrentProject(null); setSummary(null);
     setSelectedSession(''); setError(null); setCheckedDetailSessions(new Set());
   };
@@ -177,104 +195,131 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   // ── Session actions (detail view) ──────────────────────────────────────────
   const handleAddSession = async () => {
     if (!currentProject || !selectedSession) return;
+    const ticket = actionOwner.begin();
     try {
       setLoading(true); setError(null);
       await addProjectSession(currentProject.id, selectedSession);
-      const [pd, sd] = await Promise.all([getProject(currentProject.id), getProjectSummary(currentProject.id)]);
+      if (!actionOwner.current(ticket)) return;
+      const [pd, sd] = await readProject(currentProject.id);
+      if (!actionOwner.current(ticket)) return;
       setCurrentProject(pd); setSummary(sd); setSelectedSession('');
-    } catch (err) { setError(err instanceof Error ? err.message : t.errAddSession); }
-    finally { setLoading(false); }
+    } catch { if (actionOwner.current(ticket)) setError(t.errAddSession); }
+    finally { if (actionOwner.current(ticket)) setLoading(false); }
   };
 
   const handleRemoveSession = async (sid: string) => {
     if (!currentProject) return;
+    const ticket = actionOwner.begin();
     try {
       setLoading(true); setError(null);
       await removeProjectSession(currentProject.id, sid);
-      const [pd, sd] = await Promise.all([getProject(currentProject.id), getProjectSummary(currentProject.id)]);
+      if (!actionOwner.current(ticket)) return;
+      const [pd, sd] = await readProject(currentProject.id);
+      if (!actionOwner.current(ticket)) return;
       setCurrentProject(pd); setSummary(sd);
-    } catch (err) { setError(err instanceof Error ? err.message : t.errRemoveSession); }
-    finally { setLoading(false); }
+    } catch { if (actionOwner.current(ticket)) setError(t.errRemoveSession); }
+    finally { if (actionOwner.current(ticket)) setLoading(false); }
   };
 
   // ── Bulk remove sessions from project ──────────────────────────────────
   const handleBulkRemoveFromProject = async () => {
     if (!currentProject || checkedDetailSessions.size === 0) return;
     const count = checkedDetailSessions.size;
+    const confirmationTicket = confirmationOwner.begin();
     if (!(await confirm({ title: t.remove, message: t.bulkRemoveConfirm(count, currentProject.name), danger: true }))) return;
+    if (!confirmationOwner.current(confirmationTicket)) return;
+    const ticket = actionOwner.begin();
+    if (!actionOwner.current(ticket)) return;
     try {
       setLoading(true); setError(null);
       await bulkRemoveProjectSessions(currentProject.id, [...checkedDetailSessions]);
+      if (!actionOwner.current(ticket)) return;
       setCheckedDetailSessions(new Set());
-      const [pd, sd] = await Promise.all([getProject(currentProject.id), getProjectSummary(currentProject.id)]);
+      const [pd, sd] = await readProject(currentProject.id);
+      if (!actionOwner.current(ticket)) return;
       setCurrentProject(pd); setSummary(sd);
-    } catch (err) { setError(err instanceof Error ? err.message : t.errBulkRemoveSessions); }
-    finally { setLoading(false); }
+    } catch { if (actionOwner.current(ticket)) setError(t.errBulkRemoveSessions); }
+    finally { if (actionOwner.current(ticket)) setLoading(false); }
   };
 
   // ── Session delete (single) ────────────────────────────────────────────────
   const handleDeleteSession = async (sid: string) => {
     const s = sessions.find((x) => x.session_id === sid);
+    const confirmationTicket = confirmationOwner.begin();
     if (!(await confirm({ title: t.delete, message: t.deleteSessionConfirm(fmtSession(sid, s?.raw_filename)), danger: true }))) return;
+    if (!confirmationOwner.current(confirmationTicket)) return;
+    const ticket = actionOwner.begin();
+    if (!actionOwner.current(ticket)) return;
     try {
       setLoading(true); setError(null);
-      if (activeSessionId === sid) resetSession();
       await deleteSession(sid);
+      if (!actionOwner.current(ticket)) return;
+      if (activeSessionId === sid) { resetSession(); return; }
       await Promise.all([loadSessions(), loadProjects()]);
+      if (!actionOwner.current(ticket)) return;
       if (currentProject) {
         try {
-          const [pd, sd] = await Promise.all([getProject(currentProject.id), getProjectSummary(currentProject.id)]);
+          const [pd, sd] = await readProject(currentProject.id);
+          if (!actionOwner.current(ticket)) return;
           setCurrentProject(pd); setSummary(sd);
         } catch { /* ok */ }
       }
-    } catch (err) { setError(err instanceof Error ? err.message : t.errDeleteSession); }
-    finally { setLoading(false); }
+    } catch { if (actionOwner.current(ticket)) setError(t.errDeleteSession); }
+    finally { if (actionOwner.current(ticket)) setLoading(false); }
   };
 
   // ── Session delete (bulk) ──────────────────────────────────────────────────
   const handleBulkDelete = async () => {
     const count = checkedSessions.size;
     if (count === 0) return;
+    const confirmationTicket = confirmationOwner.begin();
     if (!(await confirm({ title: t.delete, message: t.bulkDeleteConfirm(count), danger: true }))) return;
+    if (!confirmationOwner.current(confirmationTicket)) return;
+    const ticket = actionOwner.begin();
+    if (!actionOwner.current(ticket)) return;
     try {
       setLoading(true); setError(null);
-      if (activeSessionId && checkedSessions.has(activeSessionId)) resetSession();
       await bulkDeleteSessions([...checkedSessions]);
+      if (!actionOwner.current(ticket)) return;
+      if (activeSessionId && checkedSessions.has(activeSessionId)) { resetSession(); return; }
       setError(null);
       await Promise.all([loadSessions(), loadProjects()]);
-    } catch (err) { setError(err instanceof Error ? err.message : 'Bulk delete failed'); }
-    finally { setLoading(false); }
+    } catch { if (actionOwner.current(ticket)) setError(t.libraryActionFailed); }
+    finally { if (actionOwner.current(ticket)) setLoading(false); }
   };
 
   // ── Add session to project (from session list) ────────────────────────────
   const handleAddToProject = async (sid: string, projectId: string, projectName: string) => {
+    const ticket = actionOwner.begin();
     try {
       setLoading(true); setError(null);
       await addProjectSession(projectId, sid);
+      if (!actionOwner.current(ticket)) return;
       setError(null);
       await loadProjects();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed';
-      setError(t.batchAddTo(projectName, msg));
-    } finally { setLoading(false); }
+    } catch {
+      if (actionOwner.current(ticket)) setError(t.batchAddTo(projectName, t.libraryActionFailed));
+    } finally { if (actionOwner.current(ticket)) setLoading(false); }
   };
 
   // ── Bulk add selected sessions to project ────────────────────────────────
   const handleBulkAddToProject = async (projectId: string, projectName: string) => {
+    const ticket = actionOwner.begin();
     const count = checkedSessions.size;
     if (count === 0) return;
     try {
       setLoading(true); setError(null);
       const res = await bulkAddProjectSessions(projectId, [...checkedSessions]);
+      if (!actionOwner.current(ticket)) return;
       setCheckedSessions(new Set());
       await loadProjects();
+      if (!actionOwner.current(ticket)) return;
       if (res.added < count) {
         setError(t.batchAddResult(res.added, count, projectName, count - res.added));
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed';
-      setError(t.batchBulkAddTo(projectName, msg));
-    } finally { setLoading(false); }
+    } catch {
+      if (actionOwner.current(ticket)) setError(t.batchBulkAddTo(projectName, t.libraryActionFailed));
+    } finally { if (actionOwner.current(ticket)) setLoading(false); }
   };
 
   // ── Checkbox helpers ───────────────────────────────────────────────────────
@@ -297,22 +342,10 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   // ── Export CSV ─────────────────────────────────────────────────────────────
   const handleExportCsv = () => {
     if (!summary) return;
-    const rows: string[] = ['Session ID,Filename,Instrument,Wells,AA,AB,BB,NTC,Unknown,Mean Quality'];
-    let tw = 0, taa = 0, tab = 0, tbb = 0, tntc = 0, tu = 0, tq = 0, pc = 0;
-    summary.plates.forEach((p) => {
-      const aa = projectGenotypeCounts(p).AA || 0, ab2 = projectGenotypeCounts(p).AB || 0;
-      const bb = projectGenotypeCounts(p).BB || 0, ntc = projectGenotypeCounts(p).NTC || 0;
-      const uk = projectGenotypeCounts(p).Unknown || 0, w = p.num_wells || 0, q = p.mean_quality || 0;
-      rows.push(`${p.session_id},${p.raw_filename||''},${p.instrument},${w},${aa},${ab2},${bb},${ntc},${uk},${q.toFixed(1)}`);
-      tw += w; taa += aa; tab += ab2; tbb += bb; tntc += ntc; tu += uk; tq += q; pc++;
-    });
-    const aq = pc > 0 ? tq / pc : 0;
-    rows.push(`TOTAL,,,${tw},${taa},${tab},${tbb},${tntc},${tu},${aq.toFixed(1)}`);
-    rows.push('', `Concordance: ${summary.concordance.concordant_wells}/${summary.concordance.total_compared} (${summary.concordance.percentage.toFixed(1)}%)`);
-    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const blob = new Blob([projectCsv(summary, t.compareUnavailable)], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url;
-    a.download = `${summary.project_name.replace(/\s+/g, '_')}_summary.csv`;
+    a.download = projectDownloadName(summary.project_name);
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   };
 
@@ -325,7 +358,9 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
 
   const availableSessions = sessions.filter((s) => !currentProject?.session_ids.includes(s.session_id));
   const getQualityColor = (q: number) => q >= 70 ? 'text-success' : q >= 50 ? 'text-warning' : 'text-danger';
-  const getConcordanceColor = (p: number) =>
+  const getConcordanceColor = (p: number | null) =>
+    p === null ? 'bg-bg border-border text-text-muted'
+    :
     p >= 90 ? 'bg-success/15 border-success/30 text-success'
     : p >= 70 ? 'bg-warning/15 border-warning/30 text-warning'
     : 'bg-danger/15 border-danger/30 text-danger';
@@ -333,12 +368,13 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   // ═══════════════════════════════════ List View ═════════════════════════════
   if (view === 'list') {
     return (
-      <div className="p-6 flex flex-col gap-6">
+      <div className="p-4 sm:p-6 min-w-0 flex flex-col gap-6">
         <UploadJobSummary onCheckSessions={() => void loadSessions()} />
         <SessionRecoveryFeedback state={recovery} />
         {error && (
-          <div className="p-3 bg-danger/10 border border-danger/30 rounded text-danger text-sm">
+          <div role="alert" className="p-3 bg-danger/10 border border-danger/30 rounded text-danger text-sm">
             {error}
+            <button type="button" onClick={() => { setError(null); void loadProjects(); }}>{t.retry}</button>
             <button onClick={() => setError(null)} aria-label={t.close} className="ml-2 text-danger hover:opacity-80 inline-flex items-center align-middle"><X size={14} aria-hidden="true" /></button>
           </div>
         )}
@@ -347,11 +383,11 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
         <div className="panel">
           <div className="mb-4">
             <h2 className="text-xl font-semibold text-text mb-3">{t.projects}</h2>
-            <div className="flex gap-2 items-center">
-              <input type="text" value={newProjectName}
+            <div className="flex flex-wrap gap-2 items-center">
+              <input type="text" value={newProjectName} aria-label={t.newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
                 placeholder={t.newProjectName}
-                className="px-3 py-1.5 border border-border rounded bg-surface text-text text-sm flex-1"
+                className="px-3 py-1.5 border border-border rounded bg-surface text-text text-sm flex-1 min-w-0"
                 onKeyDown={(e) => { if (e.key === 'Enter') handleCreateProject(); }}
                 disabled={loading} />
               <button onClick={handleCreateProject}
@@ -360,7 +396,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
             </div>
           </div>
           {projects.length > 0 ? (
-            <table className="w-full text-sm">
+            <div role="region" aria-label={t.projects} tabIndex={0} className="max-w-full overflow-x-auto"><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
                   <th className="text-left py-2 px-3 text-text-muted font-medium">{t.nameLabel}</th>
@@ -382,7 +418,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           ) : (
             <div className="text-text-muted text-sm text-center py-6">{t.noProjectsYet}</div>
           )}
@@ -415,11 +451,11 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
           </div>
 
           {sessions.length > 0 ? (
-            <table className="w-full text-sm">
+            <div role="region" aria-label={t.sessions} tabIndex={0} className="max-w-full overflow-x-auto"><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
                   <th className="py-2 px-2 w-8">
-                    <input type="checkbox"
+                    <input type="checkbox" aria-label={t.selectAllSessions}
                       checked={sessions.length > 0 && checkedSessions.size === sessions.length}
                       onChange={toggleAll}
                       className="accent-primary" />
@@ -439,7 +475,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                   return (
                     <tr key={s.session_id} className={`border-b border-border ${isActive ? 'bg-primary/5' : ''} ${checked ? 'bg-danger/10' : ''}`}>
                       <td className="py-2 px-2">
-                        <input type="checkbox" checked={checked}
+                        <input type="checkbox" checked={checked} aria-label={t.selectSession(fmtSession(s.session_id, s.raw_filename))}
                           onChange={() => toggleCheck(s.session_id)}
                           className="accent-primary" />
                       </td>
@@ -471,7 +507,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           ) : (
             <SessionEmptyState status={recovery.status} />
           )}
@@ -497,25 +533,25 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
   const avgQuality = totals.count > 0 ? totals.quality / totals.count : 0;
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6 min-w-0">
       <UploadJobSummary onCheckSessions={handleBackToList} />
       <SessionRecoveryFeedback state={recovery} />
       <div className="panel">
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="mb-6 flex flex-wrap items-start gap-3">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
             <button onClick={handleBackToList}
               className="px-3 py-1.5 bg-surface border border-border rounded text-sm font-medium text-text hover:bg-bg inline-flex items-center gap-1.5">
               <ArrowLeft size={14} aria-hidden="true" /> {t.back}
             </button>
-            <h2 className="text-xl font-semibold text-text">{currentProject.name}</h2>
+            <h2 title={currentProject.name} className="min-w-0 break-words text-xl font-semibold text-text">{currentProject.name}</h2>
           </div>
           <button onClick={handleExportCsv}
-            className="px-3 py-1.5 bg-primary text-white rounded text-sm font-medium">{t.exportCSVBtn}</button>
+            className="flex-none px-3 py-1.5 bg-primary text-white rounded text-sm font-medium">{t.exportCSVBtn}</button>
         </div>
 
         {/* Add Session */}
         <div className="mb-6 flex gap-2 items-center">
-          <select value={selectedSession}
+          <select value={selectedSession} aria-label={t.session}
             onChange={(e) => setSelectedSession(e.target.value)}
             className="px-3 py-1.5 border border-border rounded bg-surface text-text text-sm flex-1"
             disabled={loading || availableSessions.length === 0}>
@@ -543,13 +579,11 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
           </div>
         )}
 
-        {summary.concordance.total_compared > 0 && (
-          <div className="mb-4">
-            <span className={`px-2 py-1 border rounded text-xs font-medium ${getConcordanceColor(summary.concordance.percentage)}`}>
-              {t.concordance}: {summary.concordance.concordant_wells}/{summary.concordance.total_compared} ({summary.concordance.percentage.toFixed(1)}%)
-            </span>
-          </div>
-        )}
+        <div className="mb-4">
+          <span className={`px-2 py-1 border rounded text-xs font-medium ${getConcordanceColor(summary.concordance.percentage)}`}>
+            {t.concordance}: {summary.concordance.concordant_wells}/{summary.concordance.total_compared} ({summary.concordance.percentage === null ? t.compareUnavailable : `${summary.concordance.percentage.toFixed(1)}%`})
+          </span>
+        </div>
 
         {error && (
           <div className="mb-4 p-3 bg-danger/10 border border-danger/30 rounded text-danger text-sm">
@@ -559,11 +593,11 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
         )}
 
         {summary.plates.length > 0 ? (
-          <table className="w-full text-sm">
+          <div role="region" aria-label={t.sessions} tabIndex={0} className="max-w-full overflow-x-auto"><table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
                 <th className="py-2 px-2 w-8">
-                  <input type="checkbox"
+                  <input type="checkbox" aria-label={t.selectAllProjectSessions}
                     checked={summary.plates.length > 0 && checkedDetailSessions.size === summary.plates.length}
                     onChange={() => {
                       if (checkedDetailSessions.size === summary.plates.length) {
@@ -594,7 +628,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                 return (
                   <tr key={plate.session_id} className={`border-b border-border ${isActive ? 'bg-primary/5' : ''} ${detailChecked ? 'bg-warning/10' : ''}`}>
                     <td className="py-2 px-2">
-                      <input type="checkbox" checked={detailChecked}
+                    <input type="checkbox" checked={detailChecked} aria-label={t.selectSession(fmtSession(plate.session_id, fn))}
                         onChange={() => {
                           setCheckedDetailSessions((prev) => {
                             const next = new Set(prev);
@@ -646,7 +680,7 @@ export function BatchTab({ onLoadSession }: BatchTabProps) {
                 <td className="py-2 px-3"></td>
               </tr>
             </tbody>
-          </table>
+          </table></div>
         ) : (
           <div className="text-text-muted text-sm text-center py-8">{t.noSessionsInProject}</div>
         )}

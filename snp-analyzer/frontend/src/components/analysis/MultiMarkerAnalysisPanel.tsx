@@ -22,7 +22,7 @@ import { useSettledAnalysis } from "@/hooks/use-settled-analysis";
 import { useCurrentAnalysisRequest } from '@/hooks/use-current-analysis-request';
 import { ClusteringAlgorithm } from "@/types/api";
 import type { MarkerCatalogEntry, MarkerRegion } from "@/types/api";
-import { genotypeShortLabel, wellInfo } from "@/lib/genotype";
+import { chartCategory, callAppearance } from "@/lib/chart-semantics";
 import { MARKER_PALETTE } from "@/lib/constants";
 import { dosageTrustForMarker } from "@/lib/marker-catalog";
 import { analysisWarningTexts } from "@/lib/analysis-warnings";
@@ -53,6 +53,9 @@ function countKeyToLabel(key: string, ploidy: number): string {
 type MultiMarkerAnalysisPanelProps = {
   markers: MarkerRegion[];
 };
+function settledAnalysisPaused(playing: boolean, unconfirmed: boolean, exporting: boolean, navigating: boolean) {
+  return playing || unconfirmed || exporting || navigating;
+}
 
 export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelProps) {
   const { t } = useI18n();
@@ -78,6 +81,8 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   const revisionUnconfirmed = useAnalysisStore(state => state.inputRevisionRefreshing || state.inputRevisionError !== null);
   const restoreStatus = useNavigationStore(state => state.status);
   const exportRestoring = useNavigationStore(state => state.exportRestoring);
+  const qualityNavigating = useNavigationStore(state => state.qualityNavigating);
+  const qualityEpoch = useNavigationStore(state => state.qualityEpoch);
   const entry = useSessionStore(state => state.entryGeneration);
   const scatterRequestRef = useRef(0);
   const skipAutoClusterCycleRef = useRef<number | null>(null);
@@ -111,7 +116,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     void analyzeCurrent(request);
   }, [request, currentCycle]);
   useSettledAnalysis(
-    `${sessionId}:${entry}`, inputKey, isPlaying || revisionUnconfirmed || exportRestoring,
+    `${sessionId}:${entry}:${qualityEpoch}`, inputKey, settledAnalysisPaused(isPlaying, revisionUnconfirmed, exportRestoring, qualityNavigating),
     runCluster, restoreStatus === 'ready', exportRestoring,
   );
 
@@ -209,7 +214,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
       <div className="sticky top-0 z-20 border-b border-border bg-surface">
       <CycleControl />
       <div className="flex flex-wrap items-center justify-end gap-3 px-6 py-2">
-        <button type="button" data-testid="multi-analyze-recommended" onClick={handleRecommended} disabled={loading}>추천 사이클 분석</button>
+        <button type="button" data-testid="multi-analyze-recommended" onClick={handleRecommended} disabled={loading}>{t.analyzeRecommended}</button>
         <button
           type="button"
           data-testid="multi-analyze-current"
@@ -223,7 +228,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
       </div>
       </div>
       <div
-        className={`grid grid-cols-1 gap-4 p-4 sm:p-6 ${
+        className={`grid items-start grid-cols-1 gap-4 p-4 sm:p-6 ${
           useSidebar ? "xl:grid-cols-[260px_minmax(0,1fr)]" : ""
         }`}
       >
@@ -302,7 +307,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
 
         {selectedMarker && (
           <>
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="analysis-grid grid gap-4">
             <div className="panel min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <span
@@ -404,10 +409,10 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
               )}
             </div>
 
-            <PlateView
-              scopeWells={selectedMarker.wells}
-              ploidyOverride={selectedMarker.ploidy}
-            />
+            <div className="analysis-review-stack">
+              <PlateView scopeWells={selectedMarker.wells} ploidyOverride={selectedMarker.ploidy} />
+              <WellDetailPanel ploidyOverride={selectedMarker.ploidy} />
+            </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -422,8 +427,8 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
               >
                 {countsEntries.map(([key, n]) => {
                   const label = countKeyToLabel(key, selectedMarker.ploidy);
-                  const info = wellInfo(label, selectedMarker.ploidy, dark);
-                  const short = genotypeShortLabel(label, selectedMarker.ploidy);
+                  const info = chartCategory(label, selectedMarker.ploidy, dark);
+                  const short = callAppearance(label, selectedMarker.ploidy, dark, t).label;
                   return (
                     <div
                       key={key}
@@ -432,7 +437,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                     >
                       <div
                         className="text-lg font-bold tabular-nums"
-                        style={{ color: info.color }}
+                        style={{ color: info.text }}
                       >
                         {n}
                       </div>
@@ -450,7 +455,6 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                 </div>
               </div>
             </div>
-            <WellDetailPanel ploidyOverride={selectedMarker.ploidy} />
             </div>
 
             <ResultsTable ploidyOverride={selectedMarker.ploidy} />

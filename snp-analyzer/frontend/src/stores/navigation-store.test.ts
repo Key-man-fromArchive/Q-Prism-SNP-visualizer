@@ -1,8 +1,23 @@
 import { expect, it } from 'vitest';
 import { createNavigationStore, parseNavigation, serializeNavigation } from './navigation-store';
+import type { QualityTarget } from '@/lib/quality-target';
 
 const defaults = { session: 's', tab: 'analysis' as const, surface: 'plate' as const, marker: 'm', cycle: 20 };
 const available = { session: 's', cycles: [0, 20, 40], windows: [{ name: 'post', start_cycle: 20, end_cycle: 40 }], markers: ['m'], defaults };
+it('keeps a temporary quality target out of URLs and clears it at entry reset', () => {
+  const store = createNavigationStore();
+  const target: QualityTarget = { session: 's', well: 'A1', source: 'curve', basis: 'unversioned',
+    cycle: 0, useRox: false, inputRevision: null, resultRevision: null, marker: null };
+  store.setState({ ...defaults });
+  store.getState().setQualityTarget(target);
+  expect(store.getState().qualityTarget).toEqual(target);
+  expect(serializeNavigation(store.getState())).not.toContain('A1');
+  store.getState().beginRestore('other');
+  expect(store.getState().qualityTarget).toBeNull();
+  store.getState().setQualityTarget(target);
+  store.getState().clear();
+  expect(store.getState().qualityTarget).toBeNull();
+});
 it('roundtrips only navigation fields with absolute cycles', () => {
   const query = serializeNavigation({ ...defaults, cycle: 40 });
   expect(parseNavigation(query, available)).toEqual({ value: { ...defaults, cycle: 40 }, reasons: [] });

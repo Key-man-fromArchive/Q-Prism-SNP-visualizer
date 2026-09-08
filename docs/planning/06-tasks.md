@@ -397,75 +397,89 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P4-S0-T1: 공통 헤더·반응형 기반
 
-- Status: TODO
+- Status: DONE
+- Commit: bb7118e9a9111e1119d4f333b02d2df76f18f305
+- Evidence: [P4-S0-T1](ui-ux-overhaul/evidence/P4-S0-T1.md). FE 486개, ROOT24 21개+시각 3개, 기존 회귀 8개, lint·typecheck·build·audit, coverage/CC, 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P3-S0-V]
 - Write Scope: SRC/components/의 Header·공통 Navigation, 공통 CSS, tests/24-responsive.spec.ts
 - 구현: 헤더 두 줄 재배치를 허용하고 viewport overflow를 제거한다. 1280px 이상 2열, 768–1279px 1열, 390–767px 검토 중심 구성을 위한 공통 레이아웃을 만든다.
 - 검증: 390/768/1024/1280/1440 × KO/EN × light/dark에서 긴 세션명/사용자명 포함 헤더. 페이지 전체 가로 스크롤 금지, 플레이트 내부 스크롤은 허용.
-- [ ] AC: UX-07 헤더 기준 통과. 기능을 숨기기만 해서 overflow를 해결하지 않음.
+- [x] AC: UX-07 헤더 기준 통과. 기능을 숨기기만 해서 overflow를 해결하지 않음.
 
 ### P4-S1-T1: 분석 결과 중심 배치·고급 설정 접기
 
-- Status: TODO
+- Status: DONE
+- Commit: 39239091c5b1ec14b4f122f169295ba2168bd383
+- Evidence: [P4-S1-T1](ui-ux-overhaul/evidence/P4-S1-T1.md). FE 491개, 반응형/회귀 30개·최종 집중 3개·P5+마커 21개, lint·typecheck·build·audit, coverage/CC, 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P4-S0-T1]
 - Write Scope: SRC/components/의 단일/다중 분석 Workspace·설정·Plate/요약, 관련 CSS/locales, tests/24-responsive.spec.ts
 - 구현: 데스크톱 왼쪽 scatter, 오른쪽 plate+선택 웰 요약으로 배치한다. 고급 설정은 접되 활성 조건·변경 경로가 보이게 한다. 설정 값을 별도 local state로 복제하지 않는다.
 - 구현: 384웰/다수 경고는 영역 내부 스크롤, 작은 화면은 순차 검토 흐름으로 제공한다. 긴 런·경고·ASG 문맥에서도 주요 결과/행동을 유지한다.
 - 검증: 1440×1000, 100% 배율, 96웰에서 scatter·plate·선택 요약을 페이지 스크롤 없이 확인. 다중 마커·384웰·작은 화면은 별도 기준으로 확인한다.
-- [ ] AC: UX-08 및 UX-07 분석 레이아웃 기준 통과, 설정/결과 상태 회귀 없음.
+- [x] AC: UX-08 및 UX-07 분석 레이아웃 기준 통과, 설정/결과 상태 회귀 없음.
 
 ### P4-S2-T1: 품질 경고에서 웰·마커로 이동
 
-- Status: TODO
+- Status: DONE
+- Commit: 2ab2b2d720c208e7ce2f640d2e3b41004af74268
+- Evidence: [P4-S2-T1](ui-ux-overhaul/evidence/P4-S2-T1.md). FE 536개, ROOT25·관련 회귀, lint·typecheck·build, 변경 coverage 최저 94.6%·새 CC 10 이하·기존 root 증가 없음, 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P4-S1-T1]
 - Write Scope: SRC/components/의 QualityPanel·마커 선택·웰 상세/필터·PlateSetup 진입, navigation-store, tests/25-secondary-flows.spec.ts
 - 구현: 경고 웰 클릭 시 해당 마커/웰 상세로 이동하고 필터에 가린 웰을 임시 노출한다. 사용자 필터의 영구 변경을 피하고 임시 상태를 표시/해제한다.
 - 구현: 미할당 웰은 플레이트 설정으로 연결한다. 곡선 품질과 유전형 QC를 다른 지표로 표시하고 범위/버전을 유지한다.
 - 검증: 다른 마커·숨겨진 웰·미할당 웰·연속 이동·뒤로가기 및 키보드 조작.
-- [ ] AC: UX-09 품질 탐색이 사용자가 찾을 수 있는 실제 웰/화면에 도달함.
+- [x] AC: UX-09 품질 탐색이 사용자가 찾을 수 있는 실제 웰/화면에 도달함.
 
 ### P4-S3-T1: 차트 의미·대비·핵심 문구
 
-- Status: TODO
+- Status: DONE
+- Commit: 846b5c2194e0aaf7da1f29f335a549692de37821
+- Evidence: [P4-S3-T1](ui-ux-overhaul/evidence/P4-S3-T1.md). FE 560개, ROOT18·20·24·25·26 34/34 및 P5 회귀 14/14, lint·typecheck·build, 변경 coverage 최저 96.9%·새 CC 10 이하·기존 root 증가 없음, 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P4-S2-T1]
 - Write Scope: SRC/components/의 차트·범례·분석 상태, 공통 색상/심볼 helpers·locales, 관련 단위/E2E 테스트
 - 구현: 색상+심볼/텍스트로 상태를 구분하고 dark NTC 가시성을 확보한다. A1 등 웰/판정 식별자가 혼동되지 않게 라벨링한다. 기존 과학적 판정/임계값은 바꾸지 않는다.
 - 구현: 분석의 행동·오류·빈 상태 KO/EN을 완결하고 ROX 실제 적용 여부를 표시한다. 누락 키/하드코딩 사용자 문구를 검사한다.
 - 검증: 양 테마 범례/산점도/선택 상태와 텍스트 4.5:1·UI 3:1 대비를 검사하고 측정값을 기록한다. 심볼만으로도 구분 가능한지 수동 검토한다.
-- [ ] AC: UX-09 핵심 화면 언어/색상 의미 기준 통과. 대비/자동 접근성 검사만으로 전체 접근성을 통과 선언하지 않음.
+- [x] AC: UX-09 핵심 화면 언어/색상 의미 기준 통과. 대비/자동 접근성 검사만으로 전체 접근성을 통과 선언하지 않음.
 
 ### P4-S4-T1: 로그인·업로드·설정·프로토콜 보조 화면
 
-- Status: TODO
+- Status: DONE
+- Commit: d9b6901ec3cb6b3177b911bc7d7e8a84d1e203f8
+- Evidence: [P4-S4-T1](ui-ux-overhaul/evidence/P4-S4-T1.md). FE 579개, ROOT21·22·23·25 23/23, 390/1024/1440×KO/EN×양 테마, lint·typecheck·build, 변경 coverage 100%·새 CC 10 이하·기존 root 증가 없음, 독립 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P4-S3-T1]
 - Write Scope: SRC/components/의 Login·Upload·Settings·Protocol/Template 관련 화면, 관련 locales/CSS, tests/25-secondary-flows.spec.ts
 - 구현: 390/1024/1440에서 폼·대화상자·오류·진행 상태·긴 항목의 조작성을 보완한다. 인증 모드별 기존 권한/경로를 보존한다.
 - 검증: KO/EN·양 테마, 키보드 제출/취소, 업로드 부분 실패 기록 보존, 설정 변경 후 분석 무효화/복원 회귀.
-- [ ] AC: UX-09 보조 화면 해당 범위의 핵심 행동이 잘리거나 가려지지 않음.
+- [x] AC: UX-09 보조 화면 해당 범위의 핵심 행동이 잘리거나 가려지지 않음.
 
 ### P4-S4-T2: 라이브러리·프로젝트·사용자·참조·비교 화면
 
-- Status: TODO
+- Status: DONE
+- Commit: 65e6bafd1bf38310f7e993d11334455ed49ba4e2
+- Evidence: [P4-S4-T2](ui-ux-overhaul/evidence/P4-S4-T2.md). FE 632개, ROOT22·24·25 53/53, 390/1024/1440×KO/EN×양 테마, 변경 실행 라인 82.4%·적용 모듈 모두 70% 이상·새 CC 10 이하, 감사 0건, 독립 보안/UI 리뷰 PASS. Existing-E2E 확인 대화상자 정합성 repair: 18fca63, evidence 보강: 5f33813.
 - 담당: frontend-specialist
 - Depends On: [P4-S4-T1]
 - Write Scope: SRC/components/의 Library·Project·Users·Reference·Compare 관련 화면, 관련 locales/CSS, tests/25-secondary-flows.spec.ts
 - 구현: 목록/빈 상태/오류/권한/대화상자를 보완하고 비교 런을 이름+날짜+파일명 등으로 식별한다. 파괴적 행동의 기존 확인 절차와 권한 검사를 유지한다.
 - 검증: 390/1024/1440, KO/EN·양 테마, 긴 이름·중복 런 이름·조회 실패·권한 없음·키보드 탐색.
-- [ ] AC: UX-09 나머지 보조 화면 범위가 검증되며 비교 대상 식별이 모호하지 않음.
+- [x] AC: UX-09 나머지 보조 화면 범위가 검증되며 비교 대상 식별이 모호하지 않음.
 
 ### P4-S0-V: UI/UX 품질 게이트
 
-- Status: TODO
+- Status: DONE
+- Commit: fd94306913da7a7c6d316ec7e34833ec3a41950b
+- Evidence: [P4-S0-V](ui-ux-overhaul/evidence/P4-S0-V.md). FE 632/96, ROOT18–26 68/68, EXISTING-E2E 52/52, ROOT22·24·25 focused 53/53, 양 테마·KO/EN·반응형 시각 행렬, 감사 0건·신규/증가 CC 없음, 독립 UI/보안 리뷰 PASS.
 - 담당: test-specialist
 - Depends On: [P4-S4-T2]
 - Write Scope: docs/planning/ui-ux-overhaul/evidence/P4-S0-V.md
 - 검증: FE-ALL, FE-CHECK, ROOT-E2E 18–25, EXISTING-E2E, COVERAGE, 아래 시각 매트릭스 및 frontend/code 리뷰.
-- [ ] AC: UX-07·08·09 통과, 주요 정확성·복원·키보드 동작 유지. 브라우저 실측/스크린샷 없는 시각 항목은 미검증으로 남김.
+- [x] AC: UX-07·08·09 통과, 주요 정확성·복원·키보드 동작 유지. 브라우저 실측/스크린샷 없는 시각 항목은 미검증으로 남김.
 
 ## Phase P5 — 통합 검증·인수
 
