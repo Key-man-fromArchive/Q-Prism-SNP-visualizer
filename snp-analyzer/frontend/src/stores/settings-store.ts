@@ -3,12 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { BackgroundMode } from '@/types/api';
 
 /** How the scatter plots range their axes.
- *  - `zero`   : autoranged but anchored at 0, so the drawn origin IS the
- *               origin. Raw endpoint RFU spans e.g. 3800-11700 in x and
- *               2330-3370 in y, and a plain autorange puts (0, 0) off-canvas
- *               entirely — the middle of the data cloud then reads as the
- *               origin, which is where the ratio geometry visibly stops
- *               matching the calls.
+ *  - `zero`   : legacy persisted name for the NTC-origin offset mode.
  *  - `auto`   : Plotly's own autorange (tight around the data).
  *  - `manual` : the explicit xMin/xMax/yMin/yMax below. */
 export type AxisMode = 'zero' | 'auto' | 'manual';
@@ -42,6 +37,12 @@ interface SettingsState {
   xMax: number;
   yMin: number;
   yMax: number;
+  /** NTC-origin lower-axis margins, kept separately for raw and normalized
+   *  displays because their units differ (RFU versus ratio-scaled values). */
+  xNtcOffsetRaw: number;
+  yNtcOffsetRaw: number;
+  xNtcOffsetNormalized: number;
+  yNtcOffsetNormalized: number;
   clusterAlgorithm: 'threshold' | 'kmeans';
   ntcThreshold: number;
   allele1RatioMax: number;
@@ -64,6 +65,8 @@ interface SettingsState {
   setXMax: (v: number) => void;
   setYMin: (v: number) => void;
   setYMax: (v: number) => void;
+  setNtcAxisOffset: (basis: 'raw' | 'normalized', axis: 'x' | 'y', value: number) => void;
+  resetNtcAxisOffsets: (basis: 'raw' | 'normalized') => void;
   setClusterAlgorithm: (algo: 'threshold' | 'kmeans') => void;
   setNtcThreshold: (v: number) => void;
   setAllele1RatioMax: (v: number) => void;
@@ -94,6 +97,10 @@ const defaults = {
   xMax: 12,
   yMin: 0,
   yMax: 12,
+  xNtcOffsetRaw: 100,
+  yNtcOffsetRaw: 100,
+  xNtcOffsetNormalized: 0.1,
+  yNtcOffsetNormalized: 0.1,
   clusterAlgorithm: 'threshold' as const,
   ntcThreshold: 0.1,
   allele1RatioMax: 0.4,
@@ -125,6 +132,15 @@ export const useSettingsStore = create<SettingsState>()(
       setXMax: (v) => set({ xMax: v }),
       setYMin: (v) => set({ yMin: v }),
       setYMax: (v) => set({ yMax: v }),
+      setNtcAxisOffset: (basis, axis, value) => {
+        if (!Number.isFinite(value) || value < 0) return;
+        const key = `${axis}NtcOffset${basis === 'raw' ? 'Raw' : 'Normalized'}` as
+          | 'xNtcOffsetRaw' | 'yNtcOffsetRaw' | 'xNtcOffsetNormalized' | 'yNtcOffsetNormalized';
+        set({ [key]: value } as Partial<SettingsState>);
+      },
+      resetNtcAxisOffsets: (basis) => set(basis === 'raw'
+        ? { xNtcOffsetRaw: defaults.xNtcOffsetRaw, yNtcOffsetRaw: defaults.yNtcOffsetRaw }
+        : { xNtcOffsetNormalized: defaults.xNtcOffsetNormalized, yNtcOffsetNormalized: defaults.yNtcOffsetNormalized }),
       setClusterAlgorithm: (algo) => set({ clusterAlgorithm: algo }),
       setNtcThreshold: (v) => set({ ntcThreshold: v }),
       setAllele1RatioMax: (v) => set({ allele1RatioMax: v }),

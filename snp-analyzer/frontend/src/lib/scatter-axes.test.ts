@@ -31,16 +31,22 @@ describe('dataBounds', () => {
   it('falls back to a unit box with no points', () => {
     expect(dataBounds([])).toEqual({ xMin: 0, xMax: 1, yMin: 0, yMax: 1 });
   });
+
+  it('ignores non-finite points and corners', () => {
+    expect(dataBounds([{ fam: Number.NaN, allele2: 2 }, { fam: 3, allele2: Number.POSITIVE_INFINITY }])).toEqual({
+      xMin: 0, xMax: 1, yMin: 0, yMax: 1,
+    });
+  });
 });
 
 describe('visibleBounds', () => {
   const data = dataBounds(PLATE, NTC_CORNER);
   const manual = { xMin: -1, xMax: 20000, yMin: -2, yMax: 9000 };
 
-  it('zero mode includes the origin, which is the whole point', () => {
-    const bounds = visibleBounds('zero', data, manual);
-    expect(bounds.xMin).toBe(0);
-    expect(bounds.yMin).toBe(0);
+  it('NTC mode starts at origin minus independent offsets', () => {
+    const bounds = visibleBounds('zero', data, manual, { fam: 1000, allele2: 2000 }, { x: 100, y: 100 });
+    expect(bounds.xMin).toBe(900);
+    expect(bounds.yMin).toBe(1900);
     // ... and does not clip the data away to get there.
     expect(bounds.xMax).toBeGreaterThan(11671);
   });
@@ -49,9 +55,23 @@ describe('visibleBounds', () => {
     // A background subtraction can push a well negative; hiding it would be
     // worse than not anchoring at all.
     const negative = dataBounds([{ fam: -500, allele2: -200 }, { fam: 100, allele2: 50 }]);
-    const bounds = visibleBounds('zero', negative, manual);
+    const bounds = visibleBounds('zero', negative, manual, { fam: 100, allele2: 50 }, { x: 100, y: 100 });
     expect(bounds.xMin).toBeLessThan(-500);
     expect(bounds.yMin).toBeLessThan(-200);
+  });
+
+  it('falls back to a zero floor without a finite NTC origin', () => {
+    const bounds = visibleBounds('zero', data, manual, null, { x: 100, y: 100 });
+    expect(bounds.xMin).toBe(0);
+    expect(bounds.yMin).toBe(0);
+  });
+
+  it('sanitizes invalid offsets and keeps the range ordered', () => {
+    const bounds = visibleBounds('zero', dataBounds([]), manual, { fam: 1000, allele2: 2000 }, { x: -1, y: Number.NaN });
+    expect(bounds.xMin).toBe(0);
+    expect(bounds.yMin).toBe(0);
+    expect(bounds.xMax).toBe(1000);
+    expect(bounds.yMax).toBe(2000);
   });
 
   it('auto mode stays tight around the data', () => {
@@ -66,18 +86,19 @@ describe('visibleBounds', () => {
 describe('axisRangeLayout', () => {
   const bounds = { xMin: 0, xMax: 12000, yMin: 0, yMax: 3500 };
 
-  it('anchors at zero without pinning an explicit range', () => {
+  it('pins the NTC-offset range so the requested lower bounds are visible', () => {
     const { xaxis, yaxis } = axisRangeLayout('zero', false, bounds);
-    expect(xaxis.rangemode).toBe('tozero');
-    expect(yaxis.rangemode).toBe('tozero');
-    expect(xaxis.autorange).toBe(true);
-    expect(xaxis.range).toBeUndefined();
+    expect(xaxis.rangemode).toBe('normal');
+    expect(yaxis.rangemode).toBe('normal');
+    expect(xaxis.autorange).toBe(false);
+    expect(xaxis.range).toEqual([0, 12000]);
   });
 
   it('ties y to x when the aspect is locked, so a ratio is a real angle', () => {
     const { yaxis } = axisRangeLayout('zero', true, bounds);
     expect(yaxis.scaleanchor).toBe('x');
     expect(yaxis.scaleratio).toBe(1);
+    expect(yaxis.constrain).toBe('domain');
   });
 
   it('drops the aspect lock in manual mode rather than overriding a typed range', () => {

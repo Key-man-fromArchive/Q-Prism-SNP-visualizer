@@ -2,7 +2,7 @@
 
 - Contract ID: qprism-ux-followup-20260907-v1
 - 작성일: 2026-09-07
-- 상태: IN PROGRESS — P5 인수 완료 후 P6 축 표시 보완 작업 추가.
+- 상태: IN PROGRESS — P6-S1-T1 구현 완료, P6-S0-V 검증 대기.
 - 기준: [UI/UX 후속 개선 기획서 v0.2](ui-ux-overhaul/04-review-followup-prd.md)
 - 실행 기준 파일: docs/planning/06-tasks.md
 - 이전 계약: [qPCR Import Expansion 원문 보관](archive/06-tasks-qpcr-import-expansion.md). 보관본의 작업은 이번 실행 대상이 아니다.
@@ -138,7 +138,7 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 - 검증: 상태 변경에는 TDD_MODE:RED_FIRST, FE-ALL/CHECK·coverage·npm audit, 분석/ASG 상태·Plotly·화면 smoke 회귀. 변경된 실행 분기는 테스트하고 브라우저 증거를 남긴다.
 - [x] AC: lint 오류 0, 기존 테스트/build 통과, high/critical audit 0, 사용 동작 회귀 없음.
 
-두 보완 작업은 사용자 승인된 P0 추가 범위다. BE/FE 파일·환경을 분리해 병렬 실행 가능하나 git index/commit은 오케스트레이터가 슬롯을 지정해 직렬화한다. 총 작업은 33개이며 이후 의존성은 유지한다.
+두 보완 작업은 사용자 승인된 P0 추가 범위다. BE/FE 파일·환경을 분리해 병렬 실행 가능하나 git index/commit은 오케스트레이터가 슬롯을 지정해 직렬화한다. P6 두 작업을 포함한 총 작업은 35개이며 이후 의존성은 유지한다.
 
 ### P0-S0-V: Preflight·ICV 게이트
 
@@ -523,16 +523,16 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P6-S1-T1: 대립유전자 산점도 NTC 기준 offset 설정
 
-- Status: TODO
-- Commit: —
-- Evidence: [P6-S1-T1](ui-ux-overhaul/evidence/P6-S1-T1.md) (구현 후 작성)
+- Status: DONE
+- Commit: c5c97f249d9435b544d5aa30a28462bcdba5c2d2
+- Evidence: [P6-S1-T1](ui-ux-overhaul/evidence/P6-S1-T1.md)
 - 담당: frontend-specialist
 - Depends On: [P5-T0.1]
 - Write Scope: FE/src/lib/scatter-axes.ts, FE/src/stores/settings-store.ts, FE/src/components/analysis/ScatterViewControls.tsx, FE/src/components/analysis/ScatterPlot.tsx, FE/src/components/analysis/MarkerScatterPlot.tsx, FE/src/locales/en.ts, FE/src/locales/ko.ts 및 관련 FE 테스트
 - 구현: 기본 축의 좌측·하단 최소값을 NTC 기준점에서 X/Y offset만큼 뺀 값으로 계산한다. 예를 들어 NTC가 (1000, 2000)이고 offset이 (100, 100)이면 기본 기준을 (900, 1900)으로 둔다. 데이터에 음수 광학값이 있으면 실제 데이터가 잘리지 않도록 최소 범위를 확장한다.
 - 구현: X/Y offset을 각각 숫자로 입력하고 Reset으로 기본값을 복원한다. 설정은 두 산점도(전체/마커별)에 동일하게 적용하며, 기존 수동/데이터 맞춤 범위와 NTC·aspect 동작을 보존한다. NTC·데이터가 없거나 비유한 값인 경우 안전한 fallback을 사용한다.
 - 검증: TDD_MODE:RED_FIRST. 축 계산 단위 테스트(양수·음수·1000+·NTC 없음·비유한 값·aspect), 컨트롤 입력/Reset 테스트, 두 산점도 연결 테스트, KO/EN locale·lint·typecheck·build.
-- [ ] AC: NTC 기준 기본 화면에서 불필요한 좌측/하단 여백이 제거되고, offset 변경/Reset이 즉시 두 산점도에 반영됨. 음수 웰이 항상 보이며 기존 범위 모드가 회귀하지 않음.
+- [x] AC: NTC 기준 기본 화면에서 불필요한 좌측/하단 여백이 제거되고, offset 변경/Reset이 즉시 두 산점도에 반영됨. 음수 웰이 항상 보이며 기존 범위 모드가 회귀하지 않음.
 
 ### P6-S0-V: NTC 축 offset 품질 게이트
 
@@ -587,4 +587,4 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 4. 각 작업은 승인된 scope에서 RED → GREEN → REFACTOR → 검증 → 로컬 commit → 증거 보고 순으로 진행한다. 게이트 실패 시 후속 작업을 시작하지 않는다.
 5. 재개 시 계획 hash·branch/commit·상태·증거를 대조한다. 문서의 TODO를 추측으로 DONE 처리하거나 이전 작업서의 상태를 재사용하지 않는다.
 
-현재 상태: **2026-09-08 33/35 완료, P5 로컬 인수 게이트 통과, P6 TODO**. 동일 accepted source head에서 BE 755, FE 632/96, canonical ROOT18–26 73/73, EXISTING-E2E 52/52와 독립 인수 리뷰를 통과했다. Legacy ROOT01–03의 구형 인증/DOM 실패는 현재 범위의 통과로 표시하지 않는다. P6 구현·검증 전에는 제품 완료로 표시하지 않는다. 로컬 Phase 통합은 허용되지만 원격 push·배포·외부 알림은 제외한다. 재현 절차와 제한은 [운영 인수 문서](ui-ux-overhaul/06-operations-handoff.md), 실행 상태는 루트 `.claude/orchestrate-state.json`에 기록한다.
+현재 상태: **2026-09-08 34/35 완료, P6-S0-V 검증 대기**. 동일 accepted source head에서 BE 755, 기존 FE 632/96, canonical ROOT18–26 73/73, EXISTING-E2E 52/52와 독립 인수 리뷰를 통과했고 P6-S1-T1은 FE 637/96 및 build/lint/typecheck를 통과했다. Legacy ROOT01–03의 구형 인증/DOM 실패는 현재 범위의 통과로 표시하지 않는다. P6-S0-V 전에는 제품 완료로 표시하지 않는다. 로컬 Phase 통합은 허용되지만 원격 push·배포·외부 알림은 제외한다. 재현 절차와 제한은 [운영 인수 문서](ui-ux-overhaul/06-operations-handoff.md), 실행 상태는 루트 `.claude/orchestrate-state.json`에 기록한다.
