@@ -473,6 +473,9 @@ export function ScatterPlot() {
       plot_bgcolor: colors.plot_bgcolor,
       font: { color: colors.fontColor },
       hovermode: "closest",
+      // Keep Plotly's preserved interaction state in sync with the explicit
+      // NTC-origin range and its unit basis.
+      uirevision: `plate-${axisMode}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${ratioOrigin.fam}-${ratioOrigin.allele2}`,
       // Box-select while selecting, zoom while editing thresholds -- and the
       // modebar below keeps both reachable either way, because picking one
       // well out of a dense cluster needs a zoom first.

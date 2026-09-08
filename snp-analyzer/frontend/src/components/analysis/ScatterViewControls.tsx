@@ -152,6 +152,7 @@ export function ScatterViewControls({
   ) => (
     <input
       type="number"
+      id={testId}
       data-testid={testId}
       value={Number.isFinite(value) ? value : 0}
       step={inputStep}

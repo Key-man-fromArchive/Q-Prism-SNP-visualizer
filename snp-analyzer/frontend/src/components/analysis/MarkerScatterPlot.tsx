@@ -444,7 +444,9 @@ export function MarkerScatterPlot({
       // uirevision that otherwise preserves the user's pan/zoom across
       // re-renders -- without it, switching mode would leave the old range in
       // place until the marker changed.
-      uirevision: `marker-${marker.id}-${axisMode}-${lockAspect ? "aspect" : "free"}`,
+      // Offset/origin changes must invalidate Plotly's preserved pan/zoom;
+      // otherwise an explicit new range can be hidden behind the old UI state.
+      uirevision: `marker-${marker.id}-${axisMode}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${origin.fam}-${origin.allele2}`,
       shapes,
       margin: { t: 10, r: 10, b: 46, l: 56 },
       legend: { orientation: "h", y: -0.2 },
