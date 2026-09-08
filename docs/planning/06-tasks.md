@@ -460,13 +460,15 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P4-S4-T2: 라이브러리·프로젝트·사용자·참조·비교 화면
 
-- Status: TODO
+- Status: DONE
+- Commit: 65e6bafd1bf38310f7e993d11334455ed49ba4e2
+- Evidence: [P4-S4-T2](ui-ux-overhaul/evidence/P4-S4-T2.md). FE 632개, ROOT22·24·25 53/53, 390/1024/1440×KO/EN×양 테마, 변경 실행 라인 82.4%·적용 모듈 모두 70% 이상·새 CC 10 이하, 감사 0건, 독립 보안/UI 리뷰 PASS.
 - 담당: frontend-specialist
 - Depends On: [P4-S4-T1]
 - Write Scope: SRC/components/의 Library·Project·Users·Reference·Compare 관련 화면, 관련 locales/CSS, tests/25-secondary-flows.spec.ts
 - 구현: 목록/빈 상태/오류/권한/대화상자를 보완하고 비교 런을 이름+날짜+파일명 등으로 식별한다. 파괴적 행동의 기존 확인 절차와 권한 검사를 유지한다.
 - 검증: 390/1024/1440, KO/EN·양 테마, 긴 이름·중복 런 이름·조회 실패·권한 없음·키보드 탐색.
-- [ ] AC: UX-09 나머지 보조 화면 범위가 검증되며 비교 대상 식별이 모호하지 않음.
+- [x] AC: UX-09 나머지 보조 화면 범위가 검증되며 비교 대상 식별이 모호하지 않음.
 
 ### P4-S0-V: UI/UX 품질 게이트
 
