@@ -155,6 +155,17 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
   // Handle drag start
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
+    // The plate surface is a selection canvas. Preserve the button's focus
+    // affordance while preventing the browser from starting a text selection
+    // when the pointer travels across labels or empty panel space.
+    const button = event.target instanceof HTMLElement
+      ? event.target.closest<HTMLButtonElement>('button')
+      : null;
+    if (button) {
+      button.focus();
+    } else {
+      event.preventDefault();
+    }
     dragAdditiveRef.current = event.ctrlKey || event.metaKey;
     didDragRef.current = false;
     dragStartRef.current = { x: event.clientX, y: event.clientY };
@@ -173,7 +184,9 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
     if (!didDragRef.current && (deltaX > dragThreshold || deltaY > dragThreshold)) {
       didDragRef.current = true;
       // Capturing on pointerdown retargets the subsequent native child click.
-      event.currentTarget.setPointerCapture(event.pointerId);
+      if (typeof event.currentTarget.setPointerCapture === "function") {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }
     }
 
     if (didDragRef.current) {
@@ -233,7 +246,9 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
     dragStartRef.current = null;
     dragRectRef.current = null;
     if (dragOverlayRef.current) dragOverlayRef.current.style.display = 'none';
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+    if (typeof event.currentTarget.hasPointerCapture === "function"
+      && event.currentTarget.hasPointerCapture(event.pointerId)
+      && typeof event.currentTarget.releasePointerCapture === "function") {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
@@ -263,12 +278,16 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
 
   return (
     <div
-      className="panel plate-panel"
+      className="panel plate-panel select-none"
       ref={panelRef}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onMouseDown={(event) => {
+        if (event.button === 0 && !(event.target instanceof HTMLElement
+          && event.target.closest('button'))) event.preventDefault();
+      }}
     >
       <h3 className="text-sm font-semibold mb-3 text-text">{t.plateView} ({plateRows.length}×{plateCols.length})</h3>
       <p role="status" aria-live="polite" className="sr-only">{t.selectedWellCount(selectedWells.length)}</p>
@@ -440,8 +459,8 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
         style={{
           display: 'none',
           position: 'fixed',
-          border: '2px solid #f59e0b',
-          background: 'rgba(245, 158, 11, 0.16)',
+          border: '2px solid rgb(37, 99, 235)',
+          background: 'rgba(37, 99, 235, 0.16)',
           pointerEvents: 'none',
           zIndex: 50,
           borderRadius: '4px'

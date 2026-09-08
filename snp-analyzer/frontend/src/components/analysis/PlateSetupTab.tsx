@@ -34,9 +34,17 @@ const ROW_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const PLOIDY_OPTIONS = [2, 3, 4, 5, 6, 7, 8];
 
 type DragSelection = {
-  startWell: string;
+  startX: number;
+  startY: number;
   initialWells: string[];
   additive: boolean;
+};
+
+type DragRect = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 };
 
 function genMarkerId(): string {
@@ -85,6 +93,10 @@ export function PlateSetupTab() {
   const [pickMarkerId, setPickMarkerId] = useState<string | null>(null);
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
   const dragSelection = useRef<DragSelection | null>(null);
+  const selectionGridRef = useRef<HTMLDivElement>(null);
+  const dragOverlayRef = useRef<HTMLDivElement>(null);
+  const didDragRef = useRef(false);
+  const dragThreshold = 5;
 
   const [editingMarker, setEditingMarker] = useState<"new" | string | null>(null);
   const [formName, setFormName] = useState("");
@@ -249,6 +261,13 @@ export function PlateSetupTab() {
   }
 
   function beginWellSelection(id: string, event: ReactPointerEvent<HTMLButtonElement>) {
+    // Keep pointer drags from selecting well labels/sample text. Focus is
+    // restored explicitly because cancelling pointerdown's default otherwise
+    // suppresses the browser's normal button focus step.
+    if (event.button === 0) {
+      event.preventDefault();
+      event.currentTarget.focus();
+    }
     if (event.shiftKey) {
       selectWellRange(id, event.ctrlKey || event.metaKey);
       return;
@@ -256,23 +275,75 @@ export function PlateSetupTab() {
 
     toggleWell(id);
     dragSelection.current = {
-      startWell: id,
+      startX: event.clientX,
+      startY: event.clientY,
       initialWells: selectedWells,
       additive: event.ctrlKey || event.metaKey,
     };
+    didDragRef.current = false;
   }
 
-  function extendWellSelection(id: string) {
+  function updateDragSelection(clientX: number, clientY: number) {
+    const drag = dragSelection.current;
+    const grid = selectionGridRef.current;
+    if (!drag || !grid) return;
+
+    const rect: DragRect = {
+      left: Math.min(drag.startX, clientX),
+      top: Math.min(drag.startY, clientY),
+      width: Math.abs(clientX - drag.startX),
+      height: Math.abs(clientY - drag.startY),
+    };
+    const overlay = dragOverlayRef.current;
+    if (overlay) {
+      overlay.style.display = "block";
+      overlay.style.left = `${rect.left}px`;
+      overlay.style.top = `${rect.top}px`;
+      overlay.style.width = `${rect.width}px`;
+      overlay.style.height = `${rect.height}px`;
+    }
+
+    const selected = Array.from(grid.querySelectorAll<HTMLButtonElement>('[data-well-id]'))
+      .filter((well) => {
+        const wellRect = well.getBoundingClientRect();
+        const centerX = wellRect.left + wellRect.width / 2;
+        const centerY = wellRect.top + wellRect.height / 2;
+        return centerX >= rect.left && centerX <= rect.left + rect.width
+          && centerY >= rect.top && centerY <= rect.top + rect.height;
+      })
+      .map((well) => well.dataset.wellId)
+      .filter((well): well is string => Boolean(well));
+
+    if (selected.length > 0) {
+      setSelectedWells(
+        drag.additive ? Array.from(new Set([...drag.initialWells, ...selected])) : selected
+      );
+    }
+  }
+
+  function handleGridPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = dragSelection.current;
     if (!drag) return;
-    const range = wellsInRectangle(drag.startWell, id);
-    setSelectedWells(
-      drag.additive ? Array.from(new Set([...drag.initialWells, ...range])) : range
-    );
+    const moved = Math.abs(event.clientX - drag.startX) > dragThreshold
+      || Math.abs(event.clientY - drag.startY) > dragThreshold;
+    if (!didDragRef.current && moved) {
+      didDragRef.current = true;
+      if (typeof event.currentTarget.setPointerCapture === "function") {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }
+    }
+    if (didDragRef.current) updateDragSelection(event.clientX, event.clientY);
   }
 
-  function endWellSelection() {
+  function endWellSelection(event?: ReactPointerEvent<HTMLDivElement>) {
     dragSelection.current = null;
+    if (event && typeof event.currentTarget.hasPointerCapture === "function"
+      && event.currentTarget.hasPointerCapture(event.pointerId)
+      && typeof event.currentTarget.releasePointerCapture === "function") {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (dragOverlayRef.current) dragOverlayRef.current.style.display = "none";
+    didDragRef.current = false;
   }
 
   function toggleCol(col: number) {
@@ -960,7 +1031,7 @@ export function PlateSetupTab() {
         </div>
 
         {/* Plate grid */}
-        <div className="panel">
+        <div className="panel select-none">
           {selectedWells.length > 0 ? (
             <div data-testid="selection-bar" className="flex flex-wrap items-center gap-3 mb-3">
               <span data-testid="selection-count" className="text-sm font-semibold text-text">
@@ -1011,13 +1082,23 @@ export function PlateSetupTab() {
             <p className="text-xs text-text-muted mb-3">{t.wsPlateHint}</p>
           )}
 
-          <div style={{ overflowX: "auto" }}>
+          <div style={{ overflowX: "auto", overflowY: "hidden" }}>
             <div
+              ref={selectionGridRef}
+              data-testid="plate-setup-grid"
               className="select-none"
+              onPointerMove={handleGridPointerMove}
+              onPointerUp={endWellSelection}
+              onPointerCancel={endWellSelection}
+              onMouseDown={(event) => {
+                if (event.button === 0 && !(event.target instanceof HTMLElement
+                  && event.target.closest('button'))) event.preventDefault();
+              }}
               style={{
                 display: "grid",
                 gridTemplateColumns: `auto repeat(${plateCols.length}, 1fr)`,
                 gap: "4px",
+                minWidth: plateCols.length > 12 ? "820px" : undefined,
               }}
             >
               <button
@@ -1072,8 +1153,6 @@ export function PlateSetupTab() {
                         aria-pressed={isSelected}
                         data-assigned={marker ? "true" : "false"}
                         onPointerDown={(event) => beginWellSelection(id, event)}
-                        onPointerEnter={() => extendWellSelection(id)}
-                        onPointerUp={endWellSelection}
                         title={titleParts.join(" · ")}
                         style={{
                           background: marker ? marker.color ?? undefined : undefined,
@@ -1106,6 +1185,21 @@ export function PlateSetupTab() {
               ))}
             </div>
           </div>
+          <div
+            ref={dragOverlayRef}
+            data-testid="plate-setup-marquee"
+            aria-hidden="true"
+            className="drag-selection-rect"
+            style={{
+              display: "none",
+              position: "fixed",
+              border: "2px solid rgb(37, 99, 235)",
+              background: "rgba(37, 99, 235, 0.16)",
+              pointerEvents: "none",
+              zIndex: 50,
+              borderRadius: "4px",
+            }}
+          />
         </div>
 
         {/* Well inspector */}

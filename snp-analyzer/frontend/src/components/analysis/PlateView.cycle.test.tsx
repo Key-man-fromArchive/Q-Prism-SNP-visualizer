@@ -22,6 +22,21 @@ it('does not retarget native well clicks by capturing the pointer before a drag 
   expect(capture).toHaveBeenCalledTimes(1);
 });
 
+it('uses a desktop-style blue marquee without enabling text selection', async () => {
+  useSessionStore.setState({ sessionId: 'marquee' });
+  const view = render(<PlateView />);
+  await act(async () => { await Promise.resolve(); });
+  const panel = view.container.querySelector<HTMLElement>('.plate-panel')!;
+  const overlay = view.container.querySelector<HTMLElement>('.drag-selection-rect')!;
+
+  expect(panel).toHaveClass('select-none');
+  fireEvent.pointerDown(panel, { button: 0, pointerId: 7, clientX: 10, clientY: 20 });
+  fireEvent.pointerMove(panel, { pointerId: 7, clientX: 40, clientY: 60 });
+  expect(overlay).toHaveStyle({ display: 'block' });
+  expect(overlay.style.border).toContain('rgb(37, 99, 235)');
+  expect(overlay.style.background).toContain('rgba(37, 99, 235');
+});
+
 it('requests a selected actual zero cycle', async () => {
   useSessionStore.setState({ sessionId: 'zero' });
   useSelectionStore.setState({ currentCycle: 0 });

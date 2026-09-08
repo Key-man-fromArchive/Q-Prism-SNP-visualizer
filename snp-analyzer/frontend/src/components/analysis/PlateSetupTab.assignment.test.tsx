@@ -95,3 +95,21 @@ it('keeps Omit focusable and restores its type through the shared command', asyn
   fireEvent.click(screen.getByTestId('well-type-sample'));
   await waitFor(() => expect(screen.getByTestId('analysis-scope-counts')).toHaveTextContent('Eligible by marker/type: 1 · Empty: 0 · Omit: 0'));
 });
+
+it('shows a blue marquee and selects wells by pointer rectangle without text selection', async () => {
+  render(<PlateSetupTab />);
+  await waitFor(() => expect(screen.getByTestId('well-A1')).toBeVisible());
+
+  const grid = screen.getByTestId('plate-setup-grid');
+  expect(grid).toHaveClass('select-none');
+  const firstWell = screen.getByTestId('well-A1');
+  fireEvent.pointerDown(firstWell, { button: 0, pointerId: 11, clientX: 0, clientY: 0 });
+  fireEvent.pointerMove(grid, { pointerId: 11, clientX: 100, clientY: 100 });
+
+  const marquee = screen.getByTestId('plate-setup-marquee');
+  expect(marquee).toHaveStyle({ display: 'block' });
+  expect(marquee.style.border).toContain('rgb(37, 99, 235)');
+
+  fireEvent.pointerUp(grid, { pointerId: 11, clientX: 100, clientY: 100 });
+  expect(screen.getByTestId('selection-count')).toHaveTextContent('96');
+});

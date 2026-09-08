@@ -549,13 +549,15 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P7-S1-T1: 웰 선택 스크롤·marquee 상호작용 정리
 
-- Status: TODO
+- Status: DONE
 - 담당: frontend-specialist
 - Depends On: [P6-S0-V]
 - Write Scope: FE/src/components/analysis/PlateView.tsx, FE/src/components/analysis/PlateSetupTab.tsx, 관련 스타일·선택 훅/스토어 테스트 및 필요한 ROOT-E2E
 - 구현: PlateView의 기존 marquee와 PlateSetupTab 웰 picker에서 불필요한 내부 세로 스크롤바를 제거하되 384웰의 가로 overflow와 작은 화면 사용성을 보존한다. 포인터 드래그 중 `user-select: none` 및 pointer capture를 적용해 텍스트 선택이 발생하지 않게 하고, 클릭과 드래그를 구분하는 최소 이동 threshold와 Windows 바탕화면과 같은 명확한 선택 박스를 제공한다.
 - 구현: 기존 Ctrl/Cmd 추가 선택, Shift 범위 선택, 단일 클릭 해제/선택, 키보드 roving focus·접근성 semantics 및 모바일 touch 동작을 유지한다. 선택 박스는 실제 웰을 기준으로 계산하고 포인터 취소·경계 이탈·빈 영역 클릭을 안전하게 처리한다.
 - 검증: TDD_MODE:RED_FIRST. 96/384웰의 스크롤·선택 박스·클릭/드래그 threshold·pointer capture·Ctrl/Cmd·Shift·키보드·touch 회귀 테스트와 대표 브라우저 smoke를 추가한다.
+- Evidence: [P7-S1-T1](ui-ux-overhaul/evidence/P7-S1-T1.md)
+- [x] AC: 두 웰 선택 화면에서 세로 스크롤바를 제거하고 384웰 가로 overflow, blue marquee, text-selection 방지 및 기존 선택 semantics를 유지한다.
 
 ### P7-S0-V: 웰 선택 UX 품질 게이트
 

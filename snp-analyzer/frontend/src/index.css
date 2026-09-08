@@ -167,7 +167,7 @@ body.dark .panel {
   .analysis-primary-toolbar { display: flex; align-items: center; }
   .analysis-primary-toolbar > * { flex: 1; min-width: 0; }
   .analysis-primary-toolbar #cycle-control { flex: .8; }
-  .analysis-review-stack [data-testid="plate-scroll-region"] { max-height: 290px; overflow: auto; }
+  .analysis-review-stack [data-testid="plate-scroll-region"] { max-height: none; overflow-x: auto; overflow-y: hidden; }
   .analysis-context-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; padding: .5rem 1.5rem 0; }
   .analysis-context-summary > section { margin: 0; padding: .5rem; font-size: .75rem; }
   .analysis-grid { align-items: start; }
