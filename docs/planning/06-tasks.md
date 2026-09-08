@@ -536,14 +536,14 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P6-S0-V: NTC 축 offset 품질 게이트
 
-- Status: TODO
-- Commit: —
-- Evidence: [P6-S0-V](ui-ux-overhaul/evidence/P6-S0-V.md) (검증 후 작성)
+- Status: DONE
+- Commit: ebd06565bc71c9b56fef00f832cfb1f3a3fe9941
+- Evidence: [P6-S0-V](ui-ux-overhaul/evidence/P6-S0-V.md)
 - 담당: test-specialist
 - Depends On: [P6-S1-T1]
 - Write Scope: docs/planning/ui-ux-overhaul/evidence/P6-S0-V.md 및 필요한 회귀 테스트
 - 검증: P6-S1-T1 집중 테스트, FE-ALL, FE-CHECK, 대표 브라우저 산점도 smoke(전체/마커별), 양 언어·테마, offset 저장/Reset 및 음수 데이터 시나리오. 기존 P5 기준선과 신규 실패를 분리한다.
-- [ ] AC: 구현 commit과 증거가 연결되고, 두 산점도·언어·범위 모드·음수 데이터의 회귀가 없음.
+- [x] AC: 구현 commit과 증거가 연결되고, 두 산점도·언어·범위 모드·음수 데이터의 회귀가 없음.
 
 ## 수용 기준 추적표
 
@@ -587,4 +587,4 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 4. 각 작업은 승인된 scope에서 RED → GREEN → REFACTOR → 검증 → 로컬 commit → 증거 보고 순으로 진행한다. 게이트 실패 시 후속 작업을 시작하지 않는다.
 5. 재개 시 계획 hash·branch/commit·상태·증거를 대조한다. 문서의 TODO를 추측으로 DONE 처리하거나 이전 작업서의 상태를 재사용하지 않는다.
 
-현재 상태: **2026-09-08 34/35 완료, P6-S0-V 검증 대기**. 동일 accepted source head에서 BE 755, 기존 FE 632/96, canonical ROOT18–26 73/73, EXISTING-E2E 52/52와 독립 인수 리뷰를 통과했고 P6-S1-T1은 FE 637/96 및 build/lint/typecheck를 통과했다. Legacy ROOT01–03의 구형 인증/DOM 실패는 현재 범위의 통과로 표시하지 않는다. P6-S0-V 전에는 제품 완료로 표시하지 않는다. 로컬 Phase 통합은 허용되지만 원격 push·배포·외부 알림은 제외한다. 재현 절차와 제한은 [운영 인수 문서](ui-ux-overhaul/06-operations-handoff.md), 실행 상태는 루트 `.claude/orchestrate-state.json`에 기록한다.
+현재 상태: **2026-09-08 35/35 완료, P6-S0-V PASS**. 동일 accepted source head에서 BE 755, 기존 FE 632/96, canonical ROOT18–26 73/73, EXISTING-E2E 52/52와 독립 인수 리뷰를 통과했고 P6-S1-T1/P6-S0-V는 각각 FE 638/96 및 build/lint/typecheck/browser smoke를 통과했다. Legacy ROOT01–03의 구형 인증/DOM 실패는 현재 범위의 통과로 표시하지 않는다. 로컬 Phase 통합은 허용되지만 원격 push·배포·외부 알림은 제외한다. 전용 whole-plot range assertion과 normalized Reset wiring 테스트는 후속 보강 항목이다. 재현 절차와 제한은 [운영 인수 문서](ui-ux-overhaul/06-operations-handoff.md), 실행 상태는 루트 `.claude/orchestrate-state.json`에 기록한다.
