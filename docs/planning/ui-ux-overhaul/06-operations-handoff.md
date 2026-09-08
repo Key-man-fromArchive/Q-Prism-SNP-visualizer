@@ -88,8 +88,7 @@ artifacts.
 ## Task traceability
 
 The 33 completed task records below use canonical commits from orchestration state and
-the evidence files present in this worktree. P5-T0.1 is complete as documentation,
-but its final task commit is intentionally pending until the parent commits it.
+the evidence files present in this worktree.
 
 | Task | Status | Commit | Evidence |
 | --- | --- | --- | --- |
@@ -125,4 +124,4 @@ but its final task commit is intentionally pending until the parent commits it.
 | P4-S0-V | DONE | `fd94306913da7a7c6d316ec7e34833ec3a41950b` | [evidence](evidence/P4-S0-V.md) |
 | P5-R0-T1 | DONE | `c54495eebd0232e9ce723d4441d5ead699c6fc9b` | [evidence](evidence/P5-R0-T1.md) |
 | P5-S0-V | DONE | `b1cbebd49160d696dfec3f49e3b4c8d9982e7af1` | [evidence](evidence/P5-S0-V.md) |
-| P5-T0.1 | DONE | this handoff/final task commit pending | [evidence](evidence/P5-T0.1.md) |
+| P5-T0.1 | DONE | `355a14013f40df36db3986f2dca3bfd086839e74` | [evidence](evidence/P5-T0.1.md) |

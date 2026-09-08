@@ -509,13 +509,15 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P5-T0.1: 실행 결과·운영 인수 문서
 
-- Status: TODO
+- Status: DONE
+- Commit: 355a14013f40df36db3986f2dca3bfd086839e74
+- Evidence: [P5-T0.1](ui-ux-overhaul/evidence/P5-T0.1.md), [운영 인수 문서](ui-ux-overhaul/06-operations-handoff.md). 33개 작업의 실제 commit·증거 링크, 재현 명령, 설정·복원·출력·보안 경계와 알려진 제한을 대조했고 독립 문서 리뷰 PASS.
 - 담당: test-specialist
 - Depends On: [P5-S0-V]
 - Write Scope: docs/planning/06-tasks.md, docs/planning/ui-ux-overhaul/의 인수 문서, 필요한 README/API 문서
 - 구현: 검증된 변경·마이그레이션/legacy 재분석 안내·설정/복원·출력 동작·실행 명령·남은 제한을 정리한다. 작업별 실제 commit/증거를 연결하고 PRD와 차이가 생긴 경우 결정 근거를 기록한다.
 - 검증: 링크/명령/작업 상태와 실제 실행 로그 대조. 문서만 수정한 뒤에도 diff 검사하며 제품 완료를 새로 추정하지 않는다.
-- [ ] AC: 33개 작업의 상태·증거가 추적 가능하고, 후속 운영자가 재현할 수 있음. merge/push는 실행 당시 오케스트레이터 권한 범위에서만 수행함.
+- [x] AC: 33개 작업의 상태·증거가 추적 가능하고, 후속 운영자가 재현할 수 있음. merge/push는 실행 당시 오케스트레이터 권한 범위에서만 수행함.
 
 ## 수용 기준 추적표
 
@@ -558,4 +560,4 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 4. 각 작업은 승인된 scope에서 RED → GREEN → REFACTOR → 검증 → 로컬 commit → 증거 보고 순으로 진행한다. 게이트 실패 시 후속 작업을 시작하지 않는다.
 5. 재개 시 계획 hash·branch/commit·상태·증거를 대조한다. 문서의 TODO를 추측으로 DONE 처리하거나 이전 작업서의 상태를 재사용하지 않는다.
 
-현재 상태: **2026-09-07 10/33 완료, P1 PDF·XLSX·ASG 연결 구현 중**. P0 독립 게이트 통과·로컬 통합 후 P1-R1-T1/T2/T3, P1-R2-T1, P1-R3-T1도 독립 검증했다. 사용자가 lint·도구·런타임/인증 의존성 보완과 완료까지 자율 진행을 승인했다. 로컬 Phase 통합·자동 진행하며 원격 push·배포·외부 알림은 제외한다. 실행 상태는 루트 `.claude/orchestrate-state.json`, 검증 증거는 Phase Worktree의 evidence에 기록한다.
+현재 상태: **2026-09-08 33/33 완료, P5 로컬 인수 게이트 통과**. 동일 accepted source head에서 BE 755, FE 632/96, canonical ROOT18–26 73/73, EXISTING-E2E 52/52와 독립 인수 리뷰를 통과했다. Legacy ROOT01–03의 구형 인증/DOM 실패는 현재 범위의 통과로 표시하지 않는다. 로컬 Phase 통합은 허용되지만 원격 push·배포·외부 알림은 제외한다. 재현 절차와 제한은 [운영 인수 문서](ui-ux-overhaul/06-operations-handoff.md), 실행 상태는 루트 `.claude/orchestrate-state.json`에 기록한다.
