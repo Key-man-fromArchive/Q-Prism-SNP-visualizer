@@ -497,13 +497,15 @@ PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기
 
 ### P5-S0-V: 전체 회귀·수용 기준 인수
 
-- Status: TODO
+- Status: DONE
+- Commit: b1cbebd49160d696dfec3f49e3b4c8d9982e7af1
+- Evidence: [P5-S0-V](ui-ux-overhaul/evidence/P5-S0-V.md). 동일 accepted source head에서 BE 755, FE 632/96, canonical ROOT18–26 73/73, EXISTING-E2E 52/52, lint·typecheck·build·감사 0건 및 UX-01–10 추적, 독립 인수 리뷰 PASS. Legacy ROOT01–03의 인증/구형 DOM 실패는 현재 범위 통과로 표시하지 않음.
 - 담당: test-specialist
 - Depends On: [P5-R0-T1]
 - Write Scope: docs/planning/ui-ux-overhaul/evidence/P5-S0-V.md 및 통합 테스트 보강
 - 검증: BE-ALL, FE-ALL, FE-CHECK, ROOT-E2E 전체, EXISTING-E2E, COVERAGE를 같은 최종 commit에서 실행한다. 실파일 교차 검증, 전체 시각 매트릭스, 복원/동시성/실패/보안 결과를 연결한다.
 - 검증: 기존 실패도 원인·기준 commit·영향을 기록하며 신규 실패와 구분한다. 필수 수용 기준 실패/미검증은 waiver 없이 통과시킬 수 없다.
-- [ ] AC: 아래 UX-01–10 추적표의 증거가 모두 연결되고 치명/높음 미해결 결함이 없음. 자동 검사와 수동 확인 결과를 구분함.
+- [x] AC: 아래 UX-01–10 추적표의 증거가 모두 연결되고 치명/높음 미해결 결함이 없음. 자동 검사와 수동 확인 결과를 구분함.
 
 ### P5-T0.1: 실행 결과·운영 인수 문서
 
