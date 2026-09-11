@@ -110,25 +110,35 @@ export function channelLabels(metadata, allele2Dye): ChannelLabels {
 → `max-height`가 먼저 걸려 실제 비율은 940:638 ≈ **1.47:1**. 4:3(1.33:1)도, 정사각도 아니다.
 **높이를 자르는 방식으로는 종횡비를 보장할 수 없다. 폭을 종횡비에 맞춰 묶어야 한다.**
 
+**종횡비는 고정하지 않고 사용자가 고른다** (결정 D-6). `settings-store`에 상태를 두고 CSS 변수로 흘린다.
+
 ```css
 .analysis-scatter-canvas {
-  --scatter-max-h: min(70vh, 640px);          /* 세로 상한 */
-  aspect-ratio: 4 / 3;
+  --scatter-max-h: min(70vh, 640px);   /* 세로 상한 */
+  --scatter-aspect-w: 4;               /* JS가 선택값에 따라 4 또는 1 */
+  --scatter-aspect-h: 3;               /*              3 또는 1 */
+  aspect-ratio: var(--scatter-aspect-w) / var(--scatter-aspect-h);
   height: auto;
   width: 100%;
-  max-width: calc(var(--scatter-max-h) * 4 / 3);   /* 상한 높이에서 역산한 폭 */
-  min-height: 360px;                           /* Plotly 0-height 마운트 방어 */
-  margin-inline: auto;                         /* 남는 폭은 여백으로 */
+  max-width: calc(var(--scatter-max-h) * var(--scatter-aspect-w) / var(--scatter-aspect-h));
+  min-height: 360px;                   /* Plotly 0-height 마운트 방어 */
+  margin-inline: auto;                 /* 남는 폭은 좌우 여백으로 */
 }
 ```
 
 - 폭을 `max-width`로 묶으므로 `aspect-ratio`가 **항상 성립**한다. 높이가 잘리지 않는다.
-- 640px 상한 기준 폭은 약 853px → 940px 컬럼 안에 들어가고, 남는 약 87px는 좌우 여백이 된다.
+- 선택값별 실측(1920x911, 가용 폭 약 904px):
+
+  | 선택 | 캔버스 | 좌우 여백 | 현재(300px) 대비 |
+  | --- | --- | --- | --- |
+  | `4:3` (기본) | 853 × 640 | 51px | 높이 **2.1배** |
+  | `1:1` | 640 × 640 | 264px | 높이 2.1배 |
+
+  세로가 더 긴 모니터에서는 폭이 컬럼에 걸려 `4:3`이 928×696px가 된다(비율 유지).
 - `min-height: 360px`가 마운트 시 0-height를 막는다 (Gemini·Codex 공통 지적).
   좁은 폭(예: 400px 단일 컬럼)에서는 4:3이 300px를 요구하므로 `min-height`가 이겨 세로가 더 길어진다 —
   의도된 동작이며 사용자 요구("세로가 낮다") 방향과 일치한다.
-- 정사각(1:1)을 택하면 `aspect-ratio: 1/1`, `max-width: var(--scatter-max-h)` → 폭 640px.
-  컬럼 여백이 300px로 커진다. **→ 결정 D-6 참조.**
+- 종횡비 전환 시 컨테이너 크기가 바뀌므로 **Plotly가 리사이즈를 따라오는지** 확인해야 한다. 따라오지 않으면 드롭다운이 무의미해진다.
 
 **Plotly 리사이즈 검증 항목**:
 - `aspect-ratio` 컨테이너는 초기 레이아웃 패스에서 높이가 0일 수 있다 → `min-height`로 방어하되,
@@ -142,7 +152,7 @@ export function channelLabels(metadata, allele2Dye): ChannelLabels {
 
 ```
 ┌ 대립유전자 판별 ────────────────────────────────────────────┐
-│ [☑ 정규화: ROX ▾]   [축: 자동 ▾] [축 설정…]   [선택|편집]    │  ← 신설 헤더 바 (항상 보임)
+│ [☑ 정규화: ROX ▾] [축: 자동 ▾] [축 설정…] [비율: 4:3 ▾] [선택|편집] │ ← 헤더 바
 │ 비율 원점: … (기존 ratio-origin-note)                        │
 │                                                             │
 │            (4:3 산점도 캔버스)                               │
@@ -151,7 +161,7 @@ export function channelLabels(metadata, allele2Dye): ChannelLabels {
 └─────────────────────────────────────────────────────────────┘
 ```
 
-- **항상 보임**: 정규화 체크박스(+채널), 축 모드 드롭다운, `축 설정…` 버튼, 드래그 도구 토글.
+- **항상 보임**: 정규화 체크박스(+채널), 축 모드 드롭다운, `축 설정…` 버튼, **종횡비 드롭다운(`4:3`/`1:1`)**, 드래그 도구 토글.
 - **`축 설정…` 버튼**: 클릭 시 x/y min·max 4개 입력을 **인라인 팝오버**로 연다. 사용자 요구 4번의 문자 그대로.
   열리면 `axisMode`를 자동으로 `manual`로 전환한다 (현재는 `manual`을 먼저 골라야 입력이 활성화됨 — `numberInput(..., !manual)`).
 - **접힌 채 유지**: NTC 사분면, NTC 축 오프셋, 배수성 상한 — 전문가용 저빈도 설정.
@@ -236,8 +246,8 @@ export function channelLabels(metadata, allele2Dye): ChannelLabels {
 
 ## 8. 미결정 사항
 
-- **D-6 목표 종횡비**: 정사각(1:1) vs 4:3. 문서는 4:3을 채택했으나 사용자는 "정사각"을 먼저 언급했다.
-  911px 뷰포트에서 정사각은 폭 640px(컬럼 여백 300px), 4:3은 폭 853px(여백 87px). **여백 대 비율의 트레이드오프 선택 필요.**
+- ~~**D-6 목표 종횡비**~~ — **해결 (2026-09-11)**: 고정하지 않고 **드롭다운으로 `4:3`(기본) / `1:1` 선택**.
+  판독 습관이 사람마다 다르고 모니터 비율도 제각각이라, 한쪽으로 고정하면 반대편 사용자가 같은 불만을 제기하게 된다.
 - 세로 상한값 `min(70vh, 640px)`의 구체 수치 — 툴바/헤더 높이 실측 후 확정.
 - `SettingsTab`의 `useRox` 처리: 제거 / 읽기 전용 / 현행 유지.
 - **3-4 Step 2(참조 채널 재지정)의 착수 여부** — 백엔드 계약 변경이므로 별도 승인 필요.

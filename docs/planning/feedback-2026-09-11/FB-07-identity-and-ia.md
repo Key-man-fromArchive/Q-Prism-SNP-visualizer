@@ -129,13 +129,12 @@ gridColor: dark ? "#2d3040" : "#e5e7eb", …
 > 북마크된 `?tab=analysis&surface=plate`가 "결과" 탭이 아니라 기본 탭으로 떨어져 **사용자 의도가 유실**된다.
 
 > **범위 경고**: `analysis` 문자열은 `App.tsx`의 `main-panel-analysis`, `AnalysisWorkspace`의 `workspace-panel-*`,
-> `FeedbackWidget`의 `pageKey`, 루트 Playwright 스펙 다수에 퍼져 있다.
-> **id는 유지하고 라벨만 바꾸는 최소안**도 유효한 선택지다 (아래 3-1-b).
+> `FeedbackWidget`의 `pageKey`, 루트 Playwright 스펙에 퍼져 있다.
 
-**3-1-a (전면 재편)**: id·라벨·순서 모두 변경. 정합성 최상, 회귀 위험 최고.
-**3-1-b (라벨·순서만)**: `TabId`는 그대로 두고 `tabLabels` 매핑과 `tabs` 배열 순서만 변경.
+**3-1-a (전면 재편)** — **채택 (D-5, 2026-09-11)**: id·라벨·순서 모두 변경.
+**3-1-b (라벨·순서만)** — 비채택: `TabId`를 유지한 채 라벨과 순서만 바꾸는 최소안.
 
-> **정정 (리뷰 반영)**: **3-1-b만으로는 요구를 만족할 수 없다.**
+> **비채택 사유 (리뷰 반영)**: **3-1-b로는 요구를 만족할 수 없다.**
 > 사용자는 `플레이트 설정`을 **독립된 최상위 탭**으로 요구했는데, 현재 `plate`는 최상위 `TabId`가 아니라
 > `navigation-store`의 `surface` 값이다. 최상위 탭 두 개(Plate / Results)를 표현하려면
 > **새 탭 id가 반드시 필요하다.**
@@ -274,7 +273,10 @@ export function plotlyColors() {
 ## 7. 리스크
 
 - **최고.** 이 문서의 변경은 앱 전역에 닿는다.
-- 탭 라벨/셀렉터 변경은 루트 `tests/`의 Playwright 스펙 대부분을 깬다. **범위 승인(D-5) 없이 착수하면 안 된다.**
+- 탭 라벨/셀렉터 변경은 테스트를 깨뜨린다. **실측 범위**: 루트 E2E 20개 중 **7개** 스펙(`05-interactions`, `20-keyboard`,
+  `21-workspace-restore`, `23-undo`, `24-responsive`, `25-secondary-flows`, `26-chart-semantics`)의 25곳,
+  프론트 e2e 23곳, `TabNavigation.keyboard.test.tsx` 1곳. 합계 약 48곳이며 대부분
+  `workspace-tab-plate` → `tab-plate`, `tab-analysis` → `tab-results` 형태의 기계적 치환이다.
 - 팔레트 변경은 시각 회귀 기준선을 전부 무효화한다.
 - `WorkspaceTabs` 제거는 `navigation-store.surface`, `lib/quality-navigation.ts`(복귀 표면 계약),
   `session-view-cache`, `workspace-restore`, `workspace-history` 경로에 연쇄한다.
@@ -288,6 +290,6 @@ export function plotlyColors() {
 | ~~**D-1**~~ | **해결 (2026-09-11)** — `Q-Prism® Cluster Caller` 채택. `®` 사용 가능(자사 저작물). README의 `Q-Prism® SNP Visualizer`는 이 이름으로 통일한다. |
 | **D-2** | Q-Prism 브랜드 팔레트 HEX 값. 기존 가이드가 있는가, 신규 설계가 필요한가? |
 | **D-4** | `--color-fam`/`--color-allele2`를 브랜드 색으로 바꿀 것인가? (권장: 유지) |
-| **D-5** | 탭 id 전면 변경(3-1-a) 범위 승인. 리뷰 결과 **3-1-b(라벨만)로는 요구 충족 불가**로 판정됨. E2E 대량 수정 동반. |
+| ~~**D-5**~~ | **해결 (2026-09-11)** — 전면 재편(3-1-a) 채택. 실측 영향: 루트 E2E 20개 중 7개 스펙(25곳), 프론트 e2e 23곳, 단위 1개 파일(`TabNavigation.keyboard.test.tsx`). 대부분 기계적 치환이며 초안의 "대량 수정"은 과장이었다. |
 | — | `설정` 탭 강등 동의 여부 |
 | — | SEO/canonical 변경 허용 범위 |

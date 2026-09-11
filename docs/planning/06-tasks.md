@@ -152,6 +152,8 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 | ID | 항목 | 결정 | 근거 |
 | --- | --- | --- | --- |
 | D-1 | 제품 정식 명칭 | **`Q-Prism® Cluster Caller` 채택.** `Q-Prism`은 인바이러스테크 자사 저작물이므로 `®` 사용 가능 | 2026-09-11 사용자 확인 |
+| D-5 | 탭 ID 전면 변경 | **전면 재편 채택.** 새 탭 ID 3개(`plate`/`rawdata`/`results`) 도입, `WorkspaceTabs` 제거 | 2026-09-11 사용자 확인. 실측 비용 약 48곳(파일 9개)으로 기계적 치환 수준 |
+| D-6 | 산점도 종횡비 | **사용자 선택식.** 드롭다운으로 `4:3`(기본) / `1:1` 전환. 고정하지 않는다 | 2026-09-11 사용자 확인 |
 
 **미해결 — 해당 태스크는 BLOCKED로 시작한다**
 
@@ -160,8 +162,6 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 | **D-2** | Q-Prism 브랜드 팔레트 HEX | P6-S2-T1 | 기존 브랜드 가이드의 HEX 값. 없으면 신규 팔레트 설계 승인 |
 | **D-3** | 로고·마크·히어로 아트·파비콘 | P6-S3-T1 | 에셋 파일 제공 또는 제작 승인. 현재 `frontend/public/`에 이미지 0개 |
 | **D-4** | 채널색(`--color-fam`/`--color-allele2`) 브랜드화 여부 | P6-S2-T1 | 권장: **유지**(FAM=파랑 등 qPCR 판독 관례 우선). 승인 필요 |
-| **D-5** | 탭 ID 전면 변경 승인 | P3-S1-T1 | E2E 대량 수정 동반. 리뷰 결과 라벨만 변경으로는 요구 충족 불가로 판정됨 |
-| **D-6** | 산점도 목표 종횡비 | P4-S1-T1 | 정사각(폭 640px, 컬럼 여백 300px) vs 4:3(폭 853px, 여백 87px) |
 | **D-7** | 업로드 경로 이원화 처리 | P5-S2-T1 | 통합 vs 역할 분리 후 한도·문구만 일치 (권장: 후자) |
 | **D-8** | ASG `target_type` 전체 열거값 | P1-S1-T1 (부분) | 관측값은 `ad_hoc`/`marker_version`/`design_run_item` 셋뿐. ASG 계약 문서 확인 |
 | **D-9** | ASG 측 `protocol_steps` 스키마 검증 강도 | P2-R1-T1 (부분) | 필드 추가 사전 협의 필요 여부. `app/asg_result.py:91`이 외부로 직렬화 |
@@ -378,12 +378,23 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 
 ## Phase P3 — 정보구조 재편 (FB-07 IA)
 
-> **D-5 승인 없이 시작하지 않는다.** 이 Phase는 루트 Playwright 스펙 다수를 깨뜨린다.
+> **D-5 승인 완료(2026-09-11) — 착수 가능.**
+>
+> 실측 영향 범위(초안의 "대량 수정"은 과장이었다):
+>
+> | 계층 | 파일 | 참조 |
+> | --- | --- | --- |
+> | 루트 E2E (`tests/`) | 20개 중 **7개** | 25곳 (`tab-analysis` 7, `tab-protocol` 4, `workspace-tab-analysis` 5, `workspace-tab-plate` 9) |
+> | 프론트 e2e (`frontend/e2e/`) | — | 23곳 |
+> | 프론트 단위 | **1개** (`TabNavigation.keyboard.test.tsx`) | — |
+>
+> 대부분 `workspace-tab-plate` → `tab-plate`, `tab-analysis` → `tab-results` 형태의 기계적 치환이다.
+> 영향 스펙: `05-interactions`, `20-keyboard`, `21-workspace-restore`, `23-undo`, `24-responsive`, `25-secondary-flows`, `26-chart-semantics`.
 
 ### P3-S1-T1: 최상위 탭 ID·라벨·순서 재편
 - 담당: `frontend-specialist`
-- Depends On: P2-S0-V, **D-5 승인**
-- Status: BLOCKED (D-5)
+- Depends On: P2-S0-V
+- Status: TODO
 - Write Scope: `SRC/components/layout/TabNavigation.tsx`, `SRC/components/analysis/AnalysisWorkspace.tsx`, `SRC/App.tsx`, `SRC/stores/navigation-store.ts`, `SRC/lib/tab-keyboard.ts`, `SRC/locales/{en,ko}.ts`, 관련 테스트
 - 기획 근거: [FB-07](feedback-2026-09-11/FB-07-identity-and-ia.md) §3-1
 - 구현 내용
@@ -412,7 +423,7 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 ### P3-S2-T1: 구 URL 매핑 + 연동 계약 갱신
 - 담당: `frontend-specialist`
 - Depends On: P3-S1-T1
-- Status: BLOCKED (D-5)
+- Status: TODO
 - Write Scope: `SRC/lib/workspace-history.ts`, `SRC/lib/workspace-location.ts`, `SRC/hooks/use-workspace-location.ts`, `SRC/lib/quality-navigation.ts`, `SRC/stores/session-store.ts`(sessionQueries 해석), `SRC/App.tsx`(FeedbackWidget pageKey), 관련 테스트
 - 기획 근거: [FB-07](feedback-2026-09-11/FB-07-identity-and-ia.md) §3-1 호환성 주의
 - 구현 내용
@@ -437,9 +448,9 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 ### P3-S0-V: 정보구조 게이트
 - 담당: `test-specialist`
 - Depends On: P3-S2-T1
-- Status: BLOCKED (D-5)
+- Status: TODO
 - Write Scope: 루트 `tests/**`, `docs/planning/feedback-2026-09-11/evidence/**`
-- 구현 내용: 루트 Playwright 스펙 전체의 탭 셀렉터를 일괄 갱신한다. **이 Phase에서 작업량이 가장 큰 부분이다.**
+- 구현 내용: 탭 셀렉터를 일괄 갱신한다. 대상은 루트 E2E 7개 스펙(25곳), 프론트 e2e(23곳), `TabNavigation.keyboard.test.tsx` 1곳이다. 치환 후 **셀렉터가 남아 있지 않은지 grep으로 확인**한다.
 - AC: [ ] 루트 E2E 전체 통과 · [ ] FE-ALL 신규 실패 0 · [ ] 접근성(role/aria/roving tabIndex) 회귀 0 · [ ] 미해결 중요 리뷰 이슈 0
 - 검증: FE-ALL, FE-CHECK, ROOT-E2E(전체), EXISTING-E2E
 - 증거: `evidence/P3-S0-V.md`
@@ -469,53 +480,79 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 - 검증: BE-TEST, BE-ALL, BE-LINT, FE-CHECK
 - 증거: `evidence/P4-R1-T1.md`
 
-### P4-S1-T1: 산점도 캔버스 종횡비
+### P4-S1-T1: 산점도 캔버스 종횡비 (기하 + 상태)
 - 담당: `frontend-specialist`
-- Depends On: P3-S0-V, **D-6 결정**
-- Status: BLOCKED (D-6)
-- Write Scope: `SRC/index.css`, `SRC/components/analysis/ScatterPlot.tsx`, `SRC/components/analysis/MarkerScatterPlot.tsx`
+- Depends On: P3-S0-V
+- Status: TODO
+- Write Scope: `SRC/index.css`, `SRC/stores/settings-store.ts`, `SRC/components/analysis/ScatterPlot.tsx`, `SRC/components/analysis/MarkerScatterPlot.tsx`, `SRC/stores/settings-store` 관련 테스트
 - 기획 근거: [FB-04](feedback-2026-09-11/FB-04-scatter-ergonomics.md) §3-1
 - 구현 내용
   - **먼저 결함 제거**: `index.css` 1280px 블록에 `.analysis-scatter-canvas`가 두 번 선언된다
     (`:166` `max-height:300px`, `:175` `height:360px`). 서로 다른 속성이라 둘 다 적용되어 **used height가 300px로 눌린다**
     — 넓은 화면일수록 그래프가 작아지는 원인. 중복 선언을 하나로 합친다.
   - **`max-height`로 종횡비를 보장하려는 시도는 실패한다.** 940px 폭에서 4:3은 705px가 필요하지만 911px 뷰포트의 70vh는 638px다.
-    높이를 자르면 실제 비율이 1.47:1이 된다. **폭을 종횡비에 맞춰 묶어야 한다**:
+    높이를 자르면 실제 비율이 1.47:1이 된다. **폭을 종횡비에 맞춰 묶어야 한다.**
+  - **종횡비는 고정하지 않고 사용자 선택값으로 둔다** (D-6). `settings-store`에 상태를 두고 CSS 변수로 흘린다:
+
+    ```ts
+    // settings-store
+    scatterAspect: '4:3' | '1:1'        // 기본값 '4:3'
+    setScatterAspect: (v: '4:3' | '1:1') => void
+    ```
 
     ```css
     .analysis-scatter-canvas {
       --scatter-max-h: min(70vh, 640px);
-      aspect-ratio: 4 / 3;              /* D-6 결정에 따라 1/1 가능 */
+      --scatter-aspect-w: 4;            /* JS가 선택값에 따라 4 또는 1 */
+      --scatter-aspect-h: 3;            /*              3 또는 1 */
+      aspect-ratio: var(--scatter-aspect-w) / var(--scatter-aspect-h);
       height: auto; width: 100%;
-      max-width: calc(var(--scatter-max-h) * 4 / 3);
-      min-height: 360px;                 /* Plotly 0-height 마운트 방어 */
-      margin-inline: auto;
+      max-width: calc(var(--scatter-max-h) * var(--scatter-aspect-w) / var(--scatter-aspect-h));
+      min-height: 360px;                /* Plotly 0-height 마운트 방어 */
+      margin-inline: auto;              /* 남는 폭은 좌우 여백으로 */
     }
     ```
+
+  - **선택값별 실측(1920x911, 가용 폭 약 904px)**
+
+    | 선택 | 캔버스 | 좌우 여백 | 현재(300px) 대비 높이 |
+    | --- | --- | --- | --- |
+    | `4:3` (기본) | 853 × 640 | 51px | **2.1배** |
+    | `1:1` | 640 × 640 | 264px | 2.1배 |
+
+    세로가 더 긴 모니터에서는 폭이 컬럼에 걸려 `4:3`은 928×696px가 된다(비율 유지).
+  - **UI 컨트롤(드롭다운)은 이 태스크가 아니라 P4-S2-T1의 플롯 헤더 바에 놓는다.** 두 태스크가 `ScatterViewControls.tsx`를 동시에 편집하지 않도록 소유권을 나눈다. 이 태스크는 상태와 기하까지만 담당하고, 기본값 `4:3`으로 검증한다.
   - Plotly 마운트 시 `clientHeight > 0`인지 확인한다. 필요하면 `ResizeObserver` + `Plotly.Plots.resize`.
+    **종횡비 전환 시에도 Plotly가 리사이즈를 따라오는지** 확인한다 — 컨테이너 크기가 바뀌는데 차트가 그대로면 의미가 없다.
   - `lockAspect`(`lib/scatter-axes.ts`의 `scaleanchor:'x'`, `scaleratio:1`)는 **데이터 축 비율**이며 캔버스 종횡비와 별개다.
     둘 다 켜졌을 때 `constrain:'domain'`이 플롯 영역을 더 줄이지 않는지 확인한다.
   - 두 플롯(`ScatterPlot`, `MarkerScatterPlot`)이 같은 클래스를 공유하므로 함께 검증한다.
+  - **`settings-store`에 필드를 추가하면 프리셋 직렬화 경로(`lib/apply-preset.ts`, `use-preset-operations.ts`)에 영향이 갈 수 있다.** 기존 프리셋(신규 필드 없음)을 적용해도 기본값으로 복원되는지 확인한다.
 - AC
-  - [ ] 1920x911에서 캔버스 `boundingBox()`의 width:height가 목표 비율 ±2% 이내다 (300px로 눌리지 않는다)
+  - [ ] 1920x911 기본 상태에서 캔버스 `boundingBox()`의 width:height가 **4:3 ±2%** 이고 높이가 **600px 이상**이다 (300px로 눌리지 않는다)
+  - [ ] `scatterAspect`를 `1:1`로 바꾸면 캔버스가 640×640으로 렌더되고 좌우 중앙 정렬된다
+  - [ ] 종횡비 전환 후 Plotly 차트가 새 크기로 다시 그려진다
   - [ ] 1280 / 768 / 400px에서 캔버스가 뷰포트 세로를 넘지 않는다
   - [ ] 마운트 직후 캔버스 높이가 0이 아니어서 Plotly가 정상 렌더된다
   - [ ] `lockAspect` 동작이 회귀하지 않는다
-  - [ ] PNG/PDF 내보내기 산출물이 정상이다 (`use-exports.ts`의 캡처가 실측 크기를 쓰는지 확인)
-- 검증: `FE-TEST src/components/analysis/`, FE-ALL, FE-CHECK, `ROOT-E2E`(boundingBox 단언), VIEWPORT
+  - [ ] 신규 필드 없는 기존 프리셋 적용 시 `scatterAspect`가 기본값 `4:3`으로 복원된다
+  - [ ] PNG/PDF 내보내기 산출물이 두 종횡비 모두에서 정상이다 (`use-exports.ts`의 캡처가 실측 크기를 쓰는지 확인)
+- 검증: `FE-TEST src/stores/settings-store`, `FE-TEST src/components/analysis/`, FE-ALL, FE-CHECK, `ROOT-E2E`(두 종횡비 boundingBox 단언), VIEWPORT
 - 증거: `evidence/P4-S1-T1.md`
 
 ### P4-S2-T1: 플롯 헤더 바 — 정규화·축 설정 승격
 - 담당: `frontend-specialist`
 - Depends On: P4-S1-T1
-- Status: BLOCKED (D-6 경유)
+- Status: TODO
 - Write Scope: `SRC/components/analysis/ScatterViewControls.tsx`, `SRC/components/analysis/ScatterPlot.tsx`, `SRC/components/analysis/MarkerScatterPlot.tsx`, `SRC/components/settings/SettingsTab.tsx`, `SRC/locales/{en,ko}.ts`, 관련 테스트
+  (종횡비 **상태**는 P4-S1-T1 소유. 이 태스크는 그 상태를 읽는 **컨트롤**만 추가한다.)
 - 기획 근거: [FB-04](feedback-2026-09-11/FB-04-scatter-ergonomics.md) §3-2, §3-3
 - 구현 내용
   - 정규화 체크박스(`scatter-use-rox`)와 축 입력(`axis-x-min`/`max`, `axis-y-min`/`max`)은 **이미 존재**하지만
     접힌 `<details data-testid="analysis-advanced-settings">` 안에 매장되어 있다(`ScatterViewControls.tsx:170`, `:250`).
     **기능 추가가 아니라 발견 가능성 문제다.**
-  - 항상 보이는 헤더 바로 승격: 정규화 체크박스(+참조 채널명), 축 모드 드롭다운, `축 설정…` 버튼, 드래그 도구 토글.
+  - 항상 보이는 헤더 바로 승격: 정규화 체크박스(+참조 채널명), 축 모드 드롭다운, `축 설정…` 버튼, 드래그 도구 토글,
+    **종횡비 드롭다운**(`4:3` / `1:1`, P4-S1-T1의 `settings-store.scatterAspect`에 연결).
   - `축 설정…` 클릭 시 x/y min·max 4개 입력을 인라인 팝오버로 열고, **`axisMode`를 자동으로 `manual`로 전환**한다.
     현재는 `numberInput(..., !manual)`이라 manual을 먼저 골라야 입력이 활성화된다 — 사용자 요구와 어긋난다.
   - 접힌 채 유지: NTC 사분면, NTC 축 오프셋, 배수성 상한 (전문가용 저빈도).
@@ -528,6 +565,7 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
   - [ ] 참조 채널명이 표시되고, 없는 런에서는 비활성 + 사유가 보인다
   - [ ] `축 설정…` 클릭 → 축 모드를 먼저 바꾸지 않고도 min/max 편집이 가능하다
   - [ ] 기존 `data-testid`가 모두 유지되어 기존 단위 테스트가 통과한다
+  - [ ] 종횡비 드롭다운에서 `4:3` ↔ `1:1`을 바꾸면 두 플롯 모두 즉시 반영된다
   - [ ] 두 플롯이 동일한 컨트롤을 갖는다
   - [ ] 프리셋 저장·적용(`apply-preset.ts`)이 회귀하지 않는다
 - 검증: `FE-TEST src/components/analysis/ScatterViewControls.test.tsx`, `FE-TEST src/components/settings/`, FE-ALL, FE-CHECK, VIEWPORT
@@ -536,7 +574,7 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 ### P4-S3-T1: 결과 중심 레이아웃
 - 담당: `frontend-specialist`
 - Depends On: P4-R1-T1, P4-S2-T1
-- Status: BLOCKED (D-6 경유)
+- Status: TODO
 - Write Scope: `SRC/components/analysis/AnalysisTab.tsx`, `SRC/components/analysis/AnalysisWorkspace.tsx`, `SRC/components/analysis/WellSelectionToolbar.tsx`, `SRC/components/analysis/MultiMarkerAnalysisPanel.tsx`, `SRC/components/analysis/ResultsTable.tsx`, `SRC/index.css`, `SRC/locales/{en,ko}.ts`, 관련 테스트
 - 기획 근거: [FB-03](feedback-2026-09-11/FB-03-analysis-density.md) §3
 - 구현 내용
@@ -566,7 +604,7 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 ### P4-S0-V: 결과 화면 게이트
 - 담당: `test-specialist`
 - Depends On: P4-S3-T1
-- Status: BLOCKED (D-6 경유)
+- Status: TODO
 - Write Scope: `docs/planning/feedback-2026-09-11/evidence/**`
 - AC: [ ] 신규 실패 0 · [ ] 새 코드 coverage ≥70%·복잡도 ≤10 · [ ] 접근성 회귀 0 · [ ] 1920x911 육안 확인 완료 · [ ] 미해결 중요 리뷰 이슈 0
 - 검증: BE-ALL, FE-ALL, FE-CHECK, ROOT-E2E, EXISTING-E2E, VIEWPORT
@@ -753,10 +791,10 @@ P0-T0.1 ──┬── P0-T0.2 ──┬── P0-S0-V
                                  │
                             P2-S2-T1 ── P2-S0-V
                                             │
-                            P3-S1-T1 ── P3-S2-T1 ── P3-S0-V      [D-5]
+                            P3-S1-T1 ── P3-S2-T1 ── P3-S0-V
                                                         │
                         ┌───────────────────────────────┤
-                   P4-R1-T1                        P4-S1-T1      [D-6]
+                   P4-R1-T1                        P4-S1-T1
                         │                               │
                         └──────────┬──── P4-S2-T1 ──────┘
                                    │
@@ -773,8 +811,8 @@ P0-T0.1 ──┬── P0-T0.2 ──┬── P0-S0-V
 | P0 | 3 | orchestrator, frontend, test | **즉시** |
 | P1 | 2 | frontend, test | **즉시** (D-8 부분) |
 | P2 | 5 | backend ×2, frontend ×2, test | **즉시** (D-9 부분) |
-| P3 | 3 | frontend ×2, test | **D-5 대기** |
-| P4 | 5 | backend, frontend ×3, test | **D-6 대기** (P4-R1-T1만 선행 가능) |
+| P3 | 3 | frontend ×2, test | **즉시** (D-5 확정) |
+| P4 | 5 | backend, frontend ×3, test | **즉시** (D-6 확정) |
 | P5 | 3 | frontend ×2, test | P5-S2-T1은 **D-7 대기** |
 | P6 | 4 | frontend, docs, test, security | P6-S1-T1 실행 가능 / 나머지 **D-2·D-3·D-4 대기** |
 | **합계** | **25** | | |
@@ -786,5 +824,6 @@ P0-T0.1 ──┬── P0-T0.2 ──┬── P0-S0-V
 - [ ] `CLAUDE.md` Orchestration Handoff를 이번 계약 기준으로 갱신 (기존 이력 보존)
 - [ ] baseline = `main` `c2bc854` 확인 (detached `201e0c7` 아님)
 - [ ] 이전 계약 worktree·브랜치 보존 확인
-- [ ] 결정 게이트 D-2 / D-3 / D-4 / D-5 / D-6 / D-7 답변 수령 (미수령 시 해당 Phase는 BLOCKED 유지)
+- [x] D-1 (제품명), D-5 (탭 ID 전면 재편), D-6 (4:3) 확정 — 2026-09-11
+- [ ] 결정 게이트 **D-2 / D-3 / D-4 / D-7** 답변 수령 (미수령 시 P5-S2·P6-S2·P6-S3은 BLOCKED 유지)
 - [ ] 원격 push·배포·외부 알림은 **이번 계약에 승인되지 않음**을 오케스트레이터가 인지
