@@ -93,6 +93,10 @@ class UnifiedData(BaseModel):
 
 class UploadResponse(BaseModel):
     session_id: str
+    # Keep the operator-facing identity with the reload contract. Session IDs
+    # are implementation details and are not useful when switching between
+    # several plates in the file workspace.
+    raw_filename: str | None = None
     well_ids: list[str] = Field(default_factory=list)
     instrument: str
     allele2_dye: str

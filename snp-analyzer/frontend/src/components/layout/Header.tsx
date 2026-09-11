@@ -14,6 +14,7 @@ import { useLanguageStore } from "@/stores/language-store";
 import { QcBadges } from "@/components/shared/QcBadges";
 import { ManualEditStatus } from "@/components/shared/ManualEditStatus";
 import { AddToProjectButton } from "@/components/analysis/AddToProjectButton";
+import { FileWorkspaceDrawer } from "@/components/upload/FileWorkspaceDrawer";
 import { Button, IconButton, Menu, Modal, type MenuItem } from "@/components/shared/ui";
 import { ApiError, logout, saveAsgResult } from "@/lib/api";
 import { analyzeCurrent } from "@/lib/analysis-actions";
@@ -119,6 +120,7 @@ export function Header() {
       // Clear auth even if server call fails
     }
     clearAuth();
+    useSessionStore.getState().clearWorkspace();
   };
 
   const handleAsgSave = async () => {
@@ -300,6 +302,11 @@ export function Header() {
             )}
           </div>
         )}
+
+        <FileWorkspaceDrawer
+          onOpenSession={() => useNavigationStore.getState().setTab('analysis')}
+          onGoToProject={() => useNavigationStore.getState().setTab('project')}
+        />
 
         {user && (
           <div className="header-account flex items-center flex-wrap gap-2">

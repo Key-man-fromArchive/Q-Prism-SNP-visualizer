@@ -88,11 +88,11 @@ async def list_sessions(current_user: CurrentUser):
     conn = get_db()
     if current_user.role == "admin" and not is_asg_launch_mode():
         db_rows = conn.execute(
-            "SELECT session_id, raw_filename, created_at FROM sessions"
+            "SELECT session_id, raw_filename, created_at FROM sessions ORDER BY created_at DESC"
         ).fetchall()
     else:
         db_rows = conn.execute(
-            "SELECT session_id, raw_filename, created_at FROM sessions WHERE user_id = ?",
+            "SELECT session_id, raw_filename, created_at FROM sessions WHERE user_id = ? ORDER BY created_at DESC",
             (current_user.user_id,),
         ).fetchall()
     db_info = {r["session_id"]: dict(r) for r in db_rows}
@@ -112,6 +112,9 @@ async def list_sessions(current_user: CurrentUser):
                 "raw_filename": info.get("raw_filename") or "",
             }
         )
+    # sessions is an insertion-ordered in-memory dict, so the SQL ordering is
+    # lost in the join above; the newest plate has to lead the workspace list.
+    result.sort(key=lambda item: item["uploaded_at"], reverse=True)
     return result
 
 
@@ -181,8 +184,15 @@ async def get_session_info(sid: str, current_user: CurrentUser):
     suggested = compute_suggested_cycle(unified)
     from app.processing.analysis_state import analysis_status
 
+    from app.db import get_db
+
+    row = get_db().execute(
+        "SELECT raw_filename FROM sessions WHERE session_id = ?", (sid,)
+    ).fetchone()
+
     return {
         "session_id": sid,
+        "raw_filename": (row["raw_filename"] or "") if row else "",
         "input_revision": unified.input_revision,
         **analysis_status(sid),
         "instrument": unified.instrument,

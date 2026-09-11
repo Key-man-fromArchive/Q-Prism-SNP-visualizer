@@ -2,6 +2,7 @@ import { ApiError, uploadFile } from './api';
 import { recoveryReason } from './recovery-reason';
 import { validUploadResponse } from './upload-response';
 import { useAuthStore } from '@/stores/auth-store';
+import { useSessionStore } from '@/stores/session-store';
 import { useUploadJobStore, type UploadTicket } from '@/stores/upload-job-store';
 import type { UploadResponse } from '@/types/api';
 
@@ -23,6 +24,10 @@ async function uploadOne(ticket: UploadTicket, file: File, index: number, onForm
       return null;
     }
     store.update(ticket, index, { stage: 'success', sessionId: response.session_id });
+    // Every uploaded plate joins the workspace, whether or not it is the one
+    // being activated — that is what makes a batch upload reachable later
+    // instead of only the last file surviving.
+    useSessionStore.getState().addOpenSession(response.session_id);
     return response;
   } catch (error) {
     if (!current(ticket)) return null;

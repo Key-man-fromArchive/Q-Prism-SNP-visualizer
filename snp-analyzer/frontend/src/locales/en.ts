@@ -919,6 +919,28 @@ const en = {
   feedbackPrev: 'Previous',
   feedbackNext: 'Next',
   feedbackAdminOnly: 'Feedback triage is unavailable in this mode.',
+
+  // ---------------------------------------------------------------------------
+  // File workspace (several plates open at once)
+  // ---------------------------------------------------------------------------
+  workspaceFiles: 'Files',
+  workspaceTitle: 'File workspace',
+  workspaceDescription: 'Upload several runs and switch without leaving your analysis.',
+  workspaceDropTitle: 'Drop PCR files here',
+  workspaceDropHint: (max: number) => `Up to ${max} files at once · 500 MB total`,
+  workspaceTooManyFiles: (max: number) => `You can add up to ${max} files at once.`,
+  workspaceTotalTooLarge: (maxMb: number) => `The selected files exceed the ${maxMb} MB total limit.`,
+  workspaceUploadQueue: 'Upload queue',
+  workspaceClearFinished: 'Clear finished',
+  workspaceQueueStatus: (status: string, size: string) => `${status === 'mapping' ? 'Mapping required' : status} · ${size}`,
+  workspaceMappingCancelled: 'Mapping was cancelled. Retry when ready.',
+  workspaceOpenFiles: 'Open files',
+  workspaceNoOpenFiles: 'Drop files above or reopen a recent file.',
+  workspaceRecentFiles: 'Recent files',
+  workspaceOpen: 'Open',
+  workspaceCloseFile: 'Close from this workspace',
+  workspaceUploadingCount: (n: number) => `Preparing ${n} file${n === 1 ? '' : 's'}… You can keep working in the current analysis.`,
+  workspaceManageProjects: 'Manage sessions and projects →',
 };
 
 export type Translations = {
