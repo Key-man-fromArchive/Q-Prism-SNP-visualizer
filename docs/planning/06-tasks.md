@@ -1,615 +1,790 @@
-# Q-Prism UI/UX v0.2 구현 작업서 — Auto-Orchestrate
+# Q-Prism® Cluster Caller 피드백 대응 작업서 — Auto-Orchestrate
 
-- Contract ID: qprism-ux-followup-20260907-v1
-- 작성일: 2026-09-07
-- 상태: IN PROGRESS — P6 완료, P7 웰 선택 UX 보완 작업 대기.
-- 기준: [UI/UX 후속 개선 기획서 v0.2](ui-ux-overhaul/04-review-followup-prd.md)
-- 실행 기준 파일: docs/planning/06-tasks.md
-- 이전 계약: [qPCR Import Expansion 원문 보관](archive/06-tasks-qpcr-import-expansion.md). 보관본의 작업은 이번 실행 대상이 아니다.
+- Contract ID: `qprism-feedback-20260911-v1`
+- 작성일: 2026-09-11
+- 상태: READY — 정본 승격 완료(2026-09-11). 구현은 이후 auto-orchestrate 실행 요청부터 시작한다.
+- 기준 기획서: [`feedback-2026-09-11/00-overview.md`](feedback-2026-09-11/00-overview.md) 및 FB-01~FB-07 (멀티 AI 리뷰 정정 반영본)
+- 실행 기준 파일: `docs/planning/06-tasks.md` (**본 문서** — 승격 완료)
+- 이전 계약: `qprism-ux-followup-20260907-v1` — 완료 후 [`archive/06-tasks-ux-followup-20260907.md`](archive/06-tasks-ux-followup-20260907.md)로 보관. 보관본의 작업은 실행 대상이 아니다.
+
+---
+
+## 0. 정본 승격 — 완료 (2026-09-11)
+
+auto-orchestrate는 **`docs/planning/06-tasks.md`만** 정본으로 읽는다. 승격은 아래와 같이 수행되었다.
+
+```bash
+git mv docs/planning/06-tasks.md docs/planning/archive/06-tasks-ux-followup-20260907.md
+mv  docs/planning/06-tasks-feedback-20260911.md docs/planning/06-tasks.md
+```
+
+- 이전 계약 `qprism-ux-followup-20260907-v1`은 **완료 상태**였다(태스크 커밋 37건, 체크박스 37/37, `execution.status = "complete"`).
+- 이전 계약의 worktree 8개와 브랜치는 **삭제하지 않았다.**
+
+### 남은 정리 — P0-T0.1에서 처리
+
+`.claude/orchestrate-state.json`은 아직 이전 계약을 가리킨다:
+`contract_id = qprism-ux-followup-20260907-v1`, `baseline_commit = 80c2c8a`,
+`tasks_file_sha256 = b1873340…`(보관본의 해시).
+
+**이 상태 파일은 이제 `06-tasks.md`의 내용과 일치하지 않는다.**
+해시 불일치 상태로 auto-orchestrate를 실행하면 완료된 계약을 새 문서에 대해 재개하려 할 수 있다.
+P0-T0.1에서 아래를 수행하기 전까지 **실행하지 않는다**:
+
+- `contract_id`를 `qprism-feedback-20260911-v1`로 새로 시작
+- `baseline_commit`을 `c2bc854`(main)로 설정
+- `tasks_file_sha256`을 현재 `06-tasks.md` 기준으로 재계산
+- 이전 계약의 `task_commits` 37건과 `authorization`(원격 push·배포 허용)을 **승계하지 않음**
+- 이전 상태는 `.claude/orchestrate-state-ux-followup-20260907.json` 등으로 보존
+
+`CLAUDE.md`의 "Orchestration Handoff" 절도 이전 계약의 진행 기록을 담고 있다.
+P0-T0.1에서 이번 계약 기준으로 갱신한다. **기존 기록은 이력으로 남기고 삭제하지 않는다.**
+
+---
 
 ## 1. 실행 계약
 
 ### 범위와 권한
 
-구현은 이후 auto-orchestrate 실행 요청부터 시작한다. 대상은 PRD UX-01~UX-10이다. 알고리즘·QC 임계값 변경, 신규 파서, 과거 분석 버전 탐색, 파일 자동 재시도는 제외한다. PRD v0.2의 변경표가 과거 UI/UX 문서보다 우선한다.
+대상은 프로덕션 피드백 7건(`user_feedback` 상태 `open`, 2026-09-11 수집)에 대응하는 FB-01~FB-07이다.
+판정 알고리즘, 클러스터링 수식, QC 임계값, 신규 파서 추가는 **범위 밖**이다.
+FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 
 - 오케스트레이터는 의존성 선택·위임·상태 갱신·검증·Phase 통합을 담당한다. 소스·테스트 구현은 지정 specialist가 수행한다.
-- 일반 auto-orchestrate 모드를 기본으로 한다. 작업서 작성 요청만으로 구현·main 병합·원격 push·외부 알림을 수행하지 않는다. 실행 시 세션의 권한과 스킬의 일반 모드 Phase 전환 규칙을 따른다. Slack 등 외부 메시지는 명시적 요청이 없으면 보내지 않는다.
-- ID·Depends On·Status·담당·Write Scope·검증을 파싱해 DAG를 만든다. 선행 FAIL/BLOCKED면 후속 작업을 실행하지 않는다. 실패를 건너뛰어 Phase 완료로 처리하지 않는다.
-- Status는 TODO → IN_PROGRESS → DONE 또는 BLOCKED/FAIL로 갱신한다. 체크박스는 모든 AC·검증 충족 및 로컬 커밋 존재 시에만 표시한다.
-- 기능 작업은 TDD_MODE:RED_FIRST로 RED → GREEN → REFACTOR 증거를 남긴다. P0 준비·문서에는 인위적 RED를 요구하지 않는다. 검증 전용 작업은 테스트 실행·리뷰 결과가 증거다.
-- specialist는 로컬 커밋 후 TASK_DONE:{task_id}:{commit_sha}를 보고한다. 검증 작업도 재현 명령·결과를 담은 증거 문서를 Phase 브랜치에 커밋한다. main 병합·push는 specialist가 하지 않는다.
-- 호출은 기본 12턴, 통합은 최대 15턴으로 나눈다. 초과 시 완료 부분·실패 명령·다음 수정점을 인계한다. 동일 실패 반복 시 원인 분석 후 같은 Phase에서 수정한다.
-- .claude/orchestrate-state.json은 실행 시 생성한다. Contract ID·문서 해시·기준 커밋·Phase·작업별 커밋을 연결한다. 이전 계약 상태를 이번 ID에 재사용하지 않는다. 기존 상태는 보존하고 불일치를 해소한 뒤 재개한다.
+- **일반 auto-orchestrate 모드**를 기본으로 한다. 작업서 존재만으로 구현·main 병합·원격 push·외부 알림을 수행하지 않는다.
+- **원격 push, 배포, 외부 알림은 이번 계약에서 승인되지 않았다.** 로컬 커밋과 로컬 Phase 통합까지만 수행한다.
+  (이전 계약의 `remote_push: true` / `deployment: true`를 이번 ID로 승계하지 않는다.)
+- ID·Depends On·Status·담당·Write Scope·검증을 파싱해 DAG를 만든다. 선행 FAIL/BLOCKED면 후속을 실행하지 않는다.
+  실패를 건너뛰어 Phase 완료로 처리하지 않는다.
+- Status는 TODO → IN_PROGRESS → DONE 또는 BLOCKED/FAIL로 갱신한다. 모든 AC·검증 충족 및 로컬 커밋 존재 시에만 DONE으로 표시한다.
+- 기능 작업은 `TDD_MODE:RED_FIRST`로 RED → GREEN → REFACTOR 증거를 남긴다. P0 준비·문서·검증 전용 작업에는 인위적 RED를 요구하지 않는다.
+- specialist는 로컬 커밋 후 `TASK_DONE:{task_id}:{commit_sha}`를 보고한다. main 병합·push는 specialist가 하지 않는다.
+- 호출은 기본 12턴, 통합 태스크는 최대 15턴. 초과 시 완료 부분·실패 명령·다음 수정점을 인계한다.
+- **결정 게이트(4절)가 미해결인 태스크는 BLOCKED로 두고 실행하지 않는다.** 추정값으로 진행하지 않는다.
+
+### 기준선
+
+작성 시점 루트 작업트리는 **detached HEAD `201e0c7`** 이고, `main`은 `c2bc854`로 **5커밋 앞서 있다**
+(`201e0c7`은 `main`의 조상). `main`은 `worktree/ux-followup-integration`에 체크아웃되어 있다.
+
+- **이번 계약의 baseline_commit은 `c2bc854`(main)다.** `201e0c7`에서 구현을 시작하지 않는다.
+- 루트의 미커밋 변경(`.gitignore` 수정, `node_modules` 삭제, `.claude/` 미추적)은 **P0-T0.1에서 정리 방침을 확정**한 뒤 진행한다.
+  임의로 커밋하거나 되돌리지 않는다.
+- `docs/planning/feedback-2026-09-11/`(기획서 8종)은 미추적 상태다. P0-T0.1에서 main에 커밋한다.
 
 ### 브랜치·Worktree·동시성
 
-작성 당시 브랜치는 fix/ntc-origin-axis-selection, 코드 HEAD는 0b4ed25였다. main과 같다고 가정하지 않는다. 실행 전 최신 승인 코드와 PRD/작업서가 커밋되어 main에 포함됐는지 확인한다. 미포함이면 차이를 확인하고 필요한 기준 브랜치 통합부터 처리한다. 오래된 main에서 구현을 시작하지 않는다.
+모든 Phase는 브랜치 기반 Worktree에서 수행한다. Phase N의 시작점은 이전 Phase 검증·통합이 끝난 `main`이다.
+기존 경로·브랜치는 확인 후 재사용하고 강제 초기화하지 않는다.
 
-모든 Phase는 아래 브랜치 기반 Worktree에서 수행한다. Phase N 시작점은 이전 Phase 검증·통합이 끝난 main이다. 기존 경로·브랜치는 확인 후 재사용하고 강제 초기화하지 않는다.
-
-| Phase | 브랜치 | Worktree(루트 기준) | 목적 |
+| Phase | 브랜치 | Worktree (루트 기준) | 목적 |
 | --- | --- | --- | --- |
-| P0 | ux-followup/p0-preflight | worktree/ux-followup-p0 | 기준선·fixture·검증 도구 |
-| P1 | ux-followup/p1-contracts | worktree/ux-followup-p1 | 결과 계약·서버 QC·출력 |
-| P2 | ux-followup/p2-result-ui | worktree/ux-followup-p2 | 판정·QC·출력·키보드 UI |
-| P3 | ux-followup/p3-continuity | worktree/ux-followup-p3 | 복원·실행취소·실패 처리 |
-| P4 | ux-followup/p4-layout | worktree/ux-followup-p4 | 반응형·접근성·표현 |
-| P5 | ux-followup/p5-release | worktree/ux-followup-p5 | 회귀·보안·운영 인계 |
+| P0 | `feedback/p0-preflight` | `worktree/feedback-p0` | 기준선·색 토큰 단일화·검증 환경 |
+| P1 | `feedback/p1-linked-label` | `worktree/feedback-p1` | FB-01 연동 라벨 |
+| P2 | `feedback/p2-rawdata` | `worktree/feedback-p2` | FB-05·FB-06 프로토콜/Raw data |
+| P3 | `feedback/p3-ia` | `worktree/feedback-p3` | FB-07 정보구조 |
+| P4 | `feedback/p4-results` | `worktree/feedback-p4` | FB-04·FB-03 결과 화면 |
+| P5 | `feedback/p5-upload` | `worktree/feedback-p5` | FB-02 업로드 진입점 |
+| P6 | `feedback/p6-brand` | `worktree/feedback-p6` | FB-07·FB-02 브랜드 |
 
-PRD의 우선순위 P1/P2와 이 문서의 실행 Phase P0–P5는 다른 표기다. PRD 구현 순서 0(계약)은 P0–P1, 1(정확성)은 P1–P2, 2(연속성)은 P3, 3(레이아웃)은 P4에 대응하며 P5는 최종 통합 인수다.
+생성 예: `git worktree add worktree/feedback-p0 -b feedback/p0-preflight main`
 
-생성 예: git worktree add worktree/ux-followup-p0 -b ux-followup/p0-preflight main
+- **기본 동시성 1.** P2의 백엔드(R) 작업과 P6의 문서 작업만 Write Scope 분리를 확인한 뒤 최대 2개 병렬화한다.
+- 동일 Worktree의 git index/커밋·패키지 설치·서버 조작은 직렬화한다.
+- 다음은 **공유 자원**이다. 태스크명이 달라도 동시 수정하지 않는다:
+  `app/models.py`, `app/routers/data.py`, `frontend/src/types/api.ts`, `frontend/src/App.tsx`,
+  `frontend/src/components/layout/Header.tsx`, `frontend/src/index.css`, `frontend/src/locales/{en,ko}.ts`
+- Write Scope 밖 수정이 필요하면 오케스트레이터에 영향 파일을 보고하고 소유권 조정 후 진행한다.
 
-- 기본 동시성 1. P0의 두 독립 작업만 Write Scope·실행 환경 분리를 확인한 뒤 최대 2개 병렬화한다. 나머지는 DAG대로 직렬 실행한다.
-- 동일 Worktree의 git index/커밋·패키지 설치·DB/서버 조작은 직렬화한다. specialist가 동시에 git add/commit하지 않는다.
-- models.py, db.py, clustering.py, data.py, types/api.ts, lib/api.ts, App.tsx, Header.tsx, locales/*는 공유 자원이다. 작업명만 다르다고 병렬화하지 않는다.
-- Write Scope 밖 수정은 오케스트레이터에게 영향 파일을 보고하고 소유권 조정 후 진행한다. 범위 밖 기능을 암묵적으로 추가하지 않는다.
+---
 
 ## 2. 공통 검증과 증거
 
-약어: BE=snp-analyzer, FE=snp-analyzer/frontend, SRC=FE/src. 명령은 해당 Phase Worktree에서 실행한다.
+약어: BE=`snp-analyzer`, FE=`snp-analyzer/frontend`, SRC=`FE/src`. 명령은 해당 Phase Worktree에서 실행한다.
 
-| 별칭 | 디렉터리 | 명령/검증 |
+| 별칭 | 디렉터리 | 명령 |
 | --- | --- | --- |
-| BE-TEST | BE | venv/bin/python -m pytest tests/<task_test>.py --tb=short -q |
-| BE-ALL | BE | venv/bin/python -m pytest --tb=short -q |
-| FE-TEST | FE | npm run test -- src/<task_test>.test.ts 또는 .test.tsx |
-| FE-CHECK | FE | npm run lint 및 npm run build 각각 실행 |
-| FE-ALL | FE | npm run test |
-| ROOT-E2E | 루트 | E2E_BASE_URL=<이번 Worktree Vite 주소> npx playwright test tests/<NN-feature>.spec.ts --project=chromium --workers=1 |
-| EXISTING-E2E | FE | VITE_DEV_API_TARGET=<격리 API 주소> E2E_PORT=<할당 포트> npm run e2e |
-| COVERAGE | BE/FE | P0-T0.1에서 마련한 명령·대상 manifest 사용 |
+| BE-TEST | BE | `venv/bin/python -m pytest tests/<task_test>.py --tb=short -q` |
+| BE-ALL | BE | `venv/bin/python -m pytest --tb=short -q` |
+| BE-LINT | BE | `ruff check .` 및 `ruff format --check .` |
+| FE-TEST | FE | `npm run test -- src/<task_test>` |
+| FE-ALL | FE | `npm run test` |
+| FE-CHECK | FE | `npx tsc --noEmit`, `npm run lint`, `npm run build` 각각 실행 |
+| ROOT-E2E | 루트 | `E2E_BASE_URL=<이번 Worktree Vite 주소> npx playwright test tests/<NN-feature>.spec.ts --project=chromium --workers=1` |
+| EXISTING-E2E | FE | `VITE_DEV_API_TARGET=<격리 API 주소> E2E_PORT=<할당 포트> npm run e2e` |
+| VIEWPORT | 브라우저 | 1920x911(피드백 제출 뷰포트) · 1280px · 768px · 400px × 라이트/다크 |
 
-- Python은 BE/venv에 두 requirements 파일로 준비하고 bcrypt 4.0.1을 확인한다. 호스트 설치 금지. coverage·보고서 추출 도구는 개발 의존성에만 추가한다.
-- 백엔드는 임시 DB_PATH와 합성 계정·local 인증으로 실행한다. JWT/계정 값은 테스트 환경에서 생성하고 로그·커밋에 담지 않는다. 운영 DB는 사용하지 않는다.
-- 루트 E2E는 서버 자동 시작이 없다. 새 18~26번 테스트는 현재 Worktree Vite/API와 공용 로그인 helper를 사용한다. FE E2E는 기존 Vite 자동 실행·auth.setup을 사용한다. 포트·인증 파일을 병렬 공유하지 않는다.
-- UI는 정상/빈/로딩/실패 상태와 관련 언어·테마를 브라우저로 확인한다. 재현 페이지가 필요하면 개발/테스트 모드에 한정하고 배포 빌드에서는 노출하지 않는다.
-- 증거는 docs/planning/ui-ux-overhaul/evidence/<task-id>.md에 커밋·명령·결과·남은 문제를 기록한다. 이미지·trace·coverage 원본은 격리 artifact 경로에 두고 링크한다. 비공개 샘플명·인증 파일·대용량 생성물은 커밋하지 않는다.
-- Phase 체인: verification → evaluation → code-review → security(해당 변경) → frontend review(해당 변경). 관련 테스트·lint/build 성공, 미해결 중요 리뷰 이슈 0, 새 코드 coverage 70% 이상·복잡도 10 이하를 확인하고 전체 coverage도 보고한다. 기존 실패·coverage 부족·기존 보안 문제는 기준선과 분리한다. 미충족 게이트를 PASS로 처리하지 않으며 범위 밖 개선이 필요하면 차단 사유로 인계한다.
+- Python은 `BE/venv`에 두 requirements 파일로 준비하고 `bcrypt==4.0.1`을 확인한다. **호스트 설치 금지.**
+- 백엔드는 임시 `DB_PATH`와 합성 계정·local 인증으로 실행한다. **운영 DB(`/app/data/snp_analyzer.db`)는 읽기 조회 외에 사용하지 않는다.**
+- 증거는 `docs/planning/feedback-2026-09-11/evidence/<task-id>.md`에 커밋·명령·결과·남은 문제를 기록한다.
+  스크린샷·trace는 격리 artifact 경로에 두고 링크한다. 비공개 샘플명·인증 파일은 커밋하지 않는다.
+- **Phase 품질 체인**: verification → evaluation → code-review → security(해당 변경) → frontend review(UI 변경).
+  관련 테스트·lint/build 성공, 미해결 중요 리뷰 이슈 0, **새 코드** coverage 70% 이상·복잡도 10 이하.
+  기존 실패·기존 coverage 부족·기존 보안 이슈는 기준선과 분리해 보고한다. 미충족 게이트를 PASS로 처리하지 않는다.
+- **재빌드 검증**: 배포 확인이 필요한 경우 `docker compose build --no-cache frontend`를 쓴다. 캐시 빌드는 낡은 번들을 배포한다.
+  단, **이번 계약에 배포 권한은 없다.** 로컬 dev 서버 검증까지만 수행한다.
+
+---
 
 ## 3. 인터페이스 계약 점검(ICV)
 
-현재 구현의 공백을 아래 Resource 작업으로 해소한다. 계획상 연결은 지정했으나 API가 이미 지원된다는 의미는 아니다. Screen은 해당 Resource 완료 후 실행한다.
+아래 계약 공백은 Resource(R) 작업으로 먼저 해소한다. Screen(S) 작업은 해당 R 완료 후 실행한다.
+**"기획서에 연결을 지정했다"는 것이 "API가 이미 지원한다"는 뜻은 아니다.**
 
-| 소비 동작 | 필요한 계약/현재 공백 | 생산 작업 | 소비 작업 |
+| 소비 동작 | 필요한 계약 / 현재 공백 | 생산 작업 | 소비 작업 |
 | --- | --- | --- | --- |
-| 분석·복원 | analysis_context/result/input revision, legacy_unknown; 저장 조건 누락 | P1-R1-T1~T3 | P2-S1-T1, P3-S1-T1 |
-| QC | NTC status/flagged/reason, authoritative/markers; 타입/미평가 분기 누락 | P1-R2-T1 | P2-S2-T1 |
-| 추천 안내 | 상승 평가 상태·사유; null 의미 중복 | P1-R2-T1 | P2-S1-T1 |
-| CSV/PDF/XLSX | 버전 고정 snapshot·409·metadata; 조건 혼합 | P1-R3-T1~T2 | P2-S3-T1 |
-| PNG | 활성 chart handle·렌더 버전·필터 캡션; 고정 ID 의존 | P2-S3-T1 | P2-S3-T1 |
-| 탐색 | navigation-store·URL·restoring; 로컬 상태 충돌 | P1-S0-T1 | P3-S1-T1 |
-| undo | mutation revision·공유 이력·충돌 감지; 이력 미연결 | P1-R1-T2, P3-S2-T1 | P3-S2-T1 |
-| 업로드 내역 | 메모리 job·unknown; 원인 소실 | P3-S3-T1 | P3-S3-T1 |
+| 프로토콜 판독 단계 표시 | `ProtocolStep.plate_read` / `temp_increment`; 파서가 계산하고도 버림 (`pcrd_raw.py:299-301`, `eds_raw.py:450-451,489`) | P2-R1-T1 | P2-S1-T1 |
+| 프로토콜 채널 카드 | 런 채널 목록을 프로토콜/세션 응답 계약으로 제공; 현재 `data-store` 캐시만 (stale 위험) | P2-R1-T1 | P2-S1-T1 |
+| 오버레이 처리 상태 표기 | `normalization_applied` / `background_mode` 에코; all-amplification 응답에 없음 (`routers/data.py:254-258`) | P2-R1-T2 | P2-S2-T1 |
+| 분석 경고 강등 | 경고 심각도 등급(`blocking`/`advisory`); 현재 `warnings`에 등급 없음 | P4-R1-T1 | P4-S4-T1 |
+| 구 URL 복원 | 구 탭 id(`analysis`+`surface`, `protocol`) → 신 탭 id 의미 보존 매핑 | P3-S2-T1 | P3-S1-T1 |
 
-계약은 PRD §5를 따른다. 실제 필드·오류 코드·revision 대상은 P0-T0.1의 appendix에 확정하고 P1에서 검증한다. 미결 항목을 빈 TODO로 소비 코드에 넘기지 않는다.
+**ICV 비대상 (기존 인프라 재사용, 신규 계약 불필요)**
+- 결과 무효화: `AnalysisContext.result_revision` / `input_revision`이 이미 존재 (`app/models.py:380,389`)
+- 미지 탭 id 크래시 방지: `navigation-store.ts`의 `parseNavigation` → `tab()` 타입가드가 이미 폴백 처리 (:25,:32-36,:56)
 
-## Phase P0 — 실행 기준선과 검증 준비
+---
+
+## 4. 결정 게이트
+
+**해결된 결정**
+
+| ID | 항목 | 결정 | 근거 |
+| --- | --- | --- | --- |
+| D-1 | 제품 정식 명칭 | **`Q-Prism® Cluster Caller` 채택.** `Q-Prism`은 인바이러스테크 자사 저작물이므로 `®` 사용 가능 | 2026-09-11 사용자 확인 |
+
+**미해결 — 해당 태스크는 BLOCKED로 시작한다**
+
+| ID | 항목 | 차단 태스크 | 필요한 답 |
+| --- | --- | --- | --- |
+| **D-2** | Q-Prism 브랜드 팔레트 HEX | P6-S2-T1 | 기존 브랜드 가이드의 HEX 값. 없으면 신규 팔레트 설계 승인 |
+| **D-3** | 로고·마크·히어로 아트·파비콘 | P6-S3-T1 | 에셋 파일 제공 또는 제작 승인. 현재 `frontend/public/`에 이미지 0개 |
+| **D-4** | 채널색(`--color-fam`/`--color-allele2`) 브랜드화 여부 | P6-S2-T1 | 권장: **유지**(FAM=파랑 등 qPCR 판독 관례 우선). 승인 필요 |
+| **D-5** | 탭 ID 전면 변경 승인 | P3-S1-T1 | E2E 대량 수정 동반. 리뷰 결과 라벨만 변경으로는 요구 충족 불가로 판정됨 |
+| **D-6** | 산점도 목표 종횡비 | P4-S1-T1 | 정사각(폭 640px, 컬럼 여백 300px) vs 4:3(폭 853px, 여백 87px) |
+| **D-7** | 업로드 경로 이원화 처리 | P5-S2-T1 | 통합 vs 역할 분리 후 한도·문구만 일치 (권장: 후자) |
+| **D-8** | ASG `target_type` 전체 열거값 | P1-S1-T1 (부분) | 관측값은 `ad_hoc`/`marker_version`/`design_run_item` 셋뿐. ASG 계약 문서 확인 |
+| **D-9** | ASG 측 `protocol_steps` 스키마 검증 강도 | P2-R1-T1 (부분) | 필드 추가 사전 협의 필요 여부. `app/asg_result.py:91`이 외부로 직렬화 |
+
+> D-8/D-9는 **부분 차단**이다. 해당 태스크의 나머지 범위는 진행하되, 매핑 테이블 확정과 ASG 협의 결과는
+> 미해결 항목으로 증거 문서에 남기고 Phase 게이트에서 보고한다.
+
+---
+
+## Phase P0 — 기준선과 색 체계 단일화
 
 ### P0-T0.1: 기준 커밋·계약·검증 환경 확정
-
-- Status: DONE
-- Commit: 9f519ae86cc430c819ee49dbb2bf7b2913a0aefa
-- Evidence: [P0-T0.1](ui-ux-overhaul/evidence/P0-T0.1.md). 기준선 기록 완료이며 품질 게이트 통과는 아님.
-- 담당: test-specialist
-- Depends On: []
-- Write Scope: docs/planning/ui-ux-overhaul/05-contract-appendix.md, BE/requirements-dev.txt, FE/package.json·lockfile·vitest.config.ts, tests/helpers.ts, 테스트/coverage 설정
-- 구현: 코드·문서 커밋/해시와 기존 기준선을 기록한다. appendix에 revision 증가 대상·생성, stale/legacy 오류, 상태 소유권, 응답 필드·호환 정책을 backend 관점으로 명세한다. 제품 모델/DB 변경은 하지 않는다.
-- 구현: pytest-cov, Vitest와 버전이 맞는 coverage provider, PDF/XLSX 내용 검사 도구와 대상 manifest를 준비한다. 기존 전체/변경 모듈 지표를 분리하고 격리 환경·로그인 helper를 정리한다.
-- 검증: BE-ALL, FE-ALL, FE-CHECK, 기존 E2E 목록/기준선, COVERAGE. 환경 실패와 제품 결함 구분.
-- [x] AC: 올바른 소스/계획을 읽는 격리 환경과 계약 appendix가 준비되고 baseline 실패가 숨겨지지 않음.
-
-### P0-T0.2: 결정적 판정·QC·보고서 fixture
-
-- Status: DONE
-- Commit: 77010b0d9956fba11e3547bf21935c953b50b4ca (초기 d6345b6 이후 복잡도 수정)
-- Evidence: [P0-T0.2](ui-ux-overhaul/evidence/P0-T0.2.md). 합성 fixture 검증 25개 통과, 생성기 coverage 100%, 최대 복잡도 9.
-- 담당: test-specialist
-- Depends On: []
-- Write Scope: BE/tests/fixtures/ux_followup/, BE/tests/fixtures_ux_followup.py, BE/tests/test_ux_fixtures.py
-- 구현: 기존 fixture를 재사용해 값이 다른 20/40사이클·96/384웰·읽기 구간·서로 다른 배수성 마커·ROX 없음/해제·NTC 정상/오염/미존재/불충분을 정의한다. 비공개 파일을 사용하지 않는다.
-- 구현: raw/normalized·background별 기대 수치, context 없는 저장 결과, 지연/실패 사례를 포함한다. 새 API는 구현하지 않는다.
-- 검증: BE-TEST(test_ux_fixtures.py), 결정성·범위·크기·출처 검사.
-- [x] AC: 각 실패 시나리오에 이름과 기대 결과가 있고 반복 생성 입력이 동일함.
-
-### P0-R0-T1: 런타임·인증 의존성 보안 보완
-
-- Status: DONE
-- Commit: 009a7627dbbe266b895943884bad9a476e827e0f
-- Evidence: [P0-R0-T1](ui-ux-overhaul/evidence/P0-R0-T1.md)
-- 담당: security-specialist
-- Depends On: [P0-T0.1]
-- Write Scope: BE/requirements.txt·requirements-dev.txt, BE/app/auth.py 및 필요한 JWT adapter, BE/tests/의 auth·dependency 보완, evidence/P0-R0-T1.md
-- 구현: python-multipart 수정 버전을 고정하고 python-jose/ecdsa 의존 경로를 검증 가능한 JWT 구현으로 교체한다. HS256 제한·토큰 claim·만료·쿠키·ASG 정책과 기존 유효 토큰 호환을 보존한다. 취약점 제외 규칙으로 통과시키지 않는다.
-- 검증: TDD_MODE:RED_FIRST, 기존 토큰/잘못된 서명·알고리즘·만료·claim 회귀, BE-ALL, pip check/audit, 변경 코드 coverage/복잡도. 호스트 환경 수정 금지.
-- [x] AC: 인증·업로드 정책 회귀 없이 의존성 보안 게이트 통과, 실제 깨끗한 venv에서 재현 가능.
-
-### P0-S0-T1: 프론트엔드 lint·검증 도구 보안 보완
-
-- Status: DONE
-- Commit: e9c9b1d5fdb4f608d424a66cca4f0bd078a36a56 (typing 723b551, state a11ece17 및 선행 보완 포함)
-- Evidence: [P0-S0-T1](ui-ux-overhaul/evidence/P0-S0-T1.md), [typing](ui-ux-overhaul/evidence/P0-S0-T1-typing.md). Phase 통과는 독립 P0-S0-V 판정으로 확정한다.
-- 담당: frontend-specialist
-- Depends On: [P0-T0.1]
-- Write Scope: FE/package.json·lockfile·vitest/test 설정, SRC의 기존 lint 오류/경고 파일 및 필요한 typed helpers·회귀 테스트, evidence/P0-S0-T1.md
-- 구현: Vitest와 coverage를 동일 호환 버전으로 업그레이드하고 필요한 전이 의존성을 보완한다. 기존 lint 문제를 타입/상태 소유권 수정으로 해소하며 규칙 비활성화·무의미한 타이머 우회 금지. 제품 UX/과학 알고리즘 재설계는 후속 작업에 남긴다.
-- 확인된 계약 보완: Batch 집계의 실제 `genotypes/ntc_count/unknown_count` 응답 매핑과 SettingsTab의 지원하지 않는 preset algorithm 검증은 typed API 연결에 필요한 최소 회귀 수정으로 포함한다. 임의 응답 타입 추가나 조용한 알고리즘 변경으로 숨기지 않는다.
-- 검증: 상태 변경에는 TDD_MODE:RED_FIRST, FE-ALL/CHECK·coverage·npm audit, 분석/ASG 상태·Plotly·화면 smoke 회귀. 변경된 실행 분기는 테스트하고 브라우저 증거를 남긴다.
-- [x] AC: lint 오류 0, 기존 테스트/build 통과, high/critical audit 0, 사용 동작 회귀 없음.
-
-두 보완 작업은 사용자 승인된 P0 추가 범위다. BE/FE 파일·환경을 분리해 병렬 실행 가능하나 git index/commit은 오케스트레이터가 슬롯을 지정해 직렬화한다. P6 두 작업을 포함한 총 작업은 35개였으며, P7 두 작업을 추가해 총 37개로 확장한다.
-
-### P0-S0-V: Preflight·ICV 게이트
-
-- Status: DONE
-- Gate Commit: 079d23ce449b14a6e8789813f93d40a3fb6bc93d (이전 BLOCKED bc8fc0d는 증거에 보존)
-- Evidence: [P0-S0-V](ui-ux-overhaul/evidence/P0-S0-V.md)
-- Previous Blocker: 기존 lint 32 errors 및 의존성 audit. 사용자 승인으로 P0-R0-T1/P0-S0-T1에서 해결 후 재검증한다. 이전 BLOCKED 증거는 이력으로 보존한다.
-- 담당: test-specialist
-- Depends On: [P0-T0.1, P0-T0.2, P0-R0-T1, P0-S0-T1]
-- Write Scope: docs/planning/ui-ux-overhaul/evidence/P0-S0-V.md
-- 검증: DAG/ID/Write Scope, fixture 연결, 환경/coverage, appendix와 PRD 대조. 미지원 필드에 소비 코드가 의존하지 않도록 순서 확인.
-- [x] AC: 기준 커밋·해시·baseline·미해결 범위 밖 문제와 P1 진입 판정을 기록함.
-
-## Phase P1 — 결과 계약과 서버 일관성
-
-### P1-R1-T1: 분석 컨텍스트 모델·DB 왕복 저장
-
-- Status: DONE
-- Commit: b7c6e8752aa57de2fb5b9ae44b37e512f60ffee8
-- Evidence: [P1-R1-T1](ui-ux-overhaul/evidence/P1-R1-T1.md). 독립 최종 BE 530 passed + 2 subtests, 변경 실행 줄 100%, mypy/Ruff 통과.
-- 담당: database-specialist
-- Depends On: [P0-S0-V]
-- Write Scope: BE/app/models.py·db.py·main.py, BE/tests/test_analysis_context_persistence.py 및 BE/tests/test_marker_catalog.py의 migration 버전 호환 assertion·중복 테스트명 정정
-- 구현: context 전체 필드·schema/result/input revision·UTC 완료 시각·마커별 실제 parameters를 모델링하고 결과와 함께 원자 저장한다. 구버전은 추정 없이 legacy_unknown으로 읽는다.
-- 구현: SQLite/JSON 호환 migration과 시작 복원을 연결한다. 기존 결과 삭제나 임의 backfill 금지.
-- 검증: 새 결과 왕복·구버전 JSON/행·재시작·rollback, 기존 persistence 회귀.
-- [x] AC: 조건이 손실 없이 복원되고 기존 DB가 데이터 손실 없이 열림.
-
-### P1-R1-T2: 입력 revision·변경 명령 일원화
-
-- Status: DONE
-- Commit: da35b12c01b16c7df75d5eabaee0e0ca9e300f7f
-- Evidence: [P1-R1-T2](ui-ux-overhaul/evidence/P1-R1-T2.md). 독립 BE 552 passed + 2 subtests, 변경 실행 줄 91.67–100%, 새 논리 복잡도 최대 8.
-- 담당: backend-specialist
-- Depends On: [P1-R1-T1]
-- Write Scope: BE/app/routers/clustering.py·layouts.py·sample.py·marker_catalog.py, BE/app/models.py·db.py, 신규 BE/app/processing/analysis_state.py, BE/tests/test_analysis_input_revision.py 및 기존 mutation/marker 계약 회귀 테스트
-- 구현: welltype set/clear/bulk, ploidy, marker create/update/delete, layout apply 등 모든 판정 입력 변경을 조사해 변경/revision 증가를 같은 transaction·직렬화 경계에 연결한다.
-- 구현: mutation 응답 input_revision, undo용 선택적 expected revision·409를 추가한다. 보기·언어·축 변경은 제외하고 stale 결과 정책을 보존한다.
-- 접점 확인: 공용 mutation body는 models.py에 있고 session 삭제/정보는 sample.py에 있다. 요청에 포함된 ploidy 변경도 숨은 입력 변경으로 조사한다. 세션 삭제는 결과/마커/진행 요청 상태를 함께 정리하고, 마커 변경 시 결과 삭제를 요구하던 기존 테스트는 새 retained-stale 계약의 명시적 기대값으로 갱신한다.
-- 검증: 경로별 증가, 실패/no-op, 권한, stale expected revision, layout/bulk 누락 검사.
-- [x] AC: API 직접 변경도 결과를 무효화하고 실패 mutation은 버전을 전진시키지 않음.
-
-### P1-R1-T3: 결과 원자 게시·동시성 제어
-
-- Status: DONE
-- Commit: 43a013be8639b90baee6fbff62f4d70f47c05046
-- Evidence: [P1-R1-T3](ui-ux-overhaul/evidence/P1-R1-T3.md). 독립 BE 571 passed + 2 subtests, 변경 실행 줄 97.98–100%, 새 논리 복잡도 최대 10.
-- 담당: backend-specialist
-- Depends On: [P1-R1-T2]
-- Write Scope: BE/app/routers/clustering.py 및 sample.py의 세션 상태/삭제 연결, BE/app/processing/analysis_state.py, BE/app/models.py·db.py, BE/tests/test_analysis_revision_races.py
-- 구현: 계산 시작 입력/parameters를 고정하고 완료 시 input revision·요청 순서를 검증해 게시한다. DB와 cluster_store가 다른 버전을 가리키지 않게 한다.
-- 구현: 계산 중 mutation·늦은 완료·저장 실패·조회 상태를 다룬다. 현재 동기/비동기·프로세스 범위에 맞는 lock/CAS를 기록하고 최신 결과 한 건만 유지한다.
-- 검증: A/B 역순 완료, 계산 중 marker/welltype 변경, 저장 실패, 독립 세션 동시 처리.
-- [x] AC: 오래된 계산이 최신 결과를 덮어쓰지 않고 context가 실제 계산 입력과 일치함.
-
-### P1-R2-T1: NTC·마커별 QC·상승 평가 계약
-
-- Status: DONE
-- Commit: 9c15ff968c5026a41d6e322665e0bccc35767b93 (초기 d514a94 이후 imported Unknown 보완)
-- Evidence: [P1-R2-T1](ui-ux-overhaul/evidence/P1-R2-T1.md). 최종 BE 619 passed + 2 subtests, 독립 집중 89 passed, 변경 실행 줄 100%, 새 논리 복잡도 최대 10.
-- 담당: backend-specialist
-- Depends On: [P1-R1-T3]
-- Write Scope: BE/app/routers/qc.py·data.py, BE/app/processing/ntc_detection.py, BE/app/models.py, BE/tests/test_qc_status_contract.py 및 기존 test_a2_region_passthrough.py·test_marker_contract.py·control/cycle 테스트의 QC 계약 setup·회귀 보강. 장비의 일반 시료 Unknown과 명시적 수동 Unknown을 구분하기 위한 clustering.py의 captured manual_well_types 및 관련 test_analysis_revision_races.py 보완 포함.
-- 구현: 기존 ok/wells 유지, status·flagged/reason 추가. NTC 없음/평가불가/부분평가/오염을 구분하고 상승 감지 evaluation 상태를 별도로 반환한다. 임계값은 변경하지 않는다.
-- 구현: authoritative/markers와 판정 기반 지표의 버전/조건, 현재 보기 NTC 조건을 구분한다. legacy/stale를 정상 최신 QC로 포장하지 않는다.
-- 검증: 정상/오염 혼합·0개·불충분·구응답, 두 배수성 QC, 20/40사이클, no-onset/not-evaluated, 기존 control QC·cycle suggestion 회귀.
-- [x] AC: 모든 NTC와 flagged 웰이 구분되고 마커별 권위값·조건이 명확함.
-
-### P1-R3-T1: 출력 스냅샷 계약·CSV
-
-- Status: DONE
-- Commit: 991dabad1142f7df4a311162eed9077a0014ba74
-- Evidence: [P1-R3-T1](ui-ux-overhaul/evidence/P1-R3-T1.md). 최종 BE 678 passed + 2 subtests, 독립 집중 85 passed, 신규 스냅샷 98.34%·CSV 추가 실행 줄 100%.
-- 담당: backend-specialist
-- Depends On: [P1-R2-T1]
-- Write Scope: 신규 BE/app/reporting/result_snapshot.py, BE/app/routers/export.py, BE/app/processing/analysis_state.py, BE/tests/test_export_snapshot_csv.py 및 기존 CSV/마커 출력 테스트의 계약·setup 갱신. 같은 export.py의 기존 XLSX QC dict 타입 불변성 오류는 주석만 보완하며 XLSX 동작 연결은 다음 작업에 둔다.
-- 구현: result_revision 지정/생략, input revision/legacy 검증, 409를 공통 snapshot 서비스로 구현한다. 수락 이후 판정·신뢰도·manual 유형·표시 metadata·계산 조건을 고정한다.
-- 구현: 전체 실행 CSV의 마커 열·기존 데이터 열을 유지하고 조건 metadata 열을 추가한다. 임의 cycle/ROX/background와 저장 조건 불일치는 명시 오류로 전환한다.
-- 검증: 20/40·ROX/background만 차이, legacy/missing/stale, 결과 교체·수락 후 mutation·권한.
-- [x] AC: CSV에 혼합 조건이 없고 수락된 snapshot을 끝까지 사용하며 버전/조건을 파일에서 읽을 수 있음.
-
-### P1-R3-T2: PDF·XLSX 일치·연결 소비자 호환
-
-- Status: DONE
-- Commit: ccc590fcd31f81417ee947b40f35a30ab44f8ad7
-- Evidence: [P1-R3-T2](ui-ux-overhaul/evidence/P1-R3-T2.md). 최종 BE 710 passed + 2 subtests, 독립 집중 80 passed, 신규 모듈 98.5% 이상·변경 실행 줄 93.3% 이상.
-- 담당: backend-specialist
-- Depends On: [P1-R3-T1]
-- Write Scope: BE/app/routers/data.py·export.py·asg.py, BE/app/asg_result.py, BE/app/reporting/* (한글 TrueType 글꼴·라이선스·출처 포함), BE/requirements-dev.txt의 PDF 렌더 검증 도구, BE/tests/test_export_snapshot_reports.py·test_asg_result_save.py 및 기존 PDF/XLSX/ASG 출력 테스트의 계약·setup 갱신
-- 구현: PDF max(cycles)·XLSX 독자 조건 선택을 공통 snapshot으로 연결한다. 그림·판정·신뢰도는 같은 결과, Ct 등 전체 곡선 값은 별도 계산 범위를 명시한다.
-- 구현: ASG 등 결과 소비자의 추가 필드/오류를 점검하고 필요한 adapter만 적용한다. 스코프·저장 상태 정책은 보존한다.
-- 검증: 실제 CSV/PDF/XLSX의 공통 웰·판정·수치·metadata 비교. PDF metadata만이 아니라 렌더에 전달된 수치도 검증. 기존 보고서/ASG 회귀.
-- 검증 준비: pypdfium2는 검증된 wheel 버전을 개발 의존성에만 고정하고 audit한다. 한글 TrueType 글꼴은 원본·재배포 라이선스·upstream commit/SHA-256을 함께 보관하고 PDF에 포함한다. 호스트 전용 글꼴 경로나 뷰어의 CJK 대체 글꼴을 배포 검증으로 간주하지 않는다. 긴 한글 이름·모든 페이지의 렌더링과 텍스트를 확인한다.
-- [x] AC: 형식별 묵시적 사이클 대체가 없고 정상/legacy/stale·소비자 호환성이 확인됨.
-
-### P1-S0-T1: 프론트 API·분석/탐색 상태 기반
-
-- Status: DONE
-- Commit: c880b0a803aa41635237ed9cd0609431670c001a
-- Evidence: [P1-S0-T1](ui-ux-overhaul/evidence/P1-S0-T1.md). FE 167개·독립 집중 62개, lint/build/type 통과. 신규 모듈 및 API 변경 실행 줄 각각 100%, 복잡도 ≤10. 실제 화면 연결은 P2/P3 범위.
-- 담당: frontend-specialist
-- Depends On: [P1-R3-T2]
-- Write Scope: SRC/types/api.ts, SRC/lib/api.ts, 신규 SRC/stores/analysis-store.ts·navigation-store.ts, SRC/lib/analysis-context.ts 및 단위 테스트
-- 구현: context/QC/revision/409 타입·API를 연결하고 런타임 경계에서 missing/legacy/error를 구분한다. analysis-store에 결과·pending/current/mismatch/error·요청 ID를 둔다.
-- 구현: navigation-store와 URL 직렬화/유효성 순수 함수를 정의한다. 실제 App 마운트·URL 복원은 후속 작업에서 연결한다.
-- 검증: parameters별 불일치/보기 변경, 구응답·역순 응답, URL 왕복·잘못된 값, 409. FE-TEST, FE-CHECK.
-- [x] AC: 소비 화면이 값을 추정하지 않고 조건/버전/탐색의 단일 소유자를 사용할 수 있음.
-
-### P1-S0-V: 계약·서버 품질 게이트
-
-- Status: DONE
-- Commit: 4a1a632fcdb73d92273214f10fa572d4fd2c03af
-- Evidence: [P1-S0-V](ui-ux-overhaul/evidence/P1-S0-V.md). BE 710개+2 subtests, FE 167개, 브라우저 14개 및 상태 smoke 통과. 누적 변경 코드 모듈별 coverage·정적/보안 검사 통과. 기존 헤더 QC 갱신·onset 의미 구분은 P2-S1/S2 필수이며 최종 UI 승인·배포는 아님.
-- 담당: test-specialist
-- Depends On: [P1-S0-T1]
-- Write Scope: docs/planning/ui-ux-overhaul/evidence/P1-S0-V.md
-- 검증: BE-ALL, FE-ALL, FE-CHECK, COVERAGE, migration/동시성/출력/권한 리뷰, 문서·타입·응답 대조.
-- [x] AC: UX-01 서버·UX-02 A/서버 출력 기준 통과. 새 필드로 기존 UI가 깨지지 않는 smoke 확인. 필수 소비자 연결 누락 시 진입/배포 불가.
-
-## Phase P2 — 분석 화면의 정확성·입력 동작
-
-### P2-S1-T1: 단일·다중 마커 분석 상태 연결
-
-- Status: DONE
-- 담당: frontend-specialist
-- Depends On: [P1-S0-V]
-- Write Scope: SRC/App.tsx, SRC/components/의 분석 Workspace·AnalysisTab·MultiMarker·CycleControl, 관련 stores/hooks·locales 및 테스트. 기존 SettingsTab·ScatterPlot 분석 진입점과 UploadZone·Batch의 신규/기존 세션 진입 구분도 공통 상태 연결에 필요한 범위만 포함한다(화면 재설계·과학 계산 변경 제외).
-- 계약 보완 범위: BE/app/routers/sample.py의 기존 세션 조회 응답에 `cycles: number[]`를 추가하고 focused backend 테스트 및 SRC/types/api.ts의 세션 조회 타입을 갱신한다. 실제 `unified.cycles`를 전달하며 `num_cycles`(개수)를 절대 사이클로 추정하거나 전체 곡선을 재조회하지 않는다. 인증·기존 필드·DB/계산 정책은 보존한다.
-- 구현: 분석 결과/입력 revision·pending·실패·불일치를 공통 상태로 표시한다. 단일 분석은 명시 실행/새 업로드 최초 자동 실행, 다중 마커는 입력 안정화 후 기존 220ms 자동 분석을 유지한다.
-- 구현: 현재 사이클 재분석과 추천 사이클 분석을 구분한다. 재생/복원 중 자동 분석을 막고 역순 응답을 폐기한다. 탐색 상태를 navigation-store로 이전하되 URL 복원 IO는 P3에서 연결한다.
-- 검증: 빠른 연속 변경, 늦은 응답, 실패 후 재실행, 보기 전용 변경, ROX/배경/마커 조건 변경의 컴포넌트 테스트. FE-ALL, FE-CHECK.
-- 추가 검증: 세션 조회의 sparse/zero 사이클 목록·접근 권한 backend 테스트와 실제 사이클 기반 초기화·복원 FE 테스트. 서버 응답 변경은 P2 게이트에서 BE-ALL로 재검증한다.
-- 호환성 보완: scatter/plate/clustering에 선택적 `cycle_mode=absolute`를 추가한다. P2 실제 선택 사이클은 절대 좌표로 전달하고 모드 생략은 기존 0→마지막 의미를 유지한다. 공통 cycle resolver·ClusteringRequest·data/clustering router·PlateView와 관련 테스트를 범위에 포함한다.
-- 검증 기록: [P2-S1-T1 evidence](ui-ux-overhaul/evidence/P2-S1-T1.md). 독립 코드 리뷰 및 Chromium P5 14/14·P2 smoke PASS.
-- [x] AC: 표시된 조건과 완료 결과의 관계가 명확하고, 오래된 응답이 최신 결과를 덮어쓰지 않음.
-
-### P2-S2-T1: QC 상태·마커별 결과 표시
-
-- P2-S1 후속 계약: 선택한 실제 cycle 0을 QC 요청에서도 `cycle_mode=absolute`로 전달하고 공유 resolver를 적용한다. 모드 생략 시 기존 0→마지막 cycle 호환성을 유지한다.
-
-- Status: DONE
-- Evidence: [P2-S2-T1](ui-ux-overhaul/evidence/P2-S2-T1.md). 독립 소스·브라우저 검증 PASS; 검증 계층별 한계는 evidence 참조.
-- 담당: frontend-specialist
-- Depends On: [P2-S1-T1]
-- Write Scope: SRC/components/의 Header·QC 표시/상세, 관련 hooks/locales, tests/19-qc-status.spec.ts
-- 구현: ok/warning/no_ntc/insufficient와 웰별 flagged/reason을 구분한다. NTC 전체 목록을 경고 목록으로 해석하지 않는다. 추천 사이클 미평가/검출 없음도 구분한다.
-- 구현: 선택 마커의 서버 QC와 전체 플레이트 NTC 범위를 표시하고, 이전 조건 QC를 현재 조건으로 오인하지 않도록 표시한다. 마커 없는 경우 임의 pooled separation을 만들지 않는다.
-- 검증: NTC 없음·정상·경고·부족, 일부 웰만 경고, 마커별 상이한 QC, stale/legacy 시나리오. FE-TEST, ROOT-E2E.
-- [x] AC: UX-01 상태 행렬 전체를 KO/EN으로 확인하고 서버 판정과 화면이 일치함.
-
-### P2-S3-T1: 출력 버전 선택·활성 차트 PNG
-
-- P2-S1 후속 계약: CSV/PDF/XLSX/ASG의 명시적 실제 cycle 0에도 `cycle_mode=absolute`를 연결한다. 모드 생략의 기존 0→마지막 cycle 의미는 유지하며, cycle 생략으로 저장된 context.cycle을 선택하는 출력은 이미 안전하다.
-
-- Status: DONE
-- Evidence: [P2-S3-T1](ui-ux-overhaul/evidence/P2-S3-T1.md). Independent source review and final Chromium gate PASS; layer-specific caveats are recorded in the evidence.
-- 담당: frontend-specialist
-- Depends On: [P2-S2-T1]
-- Write Scope: SRC/hooks/의 export, SRC/components/의 출력 메뉴·대화상자·ScatterPlot, 관련 lib/locales, tests/18-result-consistency.spec.ts
-- 구현: 모든 출력에 result_revision을 결합한다. CSV/PDF/XLSX는 전체 런, PNG는 활성 차트/마커·필터 범위를 명시한다. 고정 DOM ID 대신 활성 차트 ref/registry를 사용한다.
-- 구현: 화면 20/결과 40 불일치에서 재분석 20 후 출력·저장 결과 40 출력·취소를 제공한다. 후자는 화면 20 유지, PNG만 확인 후 결과 40 화면을 렌더하고 출력한다. 입력 revision 변경/legacy에는 이전 결과 출력을 허용하지 않는다.
-- 구현: 계산 중 비활성화, 409 재확인, 다운로드 실패/재시도, 조건·버전·시각 metadata/caption을 연결한다.
-- 검증: 실제 다운로드 CSV/PDF/XLSX의 값·자료형·metadata, PNG 비어 있지 않음/활성 마커/caption. 단일·다중, ROX/배경, 20/40, pending/409/legacy를 테스트한다.
-- [x] AC: UX-02 C의 선택별 화면·파일 동작이 일치하며 선택 웰 필터가 전체 런 출력을 축소하지 않음.
-
-### P2-S4-T1: 포커스별 키보드 계약
-
-- Status: DONE
-- 담당: frontend-specialist
-- Depends On: [P2-S3-T1]
-- Write Scope: SRC/hooks/의 단축키, SRC/components/의 PlateView·결과 그리드·메뉴/대화상자, tests/20-keyboard.spec.ts 및 단위 테스트
-- 구현: defaultPrevented 우선 반환, 위젯 이벤트 소유권, 입력/editable에서 앱 단축키 차단을 적용한다. 일반 버튼/탭/메뉴/대화상자는 Space·Enter·방향키·Escape 기본 동작을 보존한다.
-- 구현: 그리드 방향키/Home/End/Shift 선택·Enter/Space 선택·Escape 해제와 유효한 1–7/Ctrl+E를 연결한다. 분석 바깥 재생/사이클/타입 변경을 차단하고 언어/테마/도움말 예외를 PRD대로 제한한다.
-- 검증: mouse 없이 포커스 순회, 버튼 Space가 재생하지 않음, 입력 Ctrl+Z는 브라우저 동작. undo/redo 실제 API 성공·실패 검증은 P3-S2-T1에서 완결한다.
-- [x] AC: UX-03 키보드 행렬을 통과하고 기존 PlateView roving focus를 회귀시키지 않음.
-- 증거: `ui-ux-overhaul/evidence/P2-S4-T1.md` — FE336, ROOT18+20 3/3, axe critical/serious0, 독립 소스·브라우저 리뷰 PASS. 96웰은 실제 서버, 384웰은 명시적 응답 fixture의 실제 16×24 DOM 검증이며 native384 파싱 검증이 아니다. Undo/CAS는 P3-S2, Omit 선택 정책은 P3-S4, 전체 반응형 레이아웃 검증은 P4에서 완결한다.
-
-### P2-S0-V: 정확성 품질 게이트
-
-- Status: DONE
-- Evidence: [P2-S0-V](ui-ux-overhaul/evidence/P2-S0-V.md). 최종 source 3edae4c: BE739+2 subtests, FE338, ROOT18–20 5/5, P5 14/14, 누적 변경 모듈58개 coverage·새 logical unit CC PASS. 기존 집계 복잡도·typing baseline·후속 범위는 evidence에 명시.
-- 담당: test-specialist
-- Depends On: [P2-S4-T1]
-- Write Scope: docs/planning/ui-ux-overhaul/evidence/P2-S0-V.md
-- 검증: BE-ALL, FE-ALL, FE-CHECK, ROOT-E2E 18–20, COVERAGE, 출력 실파일 증거와 frontend/code 리뷰.
-- [x] AC: UX-01·02·03 통과. UX-03 undo 연결만 명시적으로 P3에 이관하며 나머지 미구현을 통과 처리하지 않음.
-
-## Phase P3 — 복원·실패 복구·수동 편집
-
-### P3-S1-T1: URL·세션 복원 상태 머신
-
-- Status: DONE
-- Commit: 297e98157d6aafc6ad7ca0742d8e89b990c94837
-- Evidence: [P3-S1-T1](ui-ux-overhaul/evidence/P3-S1-T1.md). FE 381개, ROOT21 3개, lint·typecheck·build, 변경 모듈 coverage 70% 이상·새 함수 CC 10 이하, 실제 DB 재시작 복원과 독립 리뷰 PASS.
-- 담당: frontend-specialist
-- Depends On: [P2-S0-V]
-- Write Scope: SRC/App.tsx, navigation-store, Workspace·MultiMarker·CycleControl 및 세션/설정 hooks, tests/21-workspace-restore.spec.ts
-- 구현: 인증 → 세션 → 마커/저장 결과 → 사이클/윈도 검증 → 설정·절대 사이클 원자 적용 → ready 순서로 복원한다. URL은 session/tab/surface/marker/cycle만 사용한다.
-- 구현: 탐색은 URL > 저장 결과 사이클/기본 마커 > 데이터 기본값, 분석 설정은 사용자·세션별 sessionStorage > 저장 context > 유효 기본값으로 결정한다. 로그아웃 캐시 제거, 다른 세션 데이터 누출 방지.
-- 구현: restoring 중 CycleControl 초기화·App ROX 초기값·다중 자동 분석·URL 쓰기를 차단하고 ready 직후 첫 자동 분석도 생략한다. 불일치는 표시만 한다. 탭/하위 화면/마커 pushState, 사이클 replaceState, popstate는 재생 중지·URL 재기록 금지.
-- 검증: 새로고침/직접 링크/뒤로·앞으로, 잘못된 마커·절대 사이클·윈도, ROX 복원, 401 인증 모드별 동작/403/404/5xx 재시도. DB 재시작 후 복원은 서버 유지 동작과 함께 검사한다.
-- [x] AC: UX-06 우선순위와 오류 행렬을 통과하고 복원이 새 분석을 암묵적으로 생성하지 않음.
-
-### P3-S2-T1: 공유 수동 편집 명령·undo/redo
-
-- Status: DONE
-- Commit: 21594a50ddc544c3656f0a18f4e03978a3f09fd6
-- Evidence: [P3-S2-T1](ui-ux-overhaul/evidence/P3-S2-T1.md). BE 740개+2 subtests, FE 403개, ROOT23 2개, lint·typecheck·build, 추가/신규 실행 라인 100%·새 논리 CC 10 이하, 독립 리뷰 PASS.
-- 담당: frontend-specialist
-- Depends On: [P3-S1-T1]
-- Write Scope: 신규 SRC/stores/undo-store.ts, 수동 웰 타입 변경 hooks/호출부·단축키, 관련 tests, tests/23-undo.spec.ts
-- 구현: 모든 수동 타입 변경 진입점을 공유 명령으로 통합한다. 단일/복수 웰 변경을 한 묶음으로 최대 50개 보관하고 API 성공 후에만 히스토리 포인터를 이동한다.
-- 구현: 예상 revision 충돌은 히스토리를 무효화하고 오류를 표시한다. 실패는 기존 포인터/값 유지. 세션 전환·새로고침·로그아웃 초기화. 마커/축/분석 결과는 이력 대상에서 제외한다.
-- 구현: undo/redo도 입력 revision을 갱신하며 단일 stale/다중 자동 분석 정책을 동일하게 적용한다.
-- 검증: 서로 다른 컴포넌트에서 편집 후 undo, 다중 웰 원자 복원, 50개 경계, 실패/409, Ctrl+Z/redo와 텍스트 입력의 격리.
-- [x] AC: UX-10과 UX-03의 undo/redo 조건을 실제 서버 상태까지 확인함.
-
-### P3-S3-T1: 프리셋·최근 세션·배치 업로드 실패 복구
-
-- Status: DONE
-- Commit: c8161ba37dede090da061a450067e985888e220e
-- Evidence: [P3-S3-T1](ui-ux-overhaul/evidence/P3-S3-T1.md). FE 452개, ROOT22 3개, lint·typecheck·build·audit, 변경 coverage 기준·새 CC 10 이하, 독립 리뷰 PASS. 기존 공용 preset JSON 제약은 증거에 기록.
-- 담당: frontend-specialist
-- Depends On: [P3-S2-T1]
-- Write Scope: SRC/components/의 프리셋·최근 세션·Upload/Project, 신규 SRC/stores/upload-job-store.ts, 관련 API/hooks/locales, tests/22-error-recovery.spec.ts
-- 구현: 저장/삭제/목록 오류와 재시도를 노출하고 작성 입력을 유지한다. 최근 세션 조회 실패와 빈 목록을 구분한다.
-- 구현: 배치 업로드별 파일명·상태·실패 원인·성공 sessionID를 메모리에 보관해 탭 이동 후에도 보여준다. 부분 실패 시 자동 이동하지 않고 사용자가 프로젝트 이동을 선택하게 한다.
-- 구현: 응답 유실은 성공/실패로 단정하지 않고 unknown과 세션 확인 경로를 제공한다. 새로고침/로그아웃에서 작업 목록 제거; File 바이트 유지·자동 멱등 재업로드는 구현하지 않는다.
-- 검증: 500/네트워크 단절/부분 성공/응답 유실, 재시도 입력 보존, 탭 이동·초기화·다른 사용자 접근 방지.
-- [x] AC: UX-05 모든 오류가 조용히 무시되지 않고, 중복 업로드를 유도하는 자동 재시도가 없음.
-
-### P3-S4-T1: 마커 미설정·제외·Empty/Omit 의미 정리
-
-- Status: DONE
-- Commit: 5681041a06f122d2037c09bea76896187e7aa393
-- Evidence: [P3-S4-T1](ui-ux-overhaul/evidence/P3-S4-T1.md). FE 475개, BE 743개+2 subtests, 브라우저 19개, 변경 FE 실행 줄 55/55, lint·typecheck·build·audit, 독립 리뷰 PASS.
-- 담당: frontend-specialist
-- Depends On: [P3-S3-T1]
-- Write Scope: SRC/components/의 PlateSetup·분석 요약/배너, 관련 계산 helpers/locales, FE/e2e/의 기존 관련 spec 및 단위 테스트
-- 구현: 마커 0개는 전체 플레이트 분석 안내로 표시한다. 마커 존재 시 미할당 웰 제외 수를 계산하고 Empty/Omit 상태와 섞지 않는다.
-- 검증: 0/1/다중 마커, 일부 할당, Empty/Omit 혼합 96/384 fixtures의 개수·문구·진입 경로. 기존 마커 설정 E2E 기대값도 정책에 맞춰 갱신한다.
-- [x] AC: UX-04 통과. 정상 전체 플레이트 분석을 96개 제외로 표시하지 않음.
-
-### P3-S0-V: 연속성 품질 게이트
-
-- Status: DONE
-- Gate Commit: d288b0b0f7fa97fca31823f66ec6cf6f8fe2936b
-- Evidence: [P3-S0-V](ui-ux-overhaul/evidence/P3-S0-V.md). BE 743개+2 subtests, FE 481개, ROOT18–23 13개, 기존 E2E 52개, 누적 변경 coverage 725/760·모든 모듈 70% 이상, 새 CC 10 이하, 독립 게이트 리뷰 PASS.
-- 담당: test-specialist
-- Depends On: [P3-S4-T1]
-- Write Scope: docs/planning/ui-ux-overhaul/evidence/P3-S0-V.md
-- 검증: BE-ALL, FE-ALL, FE-CHECK, ROOT-E2E 18–23, EXISTING-E2E, COVERAGE, 복원 순서/사용자 격리/오류 복구 리뷰.
-- [x] AC: UX-04·05·06·10 및 UX-03 전체 통과. DB 유지와 화면 복원의 차이를 증거로 설명함.
-
-## Phase P4 — 반응형 레이아웃·탐색·접근성
-
-### P4-S0-T1: 공통 헤더·반응형 기반
-
-- Status: DONE
-- Commit: bb7118e9a9111e1119d4f333b02d2df76f18f305
-- Evidence: [P4-S0-T1](ui-ux-overhaul/evidence/P4-S0-T1.md). FE 486개, ROOT24 21개+시각 3개, 기존 회귀 8개, lint·typecheck·build·audit, coverage/CC, 독립 리뷰 PASS.
-- 담당: frontend-specialist
-- Depends On: [P3-S0-V]
-- Write Scope: SRC/components/의 Header·공통 Navigation, 공통 CSS, tests/24-responsive.spec.ts
-- 구현: 헤더 두 줄 재배치를 허용하고 viewport overflow를 제거한다. 1280px 이상 2열, 768–1279px 1열, 390–767px 검토 중심 구성을 위한 공통 레이아웃을 만든다.
-- 검증: 390/768/1024/1280/1440 × KO/EN × light/dark에서 긴 세션명/사용자명 포함 헤더. 페이지 전체 가로 스크롤 금지, 플레이트 내부 스크롤은 허용.
-- [x] AC: UX-07 헤더 기준 통과. 기능을 숨기기만 해서 overflow를 해결하지 않음.
-
-### P4-S1-T1: 분석 결과 중심 배치·고급 설정 접기
-
-- Status: DONE
-- Commit: 39239091c5b1ec14b4f122f169295ba2168bd383
-- Evidence: [P4-S1-T1](ui-ux-overhaul/evidence/P4-S1-T1.md). FE 491개, 반응형/회귀 30개·최종 집중 3개·P5+마커 21개, lint·typecheck·build·audit, coverage/CC, 독립 리뷰 PASS.
-- 담당: frontend-specialist
-- Depends On: [P4-S0-T1]
-- Write Scope: SRC/components/의 단일/다중 분석 Workspace·설정·Plate/요약, 관련 CSS/locales, tests/24-responsive.spec.ts
-- 구현: 데스크톱 왼쪽 scatter, 오른쪽 plate+선택 웰 요약으로 배치한다. 고급 설정은 접되 활성 조건·변경 경로가 보이게 한다. 설정 값을 별도 local state로 복제하지 않는다.
-- 구현: 384웰/다수 경고는 영역 내부 스크롤, 작은 화면은 순차 검토 흐름으로 제공한다. 긴 런·경고·ASG 문맥에서도 주요 결과/행동을 유지한다.
-- 검증: 1440×1000, 100% 배율, 96웰에서 scatter·plate·선택 요약을 페이지 스크롤 없이 확인. 다중 마커·384웰·작은 화면은 별도 기준으로 확인한다.
-- [x] AC: UX-08 및 UX-07 분석 레이아웃 기준 통과, 설정/결과 상태 회귀 없음.
-
-### P4-S2-T1: 품질 경고에서 웰·마커로 이동
-
-- Status: DONE
-- Commit: 2ab2b2d720c208e7ce2f640d2e3b41004af74268
-- Evidence: [P4-S2-T1](ui-ux-overhaul/evidence/P4-S2-T1.md). FE 536개, ROOT25·관련 회귀, lint·typecheck·build, 변경 coverage 최저 94.6%·새 CC 10 이하·기존 root 증가 없음, 독립 리뷰 PASS.
-- 담당: frontend-specialist
-- Depends On: [P4-S1-T1]
-- Write Scope: SRC/components/의 QualityPanel·마커 선택·웰 상세/필터·PlateSetup 진입, navigation-store, tests/25-secondary-flows.spec.ts
-- 구현: 경고 웰 클릭 시 해당 마커/웰 상세로 이동하고 필터에 가린 웰을 임시 노출한다. 사용자 필터의 영구 변경을 피하고 임시 상태를 표시/해제한다.
-- 구현: 미할당 웰은 플레이트 설정으로 연결한다. 곡선 품질과 유전형 QC를 다른 지표로 표시하고 범위/버전을 유지한다.
-- 검증: 다른 마커·숨겨진 웰·미할당 웰·연속 이동·뒤로가기 및 키보드 조작.
-- [x] AC: UX-09 품질 탐색이 사용자가 찾을 수 있는 실제 웰/화면에 도달함.
-
-### P4-S3-T1: 차트 의미·대비·핵심 문구
-
-- Status: DONE
-- Commit: 846b5c2194e0aaf7da1f29f335a549692de37821
-- Evidence: [P4-S3-T1](ui-ux-overhaul/evidence/P4-S3-T1.md). FE 560개, ROOT18·20·24·25·26 34/34 및 P5 회귀 14/14, lint·typecheck·build, 변경 coverage 최저 96.9%·새 CC 10 이하·기존 root 증가 없음, 독립 리뷰 PASS.
-- 담당: frontend-specialist
-- Depends On: [P4-S2-T1]
-- Write Scope: SRC/components/의 차트·범례·분석 상태, 공통 색상/심볼 helpers·locales, 관련 단위/E2E 테스트
-- 구현: 색상+심볼/텍스트로 상태를 구분하고 dark NTC 가시성을 확보한다. A1 등 웰/판정 식별자가 혼동되지 않게 라벨링한다. 기존 과학적 판정/임계값은 바꾸지 않는다.
-- 구현: 분석의 행동·오류·빈 상태 KO/EN을 완결하고 ROX 실제 적용 여부를 표시한다. 누락 키/하드코딩 사용자 문구를 검사한다.
-- 검증: 양 테마 범례/산점도/선택 상태와 텍스트 4.5:1·UI 3:1 대비를 검사하고 측정값을 기록한다. 심볼만으로도 구분 가능한지 수동 검토한다.
-- [x] AC: UX-09 핵심 화면 언어/색상 의미 기준 통과. 대비/자동 접근성 검사만으로 전체 접근성을 통과 선언하지 않음.
-
-### P4-S4-T1: 로그인·업로드·설정·프로토콜 보조 화면
-
-- Status: DONE
-- Commit: d9b6901ec3cb6b3177b911bc7d7e8a84d1e203f8
-- Evidence: [P4-S4-T1](ui-ux-overhaul/evidence/P4-S4-T1.md). FE 579개, ROOT21·22·23·25 23/23, 390/1024/1440×KO/EN×양 테마, lint·typecheck·build, 변경 coverage 100%·새 CC 10 이하·기존 root 증가 없음, 독립 리뷰 PASS.
-- 담당: frontend-specialist
-- Depends On: [P4-S3-T1]
-- Write Scope: SRC/components/의 Login·Upload·Settings·Protocol/Template 관련 화면, 관련 locales/CSS, tests/25-secondary-flows.spec.ts
-- 구현: 390/1024/1440에서 폼·대화상자·오류·진행 상태·긴 항목의 조작성을 보완한다. 인증 모드별 기존 권한/경로를 보존한다.
-- 검증: KO/EN·양 테마, 키보드 제출/취소, 업로드 부분 실패 기록 보존, 설정 변경 후 분석 무효화/복원 회귀.
-- [x] AC: UX-09 보조 화면 해당 범위의 핵심 행동이 잘리거나 가려지지 않음.
-
-### P4-S4-T2: 라이브러리·프로젝트·사용자·참조·비교 화면
-
-- Status: DONE
-- Commit: 65e6bafd1bf38310f7e993d11334455ed49ba4e2
-- Evidence: [P4-S4-T2](ui-ux-overhaul/evidence/P4-S4-T2.md). FE 632개, ROOT22·24·25 53/53, 390/1024/1440×KO/EN×양 테마, 변경 실행 라인 82.4%·적용 모듈 모두 70% 이상·새 CC 10 이하, 감사 0건, 독립 보안/UI 리뷰 PASS. Existing-E2E 확인 대화상자 정합성 repair: 18fca63, evidence 보강: 5f33813.
-- 담당: frontend-specialist
-- Depends On: [P4-S4-T1]
-- Write Scope: SRC/components/의 Library·Project·Users·Reference·Compare 관련 화면, 관련 locales/CSS, tests/25-secondary-flows.spec.ts
-- 구현: 목록/빈 상태/오류/권한/대화상자를 보완하고 비교 런을 이름+날짜+파일명 등으로 식별한다. 파괴적 행동의 기존 확인 절차와 권한 검사를 유지한다.
-- 검증: 390/1024/1440, KO/EN·양 테마, 긴 이름·중복 런 이름·조회 실패·권한 없음·키보드 탐색.
-- [x] AC: UX-09 나머지 보조 화면 범위가 검증되며 비교 대상 식별이 모호하지 않음.
-
-### P4-S0-V: UI/UX 품질 게이트
-
-- Status: DONE
-- Commit: fd94306913da7a7c6d316ec7e34833ec3a41950b
-- Evidence: [P4-S0-V](ui-ux-overhaul/evidence/P4-S0-V.md). FE 632/96, ROOT18–26 68/68, EXISTING-E2E 52/52, ROOT22·24·25 focused 53/53, 양 테마·KO/EN·반응형 시각 행렬, 감사 0건·신규/증가 CC 없음, 독립 UI/보안 리뷰 PASS.
-- 담당: test-specialist
-- Depends On: [P4-S4-T2]
-- Write Scope: docs/planning/ui-ux-overhaul/evidence/P4-S0-V.md
-- 검증: FE-ALL, FE-CHECK, ROOT-E2E 18–25, EXISTING-E2E, COVERAGE, 아래 시각 매트릭스 및 frontend/code 리뷰.
-- [x] AC: UX-07·08·09 통과, 주요 정확성·복원·키보드 동작 유지. 브라우저 실측/스크린샷 없는 시각 항목은 미검증으로 남김.
-
-## Phase P5 — 통합 검증·인수
-
-### P5-R0-T1: 보안·ASG·경로 호환성 검증
-
-- Status: DONE
-- Commit: c54495eebd0232e9ce723d4441d5ead699c6fc9b
-- Evidence: [P5-R0-T1](ui-ux-overhaul/evidence/P5-R0-T1.md). Backend focused 12개, BE-ALL 755개+subtest 2개, ROOT-E2E 26 5/5, 실제 prefix proxy·재시작·legacy migration·권한/ASG·업로드/ZIP 회귀, 독립 보안 리뷰 PASS.
-- 담당: security-specialist
-- Depends On: [P4-S0-V]
-- Write Scope: BE/tests/의 auth·ASG·export·startup 회귀 테스트, tests/26-asg-compatibility.spec.ts, docs/planning/ui-ux-overhaul/evidence/P5-R0-T1.md
-- 구현: 테스트만 보강한다. 인증 모드/ASG scope·만료·결과 저장, path-prefix, 다른 사용자/세션 snapshot 접근 차단, DB 재시작·legacy migration을 확인한다.
-- 검증: BE-ALL, ROOT-E2E 26, 권한별 정상/실패 응답, 기존 업로드 제한·ZIP hardening 회귀. 개인정보/토큰 없는 fixtures와 증거를 사용한다.
-- [x] AC: 권한 우회/데이터 누출/기존 소비자 파손 없음. 발견한 구현 결함은 해당 원 작업을 BLOCKED로 되돌려 담당자가 수정하고 관련 게이트를 재실행함.
-
-### P5-S0-V: 전체 회귀·수용 기준 인수
-
-- Status: DONE
-- Commit: b1cbebd49160d696dfec3f49e3b4c8d9982e7af1
-- Evidence: [P5-S0-V](ui-ux-overhaul/evidence/P5-S0-V.md). 동일 accepted source head에서 BE 755, FE 632/96, canonical ROOT18–26 73/73, EXISTING-E2E 52/52, lint·typecheck·build·감사 0건 및 UX-01–10 추적, 독립 인수 리뷰 PASS. Legacy ROOT01–03의 인증/구형 DOM 실패는 현재 범위 통과로 표시하지 않음.
-- 담당: test-specialist
-- Depends On: [P5-R0-T1]
-- Write Scope: docs/planning/ui-ux-overhaul/evidence/P5-S0-V.md 및 통합 테스트 보강
-- 검증: BE-ALL, FE-ALL, FE-CHECK, ROOT-E2E 전체, EXISTING-E2E, COVERAGE를 같은 최종 commit에서 실행한다. 실파일 교차 검증, 전체 시각 매트릭스, 복원/동시성/실패/보안 결과를 연결한다.
-- 검증: 기존 실패도 원인·기준 commit·영향을 기록하며 신규 실패와 구분한다. 필수 수용 기준 실패/미검증은 waiver 없이 통과시킬 수 없다.
-- [x] AC: 아래 UX-01–10 추적표의 증거가 모두 연결되고 치명/높음 미해결 결함이 없음. 자동 검사와 수동 확인 결과를 구분함.
-
-### P5-T0.1: 실행 결과·운영 인수 문서
-
-- Status: DONE
-- Commit: 355a14013f40df36db3986f2dca3bfd086839e74
-- Evidence: [P5-T0.1](ui-ux-overhaul/evidence/P5-T0.1.md), [운영 인수 문서](ui-ux-overhaul/06-operations-handoff.md). 33개 작업의 실제 commit·증거 링크, 재현 명령, 설정·복원·출력·보안 경계와 알려진 제한을 대조했고 독립 문서 리뷰 PASS.
-- 담당: test-specialist
-- Depends On: [P5-S0-V]
-- Write Scope: docs/planning/06-tasks.md, docs/planning/ui-ux-overhaul/의 인수 문서, 필요한 README/API 문서
-- 구현: 검증된 변경·마이그레이션/legacy 재분석 안내·설정/복원·출력 동작·실행 명령·남은 제한을 정리한다. 작업별 실제 commit/증거를 연결하고 PRD와 차이가 생긴 경우 결정 근거를 기록한다.
-- 검증: 링크/명령/작업 상태와 실제 실행 로그 대조. 문서만 수정한 뒤에도 diff 검사하며 제품 완료를 새로 추정하지 않는다.
-- [x] AC: 33개 작업의 상태·증거가 추적 가능하고, 후속 운영자가 재현할 수 있음. merge/push는 실행 당시 오케스트레이터 권한 범위에서만 수행함.
-
-## Phase P6 — NTC 기준 축 여백 제어
-
-### P6-S1-T1: 대립유전자 산점도 NTC 기준 offset 설정
-
-- Status: DONE
-- Commit: 8d7a58831c2f525b65b0f86c7e9817d2e9587c1f, ebd06565bc71c9b56fef00f832cfb1f3a3fe9941
-- Evidence: [P6-S1-T1](ui-ux-overhaul/evidence/P6-S1-T1.md)
-- 담당: frontend-specialist
-- Depends On: [P5-T0.1]
-- Write Scope: FE/src/lib/scatter-axes.ts, FE/src/stores/settings-store.ts, FE/src/components/analysis/ScatterViewControls.tsx, FE/src/components/analysis/ScatterPlot.tsx, FE/src/components/analysis/MarkerScatterPlot.tsx, FE/src/locales/en.ts, FE/src/locales/ko.ts 및 관련 FE 테스트
-- 구현: 기본 축의 좌측·하단 최소값을 NTC 기준점에서 X/Y offset만큼 뺀 값으로 계산한다. 예를 들어 NTC가 (1000, 2000)이고 offset이 (100, 100)이면 기본 기준을 (900, 1900)으로 둔다. 데이터에 음수 광학값이 있으면 실제 데이터가 잘리지 않도록 최소 범위를 확장한다.
-- 구현: X/Y offset을 각각 숫자로 입력하고 Reset으로 기본값을 복원한다. 설정은 두 산점도(전체/마커별)에 동일하게 적용하며, 기존 수동/데이터 맞춤 범위와 NTC·aspect 동작을 보존한다. NTC·데이터가 없거나 비유한 값인 경우 안전한 fallback을 사용한다.
-- 검증: TDD_MODE:RED_FIRST. 축 계산 단위 테스트(양수·음수·1000+·NTC 없음·비유한 값·aspect), 컨트롤 입력/Reset 테스트, 두 산점도 연결 테스트, KO/EN locale·lint·typecheck·build.
-- [x] AC: NTC 기준 기본 화면에서 불필요한 좌측/하단 여백이 제거되고, offset 변경/Reset이 즉시 두 산점도에 반영됨. 음수 웰이 항상 보이며 기존 범위 모드가 회귀하지 않음.
-
-### P6-S0-V: NTC 축 offset 품질 게이트
-
-- Status: DONE
-- Commit: ebd06565bc71c9b56fef00f832cfb1f3a3fe9941
-- Evidence: [P6-S0-V](ui-ux-overhaul/evidence/P6-S0-V.md)
-- 담당: test-specialist
-- Depends On: [P6-S1-T1]
-- Write Scope: docs/planning/ui-ux-overhaul/evidence/P6-S0-V.md 및 필요한 회귀 테스트
-- 검증: P6-S1-T1 집중 테스트, FE-ALL, FE-CHECK, 대표 브라우저 산점도 smoke(전체/마커별), 양 언어·테마, offset 저장/Reset 및 음수 데이터 시나리오. 기존 P5 기준선과 신규 실패를 분리한다.
-- [x] AC: 구현 commit과 증거가 연결되고, 두 산점도·언어·범위 모드·음수 데이터의 회귀가 없음.
-
-## Phase P7 — 웰 선택 영역·드래그 UX 보완
-
-### P7-S1-T1: 웰 선택 스크롤·marquee 상호작용 정리
-
-- Status: DONE
-- 담당: frontend-specialist
-- Depends On: [P6-S0-V]
-- Write Scope: FE/src/components/analysis/PlateView.tsx, FE/src/components/analysis/PlateSetupTab.tsx, 관련 스타일·선택 훅/스토어 테스트 및 필요한 ROOT-E2E
-- 구현: PlateView의 기존 marquee와 PlateSetupTab 웰 picker에서 불필요한 내부 세로 스크롤바를 제거하되 384웰의 가로 overflow와 작은 화면 사용성을 보존한다. 포인터 드래그 중 `user-select: none` 및 pointer capture를 적용해 텍스트 선택이 발생하지 않게 하고, 클릭과 드래그를 구분하는 최소 이동 threshold와 Windows 바탕화면과 같은 명확한 선택 박스를 제공한다.
-- 구현: 기존 Ctrl/Cmd 추가 선택, Shift 범위 선택, 단일 클릭 해제/선택, 키보드 roving focus·접근성 semantics 및 모바일 touch 동작을 유지한다. 선택 박스는 실제 웰을 기준으로 계산하고 포인터 취소·경계 이탈·빈 영역 클릭을 안전하게 처리한다.
-- 검증: TDD_MODE:RED_FIRST. 96/384웰의 스크롤·선택 박스·클릭/드래그 threshold·pointer capture·Ctrl/Cmd·Shift·키보드·touch 회귀 테스트와 대표 브라우저 smoke를 추가한다.
-- Evidence: [P7-S1-T1](ui-ux-overhaul/evidence/P7-S1-T1.md)
-- [x] AC: 두 웰 선택 화면에서 세로 스크롤바를 제거하고 384웰 가로 overflow, blue marquee, text-selection 방지 및 기존 선택 semantics를 유지한다.
-
-### P7-S0-V: 웰 선택 UX 품질 게이트
-
-- Status: DONE
-- Commit: 05b60bcf7571324142dee5157e5910044fd8615f
-- Evidence: [P7-S0-V](ui-ux-overhaul/evidence/P7-S0-V.md)
-- 담당: test-specialist
-- Depends On: [P7-S1-T1]
-- Write Scope: docs/planning/ui-ux-overhaul/evidence/P7-S0-V.md 및 필요한 회귀 테스트
-- 검증: P7-S1-T1 집중 테스트, FE-CHECK/FE-ALL, 96/384웰·데스크톱/모바일 대표 브라우저 검증, 세로 스크롤바 부재와 가로 overflow, native text selection 부재, marquee 가시성·선택 결과·키보드/접근성·양 언어/테마를 확인한다. P6 기준선과 신규 실패를 분리 기록한다.
-- [x] AC: 두 웰 선택 화면에서 요구된 스크롤·marquee·modifier·접근성 동작의 증거가 연결되고 치명/높음 회귀가 없음.
-
-## 수용 기준 추적표
-
-| PRD 기준 | 구현 작업 | 최종 검증 |
-|---|---|---|
-| UX-01 NTC·마커 QC | P1-R2-T1, P2-S2-T1 | 19-qc-status, P2-S0-V |
-| UX-02 A 저장 계약·revision | P1-R1-T1/T2/T3, P1-S0-T1 | persistence/revision/races, P1-S0-V |
-| UX-02 B 분석 실행 정책 | P2-S1-T1, P3-S1-T1 | 분석 단위/복원 E2E, P3-S0-V |
-| UX-02 C CSV/PDF/XLSX/PNG | P1-R3-T1/T2, P2-S3-T1 | 실제 파일 검사·18-result-consistency |
-| UX-03 키보드 | P2-S4-T1, P3-S2-T1 | 20-keyboard, 23-undo |
-| UX-04 마커 0·제외 의미 | P3-S4-T1 | 집계 단위/기존 설정 E2E, P3-S0-V |
-| UX-05 오류 복구 | P3-S3-T1 | 22-error-recovery |
-| UX-06 URL·설정 복원 | P3-S1-T1 | 21-workspace-restore, P5-R0-T1 |
-| UX-07 반응형·헤더 | P4-S0-T1, P4-S1-T1 | 24-responsive, P4-S0-V |
-| UX-08 분석 레이아웃 | P4-S1-T1 | 1440×1000 실측, P4-S0-V |
-| UX-09 품질 탐색·언어·접근성·보조 화면 | P4-S2-T1/S3-T1/S4-T1/S4-T2 | 24-responsive, 25-secondary-flows, 수동 검토 |
-| UX-10 undo/redo | P3-S2-T1 | 23-undo, P3-S0-V |
-| 공통 보안·ASG·기존 기능 | P5-R0-T1 | 26-asg-compatibility, 전체 회귀 |
-| NTC 기준 축 여백·offset | P6-S1-T1, P6-S0-V | 축 계산/컨트롤 단위 테스트, 산점도 smoke |
-
-작업 ID를 `/`로 축약한 셀은 같은 접두사의 각 작업을 의미한다. 최종 인수 증거에는 축약하지 않은 ID와 PRD 수용 기준별 결과를 기록한다.
-
-## 필수 검증 매트릭스
-
-| 축 | 조합/증거 |
-|---|---|
-| 핵심 UI | 분석·헤더·플레이트: 390/768/1024/1280/1440 × KO/EN × light/dark (20조합), 96/384웰 각각 |
-| 보조 UI | 로그인·업로드·설정·프로토콜·라이브러리·프로젝트·사용자·참조·비교: 390/1024/1440 × 양 언어·테마 |
-| 결과 | 단일/다중·20/40·ROX on/off·배경·마커 변경·legacy·stale·pending·409·역순 완료 |
-| 출력 | 동일 snapshot의 CSV/PDF/XLSX 실제 값/타입/metadata, PNG 활성 마커·필터·caption; empty/error 다운로드 |
-| 복원/편집 | URL/cache/context 우선순위·절대 사이클·popstate·세션/로그아웃·undo 실패/충돌·복원 시 자동 분석 억제 |
-| 오류/보안 | 프리셋/최근 목록 500·배치 부분 실패/unknown·401/403/404/5xx·ASG scope/만료·path-prefix·DB 재시작 |
-
-전체 조합의 실행 결과와 대표 스크린샷을 함께 보관한다. 대표 스크린샷만으로 생략한 조합을 통과 표시하지 않는다. 각 viewport의 높이·배율도 기록하고 UX-08은 지정된 1440×1000/100%를 별도 검사한다.
-
-## Auto-Orchestrate 시작·재개 절차
-
-1. 이 문서와 PRD가 실행 기준임을 확인하고, 현재 기능 브랜치 변경을 보존한 채 실행 baseline/main 통합 방식을 확정한다. 기존 qPCR 작업서는 archive를 사용한다.
-2. `auto-orchestrate`에 `docs/planning/06-tasks.md` 실행을 요청한다. 최초 실행은 P0부터, 권장 동시성 1이다. 전체 자동 진행/merge/push 권한은 그 실행 세션에서 명시한다. 이 작업서 작성 자체는 실행 승인이 아니다.
-3. 오케스트레이터는 DAG·Write Scope·환경을 검증하고 phase worktree를 준비한다. shared-file 쓰기/품질 검증/commit은 충돌 없이 직렬화한다.
-4. 각 작업은 승인된 scope에서 RED → GREEN → REFACTOR → 검증 → 로컬 commit → 증거 보고 순으로 진행한다. 게이트 실패 시 후속 작업을 시작하지 않는다.
-5. 재개 시 계획 hash·branch/commit·상태·증거를 대조한다. 문서의 TODO를 추측으로 DONE 처리하거나 이전 작업서의 상태를 재사용하지 않는다.
-
-현재 상태: **2026-09-08 37/37 완료, P6-S0-V/P7-S0-V PASS**. 동일 accepted source head에서 BE 755, 기존 FE 632/96, canonical ROOT18–26 73/73, EXISTING-E2E 52/52와 독립 인수 리뷰를 통과했고 P6-S1-T1/P6-S0-V/P7-S0-V는 각각 FE 테스트 및 build/lint/typecheck/browser smoke를 통과했다. Legacy ROOT01–03의 구형 인증/DOM 실패와 P7 브라우저 fixture 제한은 현재 범위의 통과로 표시하지 않고 각 증적에 기록했다. 로컬 Phase 통합은 허용되지만 원격 push·배포·외부 알림은 제외한다. 전용 whole-plot range assertion과 normalized Reset wiring 테스트는 후속 보강 항목이다. 재현 절차와 제한은 [운영 인수 문서](ui-ux-overhaul/06-operations-handoff.md), 실행 상태는 루트 `.claude/orchestrate-state.json`에 기록한다.
+- 담당: `orchestrator` (직접 수행)
+- Depends On: —
+- Status: TODO
+- Write Scope: `docs/planning/feedback-2026-09-11/**`, `docs/planning/06-tasks.md`, `docs/planning/archive/**`, `.claude/orchestrate-state.json`, `.gitignore`
+- 구현 내용
+  - `main`(`c2bc854`)을 baseline으로 확정. 루트 detached HEAD(`201e0c7`)에서 시작하지 않음을 확인한다.
+  - 루트 미커밋 변경(`.gitignore` 수정, `node_modules` 삭제, `.claude/` 미추적)의 처리 방침을 확정하고 기록한다.
+  - 기획서 8종(`docs/planning/feedback-2026-09-11/`)과 본 작업서를 main에 커밋한다.
+  - 0절 승격 절차를 수행한다(이전 계약 archive → 본 문서를 `06-tasks.md`로).
+  - `.claude/orchestrate-state.json`을 `contract_id: qprism-feedback-20260911-v1`, `baseline_commit: c2bc854`로 **새로 시작**한다. 이전 계약 파일은 보존한다.
+  - BE venv 준비(`bcrypt==4.0.1` 확인)와 FE 의존성 설치를 확인하고, 회귀 기준선(BE-ALL / FE-ALL / FE-CHECK 현재 통과 수)을 기록한다.
+- AC
+  - [ ] baseline이 `c2bc854`로 기록되고, 이전 계약의 worktree·브랜치가 삭제되지 않았다
+  - [ ] `06-tasks.md`가 본 계약 내용이고, 이전 계약이 `archive/`에 보존되었다
+  - [ ] 회귀 기준선(현재 통과/실패 수)이 증거 문서에 수치로 남았다
+- 검증: BE-ALL, FE-ALL, FE-CHECK (기준선 기록 목적, 실패가 있어도 수치로 남기고 진행)
+- 증거: `evidence/P0-T0.1.md`
+
+### P0-T0.2: 색 체계 단일화 (값 불변 리팩터링)
+- 담당: `frontend-specialist`
+- Depends On: P0-T0.1
+- Status: TODO
+- Write Scope: `SRC/lib/plotly-theme.ts`, `SRC/lib/constants.ts`, `SRC/lib/genotype.ts`, `SRC/components/protocol/ProtocolTab.tsx`, `SRC/index.css`
+- 구현 내용
+  - `plotly-theme.ts`의 하드코딩 HEX를 CSS 토큰 읽기(`getComputedStyle(document.body).getPropertyValue('--color-…')`)로 전환한다.
+  - `constants.ts` / `genotype.ts` / `ProtocolTab.tsx`의 `PHASE_COLORS`·`AMP_COLORS` HEX를 토큰 또는 단일 색 모듈로 모은다.
+  - **다크모드 전환 레이스 방어**: `body`에 `transition: background-color 0.3s`가 걸려 있어 토글 직후 `getComputedStyle`이 중간값을 읽을 수 있다. 전환 완료 후 재렌더하거나 전환 대상이 아닌 토큰에서 읽도록 한다.
+  - **색 값 자체는 바꾸지 않는다.** D-2 미확정 상태에서 팔레트를 바꾸지 않는다. 이 태스크는 "한 곳에서 바꿀 수 있게 만드는" 리팩터링이다.
+- AC
+  - [ ] 라이트/다크 모두에서 변경 전후 렌더 색이 동일하다 (시각 회귀 없음)
+  - [ ] Plotly 차트 색이 CSS 토큰에서 유도된다
+  - [ ] 다크모드 토글 직후에도 차트가 전환 중간색을 고정하지 않는다
+  - [ ] 하드코딩 HEX가 남은 위치가 증거 문서에 목록화되었다
+- 검증: FE-ALL, FE-CHECK, VIEWPORT(라이트/다크 토글 왕복)
+- 증거: `evidence/P0-T0.2.md`
+
+### P0-S0-V: Preflight 게이트
+- 담당: `test-specialist`
+- Depends On: P0-T0.1, P0-T0.2
+- Status: TODO
+- Write Scope: `docs/planning/feedback-2026-09-11/evidence/**`
+- 구현 내용: 품질 체인 실행. 기준선 대비 신규 실패 0 확인. 기존 실패는 기준선으로 분리 기록.
+- AC
+  - [ ] BE-ALL / FE-ALL / FE-CHECK가 기준선 대비 신규 실패 0
+  - [ ] 시각 회귀 없음(P0-T0.2)
+- 검증: BE-ALL, FE-ALL, FE-CHECK
+- 증거: `evidence/P0-S0-V.md`
+
+---
+
+## Phase P1 — 연동 컨텍스트 라벨 (FB-01)
+
+### P1-S1-T1: ASG 연동 컨텍스트 라벨 정상화
+- 담당: `frontend-specialist`
+- Depends On: P0-S0-V
+- Status: TODO (D-8 부분 차단 — 매핑 테이블 확정만 보류)
+- Write Scope: `SRC/components/layout/Header.tsx`, `SRC/components/layout/Header.test.tsx`, `SRC/locales/en.ts`, `SRC/locales/ko.ts`
+- 기획 근거: [FB-01](feedback-2026-09-11/FB-01-linked-context-label.md)
+- 구현 내용
+  - `LinkedIdentity`(`Header.tsx:22-28`)가 `target_type` / `target_id` 원시값을 **렌더링하지 않는다.**
+  - xl 미만 축약 경로 `<summary>ASG · {context.target_type}</summary>`(`Header.tsx:35`)도 **동일하게 수정한다.** 두 경로 모두 고쳐야 한다.
+  - 표시 우선순위: `tag_alias`(비어 있지 않을 때) → `marker_id` → i18n 매핑된 `target_type` 라벨. 셋 다 없으면 블록을 렌더링하지 않는다.
+  - `asgTargetLabel: (targetType: string) => string`을 `en.ts` / `ko.ts`에 **동시 추가**한다(`Translations` 타입이 키 동기화를 강제).
+  - 관측된 값 기준으로 매핑한다: `ad_hoc`(`tests/test_asg_launch_auth.py:87`), `marker_version`(`:56`), `design_run_item`(`tests/test_asg_result_save.py:105,209,302`). **`marker`/`design_result`/`order_item`은 코드에 존재하지 않는 추정값이므로 쓰지 않는다.**
+  - 미지의 `target_type`은 중립 문구로 폴백하고 **원시값을 화면·툴팁 어디에도 흘리지 않는다.**
+- AC
+  - [ ] `target_type` / `target_id`가 화면(툴팁 포함) 어디에도 나타나지 않는다 — 데스크톱·축약 두 경로 모두
+  - [ ] ad_hoc 런치(`tag_alias=""`, `marker_id="Ad hoc SNP Analyze"`)에서 `Ad hoc SNP Analyze`만 표시된다
+  - [ ] `tag_alias`가 빈 문자열이면 `marker_id`로 폴백한다
+  - [ ] 미지 `target_type`에서 크래시 없이 중립 폴백 또는 블록 숨김이 동작한다
+  - [ ] 비연동(local auth) 모드 렌더링이 변하지 않는다
+  - [ ] 백엔드 `linked_context` 응답은 변경하지 않았다
+- 검증: `FE-TEST src/components/layout/Header.test.tsx`, FE-ALL, FE-CHECK, `ROOT-E2E tests/26-asg-compatibility.spec.ts`
+- 증거: `evidence/P1-S1-T1.md` — D-8 미해결 시 확정 못 한 열거값을 명시
+
+### P1-S0-V: 표시 계층 게이트
+- 담당: `test-specialist`
+- Depends On: P1-S1-T1
+- Status: TODO
+- Write Scope: `docs/planning/feedback-2026-09-11/evidence/**`
+- 검증: FE-ALL, FE-CHECK, EXISTING-E2E
+- AC: [ ] 신규 실패 0 · [ ] 미해결 중요 리뷰 이슈 0 · [ ] 새 코드 coverage ≥70%
+- 증거: `evidence/P1-S0-V.md`
+
+---
+
+## Phase P2 — 프로토콜·Raw data 콘텐츠 (FB-05, FB-06)
+
+> **현행 `protocol` 탭 ID 위에서 수행한다.** 탭 ID 재편(P3)보다 먼저 콘텐츠를 완성해 두 번 고치는 것을 피한다.
+
+### P2-R1-T1: ProtocolStep 모델 확장 + 파서 전달
+- 담당: `backend-specialist`
+- Depends On: P1-S0-V
+- Status: TODO (D-9 부분 차단 — ASG 협의 결과만 보류)
+- Write Scope: `BE/app/models.py`, `BE/app/parsers/pcrd_raw.py`, `BE/app/parsers/eds_raw.py`, `BE/app/routers/data.py`, `BE/tests/test_import_parsers_p2.py`, `BE/tests/<신규 protocol 테스트>`
+- 기획 근거: [FB-05](feedback-2026-09-11/FB-05-protocol-visualization.md)
+- 구현 내용
+  - `ProtocolStep`(`models.py:158-165`)에 세 필드를 **기본값과 함께** 추가한다:
+    `plate_read: bool = False`, `temp_increment: float | None = None`, `read_channels: list[str] = Field(default_factory=list)`
+  - `pcrd_raw.py`: `_parse_protocol()`이 이미 계산하는 `has_read`(`:299`)와 `inc`/`inc_temp`(`:300-301`)를
+    `ProtocolStep(...)` 생성(`:435-443`)에 전달한다. 현재는 라벨 문자열(`:412`)에만 쓰이고 버려진다.
+  - `eds_raw.py`: `CollectionFlag`(`:450-451,502`)와 `ext_temp`(`:489`)를 `ProtocolStep` 생성(`:518-526`)에 전달한다.
+  - **`read_channels`는 단계별 채널 정보가 원본에 없으면 채우지 않는다(빈 리스트).** 런 전체 채널로 대신 채우면
+    "이 단계에서 이 채널을 읽었다"는 거짓 단언이 된다.
+  - 런 채널 목록은 별도로 **프로토콜/세션 응답 계약**에 노출해 프론트 채널 카드가 `data-store` 캐시(stale 위험) 대신 이를 읽게 한다.
+  - `routers/data.py`의 예제 프로토콜 상수를 신규 필드에 맞춰 갱신한다.
+- AC
+  - [ ] `.pcrd` 임포트 시 판독 단계의 `plate_read === true`가 API 응답에 담긴다
+  - [ ] 터치다운 단계의 `temp_increment`가 부호를 포함해 담긴다
+  - [ ] 단계별 채널 정보가 없는 포맷에서 `read_channels`가 **비어 있다** (추측 값 없음)
+  - [ ] 기존 저장 프로토콜(신규 필드 없는 JSON)이 `app/db.py:692`·`:753`의 `ProtocolStep(**s)`로 오류 없이 복원된다
+  - [ ] `protocol_overrides`에 저장된 사용자 편집본도 복원된다
+  - [ ] ASG 저장 payload(`app/asg_result.py:91` `model_dump()`)에 신규 필드가 실려도 직렬화가 정상이다
+  - [ ] 런 채널 목록이 응답 계약으로 제공된다
+- 검증: `BE-TEST tests/test_import_parsers_p2.py`, BE-ALL, BE-LINT
+- 증거: `evidence/P2-R1-T1.md` — ASG 수신측 스키마 검증 강도(D-9) 확인 결과 기록
+
+### P2-R1-T2: 증폭 응답에 처리 상태 에코 추가
+- 담당: `backend-specialist`
+- Depends On: P1-S0-V
+- Status: TODO
+- Write Scope: `BE/app/routers/data.py`, `BE/app/models.py`(응답 스키마), `BE/tests/<신규 amplification 테스트>`
+- 기획 근거: [FB-06](feedback-2026-09-11/FB-06-rawdata-tab.md) §2
+- 구현 내용
+  - `/api/data/{sid}/amplification/all` 응답(`routers/data.py:254-258`)에
+    `normalization_applied: bool`과 `background_mode`를 **에코**로 추가한다.
+  - 현재 응답은 `allele2_dye` + role label metadata + `curves`뿐이라, 프론트가 스토어의 *요청값*으로
+    "정규화 적용됨"을 단언할 수밖에 없다. 이는 백엔드가 실제로 적용했는지와 무관한 주장이 된다.
+  - 산점도가 이미 쓰는 패턴(`normalizationApplied` 응답 필드 → `ScatterReferenceBasis`가 "요청 예 / 실제 적용 아니오"를 구분 표시)을 따른다.
+- AC
+  - [ ] 응답에 `normalization_applied` / `background_mode`가 포함된다
+  - [ ] 참조 채널이 없는 런에서 `use_rox=true`로 요청해도 `normalization_applied=false`가 정직하게 반환된다
+  - [ ] 기존 소비자(프론트 오버레이)가 신규 필드를 무시해도 동작한다 (하위 호환)
+- 검증: BE-TEST, BE-ALL, BE-LINT
+- 증거: `evidence/P2-R1-T2.md`
+
+### P2-S1-T1: 열 순환 프로파일 다이어그램 + 판독 채널 카드
+- 담당: `frontend-specialist`
+- Depends On: P2-R1-T1
+- Status: TODO
+- Write Scope: `SRC/components/protocol/ProtocolThermalProfile.tsx`(신규), `SRC/components/protocol/ProtocolTab.tsx`, `SRC/components/protocol/use-protocol-editor.ts`, `SRC/components/protocol/ProtocolTab.test.tsx`, `SRC/types/api.ts`, `SRC/locales/{en,ko}.ts`
+- 기획 근거: [FB-05](feedback-2026-09-11/FB-05-protocol-visualization.md) §3-2, §3-3
+- 구현 내용
+  - **인라인 SVG** 다이어그램을 신규 컴포넌트로 구현한다. Plotly를 쓰지 않는다 — 이 그림은 탐색이 아니라 요약이며,
+    의존성 0·다크모드 `currentColor`·인쇄 안정성이 우선이다.
+  - 가로축은 **실제 시간이 아니라 단계 순서**다. Initial Denaturation 300초와 Annealing 5초를 실시간 비례로 그리면 증폭 구간이 보이지 않는다. 지속시간은 라벨로 표기한다.
+  - 반복 구간은 `phase`로 묶어 배경 밴드 + `×N` 배지로 표현한다. 기존 `getPhaseColor()` 색 체계를 재사용한다.
+  - 판독 마커(📷)는 **`plate_read` 필드 기준**으로 찍는다. 현행 `isReadingStep(label)` 문자열 휴리스틱을 **제거**한다
+    (라벨은 사용자가 자유 편집 가능하므로 표시가 데이터가 아닌 문자열에 의존하고 있다).
+  - 터치다운은 `temp_increment`로 하강 표시한다.
+  - 채널 요약 카드는 P2-R1-T1이 제공한 **응답 계약**에서 읽는다. `--color-fam` / `--color-allele2` 토큰으로 산점도와 색을 맞춘다.
+  - `use-protocol-editor.ts`가 편집 시 신규 필드를 **유실시키지 않는지** 확인한다. `handleAddStep`이 만드는 신규 스텝에 기본값을 명시한다.
+  - `max-w-[800px]` 제한을 해제하고 넓은 화면에서 다이어그램+표를 배치한다. **표의 편집 기능은 그대로 유지한다.**
+- AC
+  - [ ] 사용자가 단계 라벨을 바꿔도 📷 표시가 유지된다 (휴리스틱 제거 증명)
+  - [ ] 프로토콜 편집 → 저장 → 재조회 시 `plate_read`/`temp_increment`가 보존된다
+  - [ ] 채널 정보가 없는 포맷에서 빈 칩/추측 값이 표시되지 않는다
+  - [ ] 다이어그램이 라이트/다크 모두에서 판독 가능하고 400px에서 가로 스크롤로 처리된다
+  - [ ] 기존 프로토콜 편집·저장·취소 동작이 회귀하지 않는다
+- 검증: `FE-TEST src/components/protocol/`, FE-ALL, FE-CHECK, VIEWPORT
+- 증거: `evidence/P2-S1-T1.md`
+
+### P2-S2-T1: 증폭 오버레이 개선 + Raw data 화면 배치
+- 담당: `frontend-specialist`
+- Depends On: P2-R1-T2, P2-S1-T1
+- Status: TODO
+- Write Scope: `SRC/components/analysis/AmplificationOverlay.tsx`, `SRC/components/protocol/ProtocolTab.tsx`, `SRC/components/analysis/AnalysisTab.tsx`, `SRC/components/analysis/plot-cleanup.test.tsx`, `SRC/types/api.ts`, `SRC/locales/{en,ko}.ts`
+- 기획 근거: [FB-06](feedback-2026-09-11/FB-06-rawdata-tab.md) §3
+- 구현 내용
+  - 프로토콜 화면 하단에 **전체 플레이트 스코프** 오버레이를 추가 마운트한다. 분석 탭의 기존 마운트는 유지하되 보조 영역으로 둔다.
+  - **DOM id 스코프화**: `id="overlay-plot"` / `"overlay-container"` / `"toggle-overlay-btn"` / `"overlay-channel-select"`가
+    고정값이다. `useId()` 또는 prop 기반으로 바꾼다.
+    (참고: 현재는 `AnalysisWorkspace.tsx:104-139`의 삼항 분기로 오버레이가 항상 하나뿐이라 충돌이 없다.
+    이번 작업이 **처음으로** 두 인스턴스를 만든다. Plotly는 ref 기반이라 렌더 자체는 안전하지만,
+    `plot-cleanup.test.tsx:33,49`의 `querySelector('#overlay-plot')`가 모호해진다.)
+  - 헤더에 처리 상태를 **응답 에코 값 기준**으로 표시한다. 스토어 요청값으로 단언하지 않는다.
+  - 색 기준 선택기 추가: `유전형`(현행 `effective_type`) / `웰 타입` / `단색`.
+    **`단색`을 "raw"라고 표기하지 않는다** — Y값은 여전히 `norm_fam`/`norm_allele2`다(`AmplificationOverlay.tsx:67`).
+  - 하드코딩 영어 `"Hide Overlay"` / `"Show Overlay"`를 i18n 처리한다.
+  - 요청 중복은 **양쪽을 각각 펼쳤을 때만** 발생한다(기본 `useState(false)`, `if (!visible) return`).
+    엔드포인트는 인메모리 조회라 DB를 치지 않으므로 차단 사유는 아니다. 실측 후 필요하면 세션 캐시를 둔다.
+- AC
+  - [ ] 두 화면에 동시 마운트해도 두 차트가 각각 올바르게 렌더된다
+  - [ ] 탭 전환 시 Plotly 인스턴스가 누수되지 않는다 (`plot-cleanup` 통과)
+  - [ ] 처리 상태 표시가 응답 에코에 근거한다
+  - [ ] `Hide/Show Overlay`가 한국어 UI에서 한국어로 나온다
+  - [ ] 마커별 오버레이(`ploidyOverride`)가 회귀하지 않는다
+  - [ ] 오버레이는 `chart-export-registry`에 등록되지 않으므로 PNG/PDF 내보내기에 회귀가 없음을 확인했다
+- 검증: `FE-TEST src/components/analysis/plot-cleanup.test.tsx`, FE-ALL, FE-CHECK, VIEWPORT
+- 증거: `evidence/P2-S2-T1.md` — 요청 중복 실측 결과 포함
+
+### P2-S0-V: 콘텐츠 게이트
+- 담당: `test-specialist`
+- Depends On: P2-S2-T1
+- Status: TODO
+- Write Scope: `docs/planning/feedback-2026-09-11/evidence/**`
+- 검증: BE-ALL, BE-LINT, FE-ALL, FE-CHECK, EXISTING-E2E
+- AC: [ ] 신규 실패 0 · [ ] 새 코드 coverage ≥70%·복잡도 ≤10 · [ ] 미해결 중요 리뷰 이슈 0 · [ ] 하위호환(구 프로토콜 JSON 복원) 확인
+- 증거: `evidence/P2-S0-V.md`
+
+---
+
+## Phase P3 — 정보구조 재편 (FB-07 IA)
+
+> **D-5 승인 없이 시작하지 않는다.** 이 Phase는 루트 Playwright 스펙 다수를 깨뜨린다.
+
+### P3-S1-T1: 최상위 탭 ID·라벨·순서 재편
+- 담당: `frontend-specialist`
+- Depends On: P2-S0-V, **D-5 승인**
+- Status: BLOCKED (D-5)
+- Write Scope: `SRC/components/layout/TabNavigation.tsx`, `SRC/components/analysis/AnalysisWorkspace.tsx`, `SRC/App.tsx`, `SRC/stores/navigation-store.ts`, `SRC/lib/tab-keyboard.ts`, `SRC/locales/{en,ko}.ts`, 관련 테스트
+- 기획 근거: [FB-07](feedback-2026-09-11/FB-07-identity-and-ia.md) §3-1
+- 구현 내용
+  - 상위 탭을 **플레이트 설정 → Raw data → 결과 → 품질 → 통계 → 비교 → 라이브러리 → 프로젝트 → ⋯더보기(설정·참고자료·사용자·피드백)** 순으로 재편한다.
+  - `AnalysisWorkspace`의 2단 `WorkspaceTabs`(플레이트 설정/분석)를 **제거**하고 최상위로 승격한다. 사용자가 가장 먼저 하는 작업이 2계층에 묻혀 있는 문제를 해소한다.
+  - **라벨만 바꾸는 안으로는 불가능하다.** 현재 `plate`는 최상위 `TabId`가 아니라 `navigation-store`의 `surface` 값이다. 최상위 탭 두 개(Plate/Results)를 표현하려면 새 탭 ID가 필수다.
+  - 탭 ID 매핑:
+
+    | 신 최상위 탭 | 구 상태 |
+    | --- | --- |
+    | `plate` | `tab='analysis'` + `surface='plate'` |
+    | `results` | `tab='analysis'` + `surface='analysis'` |
+    | `rawdata` | `tab='protocol'` |
+
+  - `surface` 개념은 최상위 탭으로 흡수한다. `bannerDismissed` 상태와 세션 전환 리셋 로직도 함께 정리한다(FB-03에서 배너가 스코프 선택기로 대체되므로 P4와 조율).
+  - `설정` 탭을 더보기로 강등한다(P4에서 정규화·축 설정이 플롯 헤더로 올라가면 사용 빈도가 크게 떨어진다).
+- AC
+  - [ ] 상위 탭 순서가 `플레이트 설정 → Raw data → 결과 → …`다
+  - [ ] 플레이트 설정이 **1회 클릭**으로 도달된다
+  - [ ] `en`/`ko` 라벨이 모두 번역되고 타입 체크를 통과한다
+  - [ ] 키보드 탭 내비게이션(`navigateTabs`, roving `tabIndex`, `aria-selected`)이 새 순서에서 동작한다
+  - [ ] `TabNavigation.keyboard.test.tsx:7,10,14`의 `activeTab="analysis"` / `main-panel-analysis` / `'protocol'` 리터럴 단언이 갱신되었다
+- 검증: `FE-TEST src/components/layout/`, FE-ALL, FE-CHECK, EXISTING-E2E
+- 증거: `evidence/P3-S1-T1.md`
+
+### P3-S2-T1: 구 URL 매핑 + 연동 계약 갱신
+- 담당: `frontend-specialist`
+- Depends On: P3-S1-T1
+- Status: BLOCKED (D-5)
+- Write Scope: `SRC/lib/workspace-history.ts`, `SRC/lib/workspace-location.ts`, `SRC/hooks/use-workspace-location.ts`, `SRC/lib/quality-navigation.ts`, `SRC/stores/session-store.ts`(sessionQueries 해석), `SRC/App.tsx`(FeedbackWidget pageKey), 관련 테스트
+- 기획 근거: [FB-07](feedback-2026-09-11/FB-07-identity-and-ia.md) §3-1 호환성 주의
+- 구현 내용
+  - **`navigation-store`는 persist하지 않는다.** 위치가 살아남는 경로는 두 가지다:
+    (i) URL — `lib/workspace-history.ts`의 `pushState`/`replaceState`,
+    (ii) `session-store.sessionQueries` — 열린 세션별 쿼리 문자열이 `sessionStorage`(`qprism-file-workspace`)에 persist.
+    따라서 필요한 것은 **스토어 마이그레이션이 아니라 legacy URL 파싱 + canonical rewrite**다.
+  - 구 URL(`?tab=analysis&surface=plate` 등)을 읽어 신 탭 ID로 **의미를 보존해** 매핑하고 주소를 새 형태로 다시 쓴다.
+  - 크래시 방지 폴백은 **이미 구현되어 있다**(`navigation-store.ts`의 `parseNavigation` → `tab()` 타입가드, `:25,:32-36,:56`).
+    폴백만 있으면 북마크된 구 URL이 기본 탭으로 떨어져 **사용자 의도가 유실**된다. 매핑이 폴백보다 먼저 동작해야 한다.
+  - `lib/quality-navigation.ts`의 `surface: 'plate' | 'analysis'` 복귀 계약을 새 탭 구조에 맞춘다.
+  - `FeedbackWidget`의 `pageKey`가 새 탭 ID를 기록하게 한다. **과거 피드백의 `page_key`와 값이 달라지므로** 증거 문서에 매핑표를 남긴다.
+- AC
+  - [ ] 구 URL로 진입해도 의도한 탭으로 매핑되고 주소가 canonical 형태로 다시 쓰인다
+  - [ ] `sessionQueries`에 저장된 구 쿼리 문자열도 동일하게 매핑된다
+  - [ ] 미지 탭 ID의 기본 탭 폴백이 회귀하지 않는다
+  - [ ] 품질 탭 → 웰/마커 복귀 경로가 새 탭 구조에서 동작한다
+  - [ ] 피드백 `page_key` 신·구 매핑표가 증거에 기록되었다
+- 검증: `FE-TEST src/lib/workspace-location.test.ts`, `FE-TEST src/lib/quality-navigation.test.ts`, FE-ALL, FE-CHECK, EXISTING-E2E
+- 증거: `evidence/P3-S2-T1.md`
+
+### P3-S0-V: 정보구조 게이트
+- 담당: `test-specialist`
+- Depends On: P3-S2-T1
+- Status: BLOCKED (D-5)
+- Write Scope: 루트 `tests/**`, `docs/planning/feedback-2026-09-11/evidence/**`
+- 구현 내용: 루트 Playwright 스펙 전체의 탭 셀렉터를 일괄 갱신한다. **이 Phase에서 작업량이 가장 큰 부분이다.**
+- AC: [ ] 루트 E2E 전체 통과 · [ ] FE-ALL 신규 실패 0 · [ ] 접근성(role/aria/roving tabIndex) 회귀 0 · [ ] 미해결 중요 리뷰 이슈 0
+- 검증: FE-ALL, FE-CHECK, ROOT-E2E(전체), EXISTING-E2E
+- 증거: `evidence/P3-S0-V.md`
+
+---
+
+## Phase P4 — 결과 화면 (FB-04 + FB-03)
+
+> **두 기획서를 한 Phase로 묶는다.** 같은 `.analysis-grid` / `.analysis-scatter-canvas` 규칙을 바꾸므로 분리하면 서로를 되돌린다.
+
+### P4-R1-T1: 분석 경고 심각도 등급 계약
+- 담당: `backend-specialist`
+- Depends On: P3-S0-V
+- Status: TODO
+- Write Scope: `BE/app/models.py`, `BE/app/processing/**`(경고 생성부), `BE/tests/<경고 테스트>`, `SRC/lib/analysis-warnings.ts`, `SRC/types/api.ts`
+- 기획 근거: [FB-03](feedback-2026-09-11/FB-03-analysis-density.md) §8
+- 구현 내용
+  - 현재 `warnings`에는 **심각도 구분이 없다.** 등급 없이 경고를 화면 하단으로 내리는 것은 과학 도구에서 허용할 수 없다.
+  - `blocking`(상단 잔류) / `advisory`(하단 강등) 2단 등급을 계약에 추가한다. 기본값은 기존 동작을 보존하는 쪽으로 둔다.
+  - 기존 경고 각각을 어느 등급으로 분류할지 **판정 신뢰도 기준**으로 결정하고 근거를 문서화한다.
+    예: "저신호 웰을 NTC가 아니라 Undetermined로 두었습니다"는 비율 원점에 직접 영향 → `blocking` 후보.
+  - 기존 소비자가 등급 필드를 무시해도 동작하도록 하위 호환을 유지한다.
+- AC
+  - [ ] 응답의 각 경고가 등급을 갖는다
+  - [ ] 등급 분류 근거가 경고별로 문서화되었다
+  - [ ] 등급 필드를 무시하는 기존 코드 경로가 회귀하지 않는다
+- 검증: BE-TEST, BE-ALL, BE-LINT, FE-CHECK
+- 증거: `evidence/P4-R1-T1.md`
+
+### P4-S1-T1: 산점도 캔버스 종횡비
+- 담당: `frontend-specialist`
+- Depends On: P3-S0-V, **D-6 결정**
+- Status: BLOCKED (D-6)
+- Write Scope: `SRC/index.css`, `SRC/components/analysis/ScatterPlot.tsx`, `SRC/components/analysis/MarkerScatterPlot.tsx`
+- 기획 근거: [FB-04](feedback-2026-09-11/FB-04-scatter-ergonomics.md) §3-1
+- 구현 내용
+  - **먼저 결함 제거**: `index.css` 1280px 블록에 `.analysis-scatter-canvas`가 두 번 선언된다
+    (`:166` `max-height:300px`, `:175` `height:360px`). 서로 다른 속성이라 둘 다 적용되어 **used height가 300px로 눌린다**
+    — 넓은 화면일수록 그래프가 작아지는 원인. 중복 선언을 하나로 합친다.
+  - **`max-height`로 종횡비를 보장하려는 시도는 실패한다.** 940px 폭에서 4:3은 705px가 필요하지만 911px 뷰포트의 70vh는 638px다.
+    높이를 자르면 실제 비율이 1.47:1이 된다. **폭을 종횡비에 맞춰 묶어야 한다**:
+
+    ```css
+    .analysis-scatter-canvas {
+      --scatter-max-h: min(70vh, 640px);
+      aspect-ratio: 4 / 3;              /* D-6 결정에 따라 1/1 가능 */
+      height: auto; width: 100%;
+      max-width: calc(var(--scatter-max-h) * 4 / 3);
+      min-height: 360px;                 /* Plotly 0-height 마운트 방어 */
+      margin-inline: auto;
+    }
+    ```
+  - Plotly 마운트 시 `clientHeight > 0`인지 확인한다. 필요하면 `ResizeObserver` + `Plotly.Plots.resize`.
+  - `lockAspect`(`lib/scatter-axes.ts`의 `scaleanchor:'x'`, `scaleratio:1`)는 **데이터 축 비율**이며 캔버스 종횡비와 별개다.
+    둘 다 켜졌을 때 `constrain:'domain'`이 플롯 영역을 더 줄이지 않는지 확인한다.
+  - 두 플롯(`ScatterPlot`, `MarkerScatterPlot`)이 같은 클래스를 공유하므로 함께 검증한다.
+- AC
+  - [ ] 1920x911에서 캔버스 `boundingBox()`의 width:height가 목표 비율 ±2% 이내다 (300px로 눌리지 않는다)
+  - [ ] 1280 / 768 / 400px에서 캔버스가 뷰포트 세로를 넘지 않는다
+  - [ ] 마운트 직후 캔버스 높이가 0이 아니어서 Plotly가 정상 렌더된다
+  - [ ] `lockAspect` 동작이 회귀하지 않는다
+  - [ ] PNG/PDF 내보내기 산출물이 정상이다 (`use-exports.ts`의 캡처가 실측 크기를 쓰는지 확인)
+- 검증: `FE-TEST src/components/analysis/`, FE-ALL, FE-CHECK, `ROOT-E2E`(boundingBox 단언), VIEWPORT
+- 증거: `evidence/P4-S1-T1.md`
+
+### P4-S2-T1: 플롯 헤더 바 — 정규화·축 설정 승격
+- 담당: `frontend-specialist`
+- Depends On: P4-S1-T1
+- Status: BLOCKED (D-6 경유)
+- Write Scope: `SRC/components/analysis/ScatterViewControls.tsx`, `SRC/components/analysis/ScatterPlot.tsx`, `SRC/components/analysis/MarkerScatterPlot.tsx`, `SRC/components/settings/SettingsTab.tsx`, `SRC/locales/{en,ko}.ts`, 관련 테스트
+- 기획 근거: [FB-04](feedback-2026-09-11/FB-04-scatter-ergonomics.md) §3-2, §3-3
+- 구현 내용
+  - 정규화 체크박스(`scatter-use-rox`)와 축 입력(`axis-x-min`/`max`, `axis-y-min`/`max`)은 **이미 존재**하지만
+    접힌 `<details data-testid="analysis-advanced-settings">` 안에 매장되어 있다(`ScatterViewControls.tsx:170`, `:250`).
+    **기능 추가가 아니라 발견 가능성 문제다.**
+  - 항상 보이는 헤더 바로 승격: 정규화 체크박스(+참조 채널명), 축 모드 드롭다운, `축 설정…` 버튼, 드래그 도구 토글.
+  - `축 설정…` 클릭 시 x/y min·max 4개 입력을 인라인 팝오버로 열고, **`axisMode`를 자동으로 `manual`로 전환**한다.
+    현재는 `numberInput(..., !manual)`이라 manual을 먼저 골라야 입력이 활성화된다 — 사용자 요구와 어긋난다.
+  - 접힌 채 유지: NTC 사분면, NTC 축 오프셋, 배수성 상한 (전문가용 저빈도).
+  - **`data-testid`를 모두 보존한다.** 위치만 바뀌고 기존 단위 테스트는 통과해야 한다.
+  - 참조 채널 드롭다운은 **현재 채널 1개만** 담는다(런타임 재지정은 이번 범위 밖 — 저장 모델 확장이 필요하다).
+    참조 채널이 없는 런에서는 `hasNormalizationChannel` prop으로 비활성화하고 사유를 보인다.
+  - `SettingsTab`의 `useRox` 중복 노출을 정리한다. **`settings-store.useRox` 필드 자체는 절대 제거하지 않는다** — 프리셋이 이 값을 담는다.
+- AC
+  - [ ] 정규화 체크박스가 펼치는 동작 없이 플롯 위에 보인다
+  - [ ] 참조 채널명이 표시되고, 없는 런에서는 비활성 + 사유가 보인다
+  - [ ] `축 설정…` 클릭 → 축 모드를 먼저 바꾸지 않고도 min/max 편집이 가능하다
+  - [ ] 기존 `data-testid`가 모두 유지되어 기존 단위 테스트가 통과한다
+  - [ ] 두 플롯이 동일한 컨트롤을 갖는다
+  - [ ] 프리셋 저장·적용(`apply-preset.ts`)이 회귀하지 않는다
+- 검증: `FE-TEST src/components/analysis/ScatterViewControls.test.tsx`, `FE-TEST src/components/settings/`, FE-ALL, FE-CHECK, VIEWPORT
+- 증거: `evidence/P4-S2-T1.md`
+
+### P4-S3-T1: 결과 중심 레이아웃
+- 담당: `frontend-specialist`
+- Depends On: P4-R1-T1, P4-S2-T1
+- Status: BLOCKED (D-6 경유)
+- Write Scope: `SRC/components/analysis/AnalysisTab.tsx`, `SRC/components/analysis/AnalysisWorkspace.tsx`, `SRC/components/analysis/WellSelectionToolbar.tsx`, `SRC/components/analysis/MultiMarkerAnalysisPanel.tsx`, `SRC/components/analysis/ResultsTable.tsx`, `SRC/index.css`, `SRC/locales/{en,ko}.ts`, 관련 테스트
+- 기획 근거: [FB-03](feedback-2026-09-11/FB-03-analysis-density.md) §3
+- 구현 내용
+  - **경고 강등**: `analysisWarnings` Callout(`AnalysisTab.tsx:286`)을 `analysis-grid`(`:306`) 앞에서 `ResultsTable` 뒤로 옮긴다.
+    단 **P4-R1-T1의 등급이 `blocking`인 경고는 상단에 잔류**시킨다. 툴바에 `⚠ 경고 N건` 배지를 두고 클릭 시 하단으로 이동,
+    `aria-live`로 실시간 전파를 유지한다.
+  - **컨텍스트 요약 접기**: `analysis-context-summary`(`AnalysisResultStatus` + `PlateScopeSummary`)를 `<details>`로 접고 한 줄 요약만 노출.
+  - **그룹 프리셋 조건부화**: `WellSelectionToolbar.tsx:8`의 `DEFAULT_GROUPS` 6개는 "현재 선택을 그룹 N으로 저장"하는 프리셋 슬롯이며,
+    선택이 없으면 `manualGroupSelectFirst` 오류만 낸다. `hasSelection === true` 이거나 저장된 수동 그룹이 있을 때만 렌더한다.
+  - **안내 문구 이동**: "플레이트 웰을 고르거나 산점도에서 영역을 드래그하세요"를 플레이트 뷰 헤더 보조 문구로 옮긴다.
+  - **스코프 선택기**: 마커 0개 세션에도 `[전체 플레이트] [+ 마커로 분할]` 선택기를 둔다. 마커 ≥1개면 기존
+    `marker-selector-sidebar`(`MultiMarkerAnalysisPanel.tsx:258`)가 같은 자리에 들어간다. `split-marker-banner`는 이 선택기에 흡수되어 **제거**한다
+    (`bannerDismissed` 상태와 세션 전환 리셋 로직도 함께 제거 — 부분 제거 시 죽은 상태가 남는다).
+  - **`ResultsTable` 승격**: `[data-testid="results-scroll-region"]`의 `max-height: 24rem` 제약을 풀고 1급 영역으로 올린다.
+    (현재도 항상 렌더되지만 최하단에서 높이가 잘려 있다.)
+- AC
+  - [ ] 1920x911에서 스크롤 없이 산점도 전체와 유전형 요약이 보인다
+  - [ ] `blocking` 경고는 상단에 남고, `advisory`만 강등된다. 배지 클릭으로 하단 경고에 도달한다
+  - [ ] 그룹이 없고 선택도 없는 플레이트에서 그룹 프리셋 버튼이 렌더되지 않는다
+  - [ ] 마커 0개 세션에도 스코프 선택기가 보인다
+  - [ ] 마커 ≥1개 세션의 기존 마커 선택 동작이 회귀하지 않는다
+  - [ ] `split-marker-banner` 제거 후 죽은 상태(`bannerDismissed`)가 남지 않았다
+  - [ ] 키보드 배정(`use-keyboard-assignment`)과 `navigateTabs`가 유지된다
+- 검증: `FE-TEST src/components/analysis/`, FE-ALL, FE-CHECK, ROOT-E2E, VIEWPORT
+- 증거: `evidence/P4-S3-T1.md`
+
+### P4-S0-V: 결과 화면 게이트
+- 담당: `test-specialist`
+- Depends On: P4-S3-T1
+- Status: BLOCKED (D-6 경유)
+- Write Scope: `docs/planning/feedback-2026-09-11/evidence/**`
+- AC: [ ] 신규 실패 0 · [ ] 새 코드 coverage ≥70%·복잡도 ≤10 · [ ] 접근성 회귀 0 · [ ] 1920x911 육안 확인 완료 · [ ] 미해결 중요 리뷰 이슈 0
+- 검증: BE-ALL, FE-ALL, FE-CHECK, ROOT-E2E, EXISTING-E2E, VIEWPORT
+- 증거: `evidence/P4-S0-V.md`
+
+---
+
+## Phase P5 — 업로드 진입점 (FB-02 진입점 범위)
+
+### P5-S1-T1: 파일 워크스페이스 드로어 구조 리팩터링
+- 담당: `frontend-specialist`
+- Depends On: P4-S0-V
+- Status: TODO
+- Write Scope: `SRC/components/upload/FileWorkspaceDrawer.tsx`, `SRC/components/upload/FileWorkspaceTrigger.tsx`(신규), `SRC/components/layout/Header.tsx`, `SRC/components/upload/UploadZone.tsx`, `SRC/App.tsx`, 관련 테스트
+- 기획 근거: [FB-02](feedback-2026-09-11/FB-02-upload-entry-and-brand.md) §3-1
+- 구현 내용
+  - **핵심 제약**: 드로어 큐는 `FileWorkspaceDrawer.tsx:87`의 지역 `useState<QueueItem[]>`다.
+    `session-store`의 persist는 `openSessionIds` / `sessionQueries`만 담는다("Only WHICH plates are open survives a reload").
+    → **세션 유무로 드로어를 조건부 마운트/언마운트하면 업로드 중 큐가 소실된다.**
+    업로드가 끝나면 세션이 생기고 그 순간 `visibility.upload`가 false가 되므로, 조건부 마운트 설계는 **성공 직후 큐를 지우는 버그**를 낳는다.
+  - 패널(상시 마운트)과 트리거(복수 배치)를 분리한다. 패널은 `App.tsx` 최상위에 **항상** 마운트하고 큐 상태를 소유한다.
+    열림 상태와 큐는 Context 또는 zustand로 트리거에 노출한다.
+  - 트리거는 두 위치에 렌더하고 `visibility.upload`가 어느 쪽을 보일지 결정한다:
+    세션 없음 → `UploadZone` 하단 보조 액션 줄(`inline`), 세션 있음 → 헤더(`header`, 현행 아이콘+카운트).
+  - 패널은 portal로 렌더해 트리거 위치와 DOM 계층을 분리한다.
+  - 닫힘 시 포커스는 **현재 보이는 트리거**로 돌아가야 한다. `triggerRef` 단일 참조를 활성 트리거 레지스트리로 바꾼다.
+    포커스 트랩(`FOCUSABLE` 상수) 동작을 유지한다.
+- AC
+  - [ ] 세션이 없을 때 헤더에 드로어 트리거가 보이지 않는다
+  - [ ] 세션이 없을 때 드롭존 인근에서 파일 워크스페이스를 열 수 있다
+  - [ ] **업로드 진행 중 세션이 생성되어 트리거 위치가 바뀌어도 큐와 열림 상태가 유지된다** (핵심 회귀 방지)
+  - [ ] 두 트리거 중 어디서 열든 동일한 큐가 보인다
+  - [ ] 드로어를 닫으면 포커스가 현재 보이는 트리거로 돌아간다
+  - [ ] 드로어 내부 동작(파일 검증·ZIP 패키징·매핑 마법사 진입)이 변하지 않는다
+- 검증: `FE-TEST src/components/upload/`, `FE-TEST src/components/layout/Header.test.tsx`, FE-ALL, FE-CHECK, ROOT-E2E, VIEWPORT
+- 증거: `evidence/P5-S1-T1.md`
+
+### P5-S2-T1: 업로드 경로 한도·문구 일치
+- 담당: `frontend-specialist`
+- Depends On: P5-S1-T1, **D-7 결정**
+- Status: BLOCKED (D-7)
+- Write Scope: `SRC/lib/upload-jobs.ts`, `SRC/components/upload/UploadZone.tsx`, `SRC/components/upload/FileWorkspaceDrawer.tsx`, `SRC/locales/{en,ko}.ts`, 관련 테스트
+- 기획 근거: [FB-02](feedback-2026-09-11/FB-02-upload-entry-and-brand.md) §3-2
+- 구현 내용
+  - **중앙 드롭존은 이미 멀티 업로드를 지원한다** — `UploadZone.tsx:418`의 `multiple`, `:157-166`의 `runUploadJobs(files)` 배치.
+    문제는 "멀티가 헤더에만 있다"가 아니라 **같은 일을 하는 구현이 두 벌이고 한도·오류 복구가 다르다**는 것이다.
+
+    | | `UploadZone` | `FileWorkspaceDrawer` |
+    | --- | --- | --- |
+    | 다중 파일 | `runUploadJobs(files)` | 자체 `QueueItem[]` 상태 머신 |
+    | 한도 | `lib/upload-jobs.ts` 규칙 | `MAX_FILES_PER_DROP=20`, `MAX_TOTAL_BYTES=500MB` |
+    | 오류 복구 | `UploadJobSummary` | 큐 항목 `error` 상태 |
+
+  - D-7 결정에 따라 통합하거나, 역할을 분리(단건 빠른 경로 / 다건 관리 경로)하고 **한도와 오류 문구만 일치**시킨다. 권장은 후자.
+- AC
+  - [ ] 두 경로의 파일 수·용량 한도가 동일하다
+  - [ ] 한도 초과 시 두 경로가 같은 문구를 보인다 (en/ko 모두)
+  - [ ] 중앙 드롭존의 다중 파일 배치 업로드가 회귀하지 않는다
+- 검증: `FE-TEST src/lib/upload-jobs.test.ts`, `FE-TEST src/components/upload/`, FE-ALL, FE-CHECK
+- 증거: `evidence/P5-S2-T1.md`
+
+### P5-S0-V: 업로드 게이트
+- 담당: `test-specialist`
+- Depends On: P5-S2-T1
+- Status: BLOCKED (D-7 경유)
+- Write Scope: `docs/planning/feedback-2026-09-11/evidence/**`
+- AC: [ ] 신규 실패 0 · [ ] 업로드 중 큐 유지 시나리오 E2E 통과 · [ ] 새 코드 coverage ≥70% · [ ] 미해결 중요 리뷰 이슈 0
+- 검증: FE-ALL, FE-CHECK, ROOT-E2E, EXISTING-E2E
+- 증거: `evidence/P5-S0-V.md`
+
+---
+
+## Phase P6 — 브랜드 정체성 (FB-07 + FB-02 브랜드 범위)
+
+### P6-S1-T1: 제품명 통일 — Q-Prism® Cluster Caller
+- 담당: `frontend-specialist` + `docs-specialist`
+- Depends On: P5-S0-V
+- Status: TODO (**D-1 해소됨 — 실행 가능**)
+- Write Scope: `SRC/locales/{en,ko}.ts`, `FE/index.html`, `README.md`, `BE/app/reporting/pdf_builder.py`
+- 기획 근거: [FB-07](feedback-2026-09-11/FB-07-identity-and-ia.md) §3-2
+- 구현 내용
+  - 현재 리포지토리에 **세 가지 이름이 공존한다**: `ASG-PCR SNP 판별 분석기`(UI `locales:139/141`),
+    `Q-Prism® SNP Visualizer`(`README.md:1`), `SNP analyzer`(컨테이너·경로). **하나로 통일한다.**
+  - 채택명: **`Q-Prism® Cluster Caller`** (한국어 UI도 동일 표기, 부제로 `SNP 판별 · 대립유전자 클러스터링`).
+    `Q-Prism`은 인바이러스테크 자사 저작물이므로 `®` 표기를 사용한다.
+  - 변경 지점: `appTitle`(en/ko), `index.html`의 `<title>` · `og:title` · `og:description` · `description` · `keywords`,
+    `README.md`, PDF 산출물 브랜드 문자열(`app/reporting/pdf_builder.py`).
+  - **ASG 플랫폼 연동 문구는 유지한다** — `Save result to ASG Designer`, `backToAsgDesigner`는 상대 시스템의 이름이다.
+  - `canonical`(`https://snpanalyze.ivttools.com/`) 변경 여부는 SEO 영향이 있으므로 **변경하지 않고** 증거에 검토 필요로 기록한다.
+- AC
+  - [ ] UI·`<title>`·OG·README·PDF 산출물에서 제품명이 일관된다
+  - [ ] `en`/`ko` 양쪽이 갱신되고 타입 체크를 통과한다
+  - [ ] ASG 연동 문구가 변경되지 않았다
+  - [ ] `canonical`이 변경되지 않았고, 변경 필요 여부가 증거에 기록되었다
+- 검증: FE-ALL, FE-CHECK, BE-TEST(PDF 산출물), ROOT-E2E
+- 증거: `evidence/P6-S1-T1.md`
+
+### P6-S2-T1: Q-Prism 브랜드 팔레트 적용
+- 담당: `frontend-specialist`
+- Depends On: P6-S1-T1, **D-2 및 D-4 결정**
+- Status: BLOCKED (D-2, D-4)
+- Write Scope: `SRC/index.css`, `SRC/lib/plotly-theme.ts`(P0-T0.2 결과 위), `SRC/lib/constants.ts`, `SRC/lib/genotype.ts`, `SRC/components/protocol/ProtocolTab.tsx`
+- 기획 근거: [FB-07](feedback-2026-09-11/FB-07-identity-and-ia.md) §3-3
+- 구현 내용
+  - 현재 `--color-primary: #2563eb`는 **Tailwind 기본 blue-600**이다. 브랜드 색이 아니라 프레임워크 기본값이며,
+    사용자가 "촌스럽다"고 한 것의 물리적 근거다.
+  - D-2로 확정된 HEX를 `@theme` 블록과 `body.dark` 블록에 **동시** 반영한다. 한쪽만 바꾸면 다크 모드가 깨진다.
+  - P0-T0.2에서 색을 한 곳으로 모아 두었으므로, 이 태스크는 **값 교체**가 주된 작업이다.
+  - **절대 준수 제약**
+    1. `--color-fam` / `--color-allele2`는 D-4 결정에 따른다. 권장은 **유지** — FAM/HEX 채널 색은 qPCR 판독 관례이며 실험자 습관에 직결된다. 브랜드보다 과학적 관례가 우선한다.
+    2. 대비비: 본문 4.5:1, UI 요소 3:1(WCAG AA). 현행 `#1a1a2e` on `#f5f7fa`는 약 15:1로 여유가 크다 — 새 팔레트가 이를 깎지 않는지 검증한다.
+    3. 상태색 의미 보존: 경고=앰버, 위험=적, 성공=녹. 브랜드 색과 충돌하면 브랜드를 양보한다.
+- AC
+  - [ ] 라이트·다크 모두에서 본문 대비비가 WCAG AA를 만족한다
+  - [ ] 채널 색(`--color-fam`/`--color-allele2`)이 D-4 결정대로 처리되었다
+  - [ ] Plotly 차트 색이 앱 팔레트와 일치한다
+  - [ ] 상태색(경고/위험/성공) 의미가 보존된다
+  - [ ] 다크 모드 토글 왕복에서 색이 깨지지 않는다
+- 검증: FE-ALL, FE-CHECK, VIEWPORT(라이트/다크 × 4해상도), 대비비 자동 검사
+- 증거: `evidence/P6-S2-T1.md`
+
+### P6-S3-T1: 브랜드 에셋 · 업로드 히어로
+- 담당: `frontend-specialist`
+- Depends On: P6-S2-T1, **D-3 에셋 제공**
+- Status: BLOCKED (D-3)
+- Write Scope: `FE/public/brand/**`, `FE/public/favicon.svg`, `FE/index.html`, `SRC/components/upload/UploadZone.tsx`, `SRC/components/layout/Header.tsx`, `SRC/locales/{en,ko}.ts`
+- 기획 근거: [FB-02](feedback-2026-09-11/FB-02-upload-entry-and-brand.md) §3-3, §3-4
+- 구현 내용
+  - 현재 `frontend/public/`에는 템플릿 CSV/TSV 3개뿐이며 **이미지 에셋이 0개, 파비콘도 없다.** `index.html`에 `<link rel="icon">`도 없다.
+  - 에셋은 **SVG**를 권장한다 — 다크 모드에서 `currentColor`/CSS 변수 추종, 해상도·번들 크기 문제 없음.
+
+    | 에셋 | 경로 |
+    | --- | --- |
+    | 파비콘 | `frontend/public/favicon.svg` |
+    | Q-Prism 마크 | `frontend/public/brand/qprism-mark.svg` |
+    | Invirustech 로고 | `frontend/public/brand/invirustech.svg` |
+    | 히어로 아트 | `frontend/public/brand/qprism-hero.svg` |
+
+  - `UploadZone` 상단에 브랜드 히어로 블록(마크 + `Q-Prism® Cluster Caller` + 부제)을 추가한다.
+    **세션 없음 상태에서만** 표시해 분석 중 화면 공간을 잡아먹지 않는다.
+  - `Powered by Invirustech` 링크는 업로드 화면에서 하단 푸터로, 세션 중에는 현행 헤더 위치를 유지한다.
+- AC
+  - [ ] 파비콘이 브라우저 탭에 표시된다
+  - [ ] 히어로 블록이 세션 없음 상태에서만 보인다
+  - [ ] 히어로가 1920px과 400px 모두에서 깨지지 않는다
+  - [ ] 다크 모드에서 로고·아트가 판독 가능하다
+  - [ ] 분석 중 화면에 히어로가 나타나지 않는다
+- 검증: FE-ALL, FE-CHECK, ROOT-E2E, VIEWPORT(라이트/다크 × 4해상도)
+- 증거: `evidence/P6-S3-T1.md`
+
+### P6-S0-V: 브랜드·최종 인수 게이트
+- 담당: `test-specialist` + `security-specialist`
+- Depends On: P6-S3-T1
+- Status: BLOCKED (D-2, D-3 경유)
+- Write Scope: `docs/planning/feedback-2026-09-11/evidence/**`, `CLAUDE.md`(실행 증거 기록)
+- 구현 내용
+  - 전체 품질 체인 + 보안 리뷰 + 프론트엔드 리뷰.
+  - 피드백 7건 각각에 대해 **원문 요구 대비 충족 여부**를 대조표로 남긴다.
+  - `CLAUDE.md`에 이번 계약의 실행 증거(Contract ID, Phase별 커밋, 게이트 결과)를 기록한다.
+- AC
+  - [ ] BE-ALL / FE-ALL / FE-CHECK / ROOT-E2E / EXISTING-E2E 전체 통과
+  - [ ] 새 코드 coverage ≥70%, 복잡도 ≤10. 기존 기준선과 분리 보고
+  - [ ] 보안 리뷰 신규 이슈 0
+  - [ ] 피드백 7건 대조표 작성 완료
+  - [ ] 미해결 결정 게이트가 있으면 명시적으로 남았다
+- 검증: 전체 체인
+- 증거: `evidence/P6-S0-V.md`
+
+---
+
+## 5. 태스크 요약 (DAG)
+
+```
+P0-T0.1 ──┬── P0-T0.2 ──┬── P0-S0-V
+          │             │
+          └─────────────┘
+                        │
+                   P1-S1-T1 ── P1-S0-V
+                                   │
+                   ┌───────────────┴───────────────┐
+              P2-R1-T1                        P2-R1-T2      (병렬 가능: 최대 2)
+                   │                               │
+              P2-S1-T1 ──────────┬─────────────────┘
+                                 │
+                            P2-S2-T1 ── P2-S0-V
+                                            │
+                            P3-S1-T1 ── P3-S2-T1 ── P3-S0-V      [D-5]
+                                                        │
+                        ┌───────────────────────────────┤
+                   P4-R1-T1                        P4-S1-T1      [D-6]
+                        │                               │
+                        └──────────┬──── P4-S2-T1 ──────┘
+                                   │
+                              P4-S3-T1 ── P4-S0-V
+                                              │
+                              P5-S1-T1 ── P5-S2-T1 ── P5-S0-V    [D-7]
+                                                          │
+                              P6-S1-T1 ── P6-S2-T1 ── P6-S3-T1 ── P6-S0-V
+                                            [D-2,D-4]      [D-3]
+```
+
+| Phase | 태스크 수 | 담당 | 착수 가능 여부 |
+| --- | --- | --- | --- |
+| P0 | 3 | orchestrator, frontend, test | **즉시** |
+| P1 | 2 | frontend, test | **즉시** (D-8 부분) |
+| P2 | 5 | backend ×2, frontend ×2, test | **즉시** (D-9 부분) |
+| P3 | 3 | frontend ×2, test | **D-5 대기** |
+| P4 | 5 | backend, frontend ×3, test | **D-6 대기** (P4-R1-T1만 선행 가능) |
+| P5 | 3 | frontend ×2, test | P5-S2-T1은 **D-7 대기** |
+| P6 | 4 | frontend, docs, test, security | P6-S1-T1 실행 가능 / 나머지 **D-2·D-3·D-4 대기** |
+| **합계** | **25** | | |
+
+## 6. 실행 전 확인 목록
+
+- [x] 0절 승격 절차 수행 (이전 계약 archive → 본 문서를 `06-tasks.md`로) — 2026-09-11 완료
+- [ ] **`.claude/orchestrate-state.json`을 새 `contract_id`로 시작** (이전 상태 재사용 금지) — 현재 해시 불일치, P0-T0.1 전 실행 금지
+- [ ] `CLAUDE.md` Orchestration Handoff를 이번 계약 기준으로 갱신 (기존 이력 보존)
+- [ ] baseline = `main` `c2bc854` 확인 (detached `201e0c7` 아님)
+- [ ] 이전 계약 worktree·브랜치 보존 확인
+- [ ] 결정 게이트 D-2 / D-3 / D-4 / D-5 / D-6 / D-7 답변 수령 (미수령 시 해당 Phase는 BLOCKED 유지)
+- [ ] 원격 push·배포·외부 알림은 **이번 계약에 승인되지 않음**을 오케스트레이터가 인지
