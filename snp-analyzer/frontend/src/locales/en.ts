@@ -466,6 +466,11 @@ const en = {
   failedToLoadProjects: 'Failed to load projects',
   projectActionFailed: 'The project action could not be completed. Check the project before trying again.',
   asgContext: 'Linked ASG identity',
+  asgTargetLabel: (targetType: string) => ({
+    ad_hoc: 'Ad hoc analysis',
+    marker_version: 'Marker version',
+    design_run_item: 'Design run item',
+  } as Record<string, string>)[targetType] ?? 'ASG linked',
   plateScrollHint: 'Plate review: scroll horizontally within this area when needed.',
   resultsScrollHint: 'Genotype review: scroll horizontally within this area when needed.',
   analysisAdvancedSettings: 'View and calculation settings — expand to change',
