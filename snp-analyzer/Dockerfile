@@ -21,6 +21,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
 
+# Build provenance, surfaced by GET /api/version and the page footer. Optional:
+# an image built without them reports the version alone rather than guessing.
+ARG APP_BUILD_SHA=""
+ARG APP_BUILD_TIME=""
+ENV APP_BUILD_SHA=${APP_BUILD_SHA} \
+    APP_BUILD_TIME=${APP_BUILD_TIME}
+
 # Copy React build output (Vite outputs to /build/app/static-react/)
 COPY --from=frontend-build /build/app/static-react/ ./app/static-react/
 

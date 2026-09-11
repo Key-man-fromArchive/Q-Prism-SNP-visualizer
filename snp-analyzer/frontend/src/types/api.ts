@@ -947,3 +947,11 @@ export type FeedbackUpdateRequest = {
   status?: FeedbackStatus;
   admin_note?: string;
 };
+
+/** Build identity of the instance being talked to (GET /api/version). */
+export type VersionResponse = {
+  version: string;
+  /** Empty when the build supplied no provenance. */
+  commit: string;
+  built_at: string;
+};

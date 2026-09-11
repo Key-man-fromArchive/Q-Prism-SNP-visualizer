@@ -23,6 +23,7 @@ import { LibraryTab } from "@/components/library/LibraryTab";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { FeedbackAdminPanel } from "@/components/feedback/FeedbackAdminPanel";
 import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
+import { AppFooter } from "@/components/layout/AppFooter";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { adjacentCycle } from "@/lib/keyboard-routing";
 import { keyboardCanExecute } from "@/lib/keyboard-authority";
@@ -142,10 +143,16 @@ export default function App() {
               {t.backToAsgDesigner}
             </a>
           </div>
+          <AppFooter />
         </div>
       );
     }
-    return <LoginPage />;
+    return (
+      <>
+        <LoginPage />
+        <AppFooter />
+      </>
+    );
   }
 
   // Project/References/Users/Library tabs are accessible without a session
@@ -208,6 +215,8 @@ export default function App() {
           operator is on is recorded as the report's page_key (this is a
           tab-based SPA, so there is no route to read it from). */}
       <FeedbackWidget pageKey={activeTab} />
+
+      <AppFooter />
     </div>
   );
 }

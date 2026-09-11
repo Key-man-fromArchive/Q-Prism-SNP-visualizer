@@ -39,6 +39,18 @@ test.describe('Homepage & Initial State', () => {
     );
   });
 
+  test('the running version is stated before and after login', async ({ page }) => {
+    // An operator has to be able to quote a version in a bug report, which
+    // means seeing it on the login screen too — not only once they are in.
+    await page.goto('/');
+    const version = page.getByTestId('app-version');
+    await expect(version).toBeVisible();
+    await expect(version).toHaveText(/ASG-PCR SNP v\d+\.\d+\.\d+/);
+
+    await login(page);
+    await expect(page.getByTestId('app-version')).toBeVisible();
+  });
+
   test('analysis panel is hidden initially', async ({ page }) => {
     await login(page);
     const analysisPanel = page.locator('#analysis-panel');

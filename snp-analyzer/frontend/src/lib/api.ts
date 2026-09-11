@@ -51,6 +51,7 @@ import type {
   FeedbackStatus,
   FeedbackSubmitRequest,
   FeedbackUpdateRequest,
+  VersionResponse,
 } from '@/types/api';
 import type {
   ASGLaunchResponse,
@@ -1031,4 +1032,14 @@ export async function uploadFeedbackAttachment(file: File): Promise<FeedbackAtta
  *  through apiUrl so it honours SNP_ROOT_PATH when mounted under a prefix. */
 export function feedbackAttachmentUrl(attachmentId: string): string {
   return apiUrl(`/api/feedback/attachments/${encodeURIComponent(attachmentId)}`);
+}
+
+// ============================================================================
+// Build identity
+// ============================================================================
+
+/** What version this instance is running. Unauthenticated: the footer showing
+ *  it is on every screen, the login page included. */
+export async function getVersion(): Promise<VersionResponse> {
+  return apiFetch<VersionResponse>('/api/version');
 }
