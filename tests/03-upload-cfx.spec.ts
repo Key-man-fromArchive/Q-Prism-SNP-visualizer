@@ -22,9 +22,7 @@ test.describe('CFX Opus Amplification Results Upload', () => {
     await login(page);
     await page.locator('#file-input').setInputFiles(CFX_AMPLIFICATION);
 
-    const status = page.locator('#upload-status');
-    await expect(status).toContainText('Parsed', { timeout: 15000 });
-    await expect(status).toContainText('CFX Opus');
+    await expect(page.locator('#instrument-badge')).toContainText('CFX Opus', { timeout: 15000 });
   });
 
   test('single-cycle data hides cycle slider', async ({ page }) => {
@@ -39,7 +37,7 @@ test.describe('CFX Opus Amplification Results Upload', () => {
     await uploadAndWait(page, CFX_AMPLIFICATION);
     await page.waitForTimeout(2000);
 
-    await expect(page.locator('#wells-badge')).toContainText('96 wells');
+    await expect(page.locator('#wells-badge')).toContainText(/96\s*(wells|웰)/);
 
     const coloredWells = await page.locator('.plate-well:not(.empty)').count();
     expect(coloredWells).toBe(96);
@@ -62,10 +60,8 @@ test.describe('CFX Opus End Point Results Upload', () => {
     await login(page);
     await page.locator('#file-input').setInputFiles(CFX_ENDPOINT);
 
-    const status = page.locator('#upload-status');
-    await expect(status).toContainText('Parsed', { timeout: 15000 });
-    await expect(status).toContainText('CFX Opus');
-    await expect(status).toContainText('96 wells');
+    await expect(page.locator('#instrument-badge')).toContainText('CFX Opus', { timeout: 15000 });
+    await expect(page.locator('#wells-badge')).toContainText(/96\s*(wells|웰)/);
   });
 });
 
@@ -74,9 +70,7 @@ test.describe('CFX Opus Allelic Discrimination Results Upload', () => {
     await login(page);
     await page.locator('#file-input').setInputFiles(CFX_ALLELIC);
 
-    const status = page.locator('#upload-status');
-    await expect(status).toContainText('Parsed', { timeout: 15000 });
-    await expect(status).toContainText('CFX Opus');
-    await expect(status).toContainText('96 wells');
+    await expect(page.locator('#instrument-badge')).toContainText('CFX Opus', { timeout: 15000 });
+    await expect(page.locator('#wells-badge')).toContainText(/96\s*(wells|웰)/);
   });
 });

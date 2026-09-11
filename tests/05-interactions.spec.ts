@@ -20,9 +20,9 @@ test.describe('Plate View Interaction', () => {
 
     // Detail panel should update
     const detailContent = page.locator('#detail-content');
-    await expect(detailContent).not.toContainText('Click a well to see details', { timeout: 3000 });
+    await expect(detailContent).not.toContainText(/Click a well to see details|웰을 클릭하여 상세정보 확인/, { timeout: 3000 });
     // Should have a detail table with values
-    await expect(detailContent.locator('.detail-table')).toBeVisible();
+    await expect(detailContent.locator('.detail-table').first()).toBeVisible();
   });
 
   test('clicking well shows well ID in detail panel', async ({ page }) => {
@@ -72,8 +72,8 @@ test.describe('Detail Panel Content', () => {
     // CFX defaults to ROX OFF, so label is just "FAM"
     await expect(detail).toContainText(/FAM(\/ROX)?/);
     await expect(detail).toContainText(/HEX(\/ROX)?/);
-    await expect(detail).toContainText('Genotype');
-    await expect(detail).toContainText('FAM ratio');
+    await expect(detail).toContainText(/Genotype|유전자형/);
+    await expect(detail).toContainText(/FAM (ratio|비율)/);
   });
 });
 

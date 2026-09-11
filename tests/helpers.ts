@@ -25,7 +25,11 @@ export async function loginRequest(request: APIRequestContext) {
 export async function uploadAndWait(page: Page, filePath: string) {
   await login(page);
   await page.locator('#file-input').setInputFiles(filePath);
-  await expect(page.locator('#upload-status')).toContainText(/Parsed|파싱 완료/, { timeout: 15000 });
+  // A parsed upload opens the workspace immediately, replacing the upload
+  // screen — so the header badges, not the upload status line, are what says
+  // the plate arrived. (The status line is asserted where a file is REJECTED
+  // and the upload screen therefore stays put; see 04-error-files.)
+  await expect(page.locator('#instrument-badge')).not.toBeEmpty({ timeout: 15000 });
   await expect(page.locator('#analysis-panel')).not.toHaveClass(/hidden/, { timeout: 5000 });
   await page.waitForTimeout(1000);
 }
