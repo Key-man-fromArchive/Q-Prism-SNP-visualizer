@@ -8,26 +8,13 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useI18n } from '@/hooks/use-i18n';
 import type { ProtocolStep } from '@/types/api';
-
-// Phase color system
-const PHASE_COLORS: Record<string, { border: string; label: string }> = {
-  'Pre-read': { border: '#3b82f6', label: '#2563eb' },
-  'Initial Denaturation': { border: '#ef4444', label: '#dc2626' },
-  'Post-read': { border: '#10b981', label: '#059669' },
-};
-
-const AMP_COLORS = [
-  { border: '#f59e0b', label: '#d97706' },
-  { border: '#f97316', label: '#ea580c' },
-  { border: '#ea580c', label: '#c2410c' },
-  { border: '#dc2626', label: '#b91c1c' },
-];
+import { PROTOCOL_PHASE_COLORS, PROTOCOL_AMP_COLORS, PROTOCOL_PHASE_FALLBACK } from '@/lib/constants';
 
 function getPhaseColor(phase: string) {
-  if (PHASE_COLORS[phase]) return PHASE_COLORS[phase];
+  if (PROTOCOL_PHASE_COLORS[phase]) return PROTOCOL_PHASE_COLORS[phase];
   const m = phase.match(/Amplification\s+(\d+)/);
-  if (m) return AMP_COLORS[(parseInt(m[1]) - 1) % AMP_COLORS.length];
-  return { border: '#94a3b8', label: '#64748b' };
+  if (m) return PROTOCOL_AMP_COLORS[(parseInt(m[1]) - 1) % PROTOCOL_AMP_COLORS.length];
+  return PROTOCOL_PHASE_FALLBACK;
 }
 
 function isReadingStep(label: string): boolean {
