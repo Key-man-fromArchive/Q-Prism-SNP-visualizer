@@ -4,6 +4,24 @@
 - 입력: `docs/planning/01-prd.md`, `specs/screens/*.yaml`
 - 기존 `docs/planning/06-tasks.md`는 별도 UI/UX 계약이므로 변경하지 않는다.
 
+## 구현 메모 (main 반영 시점)
+
+이 계약은 `80c2c8a` 기준으로 작성됐고, 그 사이 main에 들어온 navigation
+store(세션/탭/표면/마커/사이클을 URL에 직렬화·검증)와 세션별 view cache를
+알지 못한다. main에 실제로 올라간 것은 다음과 같다.
+
+- **P1-S1-T1은 별도 저장소로 구현하지 않았다.** 열려 있는 플레이트 목록
+  (`openSessionIds`)과 플레이트별 마지막 내비게이션 쿼리만 세션 스토리지에
+  두고, 복원은 main의 기존 경로(`parseNavigation` → 플레이트 도메인 검증,
+  `restoreSettings` → 세션별 계산 설정 캐시)를 그대로 탄다.
+- 따라서 A→B→A 전환에서 **복원되는 것**은 탭·표면·마커·사이클과 계산 설정
+  (useRox, background, 알고리즘, 임계값, n_clusters, ploidy)이다.
+- **복원되지 않는 것**은 웰 선택, 축/표시 토글, 재생 상태다. 세션 전환 시
+  `invalidateSession()`이 선택을 비우는 main의 기존 동작을 유지했다.
+
+`specs/screens/analysis-workspace.yaml`의 "A-B-A 상태 복원" 수용 기준 중
+selection 항목은 위 범위에서 제외된 상태로 읽어야 한다.
+
 ## P1 — 세션 계약
 
 ### [x] P1-R1-T1: 세션 표시명 계약
