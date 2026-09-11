@@ -20,22 +20,33 @@ import { ApiError, logout, saveAsgResult } from "@/lib/api";
 import { analyzeCurrent } from "@/lib/analysis-actions";
 import { loadAnalysisSession } from "@/lib/analysis-session";
 import type { LinkedASGContext } from '@/types/auth';
+import type { Translations } from '@/locales/en';
 
-function LinkedIdentity({ context }: { context: LinkedASGContext }) {
-  return <>
-    <span>{context.target_type}</span><span className="text-text">{context.target_id}</span>
-    {typeof context.context.tag_alias === 'string' && <span className="badge">{context.context.tag_alias}</span>}
-    {typeof context.context.marker_id === 'string' && <span>{context.context.marker_id}</span>}
-  </>;
+// target_type/target_id are ASG's internal linkage identifiers (e.g. "ad_hoc", "1")
+// and carry no meaning to the operator. Prefer a human-readable name captured in
+// context (tag_alias, then marker_id) and only fall back to a mapped/neutral label
+// for target_type — the raw identifiers themselves must never reach the screen.
+function resolveLinkedLabel(context: LinkedASGContext, t: Translations): string {
+  const tagAlias = context.context.tag_alias;
+  if (typeof tagAlias === 'string' && tagAlias !== '') return tagAlias;
+  const markerId = context.context.marker_id;
+  if (typeof markerId === 'string' && markerId !== '') return markerId;
+  return t.asgTargetLabel(context.target_type);
+}
+
+function LinkedIdentity({ label }: { label: string }) {
+  return <span className="badge">{label}</span>;
 }
 function HeaderLinkedContext({ context }: { context: LinkedASGContext }) {
   const { t } = useI18n();
+  const label = resolveLinkedLabel(context, t);
+  if (!label) return null;
   return <div className="header-linked-context text-xs text-text-muted border border-border rounded px-2 py-1">
     <details className="xl:hidden">
-      <summary aria-label={t.asgContext} className="cursor-pointer">ASG · {context.target_type}</summary>
-      <div className="header-linked-values flex flex-wrap gap-1"><LinkedIdentity context={context} /></div>
+      <summary aria-label={t.asgContext} className="cursor-pointer">ASG · {label}</summary>
+      <div className="header-linked-values flex flex-wrap gap-1"><LinkedIdentity label={label} /></div>
     </details>
-    <div className="header-linked-values hidden xl:flex flex-wrap gap-1"><LinkedIdentity context={context} /></div>
+    <div className="header-linked-values hidden xl:flex flex-wrap gap-1"><LinkedIdentity label={label} /></div>
   </div>;
 }
 

@@ -468,6 +468,12 @@ const ko: Translations = {
   failedToLoadProjects: '프로젝트 로딩 실패',
   projectActionFailed: '프로젝트 작업을 완료하지 못했습니다. 다시 시도하기 전에 프로젝트를 확인하세요.',
   asgContext: '연결된 ASG 식별 정보',
+  asgTargetLabel: (targetType: string) => ({
+    ad_hoc: '애드혹 분석',
+    marker: '마커',
+    marker_version: '마커 버전',
+    design_run_item: '디자인 실행 항목',
+  } as Record<string, string>)[targetType] ?? 'ASG 연동',
   plateScrollHint: '플레이트 검토: 필요한 경우 이 영역 안에서 가로로 스크롤하세요.',
   resultsScrollHint: '유전자형 검토: 필요한 경우 이 영역 안에서 가로로 스크롤하세요.',
   analysisAdvancedSettings: '표시·계산 설정 — 펼쳐서 변경',
