@@ -7,10 +7,6 @@ venv/
 
 # Node
 node_modules/
-# Without the slash too: a SYMLINK named node_modules is not matched by the
-# directory pattern, which is how one got committed (99fbe25) and later
-# replaced a real install on checkout.
-node_modules
 
 # Test artifacts
 test-results/
@@ -28,7 +24,11 @@ CFX-opus/*.xml
 CFX-opus/*.xlsx
 
 # Claude Code session data
-.claude/
+# Local agent state (orchestrate-state.json and friends) stays out, but the
+# project's own commands are part of the repo: they encode how THIS project is
+# operated, and a skill nobody else has is a skill that goes stale.
+.claude/*
+!.claude/commands/
 
 # Database (runtime)
 snp-analyzer/app/data/
@@ -47,3 +47,6 @@ snp-analyzer/app.env
 
 # Temporary scripts
 *.mjs
+
+# Screenshots pulled out of the feedback store for triage — user content, never committed.
+feedback-shots/
