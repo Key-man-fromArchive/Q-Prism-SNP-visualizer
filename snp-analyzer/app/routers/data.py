@@ -231,6 +231,7 @@ async def amplification_all(
     check_session_access(sid, current_user)
     unified = _get_session(sid)
     all_normalized = normalize(unified, use_rox=use_rox, background=background)
+    applied = normalization_applies(unified, use_rox=use_rox)
 
     # Get genotype assignments
     ca = cluster_store.get(sid)
@@ -256,6 +257,12 @@ async def amplification_all(
 
     return {
         "allele2_dye": unified.allele2_dye,
+        "background_mode": background,
+        # What the curves ABOVE actually are, not what the request asked for --
+        # see normalization_applies() in app/processing/normalize.py. A run
+        # with no passive reference stays raw regardless of use_rox, and the
+        # overlay cannot tell "normalized" from "raw" on its own.
+        "normalization_applied": applied,
         **build_role_label_metadata(unified),
         "curves": curves,
     }
