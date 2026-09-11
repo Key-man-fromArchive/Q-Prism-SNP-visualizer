@@ -31,6 +31,7 @@ def test_create_session_from_import_preserves_persistence_asg_and_response_contr
 
     assert isinstance(response, UploadResponse)
     assert response.session_id == "abcdef123456"
+    assert response.raw_filename == "plate.xls"
     assert response.instrument == "QuantStudio"
     assert response.num_wells == 2
     assert response.num_cycles == 3

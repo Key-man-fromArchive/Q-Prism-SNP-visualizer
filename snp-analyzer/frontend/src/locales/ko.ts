@@ -916,6 +916,28 @@ const ko: Translations = {
   feedbackPrev: '이전',
   feedbackNext: '다음',
   feedbackAdminOnly: '이 모드에서는 피드백 관리 화면을 사용할 수 없습니다.',
+
+  // ---------------------------------------------------------------------------
+  // File workspace (several plates open at once)
+  // ---------------------------------------------------------------------------
+  workspaceFiles: '파일',
+  workspaceTitle: '파일 작업공간',
+  workspaceDescription: '분석 화면을 벗어나지 않고 여러 실험 파일을 업로드하고 전환합니다.',
+  workspaceDropTitle: 'PCR 파일을 여기에 놓으세요',
+  workspaceDropHint: (max: number) => `한 번에 최대 ${max}개 · 전체 500MB`,
+  workspaceTooManyFiles: (max: number) => `한 번에 최대 ${max}개 파일까지 추가할 수 있습니다.`,
+  workspaceTotalTooLarge: (maxMb: number) => `선택한 파일의 전체 크기가 ${maxMb}MB를 초과합니다.`,
+  workspaceUploadQueue: '업로드 대기열',
+  workspaceClearFinished: '완료 항목 지우기',
+  workspaceQueueStatus: (status: string, size: string) => `${status === 'mapping' ? '매핑 필요' : status === 'uploading' ? '업로드 중' : status === 'packaging' ? '묶는 중' : status === 'success' ? '완료' : status === 'queued' ? '대기 중' : status} · ${size}`,
+  workspaceMappingCancelled: '매핑을 취소했습니다. 준비되면 다시 시도하세요.',
+  workspaceOpenFiles: '이번 작업 파일',
+  workspaceNoOpenFiles: '위에서 파일을 추가하거나 최근 파일을 다시 여세요.',
+  workspaceRecentFiles: '최근 파일',
+  workspaceOpen: '열기',
+  workspaceCloseFile: '이번 작업에서 닫기',
+  workspaceUploadingCount: (n: number) => `${n}개 파일을 준비하고 있습니다. 현재 분석 작업은 계속할 수 있습니다.`,
+  workspaceManageProjects: '세션 및 프로젝트 관리 →',
 };
 
 export default ko;

@@ -61,6 +61,9 @@ export type UnifiedData = {
 
 export type UploadResponse = {
   session_id: string;
+  /** Operator-facing plate identity, for switching between several open
+   *  files — a session id is not something anyone recognises. */
+  raw_filename?: string;
   /** Exact run inventory; absent on legacy servers, never infer from the current cycle. */
   well_ids?: string[];
   instrument: string;
