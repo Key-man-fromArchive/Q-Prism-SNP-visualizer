@@ -468,6 +468,7 @@ const en = {
   asgContext: 'Linked ASG identity',
   asgTargetLabel: (targetType: string) => ({
     ad_hoc: 'Ad hoc analysis',
+    marker: 'Marker',
     marker_version: 'Marker version',
     design_run_item: 'Design run item',
   } as Record<string, string>)[targetType] ?? 'ASG linked',

@@ -470,6 +470,7 @@ const ko: Translations = {
   asgContext: '연결된 ASG 식별 정보',
   asgTargetLabel: (targetType: string) => ({
     ad_hoc: '애드혹 분석',
+    marker: '마커',
     marker_version: '마커 버전',
     design_run_item: '디자인 실행 항목',
   } as Record<string, string>)[targetType] ?? 'ASG 연동',

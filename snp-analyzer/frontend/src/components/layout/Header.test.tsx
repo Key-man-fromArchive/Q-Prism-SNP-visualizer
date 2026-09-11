@@ -7,6 +7,7 @@ import { useSelectionStore } from '@/stores/selection-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { ApiError, saveAsgResult } from '@/lib/api';
+import ko from '@/locales/ko';
 
 const exportFns = vi.hoisted(() => ({ csv: vi.fn(), png: vi.fn(), pdf: vi.fn(), xlsx: vi.fn(), stored: vi.fn() }));
 const actions = vi.hoisted(() => ({ analyze: vi.fn(), refresh: vi.fn() }));
@@ -166,6 +167,19 @@ describe('ASG linked context label', () => {
     assertRawValueHiddenEverywhere('RAWID3');
     // Some neutral, non-raw label must still render (block is not suppressed).
     expect(document.querySelector('.header-linked-context')?.textContent?.trim()).not.toBe('');
+  });
+
+  it('maps a bare marker target_type to a real label instead of the neutral fallback', () => {
+    useAuthStore.setState({ linkedContext: {
+      target_type: 'marker', target_id: 'RAWID4', context: {}, scope: [], expires_at: null,
+    } });
+    render(<Header />);
+    // The store defaults to Korean; assert against the actual translation rather
+    // than hardcoding an English string, so this doesn't silently drift.
+    const mappedLabel = ko.asgTargetLabel('marker');
+    expect(mappedLabel).not.toBe(ko.asgTargetLabel('unmapped-type-for-test'));
+    expect(screen.getAllByText(mappedLabel)).toHaveLength(2);
+    assertRawValueHiddenEverywhere('RAWID4');
   });
 
   it('renders no linked-context block at all when there is no ASG context', () => {
