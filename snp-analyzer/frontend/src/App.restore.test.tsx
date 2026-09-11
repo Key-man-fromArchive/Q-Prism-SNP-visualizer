@@ -13,6 +13,7 @@ const info = { session_id: 's', instrument: 'test', allele2_dye: 'VIC', num_well
   cycles: [0, 10, 40], has_rox: true, data_windows: null, suggested_cycle: 40, well_groups: null,
   input_revision: 0, analysis_status: 'completed', analysis_pending: false };
 vi.mock('@/lib/api', () => ({
+  getVersion: vi.fn(async () => ({ version: '1.0.0', commit: '', built_at: '' })),
   getAuthConfig: vi.fn(() => new Promise(() => {})), getMe: vi.fn(), asgLaunch: vi.fn(), asgLaunchCookie: vi.fn(),
   getCluster: vi.fn(async () => ({ algorithm: 'auto', cycle: 40, assignments: {} })),
   getMarkers: vi.fn(async () => ({ markers: [] })), getPloidy: vi.fn(async () => ({ ploidy: 2 })),

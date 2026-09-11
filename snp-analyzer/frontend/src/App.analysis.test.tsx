@@ -8,7 +8,8 @@ import { useNavigationStore } from '@/stores/navigation-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
 
-vi.mock('@/lib/api', () => ({ getAuthConfig: vi.fn(() => new Promise(() => {})), getMe: vi.fn(), asgLaunch: vi.fn(), asgLaunchCookie: vi.fn(), setWellTypes: vi.fn() }));
+vi.mock('@/lib/api', () => ({
+  getVersion: vi.fn(async () => ({ version: '1.0.0', commit: '', built_at: '' })), getAuthConfig: vi.fn(() => new Promise(() => {})), getMe: vi.fn(), asgLaunch: vi.fn(), asgLaunchCookie: vi.fn(), setWellTypes: vi.fn() }));
 vi.mock('@/components/layout/Header', () => ({ Header: () => null }));
 vi.mock('@/components/upload/UploadZone', () => ({ UploadZone: ({ onGoToProject }: { onGoToProject: () => void }) => <button onClick={onGoToProject}>Open project</button> }));
 vi.mock('@/components/batch/BatchTab', () => ({ BatchTab: () => <div>Synthetic projects</div> }));
