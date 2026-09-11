@@ -1,0 +1,79 @@
+version: "2.0"
+
+screen:
+  name: "파일 작업공간 드로어"
+  route: "overlay:/"
+  layout: main-sidebar
+  auth: true
+
+data_requirements:
+  - resource: sessions
+    needs: [session_id, raw_filename, instrument, num_wells, num_cycles, uploaded_at]
+    auth_required: true
+  - resource: workspace_sessions
+    needs: [ordered_session_ids]
+  - resource: upload_queue
+    needs: [id, file, status, session_id, error, preview]
+
+components:
+  - id: file_drawer
+    type: drawer
+    position: overlay
+    function: "현재 분석 위에서 업로드 큐, 이번 작업, 최근 파일을 제공"
+    data_source: { resource: workspace_sessions }
+    events:
+      - { on: escape, do: "drawer를 닫고 파일 trigger로 focus 복귀" }
+  - id: compact_drop_zone
+    type: form
+    position: sidebar
+    function: "drop, 파일 선택, 폴더 선택을 큐 항목으로 분류·검증"
+    data_source: { resource: upload_queue }
+    events:
+      - { on: add:files, do: "중복 제거, count/size 검증, XML 묶음화 후 순차 enqueue" }
+  - id: upload_queue_list
+    type: list
+    position: sidebar
+    function: "항목별 단계 상태, 오류, 재시도 및 mapping 진입을 표시"
+    data_source: { resource: upload_queue }
+    events:
+      - { on: click:retry, do: "성공 항목은 유지하고 실패 항목만 재시도" }
+      - { on: click:mapping, do: "대기열에서 modal 하나만 열기" }
+  - id: workspace_file_list
+    type: list
+    position: sidebar
+    function: "이번 작업 세션을 열거나 목록에서만 닫는다"
+    data_source: { resource: workspace_sessions }
+    events:
+      - { on: click:item, do: "공통 session opener로 세션 열기" }
+      - { on: click:close, do: "서버 삭제 없이 이번 작업에서 제거하고 active fallback 적용" }
+  - id: recent_session_list
+    type: list
+    position: sidebar
+    function: "이번 작업에 없는 소유 세션을 최근 파일로 표시"
+    data_source: { resource: sessions }
+    events:
+      - { on: click:item, do: "이번 작업에 추가한 뒤 공통 session opener로 열기" }
+
+connections:
+  navigations:
+    - { from: upload_queue_list, to: "modal:import-mapping" }
+    - { from: file_drawer, to: "/?tab=project" }
+  shared_components: [FileDrawer, CompactDropZone, FileQueueItem, WorkspaceFileItem, RecentSessionItem, StatusState]
+
+tests:
+  - name: "부분 성공 업로드"
+    when: "유효 파일과 실패 fixture를 함께 추가한다"
+    then: ["성공 항목은 준비됨", "실패 항목은 고유 원인과 재시도 표시", "활성 세션은 유지됨"]
+  - name: "XML 묶음과 table 분기"
+    when: "XML 여러 개와 CSV를 한 번에 추가한다"
+    then: ["XML은 하나의 묶음 항목", "CSV는 매핑 필요 항목", "다른 raw 파일은 개별 항목"]
+  - name: "작업 목록 닫기"
+    when: "활성 파일을 닫는다"
+    then: ["서버 세션은 삭제되지 않음", "목록의 첫 번째 남은 세션 또는 빈 상태 표시"]
+  - name: "접근성과 반응성"
+    when: "키보드와 200% zoom에서 drawer를 사용한다"
+    then: ["첫 시각 피드백 100ms 이내", "focus trap/escape/restore 동작", "파일명과 action이 가려지지 않음"]
+
+notes:
+  - "업로드 완료는 session 생성까지이며 자동 전환·자동 분석하지 않는다."
+  - "drawer에는 영구 삭제 action이 없다."

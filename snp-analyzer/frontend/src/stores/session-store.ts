@@ -27,6 +27,11 @@ interface SessionState {
    *  navigation store owns WHERE you are inside the active plate; this is
    *  only which plates are on the bench. */
   openSessionIds: string[];
+  /** The navigation query each open plate was last seen at, so switching
+   *  away and back returns to that cycle/surface/marker instead of the
+   *  plate's defaults. Reuses the URL the history writer already keeps in
+   *  sync, so it is validated against the plate on the way back in. */
+  sessionQueries: Record<string, string>;
   wellGroups: Record<string, string[]> | null;
   uploadState: 'idle' | 'uploading' | 'packaging' | 'success' | 'error';
   uploadProgress: number; // 0-100
@@ -58,6 +63,7 @@ export const useSessionStore = create<SessionState>()(
   sessionId: null,
   sessionInfo: null,
   openSessionIds: [],
+  sessionQueries: {},
   wellGroups: null,
   uploadState: 'idle',
   uploadProgress: 0,
@@ -77,9 +83,12 @@ export const useSessionStore = create<SessionState>()(
     if (allowed && !allowed.includes(settings.backgroundMode)) {
       settings.setBackgroundMode('none');
     }
-    const open = get().openSessionIds;
+    const { openSessionIds: open, sessionId: previous, sessionQueries } = get();
+    // Remember where the outgoing plate was before its URL is replaced.
+    const queries = previous && previous !== id && typeof location !== 'undefined'
+      ? { ...sessionQueries, [previous]: location.search } : sessionQueries;
     set({ restoreQuery: query, sessionId: id, sessionInfo: info, wellGroups: info.well_groups, entryReason: reason,
-      openSessionIds: open.includes(id) ? open : [...open, id],
+      openSessionIds: open.includes(id) ? open : [...open, id], sessionQueries: queries,
       entryGeneration: get().entryGeneration + 1, initialAnalysisAvailable: reason === 'fresh' });
   },
   consumeInitialAnalysis: () => {
@@ -92,9 +101,10 @@ export const useSessionStore = create<SessionState>()(
    *  navigate to a plate that is no longer the one being opened. */
   loadSession: async (id) => {
     const revision = ++sessionLoadRevision;
+    const remembered = get().sessionQueries[id] ?? null;
     const info = await getSessionInfo(id);
     if (revision !== sessionLoadRevision) return false;
-    get().setSession(id, info, 'reopen');
+    get().setSession(id, info, 'reopen', remembered);
     return true;
   },
   addOpenSession: (id) => set(state => ({
@@ -102,12 +112,17 @@ export const useSessionStore = create<SessionState>()(
   })),
   closeOpenSession: (id) => set(state => ({
     openSessionIds: state.openSessionIds.filter(sessionId => sessionId !== id),
+    // A closed plate forgets where it was: reopening it later starts clean.
+    sessionQueries: Object.fromEntries(Object.entries(state.sessionQueries).filter(([key]) => key !== id)),
   })),
   /** Drops plates that no longer exist on the server (deleted elsewhere, or
    *  swept by the retention timer) instead of offering dead tabs. */
   syncOpenSessions: (availableIds) => {
     const available = new Set(availableIds);
-    set(state => ({ openSessionIds: state.openSessionIds.filter(id => available.has(id)) }));
+    set(state => ({
+      openSessionIds: state.openSessionIds.filter(id => available.has(id)),
+      sessionQueries: Object.fromEntries(Object.entries(state.sessionQueries).filter(([id]) => available.has(id))),
+    }));
   },
   setWellGroups: (groups) => set({ wellGroups: groups }),
   setUploadState: (state) => set({ uploadState: state }),
@@ -137,6 +152,7 @@ export const useSessionStore = create<SessionState>()(
       restoreQuery: null, sessionId: null,
       sessionInfo: null,
       openSessionIds: [],
+      sessionQueries: {},
       wellGroups: null,
       uploadState: 'idle',
       uploadProgress: 0,
@@ -150,13 +166,19 @@ export const useSessionStore = create<SessionState>()(
       name: 'qprism-file-workspace',
       storage: createJSONStorage(() => sessionStorage),
       version: 1,
-      partialize: state => ({ openSessionIds: state.openSessionIds }),
+      partialize: state => ({ openSessionIds: state.openSessionIds, sessionQueries: state.sessionQueries }),
       merge: (persisted, current) => {
-        const candidate = persisted && typeof persisted === 'object' ? persisted as { openSessionIds?: unknown } : {};
+        const candidate = persisted && typeof persisted === 'object'
+          ? persisted as { openSessionIds?: unknown; sessionQueries?: unknown } : {};
         const openSessionIds = Array.isArray(candidate.openSessionIds)
           ? candidate.openSessionIds.filter((id): id is string => typeof id === 'string')
           : [];
-        return { ...current, openSessionIds };
+        const stored = candidate.sessionQueries;
+        const sessionQueries = stored && typeof stored === 'object' && !Array.isArray(stored)
+          ? Object.fromEntries(Object.entries(stored as Record<string, unknown>)
+              .filter(([id, query]) => openSessionIds.includes(id) && typeof query === 'string')) as Record<string, string>
+          : {};
+        return { ...current, openSessionIds, sessionQueries };
       },
     },
   ),

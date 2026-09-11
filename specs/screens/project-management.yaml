@@ -1,0 +1,51 @@
+version: "2.0"
+
+screen:
+  name: "프로젝트 관리"
+  route: "/?tab=project"
+  layout: full-width
+  auth: true
+
+data_requirements:
+  - resource: sessions
+    needs: [session_id, raw_filename, instrument, num_wells, num_cycles, uploaded_at]
+    auth_required: true
+  - resource: workspace_sessions
+    needs: [ordered_session_ids]
+
+components:
+  - id: existing_batch_tab
+    type: table
+    position: main
+    function: "기존 프로젝트·세션 관리와 확인 후 영구 삭제 기능을 유지"
+    data_source: { resource: sessions }
+    events:
+      - { on: click:open_session, do: "공통 session opener로 세션을 이번 작업에 추가하고 열기" }
+      - { on: confirm:delete, do: "기존 프로젝트 관리 절차로 영구 삭제" }
+  - id: file_trigger_button
+    type: button
+    position: header
+    function: "프로젝트 tab에서도 파일 drawer를 연다"
+    data_source: { resource: workspace_sessions }
+    events:
+      - { on: click, do: "파일 drawer 열기" }
+
+connections:
+  navigations:
+    - { from: file_trigger_button, to: "overlay:file-drawer" }
+    - { from: existing_batch_tab, to: "/" }
+  shared_components: [FileTriggerButton]
+
+tests:
+  - name: "drawer 닫기와 영구 삭제 분리"
+    when: "drawer에서 세션을 닫고 프로젝트 tab을 연다"
+    then: ["세션이 프로젝트 목록에 남아 있음", "닫기가 서버 삭제를 호출하지 않음"]
+  - name: "기존 삭제 흐름 유지"
+    when: "프로젝트 화면에서 확인 후 세션을 영구 삭제한다"
+    then: ["기존 삭제 동작이 완료됨", "다음 목록 동기화에서 작업·최근 목록에서 제거됨"]
+  - name: "공통 opener 사용"
+    when: "프로젝트 목록에서 세션을 연다"
+    then: ["이번 작업에 세션이 추가됨", "generation guard를 거쳐 분석 workspace로 전환됨"]
+
+notes:
+  - "이 화면의 기존 관리 API는 변경하지 않으며 새 workspace 기능은 명시된 세션 조회 API만 사용한다."

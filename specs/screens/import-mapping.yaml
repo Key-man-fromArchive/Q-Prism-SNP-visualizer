@@ -1,0 +1,60 @@
+version: "2.0"
+
+screen:
+  name: "매핑 마법사"
+  route: "modal:/"
+  layout: full-width
+  auth: true
+
+data_requirements:
+  - resource: import_previews
+    needs: [preview_id, parser_id, filename, candidate_tables, inferred_delimiter, decimal_separator, header_row, first_data_row, inferred_headers, column_candidates, sample_rows, channel_candidates, assay_mode_candidates, warnings, suggested_mapping, metadata, mapping, status, issues, error]
+    auth_required: true
+  - resource: upload_queue
+    needs: [client_id, display_name, source_files, status, session_id, error, retryable]
+
+components:
+  - id: import_mapping_wizard
+    type: modal
+    position: overlay
+    function: "preview를 바탕으로 assay/channel role mapping을 구성"
+    data_source: { resource: import_previews }
+    events:
+      - { on: submit, do: "mapping validation 후 parse를 호출해 session 생성" }
+      - { on: close, do: "항목을 제거하지 않고 매핑 필요 상태로 유지" }
+  - id: validation_issue_list
+    type: alert
+    position: overlay
+    function: "preview/parse validation issue와 수정 가능한 위치를 표시"
+    data_source: { resource: import_previews }
+    events:
+      - { on: select:issue, do: "관련 mapping field로 focus 이동" }
+  - id: preview_expiry_recovery
+    type: alert
+    position: overlay
+    function: "preview 만료 시 보유 File로 재-preview하거나 재선택 안내"
+    data_source: { resource: upload_queue }
+    events:
+      - { on: click:retry, do: "원본 File이 있으면 preview 재생성, 없으면 재선택 요청" }
+
+connections:
+  navigations:
+    - { from: import_mapping_wizard, to: "overlay:file-drawer" }
+  shared_components: [ImportMappingWizard, ValidationIssueList, StatusState, Modal]
+
+tests:
+  - name: "단일 wizard 직렬 처리"
+    when: "매핑 필요 항목 두 개에서 mapping을 시작한다"
+    then: ["동시에 하나의 wizard만 열림", "완료 후 다음 항목이 대기"]
+  - name: "parse 성공"
+    when: "유효한 WT/MT mapping을 제출한다"
+    then: ["세션이 생성되어 해당 큐 항목이 준비됨", "활성 분석 세션은 변경되지 않음"]
+  - name: "preview 만료 복구"
+    when: "30분 만료된 preview를 제출한다"
+    then: ["원본 File이 있으면 preview 재생성", "File이 없으면 재선택 안내"]
+  - name: "지원 전 분석 모드"
+    when: "preview-only assay mode를 제출한다"
+    then: ["지원되지 않음을 설명", "mapping 항목과 현재 분석을 유지"]
+
+notes:
+  - "preview_id와 File은 sessionStorage에 저장하지 않는다."
