@@ -7,6 +7,10 @@ venv/
 
 # Node
 node_modules/
+# Without the slash too: a SYMLINK named node_modules is not matched by the
+# directory pattern, which is how one got committed (99fbe25) and later
+# replaced a real install on checkout.
+node_modules
 
 # Test artifacts
 test-results/
