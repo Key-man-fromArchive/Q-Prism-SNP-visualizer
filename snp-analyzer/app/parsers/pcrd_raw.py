@@ -440,6 +440,8 @@ def _parse_protocol(root: ET.Element) -> list[ProtocolStep]:
             label=label,
             phase=phase,
             goto_label=goto_label,
+            plate_read=step["has_read"],
+            temp_increment=step["inc_temp"] if step["inc_temp"] != 0 else None,
         ))
 
     return steps

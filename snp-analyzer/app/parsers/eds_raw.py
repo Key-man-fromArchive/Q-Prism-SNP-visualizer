@@ -523,6 +523,8 @@ def _parse_protocol(xml_data: bytes) -> list[ProtocolStep]:
                 label=label,
                 phase=phase,
                 goto_label=goto_label,
+                plate_read=tc_step.findtext("CollectionFlag", "0") == "1",
+                temp_increment=ext_temp if (auto_delta and ext_temp != 0) else None,
             ))
 
     return steps

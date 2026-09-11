@@ -26,10 +26,13 @@ protocol_store: dict[str, list[ProtocolStep]] = {}
 DEFAULT_PROTOCOL = [
     ProtocolStep(step=1, temperature=94.0, duration_sec=900, cycles=1, label="Initial Denaturation"),
     ProtocolStep(step=2, temperature=94.0, duration_sec=20, cycles=10, label="Denaturation (Touchdown)"),
-    ProtocolStep(step=3, temperature=61.0, duration_sec=60, cycles=10, label="Annealing (Touchdown -0.6/cycle)"),
+    ProtocolStep(
+        step=3, temperature=61.0, duration_sec=60, cycles=10, label="Annealing (Touchdown -0.6/cycle)",
+        temp_increment=-0.6,
+    ),
     ProtocolStep(step=4, temperature=94.0, duration_sec=20, cycles=25, label="Denaturation"),
     ProtocolStep(step=5, temperature=55.0, duration_sec=60, cycles=25, label="Annealing"),
-    ProtocolStep(step=6, temperature=37.0, duration_sec=60, cycles=1, label="Final Read"),
+    ProtocolStep(step=6, temperature=37.0, duration_sec=60, cycles=1, label="Final Read", plate_read=True),
 ]
 
 
@@ -312,7 +315,12 @@ async def get_protocol(sid: str, current_user: CurrentUser):
         steps = unified.protocol_steps
     else:
         steps = DEFAULT_PROTOCOL
-    return {"steps": steps}
+    return {
+        "steps": steps,
+        # Run-wide channel list, so the protocol tab's channel card reads from
+        # the response contract instead of the (possibly stale) data-store cache.
+        **build_role_label_metadata(unified),
+    }
 
 
 @router.post("/api/data/{sid}/protocol")
