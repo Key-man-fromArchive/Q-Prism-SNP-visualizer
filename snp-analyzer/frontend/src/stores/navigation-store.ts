@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { DataWindow } from '@/types/api';
 import type { QualityTarget } from '@/lib/quality-target';
 
-export const navigationTabs = ['analysis', 'protocol', 'settings', 'quality', 'statistics', 'compare', 'project', 'users', 'references', 'library'] as const;
+export const navigationTabs = ['analysis', 'protocol', 'settings', 'quality', 'statistics', 'compare', 'project', 'users', 'references', 'library', 'feedback'] as const;
 export type NavigationTab = typeof navigationTabs[number];
 export type WorkspaceSurface = 'plate' | 'analysis';
 export type NavigationValue = {

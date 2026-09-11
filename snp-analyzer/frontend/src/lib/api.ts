@@ -42,6 +42,15 @@ import type {
   MarkerCatalogListResponse,
   MarkerCatalogCreateRequest,
   MarkerCatalogUpdateRequest,
+  FeedbackAttachment,
+  FeedbackCategory,
+  FeedbackComment,
+  FeedbackItem,
+  FeedbackListResponse,
+  FeedbackStats,
+  FeedbackStatus,
+  FeedbackSubmitRequest,
+  FeedbackUpdateRequest,
 } from '@/types/api';
 import type {
   ASGLaunchResponse,
@@ -948,4 +957,78 @@ export async function saveAsgResult(
       result_revision: resultRevision,
     }),
   });
+}
+
+// ============================================================================
+// In-app user feedback
+// ============================================================================
+
+/** Files a feedback item, claiming any screenshots uploaded beforehand. */
+export async function submitFeedback(body: FeedbackSubmitRequest): Promise<FeedbackItem> {
+  return apiFetch<FeedbackItem>('/api/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/** The caller's own submissions, newest first, with the admin's replies. */
+export async function listMyFeedback(page = 1, perPage = 20): Promise<FeedbackListResponse> {
+  return apiFetch<FeedbackListResponse>(
+    `/api/feedback/my${buildQuery({ page, per_page: perPage })}`
+  );
+}
+
+/** Admin triage view: every user's feedback. 403 for non-admins, and in ASG
+ *  launch mode (which has no local administration at all). */
+export async function listFeedback(params: {
+  status?: FeedbackStatus;
+  category?: FeedbackCategory;
+  page?: number;
+  per_page?: number;
+} = {}): Promise<FeedbackListResponse> {
+  return apiFetch<FeedbackListResponse>(`/api/feedback${buildQuery(params)}`);
+}
+
+export async function getFeedbackStats(): Promise<FeedbackStats> {
+  return apiFetch<FeedbackStats>('/api/feedback/stats');
+}
+
+/** Partial admin update — omitted fields are left as they are, so setting a
+ *  status never clears an existing note. */
+export async function updateFeedback(
+  id: string,
+  patch: FeedbackUpdateRequest
+): Promise<FeedbackItem> {
+  return apiFetch<FeedbackItem>(`/api/feedback/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+/** Replies on a feedback thread. Allowed for the reporter and for an admin. */
+export async function addFeedbackComment(id: string, body: string): Promise<FeedbackComment> {
+  return apiFetch<FeedbackComment>(`/api/feedback/${encodeURIComponent(id)}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body }),
+  });
+}
+
+/** Uploads one screenshot ahead of submission and returns its id for
+ *  `submitFeedback`'s `attachment_ids`. PNG/JPEG/WebP, 2 MB each. */
+export async function uploadFeedbackAttachment(file: File): Promise<FeedbackAttachment> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return apiFetch<FeedbackAttachment>('/api/feedback/attachments', {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+/** Resolved URL for an attachment's bytes, for use as an <img> src. Goes
+ *  through apiUrl so it honours SNP_ROOT_PATH when mounted under a prefix. */
+export function feedbackAttachmentUrl(attachmentId: string): string {
+  return apiUrl(`/api/feedback/attachments/${encodeURIComponent(attachmentId)}`);
 }

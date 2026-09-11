@@ -448,3 +448,102 @@ class QualityResult(BaseModel):
     noise_score: float = 0
     rise_score: float = 0
     flags: list[str] = []
+
+
+# ---------------------------------------------------------------------------
+# In-app user feedback
+# ---------------------------------------------------------------------------
+
+
+class FeedbackCategory(str, Enum):
+    BUG = "bug"
+    FEATURE = "feature"
+    IMPROVEMENT = "improvement"
+    QUESTION = "question"
+    OTHER = "other"
+
+
+class FeedbackStatus(str, Enum):
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
+
+
+class FeedbackContext(BaseModel):
+    """Where the reporter was when they filed it.
+
+    Collected automatically by the widget so a report is reproducible without
+    asking the operator to describe their screen. Deliberately holds NO plate
+    contents -- no sample names, well ids, genotype calls or fluorescence --
+    because an admin reading feedback is not otherwise entitled to another
+    user's sample identities (see AGENTS.md on private sample identifiers).
+    Only the run's shape (instrument, well/cycle counts, ploidy) is carried,
+    which is what a parsing or clustering bug actually depends on.
+    """
+    # The tab the reporter was on ("analysis", "quality", ...) plus the
+    # sub-surface within it where one exists ("plate-setup" / "analysis").
+    page_key: str | None = None
+    surface: str | None = None
+    session_id: str | None = None
+    instrument: str | None = None
+    num_wells: int | None = None
+    num_cycles: int | None = None
+    ploidy: int | None = None
+    cycle: int | None = None
+    language: str | None = None
+    viewport: str | None = None
+    user_agent: str | None = None
+
+
+class FeedbackAttachment(BaseModel):
+    """A stored screenshot. Bytes are fetched separately from
+    ``GET /api/feedback/attachments/{id}``; this is metadata only."""
+    id: str
+    filename: str
+    mime_type: str
+    size_bytes: int
+
+
+class FeedbackComment(BaseModel):
+    id: str
+    feedback_id: str
+    author_user_id: str
+    author_name: str | None = None
+    body: str
+    # Captured when the comment was written, not derived from the author's
+    # current role -- a staff answer stays a staff answer.
+    is_admin: bool = False
+    created_at: str | None = None
+
+
+class FeedbackItem(BaseModel):
+    id: str
+    owner_user_id: str
+    owner_name: str | None = None
+    category: FeedbackCategory
+    title: str
+    body: str
+    context: FeedbackContext | None = None
+    status: FeedbackStatus = FeedbackStatus.OPEN
+    admin_note: str | None = None
+    comments: list[FeedbackComment] = []
+    attachments: list[FeedbackAttachment] = []
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class FeedbackListResponse(BaseModel):
+    items: list[FeedbackItem]
+    total: int
+    page: int
+    per_page: int
+
+
+class FeedbackStats(BaseModel):
+    total: int = 0
+    open: int = 0
+    in_progress: int = 0
+    resolved: int = 0
+    closed: int = 0
+    by_category: dict[str, int] = {}

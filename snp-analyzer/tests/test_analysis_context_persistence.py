@@ -140,7 +140,9 @@ def test_existing_revision_column_with_missing_version_stamp(isolated_db: Module
     conn.execute("DELETE FROM schema_version WHERE version=7")
     conn.commit()
     isolated_db.init_db()
-    assert conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 7
+    # Migration 7 (input_revision) is re-stamped. Checked by presence rather
+    # than as the newest version: init_db() runs every later migration too.
+    assert conn.execute("SELECT version FROM schema_version WHERE version=7").fetchone() is not None
 
 
 @pytest.mark.parametrize("wire_context", ["missing", None])
@@ -184,7 +186,9 @@ def test_migrate_v6_idempotently_without_cascade_deletion(isolated_db: ModuleTyp
     isolated_db.init_db()
     isolated_db.init_db()
     assert conn.execute("SELECT input_revision FROM sessions").fetchone()[0] == 0
-    assert conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 7
+    # Migration 7 (input_revision) is re-stamped. Checked by presence rather
+    # than as the newest version: init_db() runs every later migration too.
+    assert conn.execute("SELECT version FROM schema_version WHERE version=7").fetchone() is not None
     assert conn.execute("SELECT COUNT(*) FROM well_cycle_data").fetchone()[0] == 96 * 42
     assert conn.execute("SELECT COUNT(*) FROM manual_welltypes").fetchone()[0] == 1
     assert loaded_result().context_status == "legacy_unknown"

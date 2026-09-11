@@ -3,7 +3,7 @@ import { useI18n } from '@/hooks/use-i18n';
 import { Menu, type MenuItem } from '@/components/shared/ui';
 import { navigateTabs } from '@/lib/tab-keyboard';
 
-export type TabId = 'analysis' | 'protocol' | 'settings' | 'quality' | 'statistics' | 'compare' | 'project' | 'users' | 'references' | 'library';
+export type TabId = 'analysis' | 'protocol' | 'settings' | 'quality' | 'statistics' | 'compare' | 'project' | 'users' | 'references' | 'library' | 'feedback';
 
 export type TabNavigationProps = {
   activeTab: TabId;
@@ -37,6 +37,7 @@ const tabs: Tab[] = [
   { id: 'project', label: 'Project', dataTab: 'project', sessionFree: true },
   { id: 'references', label: 'References', dataTab: 'references', sessionFree: true, overflow: true },
   { id: 'users', label: 'Users', dataTab: 'users', sessionFree: true, adminOnly: true, overflow: true },
+  { id: 'feedback', label: 'Feedback', dataTab: 'feedback', sessionFree: true, adminOnly: true, overflow: true },
 ];
 
 export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdmin = false }: TabNavigationProps) {
@@ -52,6 +53,7 @@ export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdm
     users: t.tabUsers,
     references: t.tabReferences,
     library: t.tabLibrary,
+    feedback: t.tabFeedback,
   };
 
   const visible = tabs.filter((tab) => !tab.adminOnly || isAdmin);
