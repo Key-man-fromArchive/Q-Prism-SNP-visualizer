@@ -106,7 +106,7 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 | --- | --- | --- |
 | BE-TEST | BE | `venv/bin/python -m pytest tests/<task_test>.py --tb=short -q` |
 | BE-ALL | BE | `venv/bin/python -m pytest --tb=short -q` |
-| BE-LINT | BE | `ruff check .` 및 `ruff format --check .` |
+| BE-LINT | BE | **변경한 `.py` 파일에 대해서만** `venv/bin/ruff check <changed…>` 및 `venv/bin/ruff format --check <changed…>` (P0-T0.1에서 수정됨 — 아래 주석) |
 | FE-TEST | FE | `npm run test -- src/<task_test>` |
 | FE-ALL | FE | `npm run test` |
 | FE-CHECK | FE | `npx tsc --noEmit`, `npm run lint`, `npm run build` 각각 실행 |
@@ -114,7 +114,18 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 | EXISTING-E2E | FE | `VITE_DEV_API_TARGET=<격리 API 주소> E2E_PORT=<할당 포트> npm run e2e` |
 | VIEWPORT | 브라우저 | 1920x911(피드백 제출 뷰포트) · 1280px · 768px · 400px × 라이트/다크 |
 
-- Python은 `BE/venv`에 두 requirements 파일로 준비하고 `bcrypt==4.0.1`을 확인한다. **호스트 설치 금지.**
+- **백엔드 인터프리터는 P0에서 구축한 계약 전용 venv를 절대경로로 쓴다**:
+  `/mnt/docker/Q-Prism-SNP-visualizer/worktree/feedback-p0/snp-analyzer/venv/bin/python`
+  (`bcrypt==4.0.1` 확인 완료). **호스트 설치 금지.** 루트 `snp-analyzer/venv`는 낡아 사용하지 않는다.
+  venv를 다른 worktree에 **심볼릭링크하지 않는다** — `.gitignore`의 `venv/`가 심볼릭링크를 걸러내지 못해 추적이 오염된다.
+- **프론트엔드는 worktree마다 `npm ci`로 설치한다.** 다른 worktree의 `node_modules`를 공유·심볼릭링크하지 않는다.
+  루트의 `node_modules`는 vitest 2.1.9로 main 요구(4.1.11)와 달라 테스트 1건과 빌드가 거짓 실패했다(P0-T0.1 기록).
+- **BE-LINT는 변경분 기준이다.** main `bbc6657`의 기준선은 `ruff check` **36 errors**
+  (F811 19 / E702 8 / F401 7 / F841 2 · `app/` 5건, `tests/` 31건)와
+  `ruff format --check` **122개 파일 미포맷**이다. 리포지토리에 ruff 설정 파일이 없어 기본 규칙이 적용되며,
+  코드베이스는 그 규칙으로 작성되지 않았다. 전체를 고치는 것은 이번 계약 범위 밖이며
+  (122개 파일 포맷은 모든 후속 diff·blame을 오염시킨다), **별도 계약으로 분리한다.**
+  신규·수정 파일은 통과해야 하고, 기준선 수치가 늘면 회귀로 본다.
 - 백엔드는 임시 `DB_PATH`와 합성 계정·local 인증으로 실행한다. **운영 DB(`/app/data/snp_analyzer.db`)는 읽기 조회 외에 사용하지 않는다.**
 - 증거는 `docs/planning/feedback-2026-09-11/evidence/<task-id>.md`에 커밋·명령·결과·남은 문제를 기록한다.
   스크린샷·trace는 격리 artifact 경로에 두고 링크한다. 비공개 샘플명·인증 파일은 커밋하지 않는다.
@@ -185,6 +196,8 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
   - 0절 승격 절차를 수행한다(이전 계약 archive → 본 문서를 `06-tasks.md`로).
   - `.claude/orchestrate-state.json`을 `contract_id: qprism-feedback-20260911-v1`, `baseline_commit: c2bc854`로 **새로 시작**한다. 이전 계약 파일은 보존한다.
   - BE venv 준비(`bcrypt==4.0.1` 확인)와 FE 의존성 설치를 확인하고, 회귀 기준선(BE-ALL / FE-ALL / FE-CHECK 현재 통과 수)을 기록한다.
+  - **측정된 기준선 (main `bbc6657`)**: BE-ALL 798 passed + 2 subtests / 0 failed · FE 100 files 666 tests / 0 failed ·
+    `tsc --noEmit` 0 · eslint 0 · `npm run build` 성공. `ruff check` 36 errors와 `ruff format --check` 122 files는 **기존 문제**로 분리한다.
 - AC
   - [ ] baseline이 `c2bc854`로 기록되고, 이전 계약의 worktree·브랜치가 삭제되지 않았다
   - [ ] `06-tasks.md`가 본 계약 내용이고, 이전 계약이 `archive/`에 보존되었다
