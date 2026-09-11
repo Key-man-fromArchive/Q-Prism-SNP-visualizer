@@ -1,0 +1,41 @@
+version: "2.0"
+
+screens:
+  - id: analysis_workspace
+    name: "분석 작업공간"
+    route: /
+    spec: analysis-workspace.yaml
+    consolidates:
+      - screen-file-workspace-host
+      - screen-session-opening
+      - screen-first-open-analysis
+      - screen-restored-analysis
+  - id: file_drawer
+    name: "파일 작업공간 드로어"
+    route: "overlay:/"
+    spec: file-drawer.yaml
+    consolidates: [screen-file-drawer]
+  - id: import_mapping
+    name: "매핑 마법사"
+    route: "modal:/"
+    spec: import-mapping.yaml
+    consolidates: [screen-import-mapping]
+  - id: project_management
+    name: "프로젝트 관리"
+    route: "/?tab=project"
+    spec: project-management.yaml
+    consolidates: [screen-project-management-existing]
+
+constraints:
+  max_new_routes: 0
+  state_persistence: "사용자 범위 sessionStorage"
+  allowed_new_feature_endpoints:
+    - GET /api/sessions
+    - GET /api/sessions/{sid}
+    - POST /api/upload
+    - POST /api/import/preview
+    - POST /api/import/parse
+  explicitly_excluded:
+    - "view-state API 또는 DB table"
+    - "drawer 안의 영구 삭제"
+    - "업로드 직후 자동 분석 또는 자동 전환"

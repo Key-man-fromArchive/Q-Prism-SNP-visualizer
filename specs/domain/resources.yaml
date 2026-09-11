@@ -1,0 +1,95 @@
+version: "2.0"
+
+resources:
+  sessions:
+    description: "서버에 파싱되어 저장된 현재 사용자 소유 분석 세션"
+    ownership: current_user
+    endpoints:
+      - { method: GET, path: /api/sessions, scope: collection }
+      - { method: GET, path: "/api/sessions/{sid}", scope: item }
+    fields:
+      session_id: { type: string, required: true }
+      raw_filename: { type: string, required: false }
+      instrument: { type: string, required: true }
+      allele2_dye: { type: string, required: item }
+      num_wells: { type: integer, required: true }
+      num_cycles: { type: integer, required: true }
+      uploaded_at: { type: datetime, required: collection }
+      has_rox: { type: boolean, required: item }
+      data_windows: { type: "DataWindow[] | null", required: item }
+      suggested_cycle: { type: "integer | null", required: item }
+      background_modes: { type: "BackgroundMode[]", required: item }
+      well_groups: { type: "record<string, string[]> | null", required: item }
+
+  upload_queue:
+    description: "원본 File을 보유하는 탭 메모리 전용 업로드 작업 큐"
+    storage: browser_memory
+    endpoint:
+      method: POST
+      path: /api/upload
+      output_resource: sessions
+    fields:
+      id: { type: string }
+      file: { type: File, persisted: false }
+      status: { type: QueueStatus }
+      session_id: { type: "string | null", required: false }
+      error: { type: "string | null", required: false }
+      preview: { type: "ImportPreview | null", required: false }
+
+  import_previews:
+    description: "표 형식 파일의 일시적 preview와 mapping 입력"
+    ttl_minutes: 30
+    endpoints:
+      - { method: POST, path: /api/import/preview, scope: create_preview }
+      - { method: POST, path: /api/import/parse, scope: create_session }
+    fields:
+      preview_id: { type: string }
+      parser_id: { type: string }
+      filename: { type: string }
+      candidate_tables: { type: "string[]" }
+      inferred_delimiter: { type: "string | null" }
+      decimal_separator: { type: "string | null" }
+      header_row: { type: "integer | null" }
+      first_data_row: { type: "integer | null" }
+      inferred_headers: { type: "string[]" }
+      column_candidates: { type: "record<string, string[]>" }
+      sample_rows: { type: "record<string, unknown>[]" }
+      channel_candidates: { type: "ReporterChannel[]" }
+      assay_mode_candidates: { type: "AssayModeId[]" }
+      warnings: { type: "ValidationIssue[]" }
+      suggested_mapping: { type: "MappingConfig | null" }
+      metadata: { type: "record<string, unknown>" }
+      mapping: { type: MappingConfig, direction: request }
+      status: { type: ImportStatus, direction: response_or_client }
+      issues: { type: "ValidationIssue[]", direction: response_or_client }
+      error: { type: "QueueError | null", direction: client }
+
+  workspace_sessions:
+    description: "이번 탭의 열린 세션 ID 순서; 로그아웃 시 제거"
+    storage: sessionStorage
+    server_endpoint: none
+    fields:
+      ordered_session_ids: { type: "string[]" }
+
+  session_view_states:
+    description: "세션별 분석 UI snapshot; 서버 동기화 없이 sessionStorage에만 저장"
+    storage: sessionStorage
+    key_by: session_id
+    server_endpoint: none
+    fields:
+      active_surface: { type: WorkspaceSurface }
+      current_cycle: { type: "integer | null" }
+      current_data_window: { type: "string | null" }
+      selected_well: { type: "string | null" }
+      selected_wells: { type: "string[]" }
+      selected_group: { type: "string | null" }
+      focus_selected_wells: { type: boolean }
+      show_empty_wells: { type: boolean }
+      show_manual_types: { type: boolean }
+      show_auto_cluster: { type: boolean }
+      use_rox: { type: boolean }
+      background_mode: { type: BackgroundMode }
+      scatter_tool: { type: ScatterTool }
+      axis_mode: { type: AxisMode }
+      lock_aspect: { type: boolean }
+      axis_range: { type: "AxisRange | null" }

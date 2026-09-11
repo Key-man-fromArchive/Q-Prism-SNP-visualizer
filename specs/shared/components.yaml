@@ -1,0 +1,42 @@
+version: "2.0"
+
+components:
+  FileTriggerButton:
+    type: button
+    purpose: "이번 작업의 열린 파일 수를 표시하고 drawer를 여는 전역 trigger"
+    accessibility: ["accessible name", "drawer close 후 focus restore"]
+  FileDrawer:
+    type: drawer
+    purpose: "업로드·이번 작업·최근 파일을 현재 화면 위에서 조정"
+    accessibility: ["role dialog", "focus trap", "Escape close", "responsive near-full-width"]
+  CompactDropZone:
+    type: form
+    purpose: "drop, file picker, folder picker 입력을 공통 coordinator에 전달"
+  FileQueueItem:
+    type: card
+    purpose: "파일별 단계 상태·오류·retry/mapping action 표시"
+    accessibility: ["상태 icon과 label 병행", "polite live region"]
+  WorkspaceFileItem:
+    type: card
+    purpose: "이번 작업 세션의 active 상태와 open/close action 표시"
+  RecentSessionItem:
+    type: card
+    purpose: "서버 세션 요약을 표시하고 이번 작업에 추가하여 열기"
+  ImportMappingWizard:
+    type: modal
+    purpose: "단일 table preview의 mapping 편집과 parse 제출"
+  ValidationIssueList:
+    type: alert
+    purpose: "mapping validation issue를 위치·복구 가능성과 함께 표시"
+  StatusState:
+    type: alert
+    purpose: "loading, empty, error, partial success를 동일한 시각·접근성 규칙으로 표시"
+  Modal:
+    type: modal
+    purpose: "focus 관리와 dismiss 정책을 제공하는 기존 공통 modal"
+
+rules:
+  localization: [ko, en]
+  themes: [light, dark]
+  filenames: "text node로만 렌더하고 번역·변형하지 않음"
+  destructive_action: "FileDrawer 계열에는 영구 삭제 action 금지"

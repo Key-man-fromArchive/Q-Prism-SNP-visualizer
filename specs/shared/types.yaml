@@ -1,0 +1,56 @@
+version: "2.0"
+
+types:
+  QueueStatus:
+    kind: enum
+    values: [queued, packaging, uploading, mapping, success, error]
+  WorkspaceSurface:
+    kind: enum
+    values: [plate, analysis]
+  BackgroundMode:
+    kind: enum
+    values: [none, pre_read, channel_min]
+  ScatterTool:
+    kind: enum
+    values: [select, edit]
+  AxisMode:
+    kind: enum
+    values: [zero, auto, manual]
+  AxisRange:
+    kind: object
+    fields: { x_min: number, x_max: number, y_min: number, y_max: number }
+  DataWindow:
+    kind: object
+    fields: { name: string, start_cycle: integer, end_cycle: integer }
+  AssayModeId:
+    kind: enum
+    values: [wt_mt, wt_mt1_mt2, wt_mt1_mt2_mt3]
+  ImportStatus:
+    kind: enum
+    values: [previewing, ready, validation_failed, parsing, preview_expired, unsupported_analysis_mode]
+  ReporterChannel:
+    kind: object
+    fields: { channel_id: string, dye_name: "string | null", role: ImportRole }
+  ImportRole:
+    kind: enum
+    values: [WT, MT1, MT2, MT3, normalization, excluded, unknown]
+  ValidationIssue:
+    kind: object
+    fields:
+      code: string
+      message: string
+      recoverable: boolean
+      row: "integer | null"
+      column: "string | null"
+      channel_id: "string | null"
+      context: "record<string, unknown>"
+  MappingConfig:
+    kind: object
+    description: "assay mode, normalization, channel role 및 table column mapping"
+    required_fields: [assay_mode, normalization_mode, channel_roles]
+
+persistence:
+  session_storage:
+    include: [workspace_sessions, session_view_states]
+    exclude: [File, Blob, preview_id, token, sample_name, modal_state, playback_state]
+    invalid_state_policy: "조회 가능한 session ID와 허용된 view 값만 사용하고 로그아웃 시 전체 폐기"

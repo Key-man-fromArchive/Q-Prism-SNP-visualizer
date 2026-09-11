@@ -1,0 +1,64 @@
+version: "2.0"
+
+screen:
+  name: "분석 작업공간"
+  route: /
+  layout: full-width
+  auth: true
+
+data_requirements:
+  - resource: sessions
+    needs: [session_id, raw_filename, instrument, allele2_dye, num_wells, num_cycles, has_rox, data_windows, suggested_cycle, background_modes, well_groups]
+    auth_required: true
+  - resource: workspace_sessions
+    needs: [ordered_session_ids]
+  - resource: session_view_states
+    needs: [active_surface, current_cycle, current_data_window, selected_well, selected_wells, selected_group, focus_selected_wells, show_empty_wells, show_manual_types, show_auto_cluster, use_rox, background_mode, scatter_tool, axis_mode, lock_aspect, axis_range]
+  - resource: upload_queue
+    needs: [id, status, error]
+
+components:
+  - id: file_trigger_button
+    type: button
+    position: header
+    function: "이번 작업의 열린 파일 수를 표시하고 파일 drawer를 연다"
+    data_source: { resource: workspace_sessions }
+    events:
+      - { on: click, do: "파일 drawer를 열고 trigger를 focus restore 대상으로 기록" }
+  - id: analysis_workspace
+    type: container
+    position: main
+    function: "활성 세션의 plate/analysis 표면과 복원된 분석 맥락을 표시"
+    data_source: { resource: session_view_states }
+    events:
+      - { on: change:view_state, do: "세션별 snapshot을 sessionStorage에 저장" }
+  - id: session_open_coordinator
+    type: alert
+    position: main
+    function: "세션 metadata를 열고 generation 일치 시 projection을 원자 교체"
+    data_source: { resource: sessions }
+    events:
+      - { on: open:session, do: "현재 상태 snapshot 후 GET detail; 결과 유무에 따라 복원 또는 최초 분석 1회" }
+      - { on: open:error, do: "기존 활성 화면을 유지하고 대상 행에 재시도 제공" }
+
+connections:
+  navigations:
+    - { from: file_trigger_button, to: "overlay:file-drawer" }
+  shared_components: [FileTriggerButton, StatusState]
+
+tests:
+  - name: "background 업로드 중 화면 보존"
+    when: "활성 분석 중 여러 파일을 추가한다"
+    then: ["사용자 선택 전 session ID가 유지됨", "분석 workspace가 unmount/reset되지 않음"]
+  - name: "빠른 전환의 stale 응답 폐기"
+    when: "A open 응답보다 B open 응답이 먼저 완료된다"
+    then: ["최신 generation의 B만 활성 store에 반영됨", "늦은 A 결과는 폐기됨"]
+  - name: "최초 열기와 재열기"
+    when: "결과 없는 세션을 처음 열고 저장 결과가 있는 세션을 재연다"
+    then: ["첫 세션만 자동 분석 1회", "재연 세션은 추가 분석 없이 기존 결과 표시"]
+  - name: "A-B-A 상태 복원"
+    when: "A 상태를 변경한 뒤 B를 거쳐 A로 돌아온다"
+    then: ["유효한 cycle/filter/selection/surface/axis가 복원됨", "재생과 열린 popup은 복원되지 않음"]
+
+notes:
+  - "view state는 서버에 보내지 않으며 사용자 범위 sessionStorage에서만 관리한다."
