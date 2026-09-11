@@ -18,6 +18,8 @@ import { UserManagement } from "@/components/admin/UserManagement";
 import { ReferencesTab } from "@/components/references/ReferencesTab";
 import { LibraryTab } from "@/components/library/LibraryTab";
 import { LoginPage } from "@/components/auth/LoginPage";
+import { FeedbackAdminPanel } from "@/components/feedback/FeedbackAdminPanel";
+import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useExports } from "@/hooks/use-exports";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
@@ -198,7 +200,8 @@ export default function App() {
     (activeTab === "project" ||
       activeTab === "users" ||
       activeTab === "references" ||
-      activeTab === "library");
+      activeTab === "library" ||
+      activeTab === "feedback");
   const isAdmin = user?.role === "admin";
 
   return (
@@ -232,10 +235,16 @@ export default function App() {
           {activeTab === "users" && isAdmin && <UserManagement />}
           {activeTab === "references" && <ReferencesTab />}
           {activeTab === "library" && <LibraryTab />}
+          {activeTab === "feedback" && isAdmin && <FeedbackAdminPanel />}
         </div>
       </main>
 
       {showHelp && <KeyboardHelpOverlay onClose={() => setShowHelp(false)} />}
+
+      {/* Every authenticated screen gets the feedback entry point; the tab the
+          operator is on is recorded as the report's page_key (this is a
+          tab-based SPA, so there is no route to read it from). */}
+      <FeedbackWidget pageKey={activeTab} />
     </div>
   );
 }

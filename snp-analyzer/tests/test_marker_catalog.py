@@ -184,8 +184,11 @@ def test_migration_6_adds_marker_catalog_table_and_catalog_id_column(tmp_path):
     assert "marker_catalog" in tables
     cols = [r[1] for r in conn.execute("PRAGMA table_info(marker_regions)").fetchall()]
     assert "catalog_id" in cols
-    version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-    assert version == 6
+    # Migration 6 is recorded. Deliberately not an equality check against the
+    # newest version: init_db() runs every later migration too, and this test
+    # is about 6 having applied, not about which migration happens to be last.
+    versions = {r[0] for r in conn.execute("SELECT version FROM schema_version").fetchall()}
+    assert versions >= {1, 2, 3, 4, 5, 6}
 
     # Migration 6 back-fills nothing.
     assert db.list_marker_catalog_entries("any-user") == []

@@ -139,6 +139,60 @@ def _run_migrations(conn: sqlite3.Connection):
             conn.execute("ALTER TABLE marker_regions ADD COLUMN catalog_id TEXT")
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (6)")
 
+    if current < 7:
+        # Migration 7: in-app user FEEDBACK (bug reports / requests) plus its
+        # comment thread and screenshot attachments. db_schema.sql is re-run on
+        # every startup, so the CREATE statements there already cover an
+        # existing DB; this branch exists so the version bookkeeping stays
+        # honest about when the tables appeared, and adds the indexes for a DB
+        # that somehow has the tables without them. It back-fills nothing --
+        # there is no prior feedback anywhere to migrate from.
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS user_feedback (
+                id TEXT PRIMARY KEY,
+                owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                category TEXT NOT NULL CHECK (category IN ('bug', 'feature', 'improvement', 'question', 'other')),
+                title TEXT NOT NULL,
+                body TEXT NOT NULL,
+                context_json TEXT,
+                status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
+                admin_note TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS user_feedback_comments (
+                id TEXT PRIMARY KEY,
+                feedback_id TEXT NOT NULL REFERENCES user_feedback(id) ON DELETE CASCADE,
+                author_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                body TEXT NOT NULL,
+                is_admin INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS user_feedback_attachments (
+                id TEXT PRIMARY KEY,
+                feedback_id TEXT REFERENCES user_feedback(id) ON DELETE CASCADE,
+                owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                filename TEXT NOT NULL,
+                mime_type TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                content BLOB NOT NULL,
+                created_at TEXT DEFAULT (datetime('now'))
+            )"""
+        )
+        for index_sql in (
+            "CREATE INDEX IF NOT EXISTS idx_user_feedback_owner ON user_feedback (owner_user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_user_feedback_status ON user_feedback (status)",
+            "CREATE INDEX IF NOT EXISTS idx_user_feedback_comments_feedback ON user_feedback_comments (feedback_id)",
+            "CREATE INDEX IF NOT EXISTS idx_user_feedback_attachments_feedback ON user_feedback_attachments (feedback_id)",
+            "CREATE INDEX IF NOT EXISTS idx_user_feedback_attachments_owner ON user_feedback_attachments (owner_user_id)",
+        ):
+            conn.execute(index_sql)
+        conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (7)")
+
     conn.commit()
 
 
@@ -684,3 +738,330 @@ def load_all_sessions():
         })
 
     return sessions_data
+
+
+# ---------------------------------------------------------------------------
+# In-app user feedback
+#
+# Feedback rows are plain DB state -- unlike sessions/markers there is no
+# in-memory store mirroring them, so every read goes through these helpers.
+# The HTTP layer (app/routers/feedback.py) owns validation and authorization;
+# everything here assumes it has already run.
+# ---------------------------------------------------------------------------
+
+
+def _feedback_row_to_dict(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "owner_user_id": row["owner_user_id"],
+        "category": row["category"],
+        "title": row["title"],
+        "body": row["body"],
+        "context": json.loads(row["context_json"]) if row["context_json"] else None,
+        "status": row["status"],
+        "admin_note": row["admin_note"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def insert_feedback(
+    feedback_id: str,
+    owner_user_id: str,
+    category: str,
+    title: str,
+    body: str,
+    context: dict | None = None,
+) -> None:
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO user_feedback (id, owner_user_id, category, title, body, context_json) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            feedback_id,
+            owner_user_id,
+            category,
+            title,
+            body,
+            json.dumps(context) if context else None,
+        ),
+    )
+    conn.commit()
+
+
+def get_feedback(feedback_id: str) -> dict | None:
+    conn = get_db()
+    row = conn.execute("SELECT * FROM user_feedback WHERE id = ?", (feedback_id,)).fetchone()
+    return _feedback_row_to_dict(row) if row else None
+
+
+def list_feedback(
+    *,
+    owner_user_id: str | None = None,
+    status: str | None = None,
+    category: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[list[dict], int]:
+    """Return one page of feedback (newest first) plus the unpaginated total.
+
+    ``owner_user_id`` narrows to one reporter's own submissions (the "my
+    feedback" view); omit it for the admin triage view, which sees everyone's.
+    """
+    conn = get_db()
+    where: list[str] = []
+    params: list[object] = []
+    if owner_user_id is not None:
+        where.append("owner_user_id = ?")
+        params.append(owner_user_id)
+    if status is not None:
+        where.append("status = ?")
+        params.append(status)
+    if category is not None:
+        where.append("category = ?")
+        params.append(category)
+    clause = f" WHERE {' AND '.join(where)}" if where else ""
+
+    total = conn.execute(
+        f"SELECT COUNT(*) FROM user_feedback{clause}", tuple(params)
+    ).fetchone()[0]
+    rows = conn.execute(
+        f"SELECT * FROM user_feedback{clause} ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?",
+        (*params, limit, offset),
+    ).fetchall()
+    return [_feedback_row_to_dict(r) for r in rows], int(total)
+
+
+def update_feedback(
+    feedback_id: str, *, status: str | None = None, admin_note: str | None = None
+) -> None:
+    """Apply a partial admin update. Fields left as None are untouched, so a
+    status change never wipes an existing note (and vice versa)."""
+    sets: list[str] = []
+    params: list[object] = []
+    if status is not None:
+        sets.append("status = ?")
+        params.append(status)
+    if admin_note is not None:
+        sets.append("admin_note = ?")
+        params.append(admin_note)
+    if not sets:
+        return
+    sets.append("updated_at = datetime('now')")
+    conn = get_db()
+    conn.execute(
+        f"UPDATE user_feedback SET {', '.join(sets)} WHERE id = ?",
+        (*params, feedback_id),
+    )
+    conn.commit()
+
+
+def feedback_stats() -> dict:
+    """Counts for the admin dashboard: one row per status, one per category."""
+    conn = get_db()
+    status_rows = conn.execute(
+        "SELECT status, COUNT(*) AS n FROM user_feedback GROUP BY status"
+    ).fetchall()
+    by_status = {r["status"]: int(r["n"]) for r in status_rows}
+    category_rows = conn.execute(
+        "SELECT category, COUNT(*) AS n FROM user_feedback GROUP BY category"
+    ).fetchall()
+    return {
+        "total": sum(by_status.values()),
+        "open": by_status.get("open", 0),
+        "in_progress": by_status.get("in_progress", 0),
+        "resolved": by_status.get("resolved", 0),
+        "closed": by_status.get("closed", 0),
+        "by_category": {r["category"]: int(r["n"]) for r in category_rows},
+    }
+
+
+def insert_feedback_comment(
+    comment_id: str,
+    feedback_id: str,
+    author_user_id: str,
+    body: str,
+    is_admin: bool,
+) -> dict:
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO user_feedback_comments (id, feedback_id, author_user_id, body, is_admin) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (comment_id, feedback_id, author_user_id, body, int(is_admin)),
+    )
+    # A reply is activity on the item, so the triage list re-sorts/refreshes on
+    # it rather than showing a stale "last touched" time.
+    conn.execute(
+        "UPDATE user_feedback SET updated_at = datetime('now') WHERE id = ?",
+        (feedback_id,),
+    )
+    conn.commit()
+    row = conn.execute(
+        "SELECT * FROM user_feedback_comments WHERE id = ?", (comment_id,)
+    ).fetchone()
+    return _feedback_comment_row_to_dict(row)
+
+
+def _feedback_comment_row_to_dict(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "feedback_id": row["feedback_id"],
+        "author_user_id": row["author_user_id"],
+        "body": row["body"],
+        "is_admin": bool(row["is_admin"]),
+        "created_at": row["created_at"],
+    }
+
+
+def load_feedback_comments(feedback_ids: list[str]) -> dict[str, list[dict]]:
+    """Comments for a page of feedback items, keyed by feedback id.
+
+    One query for the whole page instead of one per item; ids come from a
+    previous query, never from user input, but are still bound as parameters.
+    """
+    if not feedback_ids:
+        return {}
+    conn = get_db()
+    placeholders = ", ".join("?" for _ in feedback_ids)
+    rows = conn.execute(
+        f"SELECT * FROM user_feedback_comments WHERE feedback_id IN ({placeholders}) "
+        "ORDER BY created_at ASC, rowid ASC",
+        tuple(feedback_ids),
+    ).fetchall()
+    out: dict[str, list[dict]] = {}
+    for row in rows:
+        out.setdefault(row["feedback_id"], []).append(_feedback_comment_row_to_dict(row))
+    return out
+
+
+def insert_feedback_attachment(
+    attachment_id: str,
+    owner_user_id: str,
+    filename: str,
+    mime_type: str,
+    content: bytes,
+) -> dict:
+    """Store an uploaded screenshot, not yet attached to any feedback item."""
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO user_feedback_attachments "
+        "(id, feedback_id, owner_user_id, filename, mime_type, size_bytes, content) "
+        "VALUES (?, NULL, ?, ?, ?, ?, ?)",
+        (attachment_id, owner_user_id, filename, mime_type, len(content), sqlite3.Binary(content)),
+    )
+    conn.commit()
+    return {
+        "id": attachment_id,
+        "filename": filename,
+        "mime_type": mime_type,
+        "size_bytes": len(content),
+    }
+
+
+def get_feedback_attachment(attachment_id: str) -> dict | None:
+    """One attachment INCLUDING its bytes -- only the serving endpoint wants
+    this; list views use load_feedback_attachments (metadata only)."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, feedback_id, owner_user_id, filename, mime_type, size_bytes, content "
+        "FROM user_feedback_attachments WHERE id = ?",
+        (attachment_id,),
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "feedback_id": row["feedback_id"],
+        "owner_user_id": row["owner_user_id"],
+        "filename": row["filename"],
+        "mime_type": row["mime_type"],
+        "size_bytes": int(row["size_bytes"]),
+        "content": bytes(row["content"]),
+    }
+
+
+def load_feedback_attachments(feedback_ids: list[str]) -> dict[str, list[dict]]:
+    """Attachment METADATA for a page of feedback items, keyed by feedback id.
+
+    Deliberately never selects ``content``: a list of 20 items with 4
+    screenshots each would otherwise pull ~160 MB of BLOBs through the
+    response path to render thumbnails the client fetches individually.
+    """
+    if not feedback_ids:
+        return {}
+    conn = get_db()
+    placeholders = ", ".join("?" for _ in feedback_ids)
+    rows = conn.execute(
+        "SELECT id, feedback_id, filename, mime_type, size_bytes FROM user_feedback_attachments "
+        f"WHERE feedback_id IN ({placeholders}) ORDER BY created_at ASC, rowid ASC",
+        tuple(feedback_ids),
+    ).fetchall()
+    out: dict[str, list[dict]] = {}
+    for row in rows:
+        out.setdefault(row["feedback_id"], []).append(
+            {
+                "id": row["id"],
+                "filename": row["filename"],
+                "mime_type": row["mime_type"],
+                "size_bytes": int(row["size_bytes"]),
+            }
+        )
+    return out
+
+
+def claim_feedback_attachments(
+    feedback_id: str, attachment_ids: list[str], owner_user_id: str
+) -> list[dict]:
+    """Bind previously uploaded, still-unattached screenshots to a submitted
+    feedback item, and return the ones actually claimed.
+
+    Only rows that are owned by the submitter AND not already attached are
+    taken, so a caller cannot graft someone else's screenshot -- or re-use one
+    already filed under another report -- onto their own.
+    """
+    if not attachment_ids:
+        return []
+    conn = get_db()
+    placeholders = ", ".join("?" for _ in attachment_ids)
+    conn.execute(
+        f"UPDATE user_feedback_attachments SET feedback_id = ? "
+        f"WHERE id IN ({placeholders}) AND owner_user_id = ? AND feedback_id IS NULL",
+        (feedback_id, *attachment_ids, owner_user_id),
+    )
+    conn.commit()
+    return load_feedback_attachments([feedback_id]).get(feedback_id, [])
+
+
+def cleanup_orphan_feedback_attachments(hours: int = 24) -> int:
+    """Drop screenshots uploaded for a report that was never submitted.
+
+    The widget uploads while the reporter is still typing, so an abandoned
+    dialog leaves rows with feedback_id IS NULL that nothing will ever
+    reference. Returns the number of rows deleted.
+    """
+    conn = get_db()
+    cur = conn.execute(
+        "DELETE FROM user_feedback_attachments WHERE feedback_id IS NULL "
+        "AND created_at < datetime('now', ?)",
+        (f"-{int(hours)} hours",),
+    )
+    conn.commit()
+    return cur.rowcount or 0
+
+
+def user_display_names(user_ids: list[str]) -> dict[str, str]:
+    """Map user ids -> a human label (display_name, else username).
+
+    Used so a feedback list can name reporters and commenters without the
+    caller hitting the users table once per row.
+    """
+    ids = [uid for uid in dict.fromkeys(user_ids) if uid]
+    if not ids:
+        return {}
+    conn = get_db()
+    placeholders = ", ".join("?" for _ in ids)
+    rows = conn.execute(
+        f"SELECT id, username, display_name FROM users WHERE id IN ({placeholders})",
+        tuple(ids),
+    ).fetchall()
+    return {r["id"]: (r["display_name"] or r["username"]) for r in rows}

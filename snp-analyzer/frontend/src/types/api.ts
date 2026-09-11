@@ -727,3 +727,93 @@ export type ProjectSummaryResponse = {
     percentage: number;
   };
 };
+// ============================================================================
+// In-app user feedback
+// ============================================================================
+
+export type FeedbackCategory = 'bug' | 'feature' | 'improvement' | 'question' | 'other';
+
+export type FeedbackStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+
+/** Where the reporter was when they filed it, collected automatically by the
+ *  widget. Holds the run's SHAPE only — never sample names, well ids or
+ *  calls, which an admin reading feedback is not entitled to. */
+export type FeedbackContext = {
+  page_key?: string;
+  surface?: string;
+  session_id?: string;
+  instrument?: string;
+  num_wells?: number;
+  num_cycles?: number;
+  ploidy?: number;
+  cycle?: number;
+  language?: string;
+  viewport?: string;
+  user_agent?: string;
+};
+
+/** Screenshot metadata. The bytes come from
+ *  `GET /api/feedback/attachments/{id}` (see feedbackAttachmentUrl). */
+export type FeedbackAttachment = {
+  id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+};
+
+export type FeedbackComment = {
+  id: string;
+  feedback_id: string;
+  author_user_id: string;
+  author_name?: string | null;
+  body: string;
+  /** Captured when the reply was written, not derived from the author's
+   *  current role — a staff answer stays a staff answer. */
+  is_admin: boolean;
+  created_at?: string | null;
+};
+
+export type FeedbackItem = {
+  id: string;
+  owner_user_id: string;
+  owner_name?: string | null;
+  category: FeedbackCategory;
+  title: string;
+  body: string;
+  context?: FeedbackContext | null;
+  status: FeedbackStatus;
+  admin_note?: string | null;
+  comments: FeedbackComment[];
+  attachments: FeedbackAttachment[];
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type FeedbackListResponse = {
+  items: FeedbackItem[];
+  total: number;
+  page: number;
+  per_page: number;
+};
+
+export type FeedbackStats = {
+  total: number;
+  open: number;
+  in_progress: number;
+  resolved: number;
+  closed: number;
+  by_category: Record<string, number>;
+};
+
+export type FeedbackSubmitRequest = {
+  category: FeedbackCategory;
+  title: string;
+  body: string;
+  context?: FeedbackContext | null;
+  attachment_ids?: string[];
+};
+
+export type FeedbackUpdateRequest = {
+  status?: FeedbackStatus;
+  admin_note?: string;
+};
