@@ -8,7 +8,7 @@
  *
  * Keep the label + palette rules in sync with the backend vocabulary.
  */
-import { WELL_TYPE_INFO, UNASSIGNED_TYPE } from './constants';
+import { WELL_TYPE_INFO, UNASSIGNED_TYPE, BRAND_HEX } from './constants';
 
 export const MIN_PLOIDY = 2;
 export const MAX_PLOIDY = 8;
@@ -97,10 +97,10 @@ const RED_ARM_LIGHT = ['#76221d', '#892c26', '#9e342e', '#b14038', '#c74940', '#
 const BLUE_ARM_LIGHT = ['#0d366b', '#104281', '#184f95', '#1c5cab', '#256abf', '#2a78d6', '#3987e5', '#5598e7', '#6da7ec'];
 const RED_ARM_DARK = ['#b14038', '#c74940', '#d7584e', '#dd7166', '#e4857b', '#ea9a91', '#f0aca4'];
 const BLUE_ARM_DARK = ['#1c5cab', '#256abf', '#2a78d6', '#3987e5', '#5598e7', '#6da7ec', '#86b6ef', '#9ec5f4'];
-const BALANCED_LIGHT = '#10b981';
-const BALANCED_DARK = '#34d399';
-const DIPLOID_COLORS_LIGHT = ['#dc2626', BALANCED_LIGHT, '#2563eb'];
-const DIPLOID_COLORS_DARK = ['#dc2626', BALANCED_DARK, '#2563eb'];
+const BALANCED_LIGHT = BRAND_HEX.green500;
+const BALANCED_DARK = BRAND_HEX.green400;
+const DIPLOID_COLORS_LIGHT = [BRAND_HEX.red600, BALANCED_LIGHT, BRAND_HEX.blue600];
+const DIPLOID_COLORS_DARK = [BRAND_HEX.red600, BALANCED_DARK, BRAND_HEX.blue600];
 
 // Indexed by dosage. Adjacent dosages never share a shape, which is what makes
 // neighbouring classes separable when their colours are one ramp step apart.
