@@ -110,10 +110,11 @@ export const useSessionStore = create<SessionState>()(
   addOpenSession: (id) => set(state => ({
     openSessionIds: state.openSessionIds.includes(id) ? state.openSessionIds : [...state.openSessionIds, id],
   })),
-  closeOpenSession: (id) => set(state => {
-    const { [id]: _closed, ...sessionQueries } = state.sessionQueries;
-    return { openSessionIds: state.openSessionIds.filter(sessionId => sessionId !== id), sessionQueries };
-  }),
+  closeOpenSession: (id) => set(state => ({
+    openSessionIds: state.openSessionIds.filter(sessionId => sessionId !== id),
+    // A closed plate forgets where it was: reopening it later starts clean.
+    sessionQueries: Object.fromEntries(Object.entries(state.sessionQueries).filter(([key]) => key !== id)),
+  })),
   /** Drops plates that no longer exist on the server (deleted elsewhere, or
    *  swept by the retention timer) instead of offering dead tabs. */
   syncOpenSessions: (availableIds) => {
