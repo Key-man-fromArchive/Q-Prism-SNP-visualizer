@@ -6,12 +6,12 @@ from datetime import datetime
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import mm, cm
+from reportlab.lib.units import mm
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, PageBreak
 )
 
-from app.reporting.charts import render_scatter_png, render_plate_png, GENOTYPE_COLORS
+from app.reporting.charts import render_scatter_png, render_plate_png
 
 
 def build_report(
