@@ -1,4 +1,4 @@
-# Q-Prism® Cluster Caller 피드백 대응 작업서 — Auto-Orchestrate
+# Q-prism® Cluster Caller 피드백 대응 작업서 — Auto-Orchestrate
 
 - Contract ID: `qprism-feedback-20260911-v1`
 - 작성일: 2026-09-11
@@ -167,7 +167,7 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 
 | ID | 항목 | 결정 | 근거 |
 | --- | --- | --- | --- |
-| D-1 | 제품 정식 명칭 | **`Q-Prism® Cluster Caller` 채택.** `Q-Prism`은 인바이러스테크 자사 저작물이므로 `®` 사용 가능 | 2026-09-11 사용자 확인 |
+| D-1 | 제품 정식 명칭 | **`Q-prism® Cluster Caller` 채택.** `Q-prism`은 인바이러스테크 자사 저작물이므로 `®` 사용 가능 | 2026-09-11 사용자 확인 |
 | D-5 | 탭 ID 전면 변경 | **전면 재편 채택.** 새 탭 ID 3개(`plate`/`rawdata`/`results`) 도입, `WorkspaceTabs` 제거 | 2026-09-11 사용자 확인. 실측 비용 약 48곳(파일 9개)으로 기계적 치환 수준 |
 | D-6 | 산점도 종횡비 | **사용자 선택식.** 드롭다운으로 `4:3`(기본) / `1:1` 전환. 고정하지 않는다 | 2026-09-11 사용자 확인 |
 
@@ -175,7 +175,7 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 
 | ID | 항목 | 차단 태스크 | 필요한 답 |
 | --- | --- | --- | --- |
-| ~~D-2~~ | Q-Prism 브랜드 팔레트 | **해결 (2026-09-12)** — 기존 가이드 없음. 오케스트레이터가 후보 시안을 설계해 **시각 비교로 제시**하고 사용자가 고른다. 선택 전까지 P6-S2-T1은 BLOCKED |
+| ~~D-2~~ | Q-prism 브랜드 팔레트 | **해결 (2026-09-12)** — 기존 가이드 없음. 오케스트레이터가 후보 시안을 설계해 **시각 비교로 제시**하고 사용자가 고른다. 선택 전까지 P6-S2-T1은 BLOCKED |
 | **D-3** | 로고·마크·히어로 아트·파비콘 | P6-S3-T1 | 에셋 파일 제공 또는 제작 승인. 현재 `frontend/public/`에 이미지 0개 |
 | ~~D-4~~ | 채널색 브랜드화 여부 | **해결 (2026-09-12)** — **유지.** FAM=파랑 / allele2=빨강은 qPCR 판독 관례이며 실험자 습관·기존 보고서와의 일치가 브랜드 일관성보다 우선한다 |
 | ~~D-7~~ | 업로드 경로 이원화 처리 | **해결 (2026-09-12)** — **역할 분리 유지.** 중앙 드롭존은 빠른 업로드, 드로어는 다건 관리. 구현은 그대로 두고 **파일 수·용량 한도와 오류 문구만 일치**시킨다 |
@@ -698,7 +698,7 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 
 ## Phase P6 — 브랜드 정체성 (FB-07 + FB-02 브랜드 범위)
 
-### P6-S1-T1: 제품명 통일 — Q-Prism® Cluster Caller
+### P6-S1-T1: 제품명 통일 — Q-prism® Cluster Caller
 - 담당: `frontend-specialist` + `docs-specialist`
 - Depends On: P5-S0-V
 - Status: TODO (**D-1 해소됨 — 실행 가능**)
@@ -706,9 +706,9 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 - 기획 근거: [FB-07](feedback-2026-09-11/FB-07-identity-and-ia.md) §3-2
 - 구현 내용
   - 현재 리포지토리에 **세 가지 이름이 공존한다**: `ASG-PCR SNP 판별 분석기`(UI `locales:139/141`),
-    `Q-Prism® SNP Visualizer`(`README.md:1`), `SNP analyzer`(컨테이너·경로). **하나로 통일한다.**
-  - 채택명: **`Q-Prism® Cluster Caller`** (한국어 UI도 동일 표기, 부제로 `SNP 판별 · 대립유전자 클러스터링`).
-    `Q-Prism`은 인바이러스테크 자사 저작물이므로 `®` 표기를 사용한다.
+    `Q-prism® SNP Visualizer`(`README.md:1`), `SNP analyzer`(컨테이너·경로). **하나로 통일한다.**
+  - 채택명: **`Q-prism® Cluster Caller`** (한국어 UI도 동일 표기, 부제로 `SNP 판별 · 대립유전자 클러스터링`).
+    `Q-prism`은 인바이러스테크 자사 저작물이므로 `®` 표기를 사용한다.
   - 변경 지점: `appTitle`(en/ko), `index.html`의 `<title>` · `og:title` · `og:description` · `description` · `keywords`,
     `README.md`, PDF 산출물 브랜드 문자열(`app/reporting/pdf_builder.py`).
   - **ASG 플랫폼 연동 문구는 유지한다** — `Save result to ASG Designer`, `backToAsgDesigner`는 상대 시스템의 이름이다.
@@ -721,7 +721,7 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 - 검증: FE-ALL, FE-CHECK, BE-TEST(PDF 산출물), ROOT-E2E
 - 증거: `evidence/P6-S1-T1.md`
 
-### P6-S2-T1: Q-Prism 브랜드 팔레트 적용
+### P6-S2-T1: Q-prism 브랜드 팔레트 적용
 - 담당: `frontend-specialist`
 - Depends On: P6-S1-T1, **D-2 및 D-4 결정**
 - Status: BLOCKED (D-2, D-4)
@@ -758,11 +758,11 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
     | 에셋 | 경로 |
     | --- | --- |
     | 파비콘 | `frontend/public/favicon.svg` |
-    | Q-Prism 마크 | `frontend/public/brand/qprism-mark.svg` |
+    | Q-prism 마크 | `frontend/public/brand/qprism-mark.svg` |
     | Invirustech 로고 | `frontend/public/brand/invirustech.svg` |
     | 히어로 아트 | `frontend/public/brand/qprism-hero.svg` |
 
-  - `UploadZone` 상단에 브랜드 히어로 블록(마크 + `Q-Prism® Cluster Caller` + 부제)을 추가한다.
+  - `UploadZone` 상단에 브랜드 히어로 블록(마크 + `Q-prism® Cluster Caller` + 부제)을 추가한다.
     **세션 없음 상태에서만** 표시해 분석 중 화면 공간을 잡아먹지 않는다.
   - `Powered by Invirustech` 링크는 업로드 화면에서 하단 푸터로, 세션 중에는 현행 헤더 위치를 유지한다.
 - AC

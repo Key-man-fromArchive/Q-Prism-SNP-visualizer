@@ -153,7 +153,7 @@ const en = {
   manualGroupSaveFailed: 'Could not save the well group.',
 
   // Header
-  appTitle: 'ASG-PCR SNP Discrimination Analyzer',
+  appTitle: 'Q-prism® Cluster Caller',
   poweredBy: 'Powered by Invirustech',
   undo: 'Undo',
   recoveryUnauthorized: 'Your session expired. Sign in again.',
@@ -280,11 +280,11 @@ const en = {
   imwIssueMissingRole: (role: string) => `Missing required role binding: ${role}`,
   imwIssueDuplicateRole: (role: string, channels: string) => `Role ${role} is bound to multiple channels: ${channels}`,
   importTemplatesTitle: 'Import templates',
-  importTemplatesDescription: 'Download a Q-Prism template, then upload it here for preview and mapping.',
+  importTemplatesDescription: 'Download a Q-prism template, then upload it here for preview and mapping.',
   importTemplatesHelpLabel: 'Import template help',
   importTemplatesHelp: 'Use these templates when your qPCR software can export well-by-cycle fluorescence values but not a directly supported raw file. Each template opens a preview step where channel roles and WT/MT mapping are confirmed.',
   templateRdes: 'RDES amplification TSV',
-  templateRdesHelp: 'Recommended Q-Prism standard template. It explicitly records well, cycle, dye, role (WT/MT/normalization), sample, target, and RFU columns for stable instrument-independent mapping.',
+  templateRdesHelp: 'Recommended Q-prism standard template. It explicitly records well, cycle, dye, role (WT/MT/normalization), sample, target, and RFU columns for stable instrument-independent mapping.',
   templateGenericLong: 'Generic long CSV',
   templateGenericLongHelp: 'Use when each row is one well-cycle-channel reading, such as A1, cycle 12, FAM, RFU 1532. Best for exports where dye/channel values repeat as rows.',
   templateGenericWide: 'Generic wide CSV',
