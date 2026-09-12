@@ -11,7 +11,7 @@ import {
 import { analyzeCurrent, analyzeRecommended } from "@/lib/analysis-actions";
 import { useAnalysisStore } from "@/stores/analysis-store";
 import { CycleControl } from "./CycleControl";
-import { ScatterPlot } from "./ScatterPlot";
+import { ResultsPlotToggle } from "./ResultsPlotToggle";
 import { PlateView } from "./PlateView";
 import { WellDetailPanel } from "./WellDetailPanel";
 import { ResultsTable } from "./ResultsTable";
@@ -295,8 +295,8 @@ export function AnalysisTab() {
 
       {/* Shared responsive foundation defines the 1280px two-column breakpoint. */}
       <div className="analysis-grid grid gap-4 p-4 sm:px-6">
-        {/* Scatter Plot - top left */}
-        <ScatterPlot />
+        {/* Results plot area - top left: scatter/curve toggle (FB-12) */}
+        <ResultsPlotToggle />
 
         <div className="analysis-review-stack">
           {/* P4-S3-T1 (FB-03 §3-2): only meaningful before anything is

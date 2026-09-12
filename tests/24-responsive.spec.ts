@@ -83,9 +83,17 @@ test('result-first 96-well desktop keeps scatter, plate and selected summary in 
   await expect(page.getByTestId('scatter-view-controls')).toBeVisible();
   await settings.locator('summary').click();
   expect(await plot.evaluate((node, original) => node === original, originalPlot)).toBe(true);
-  await page.locator('.well-detail-expanded > summary').click();
+  // P12-PLOT-TOGGLE: the curve is a results-screen VIEW now (FB-12), not
+  // something a well-detail disclosure ever contained -- switching to it is
+  // the equivalent of P8-E2E-DEBT's "visible without expanding a
+  // disclosure" guarantee in the new toggle structure (see
+  // evidence/P12-PLOT-TOGGLE.md's "P8 guarantee" section).
+  await page.getByTestId('plot-view-curve').click();
   await expect(page.locator('#amplification-plot .main-svg').first()).toBeVisible();
-  await page.locator('.well-detail-expanded > summary').click();
+  // Switch back to scatter before the resize check below, which reads
+  // #scatter-plot's own rendered width -- that is only meaningful while
+  // the scatter view is the visible one.
+  await page.getByTestId('plot-view-scatter').click();
   await page.setViewportSize({ width: 768, height: 1000 });
   await expect.poll(() => plot.locator('.svg-container').evaluate(node => node.getBoundingClientRect().width)).toBeLessThan(768);
   await page.setViewportSize({ width: 1440, height: 1000 });

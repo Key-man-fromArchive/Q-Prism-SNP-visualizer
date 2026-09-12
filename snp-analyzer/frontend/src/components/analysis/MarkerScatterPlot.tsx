@@ -8,7 +8,7 @@
 // global stores. ScatterPlot.tsx itself is left untouched (still used by
 // the single-marker default view) to avoid regressing S0/S1.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import Plotly from "plotly.js-dist-min";
 import { dosageOfLabel, defaultRatioCuts } from "@/lib/genotype";
 import { chartCategory, callLabel, chartPointState, chartStateText } from "@/lib/chart-semantics";
@@ -50,6 +50,13 @@ type PlotlyGraphDiv = HTMLDivElement & {
   data?: unknown[];
 };
 
+// P12-TOGGLE (FB-12): mirrors ScatterPlot.tsx's exact values -- see that
+// file's comment for the size/shape-distinguishability rationale and the
+// well-count cap on individual labels.
+const MARKER_SIZE = 8;
+const MARKER_SIZE_NTC = 7;
+const MARKER_SIZE_SELECTED = 12;
+
 // Feeds `.analysis-scatter-canvas`'s `aspect-ratio` (index.css, P4-S1-T1);
 // see the sibling copy in ScatterPlot.tsx for the rationale.
 function scatterAspectVars(aspect: ScatterAspect): CSSProperties {
@@ -70,6 +77,12 @@ type MarkerScatterPlotProps = {
   allele2Dye?: string | null;
   roleLabels?: ChannelLabels | null;
   onBoundariesPersisted: () => void | Promise<void>;
+  /** P12-PLOT-TOGGLE: mirrors ScatterPlot.tsx's `active`/`viewToggle` --
+   *  see that file's comments for why each exists. Default true/undefined
+   *  keeps every existing caller (e2e/p4-s2-analysis-tab.spec.ts etc.)
+   *  behaving exactly as before. */
+  active?: boolean;
+  viewToggle?: ReactNode;
 };
 
 export function MarkerScatterPlot({
@@ -82,6 +95,8 @@ export function MarkerScatterPlot({
   allele2Dye,
   roleLabels,
   onBoundariesPersisted,
+  active = true,
+  viewToggle,
 }: MarkerScatterPlotProps) {
   // Dosage colours have their own dark steps, so the traces are rebuilt on a
   // theme change rather than only recoloured in the layout.
@@ -337,7 +352,7 @@ export function MarkerScatterPlot({
         hovertemplate: "%{text}<extra></extra>",
         marker: {
           size: pts.map((p) =>
-            selectedWellSet.has(p.well) ? 17 : typeKey === "NTC" ? 9 : 11
+            selectedWellSet.has(p.well) ? MARKER_SIZE_SELECTED : typeKey === "NTC" ? MARKER_SIZE_NTC : MARKER_SIZE
           ),
           color: info.color,
           symbol: info.symbol,
@@ -573,6 +588,14 @@ export function MarkerScatterPlot({
     Plotly.Plots.resize(plotRef.current);
   }, [scatterAspect]);
 
+  // P12-PLOT-TOGGLE: see ScatterPlot.tsx's matching effect -- recovers from
+  // a first draw made while MultiMarkerAnalysisPanel had the curve view
+  // showing instead of this one.
+  useEffect(() => {
+    if (!active || !initialized.current || !plotRef.current) return;
+    Plotly.Plots.resize(plotRef.current);
+  }, [active]);
+
   // Drag a radial boundary line; persists to the marker's threshold_config on
   // release (PUT /markers/{id}) then asks the parent to re-cluster so the
   // override is reflected everywhere (and survives tab-switch/re-cluster --
@@ -719,6 +742,9 @@ export function MarkerScatterPlot({
 
   return (
     <div>
+      {/* P12-PLOT-TOGGLE: see ScatterPlot.tsx's identical row for why this
+          isn't folded into ScatterViewControls' header. */}
+      {viewToggle && <div className="mb-1 xl:mb-px flex justify-end">{viewToggle}</div>}
       <ScatterViewControls
         dataBounds={dataBounds(
           scopedPoints.map((p) => ({ fam: p.norm_fam, allele2: p.norm_allele2 })),

@@ -1,6 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from "react";
-import Plotly from "plotly.js-dist-min";
-import type { Data, Layout, Shape } from "plotly.js";
+import { useEffect, useState } from "react";
 import { useSessionStore } from "@/stores/session-store";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -8,26 +6,21 @@ import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { getAmplification } from "@/lib/api";
 import { channelLabels, normalizationLabel } from "@/lib/channel-labels";
-import { plotlyColors } from "@/lib/plotly-theme";
 import { callLabel } from "@/lib/chart-semantics";
 import type { AmplificationCurve } from "@/types/api";
 
 type WellDetailPanelProps = { ploidyOverride?: number };
 
+// @TASK P12-TOGGLE - Well detail panel: numeric info + P7 time-series table
+// only. The curve chart itself moved to AmplificationCurvePanel (results
+// screen's large plot area, toggled against ScatterPlot) -- this component
+// keeps its OWN getAmplification fetch for the P7 full-cycle table rather
+// than reading AmplificationCurvePanel's response, so it stays usable (and
+// unit-testable) on its own; see AmplificationCurvePanel.tsx's doc comment
+// for the trade-off this makes (one duplicate GET per well selection when
+// both are mounted).
 export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   const { t } = useI18n();
-  const plotRef = useRef<HTMLDivElement>(null);
-  const plotInitRef = useRef(false);
-  const attachPlot = useCallback((node: HTMLDivElement | null) => {
-    plotRef.current = node;
-    if (!node) return;
-    return () => {
-      if (plotInitRef.current) Plotly.purge(node);
-      plotInitRef.current = false;
-      plotRef.current = null;
-    };
-  }, []);
-
   const sessionId = useSessionStore((s) => s.sessionId);
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const useRox = useSettingsStore((s) => s.useRox);
@@ -41,9 +34,12 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   const scatterPoints = useDataStore((s) => s.scatterPoints);
   const allele2Dye = useDataStore((s) => s.allele2Dye);
   const roleLabels = useDataStore((s) => s.channelLabels);
-  // P7-VALUES (FB-06 Q-1): the SAME curve WellDetailPanel already fetches to
-  // plot (below) is now also kept in state so its full cycle series can be
-  // shown as numbers, not only as a chart. No second request is made.
+  // P7-VALUES (FB-06 Q-1): full cycle series shown as numbers in the
+  // "Detailed readings" disclosure below. P12-PLOT-TOGGLE moved the CHART
+  // itself out to AmplificationCurvePanel -- this fetch stays here (rather
+  // than reading that component's response) so this table keeps working
+  // wherever WellDetailPanel is mounted, including without
+  // AmplificationCurvePanel alongside it. See that file's doc comment.
   const [curve, setCurve] = useState<AmplificationCurve | null>(null);
 
   // Find point data for selected well
@@ -53,82 +49,18 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
 
   const numCycles = sessionInfo?.num_cycles ?? 1;
 
-  // Fetch and plot amplification curve when selectedWell changes
+  // Fetch the amplification curve (for the numeric time-series table only)
+  // when the selected well changes.
   useEffect(() => {
-    if (!selectedWell || !sessionId || numCycles <= 1 || !plotRef.current) {
-      if (plotRef.current && plotInitRef.current) {
-        Plotly.purge(plotRef.current);
-        plotInitRef.current = false;
-      }
-      return;
-    }
+    if (!selectedWell || !sessionId || numCycles <= 1) return;
 
     let cancelled = false;
 
     (async () => {
       try {
         const res = await getAmplification(sessionId, [selectedWell], useRox, backgroundMode);
-        if (cancelled || !plotRef.current) return;
-
-        const fetchedCurve: AmplificationCurve | undefined = res.curves[0];
-        if (!fetchedCurve) { setCurve(null); return; }
-        setCurve(fetchedCurve);
-        const labels = channelLabels(
-          res.channel_labels ? res : { channel_labels: roleLabels ?? undefined },
-          res.allele2_dye || allele2Dye
-        );
-
-        const traces: Data[] = [
-          {
-            x: fetchedCurve.cycles,
-            y: fetchedCurve.norm_fam,
-            name: labels.fam,
-            line: { color: "#2563eb", width: 2 },
-          },
-          {
-            x: fetchedCurve.cycles,
-            y: fetchedCurve.norm_allele2,
-            name: labels.allele2,
-            line: { color: "#dc2626", width: 2 },
-          },
-        ];
-
-        const shapes: Partial<Shape>[] = currentCycle
-          ? [
-              {
-                type: "line",
-                x0: currentCycle,
-                x1: currentCycle,
-                y0: 0,
-                y1: 1,
-                yref: "paper",
-                line: { color: "#9ca3af", width: 1, dash: "dot" },
-              },
-            ]
-          : [];
-
-        const c = plotlyColors();
-        const layout: Partial<Layout> = {
-          xaxis: { title: { text: t.axisCycle }, gridcolor: c.gridColor },
-          // automargin: a fixed-height container (P11-VIEWPORT-BUDGET) means
-          // a longer title in a future translation could still get clipped
-          // by the plot's own height rather than growing the margin --
-          // automargin asks Plotly to reserve/shrink the axis title's space
-          // to actually fit instead of overflowing silently.
-          yaxis: { title: { text: t.curveReportedSignal }, automargin: true, gridcolor: c.gridColor },
-          paper_bgcolor: c.paper_bgcolor,
-          plot_bgcolor: c.plot_bgcolor,
-          font: { color: c.fontColor },
-          margin: { t: 5, r: 5, b: 40, l: 50 },
-          legend: { x: 0, y: 1, bgcolor: c.legendBg },
-          shapes,
-        };
-
-        Plotly.react(plotRef.current, traces, layout, {
-          responsive: true,
-          displayModeBar: false,
-        });
-        plotInitRef.current = true;
+        if (cancelled) return;
+        setCurve(res.curves[0] ?? null);
       } catch (err) {
         console.error("Failed to fetch amplification:", err);
       }
@@ -137,7 +69,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [selectedWell, sessionId, useRox, backgroundMode, currentCycle, allele2Dye, roleLabels, numCycles, t.axisCycle, t.curveReportedSignal]);
+  }, [selectedWell, sessionId, useRox, backgroundMode, numCycles]);
 
   if (!selectedWell) {
     return (
@@ -264,12 +196,12 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
           </tbody>
         </table>
 
-          {/* P7-VALUES (FB-06 Q-1): the numeric table above shows the SAME
-              curve's numbers -- this stays inside the numeric-details
-              disclosure with the rest of the detail rows; the plot itself
-              (below, outside </details>) is the panel's primary
-              visualization and must not require expanding this disclosure
-              to be seen (P8-E2E-DEBT). */}
+          {/* P7-VALUES (FB-06 Q-1): the numeric table shows the SAME curve's
+              numbers as the AmplificationCurvePanel chart (P12-PLOT-TOGGLE
+              moved that chart out of this panel entirely) -- this table
+              stays inside the numeric-details disclosure with the rest of
+              the detail rows, since it IS a numeric detail (the chart,
+              elsewhere, is the primary visualization). */}
           {/* curve.well === selectedWell guards against showing a stale
               series from a previous well: `curve` is only ever replaced (not
               reset) by the fetch effect above, since it must not call
@@ -310,31 +242,6 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
             </div>
           )}
         </details>
-
-        {/* P8-E2E-DEBT: moved out of the disclosure above -- the curve is
-            the reason a well was clicked, not a numeric detail, and must be
-            visible without expanding "Detailed readings". */}
-        {/* P11-VIEWPORT-BUDGET: 200px (P8's original height) pushed this
-            panel's bottom edge 111px past the 1000px viewport budget
-            (tests/24-responsive.spec.ts:51) once the curve became
-            permanently visible -- the fix could not come from height alone
-            without shrinking the curve to illegibility, so this 135px is
-            paired with several small spacing cuts around it (panel padding,
-            title/legend margins, the review-stack gap). 135px keeps both
-            trend lines, the legend and axis ticks readable at 1440px and
-            768px (see evidence/P11-VIEWPORT-BUDGET.md screenshots) -- it is
-            not a target to keep shrinking if a future change needs more
-            room; find the room elsewhere first. */}
-        {numCycles > 1 && (
-          <>
-          <p className="text-xs text-text-muted">{t.referenceBasisUnknown}</p>
-          <div
-            id="amplification-plot"
-            ref={attachPlot}
-            style={{ width: "100%", height: "135px", marginTop: "6px" }}
-          />
-          </>
-        )}
       </div>
     </div>
   );

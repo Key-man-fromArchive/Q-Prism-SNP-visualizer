@@ -16,14 +16,15 @@ const en = {
   chartWellAddress: 'Well',
   chartCall: 'Call',
   referenceBasisUnknown: 'Amplification curve normalization basis: unknown (curve response does not report it).',
-  // P11-VIEWPORT-BUDGET: shortened from "Reported curve signal (normalization
-  // basis unknown)" -- that full string no longer fits Plotly's rotated
-  // y-axis title within the 135px-tall curve (it was rendering truncated,
-  // e.g. "ve signal (normalizati"). The dropped parenthetical isn't lost
-  // information: referenceBasisUnknown right above the plot already states
-  // it in full sentence form ("Amplification curve normalization basis:
-  // unknown...").
-  curveReportedSignal: 'Reported signal',
+  // P12-PLOT-TOGGLE: restored from the P11-VIEWPORT-BUDGET short form
+  // ("Reported signal"). That shortening existed only because the curve
+  // was squeezed into a 135px-tall strip inside .detail-panel, where the
+  // full string didn't fit Plotly's rotated y-axis title. The curve now
+  // renders in the results screen's large plot area (shared sizing with
+  // ScatterPlot, see .analysis-scatter-canvas), which has ample height for
+  // the descriptive title -- confirmed untruncated at 1440x1000 and 768
+  // viewports, both languages/themes (evidence/P12-PLOT-TOGGLE.md).
+  curveReportedSignal: 'Reported curve signal (normalization basis unknown)',
   scatterReferenceBasis: (requested: boolean, reported: boolean, applied: boolean) => `Scatter readings — reference normalization requested: ${requested ? 'yes' : 'no'}; actually applied: ${reported ? applied ? 'yes' : 'no (reporter scale)' : 'unknown'}.`,
   chartNoSample: 'No sample identifier',
   chartExcluded: 'Hidden by display filters',
@@ -627,6 +628,13 @@ const en = {
 
   // Analysis panels & misc (localization fixes)
   alleleDiscrimination: 'Allele Discrimination',
+  // P12-PLOT-TOGGLE: results screen's large plot area switches between the
+  // scatter plot and the amplification curve (one at a time -- FB-12) rather
+  // than showing both together.
+  resultsPlotViewLabel: 'Plot view',
+  resultsPlotViewScatter: 'Scatter plot',
+  resultsPlotViewCurve: 'Amplification curve',
+  curveNoMultiCycleData: 'This run has no cycle-by-cycle data to plot as a curve.',
   genotypeResults: 'Genotype Results',
   plateView: 'Plate View',
   amplificationOverlay: 'Amplification Overlay',

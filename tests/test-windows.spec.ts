@@ -114,6 +114,10 @@ test.describe("Data Window Selection (.eds)", () => {
     await well.click();
     await page.waitForTimeout(1000);
 
+    // P12-PLOT-TOGGLE: results screen shows scatter/curve one at a time
+    // (FB-12) -- switch to the curve view before checking it.
+    await page.getByTestId("plot-view-curve").click();
+
     // Screenshot
     await page.screenshot({ path: "/tmp/eds-05-amp-curve.png", fullPage: true });
 

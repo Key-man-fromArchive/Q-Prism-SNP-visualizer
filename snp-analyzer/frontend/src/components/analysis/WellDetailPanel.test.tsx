@@ -1,6 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import Plotly from 'plotly.js-dist-min';
 import { WellDetailPanel } from './WellDetailPanel';
 import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
@@ -10,7 +9,6 @@ import { getAmplification } from '@/lib/api';
 import en from '@/locales/en';
 import ko from '@/locales/ko';
 import { useSettingsStore } from '@/stores/settings-store';
-vi.mock('plotly.js-dist-min', () => ({ default: { react: vi.fn(), relayout: vi.fn(), purge: vi.fn() } }));
 vi.mock('@/lib/api', () => ({ getAmplification: vi.fn() }));
 beforeEach(() => vi.clearAllMocks());
 for (const language of ['en', 'ko'] as const) for (const call of ['Positive Control', 'Unknown', 'AABB']) {
@@ -42,54 +40,32 @@ for (const language of ['en', 'ko'] as const) for (const applied of [undefined, 
     const details = view.container.querySelector('details')!;
     details.open = true; fireEvent(details, new Event('toggle'));
     expect(screen.getByTestId('scatter-reading-basis')).toHaveTextContent(t.scatterReferenceBasis(true, applied !== undefined, applied === true));
-    expect(screen.getByText(t.referenceBasisUnknown)).toBeVisible();
   });
 }
-// P8-E2E-DEBT: the curve moved out of the "Detailed readings" disclosure
-// (3923909 had nested it there, alongside numeric rows it doesn't belong
-// with), so it's visible -- and its normalization-basis caption with it --
-// before the disclosure is ever opened, and toggling the disclosure (which
-// now only governs the numeric rows/time-series table) no longer needs to
-// resize a plot that lives inside it, because it doesn't anymore.
-it('keeps compact populated fields and the curve visible regardless of the numeric-details disclosure', async () => {
+// @TASK P12-TOGGLE - the curve CHART moved out of this panel entirely
+// (AmplificationCurvePanel, in the results screen's large plot area); this
+// panel keeps only the numeric fields and the "Detailed readings"
+// disclosure (P7's full time-series table). It still fetches
+// getAmplification itself, for that table, independently of whether
+// AmplificationCurvePanel is mounted anywhere (see WellDetailPanel.tsx's
+// doc comment).
+it('keeps compact populated fields visible regardless of the numeric-details disclosure, and fetches the curve for the numeric table', async () => {
   useLanguageStore.getState().setLanguage('en');
   useSessionStore.setState({ sessionId: 's', sessionInfo: { session_id: 's', instrument: 'synthetic', allele2_dye: 'VIC', num_wells: 1, num_cycles: 2, has_rox: false, data_windows: null, suggested_cycle: 40, well_groups: null } });
   useSelectionStore.setState({ selectedWell: 'A1', currentCycle: 40 });
   useDataStore.setState({ scatterPoints: [{ well: 'A1', sample_name: 'Sample A', auto_cluster: 'Heterozygous', manual_type: null, confidence: 0.95, norm_fam: 1, norm_allele2: 1, raw_fam: 2, raw_allele2: 2, raw_rox: null }] });
   vi.mocked(getAmplification).mockResolvedValue({ allele2_dye: 'VIC', curves: [{ well: 'A1', cycles: [20, 40], norm_fam: [0, 1], norm_allele2: [0, 1] }] });
   const { container } = render(<WellDetailPanel />);
-  await waitFor(() => expect(Plotly.react).toHaveBeenCalled());
+  await waitFor(() => expect(getAmplification).toHaveBeenCalledTimes(1));
   expect(screen.getByText('Sample A')).toBeVisible();
   expect(screen.getByText('95%')).toBeVisible();
   const details = container.querySelector('details')!;
   expect(details.open).toBe(false);
-  const plot = container.querySelector('#amplification-plot');
-  expect(plot).toBeVisible();
-  expect(screen.getByText(en.referenceBasisUnknown)).toBeVisible();
+  // No curve chart lives in this panel any more.
+  expect(container.querySelector('#amplification-plot')).toBeNull();
   details.open = true; fireEvent(details, new Event('toggle'));
   details.open = false; fireEvent(details, new Event('toggle'));
-  expect(container.querySelector('#amplification-plot')).toBe(plot);
   expect(getAmplification).toHaveBeenCalledTimes(1);
-  expect(Plotly.relayout).not.toHaveBeenCalled();
-});
-
-// @TASK P8-E2E-DEBT - the amplification curve is the panel's primary
-// visualization and the reason a user clicks a well at all; it must not
-// require expanding the "Detailed readings" disclosure to be seen (root
-// cause: 3923909 nested it alongside the numeric detail rows it actually
-// belongs next to). Only the numeric rows/time-series table are detail.
-it('shows the amplification curve without expanding the numeric-details disclosure', async () => {
-  useLanguageStore.getState().setLanguage('en');
-  useSessionStore.setState({ sessionId: 's', sessionInfo: { session_id: 's', instrument: 'synthetic', allele2_dye: 'VIC', num_wells: 1, num_cycles: 2, has_rox: false, data_windows: null, suggested_cycle: 40, well_groups: null } });
-  useSelectionStore.setState({ selectedWell: 'A1', currentCycle: 40 });
-  useDataStore.setState({ scatterPoints: [{ well: 'A1', sample_name: 'Sample A', auto_cluster: 'Heterozygous', manual_type: null, confidence: 0.95, norm_fam: 1, norm_allele2: 1, raw_fam: 2, raw_allele2: 2, raw_rox: null }] });
-  vi.mocked(getAmplification).mockResolvedValue({ allele2_dye: 'VIC', curves: [{ well: 'A1', cycles: [20, 40], norm_fam: [0, 1], norm_allele2: [0, 1] }] });
-  const { container } = render(<WellDetailPanel />);
-  await waitFor(() => expect(Plotly.react).toHaveBeenCalled());
-
-  const details = container.querySelector('details')!;
-  expect(details.open).toBe(false);
-  expect(container.querySelector('#amplification-plot')).toBeVisible();
 });
 
 // @TASK P7-VALUES - Well detail panel: show the FULL cycle time series, not
@@ -101,15 +77,14 @@ it('shows the full cycle time series for the selected well, keeping the existing
   useDataStore.setState({ scatterPoints: [{ well: 'A1', sample_name: 'Sample A', auto_cluster: 'Heterozygous', manual_type: null, confidence: 0.95, norm_fam: 1, norm_allele2: 1, raw_fam: 2, raw_allele2: 2, raw_rox: null }] });
   vi.mocked(getAmplification).mockResolvedValue({ allele2_dye: 'VIC', curves: [{ well: 'A1', cycles: [1, 2, 3], norm_fam: [0.1, 0.2, 0.3], norm_allele2: [0.9, 0.8, 0.7] }] });
   const { container } = render(<WellDetailPanel />);
-  await waitFor(() => expect(Plotly.react).toHaveBeenCalled());
 
   const details = container.querySelector('details')!;
+  const seriesTable = await screen.findByTestId('well-timeseries-table');
   details.open = true; fireEvent(details, new Event('toggle'));
 
   // Existing current-cycle table is untouched.
   expect(screen.getByText('95%')).toBeVisible();
 
-  const seriesTable = screen.getByTestId('well-timeseries-table');
   expect(seriesTable.querySelectorAll('tbody tr')).toHaveLength(3);
   const rows = seriesTable.querySelectorAll('tbody tr');
   expect(rows[0]).toHaveTextContent('0.1');

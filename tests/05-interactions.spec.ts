@@ -162,11 +162,15 @@ test.describe('QuantStudio Multi-Cycle Features', () => {
     await well.click();
     await page.waitForTimeout(1500);
 
-    // Amplification plot should appear for multi-cycle data. Native <details>
-    // disclosures hide their content without ever adding a "hidden" class
-    // (P8-E2E-DEBT: this assertion previously missed exactly that case, when
-    // 3923909 briefly nested the plot inside one) -- toBeVisible() is the
-    // only check that actually verifies the curve rendered on screen.
+    // P12-PLOT-TOGGLE: the results screen shows one plot at a time now
+    // (FB-12) -- the curve is the "Amplification curve" view, not the
+    // default. Switching to it is the direct descendant of P8-E2E-DEBT's
+    // guarantee: native <details> disclosures hide their content without
+    // ever adding a "hidden" class (3923909 briefly nested the plot inside
+    // one, and toBeVisible() was the only check that caught it), and this
+    // curve is likewise never inside any <details> -- it is shown by
+    // picking this view, not by expanding anything.
+    await page.getByTestId('plot-view-curve').click();
     const ampPlot = page.locator('#amplification-plot');
     await expect(ampPlot).toBeVisible({ timeout: 5000 });
   });

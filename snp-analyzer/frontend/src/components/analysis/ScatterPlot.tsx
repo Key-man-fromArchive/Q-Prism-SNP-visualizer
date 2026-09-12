@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import Plotly from "plotly.js-dist-min";
 import type { Data, Layout, Config, Shape, PlotlyHTMLElement, PlotMouseEvent, PlotSelectionEvent } from "plotly.js";
 import { useSessionStore } from "@/stores/session-store";
@@ -33,6 +33,25 @@ type PlotlyGraphDiv = HTMLDivElement & {
   _fullLayout?: { xaxis?: PlotlyAxis; yaxis?: PlotlyAxis };
   data?: Array<Record<string, unknown>>;
 };
+
+// P12-TOGGLE (FB-12): shrunk from 12/10/18 -- the user asked for smaller
+// dots, keeping the existing shape-per-genotype coding (SYMBOLS in
+// chart-semantics.ts) unchanged since that is the only non-color
+// distinction for color-blind/print use, and PlateLegend uses the same
+// glyphs. MarkerScatterPlot.tsx mirrors these exact values so the two plots
+// read consistently. Checked at this size (screenshots in
+// evidence/P12-PLOT-TOGGLE.md) that triangle-up/square/diamond-open are
+// still visually distinct at 1x and under a 2x crop -- smaller made the
+// filled shapes converge toward indistinguishable dots.
+const MARKER_SIZE = 8;
+const MARKER_SIZE_NTC = 7;
+const MARKER_SIZE_SELECTED = 12;
+// Individual well-number labels stop being drawn past this many selected
+// wells -- past a handful, a label per point on a 96/384-well plate turns
+// into unreadable clutter (the whole reason dot size was reduced in the
+// first place). The hover tooltip's first line ("Well: A1") still answers
+// "which well is this" for a single point either way.
+const MAX_WELL_LABELS = 8;
 
 // Feeds `.analysis-scatter-canvas`'s `aspect-ratio` (index.css, P4-S1-T1):
 // the canvas is bound by width so the ratio always holds, and the ratio
@@ -75,7 +94,22 @@ function effectiveType(
   return null;
 }
 
-export function ScatterPlot() {
+type ScatterPlotProps = {
+  /** Whether the scatter view is the one currently selected in
+   *  ResultsPlotToggle (default true: ScatterPlot has no other caller).
+   *  Toggling the curve/scatter views hides the inactive one with an
+   *  inline `display: none` rather than unmounting it, so a resize on
+   *  becoming active recovers the WebGL canvas from any size Plotly
+   *  computed for it while its container had zero size -- see
+   *  AmplificationCurvePanel's `active` prop for the mirrored case. */
+  active?: boolean;
+  /** P12-PLOT-TOGGLE: the scatter/curve toggle buttons, threaded through to
+   *  ScatterViewControls' header row -- see that prop's doc comment for why
+   *  it lives there instead of in a row ScatterPlot adds itself. */
+  viewToggle?: ReactNode;
+};
+
+export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}) {
   const { t } = useI18n();
   // The dosage palette has its own dark steps, so a theme change has to rebuild
   // the traces -- the chrome-only relayout below cannot repaint markers.
@@ -362,7 +396,7 @@ export function ScatterPlot() {
         hoverinfo: "text",
         hovertemplate: "%{text}<extra></extra>",
         marker: {
-          size: typeKey === "NTC" ? 10 : 12,
+          size: typeKey === "NTC" ? MARKER_SIZE_NTC : MARKER_SIZE,
           color: info.color,
           symbol: info.symbol,
           opacity: info.opacity,
@@ -467,6 +501,37 @@ export function ScatterPlot() {
       }
     );
 
+    // Selected-well number labels (FB-12): smaller dots (above) made it hard
+    // to tell on screen which point a click actually landed on, so the
+    // selected well's own address is drawn next to its point -- capped at
+    // MAX_WELL_LABELS so a large box/lasso selection doesn't paper the plot
+    // in text. `wellPositions` looks the well up in the CURRENTLY VISIBLE
+    // points, so a well hidden by a display filter (or omitted) silently
+    // gets no label rather than crashing or drawing one off-plot.
+    const wellPositions = new Map(visiblePoints.map((point) => [point.well, point]));
+    const labeledWells = selectedWellSet.size > 0 && selectedWellSet.size <= MAX_WELL_LABELS
+      ? [...selectedWellSet]
+      : [];
+    const annotations: NonNullable<Layout["annotations"]> = labeledWells.flatMap((well) => {
+      const point = wellPositions.get(well);
+      if (!point) return [];
+      return [{
+        x: point.norm_fam,
+        y: point.norm_allele2,
+        text: well,
+        showarrow: false,
+        yshift: 14,
+        // Same tokens the legend uses (plotly-theme.ts), so the label reads
+        // against both the light and dark plot background at the same
+        // contrast the legend already relies on.
+        font: { size: 11, color: colors.fontColor },
+        bgcolor: colors.legendBg,
+        bordercolor: colors.lineColor,
+        borderwidth: 1,
+        borderpad: 2,
+      }];
+    });
+
     const axes = axisRangeLayout(axisMode, lockAspect, bounds);
     const layout: Partial<Layout> = {
       xaxis: {
@@ -493,6 +558,7 @@ export function ScatterPlot() {
       // well out of a dense cluster needs a zoom first.
       dragmode: editing ? "zoom" : "select",
       shapes,
+      annotations,
       margin: { t: 10, r: 10, b: 60, l: 70 },
       legend: { orientation: "h", y: -0.2 },
     };
@@ -618,6 +684,14 @@ export function ScatterPlot() {
     Plotly.Plots.resize(plotRef.current);
   }, [scatterAspect]);
 
+  // See the `active` prop's doc comment: recover from a first draw (or a
+  // resize event) that happened while ResultsPlotToggle had this view
+  // hidden behind the curve view.
+  useEffect(() => {
+    if (!active || !initialized.current || !plotRef.current) return;
+    Plotly.Plots.resize(plotRef.current);
+  }, [active]);
+
   // Declaring the assay's dosage ceiling. Re-clusters in AUTO mode with the
   // ceiling as a constraint rather than switching to a threshold override:
   // the mixture fit is what finds the clusters, and the declaration only tells
@@ -668,7 +742,7 @@ export function ScatterPlot() {
       if (data[t].uid === 'ntc-threshold') continue;
       const rawCustomdata = data[t].customdata;
       const customdata: unknown[] = Array.isArray(rawCustomdata) ? rawCustomdata : [];
-      const sizes = customdata.map((w: unknown) => (typeof w === "string" && selectedWellSet.has(w) ? 18 : 12));
+      const sizes = customdata.map((w: unknown) => (typeof w === "string" && selectedWellSet.has(w) ? MARKER_SIZE_SELECTED : MARKER_SIZE));
       const lineWidths = customdata.map((w: unknown) => chartPointState(selectedWellSet.has(String(w)), roxOutlierWells.includes(String(w)), dark).width);
       const lineColors = chartPointState(false, false, dark).stroke;
 
@@ -998,6 +1072,15 @@ export function ScatterPlot() {
 
   return (
     <div className="panel scatter-panel">
+      {/* P12-PLOT-TOGGLE: kept as ScatterPlot's own slim row (not threaded
+          into ScatterViewControls' header) -- that header's flex-wrap row
+          was already full at the 2-column 1440x1000 width, so the toggle
+          just wrapped onto a new line there anyway, for the same height
+          cost as its own row plus the risk of changing a shared,
+          extensively-tuned component both ScatterPlot and MarkerScatterPlot
+          depend on. AmplificationCurvePanel mirrors this exact row so the
+          toggle sits in the same slot in both views. */}
+      {viewToggle && <div className="mb-1 xl:mb-px flex justify-end">{viewToggle}</div>}
       <ScatterViewControls
         title={t.alleleDiscrimination}
         dataBounds={controlBounds}
