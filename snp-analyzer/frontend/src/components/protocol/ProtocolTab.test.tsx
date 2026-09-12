@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProtocolTab } from './ProtocolTab';
 import { getProtocol, updateProtocol } from '@/lib/api';
 import { useSessionStore } from '@/stores/session-store';
@@ -438,7 +438,10 @@ it('does not impose the editable table\'s 500px scroll clamp on the read-only su
     ],
   });
   render(<ProtocolTab />);
-  await screen.findByTestId('protocol-group-header-Post-read-9');
+  // "Post-read" is ambiguous by plain text (diagram <title> + sr-only
+  // legend + the row itself); wait on the last step's own table cell
+  // (unique: no other row shares this step number).
+  await screen.findAllByText('Post-read');
   const region = screen.getByRole('region', { name: en.pcrProtocolSteps });
   expect(region.style.maxHeight).toBe('');
   // Vertical clamp gone, but horizontal overflow containment is kept
@@ -447,10 +450,89 @@ it('does not impose the editable table\'s 500px scroll clamp on the read-only su
   // document-level horizontal scroll.
   expect(region.style.overflow).toBe('');
   expect(region.style.overflowX).toBe('auto');
-  // Every step row and every group header must actually be in the
-  // document, not merely reachable by scrolling an inner clamp box.
-  expect(document.querySelectorAll('#protocol-table tbody tr')).toHaveLength(10 + 8);
+  // Every step row must actually be in the document, not merely
+  // reachable by scrolling an inner clamp box. 6 of the 8 phase bands
+  // here are single-step bands whose phase name repeats their own
+  // step's label (Pre-read, Initial Denaturation, Secondary
+  // Denaturation Hold, Extension (Touchdown), Final Extension Hold,
+  // Post-read) and so get no separate header row (P10 follow-up) --
+  // only the 2 real multi-step bands (Amplification 1/2) do.
+  expect(document.querySelectorAll('#protocol-table tbody tr')).toHaveLength(10 + 2);
   for (const label of ['Pre-read', 'Final Extension Hold', 'Post-read']) {
     expect(screen.getAllByText(label).length).toBeGreaterThan(0);
   }
+});
+
+it('inlines a redundant singleton band\'s GOTO/cycles badge onto its own step row instead of dropping it', async () => {
+  // "Extension (Touchdown)" is both: (a) a single-step band whose phase
+  // name repeats its own label (no separate header row, per the above),
+  // and (b) a genuine repeat (12 cycles, a goto_label) -- the badge that
+  // information carries must not be lost just because the header went
+  // away.
+  vi.mocked(getProtocol).mockResolvedValue({
+    steps: [
+      { ...step, step: 1, label: 'Extension (Touchdown)', phase: 'Extension (Touchdown)', cycles: 12, goto_label: '↩ Repeat Step 1 × 12 cycles' },
+    ],
+  });
+  render(<ProtocolTab />);
+  await screen.findByText('Extension (Touchdown)');
+  expect(screen.queryByTestId('protocol-group-header-Extension (Touchdown)-0')).not.toBeInTheDocument();
+  expect(screen.getByText('Extension (Touchdown)').closest('tr')).toHaveTextContent(en.protocolGotoRange(1, 1, 12));
+});
+
+// P10 follow-up (independent review): a single-step band whose phase
+// name only repeats its own step's label produced a header row saying
+// the exact same word the step row already says, right above it.
+describe('redundant singleton phase-band header folding', () => {
+  it('does not render a separate header row for a single step whose phase name equals its own label', async () => {
+    vi.mocked(getProtocol).mockResolvedValue({
+      steps: [{ ...step, step: 1, label: 'Initial Denaturation', phase: 'Initial Denaturation' }],
+    });
+    render(<ProtocolTab />);
+    // "Initial Denaturation" also appears in the diagram's <title> tooltip
+    // and its sr-only phase legend, so it's ambiguous for a plain text
+    // query -- wait on the always-unique Edit button instead, then scope
+    // to the step's own table row.
+    await screen.findByText(en.protocolEditButton);
+    expect(screen.queryByTestId('protocol-group-header-Initial Denaturation-0')).not.toBeInTheDocument();
+    const row = document.querySelector('#protocol-table tbody tr') as HTMLTableRowElement;
+    expect(row).toHaveTextContent('Initial Denaturation');
+    // The information isn't lost -- it's just not duplicated: the phase
+    // color still marks the row (left border), it's simply not repeated
+    // as a second line of identical text above it.
+    expect(row).toHaveStyle({ borderLeft: '3px solid rgb(239, 68, 68)' });
+  });
+
+  // Case-only difference, matching real parser output (both eds_raw.py
+  // and pcrd_raw.py emit phase "Pre-read"/"Post-read" but label
+  // "Pre-Read"/"Post-Read" for that same step).
+  it('folds a header even when the phase/label match only case-insensitively', async () => {
+    vi.mocked(getProtocol).mockResolvedValue({
+      steps: [{ ...step, step: 1, label: 'Pre-Read', phase: 'Pre-read', plate_read: true }],
+    });
+    render(<ProtocolTab />);
+    await screen.findByText('Pre-Read');
+    expect(screen.queryByTestId('protocol-group-header-Pre-read-0')).not.toBeInTheDocument();
+  });
+
+  it('keeps the header row when the phase name adds information beyond the step\'s own label', async () => {
+    vi.mocked(getProtocol).mockResolvedValue({
+      steps: [{ ...step, step: 1, label: 'Denaturation', phase: 'Amplification 1', cycles: 1 }],
+    });
+    render(<ProtocolTab />);
+    await screen.findByText('Denaturation');
+    expect(screen.getByTestId('protocol-group-header-Amplification 1-0')).toBeInTheDocument();
+  });
+
+  it('keeps the header row for a real multi-step band even if every step happens to share the phase name as its label', async () => {
+    vi.mocked(getProtocol).mockResolvedValue({
+      steps: [
+        { ...step, step: 1, label: 'Hold', phase: 'Hold' },
+        { ...step, step: 2, label: 'Hold', phase: 'Hold' },
+      ],
+    });
+    render(<ProtocolTab />);
+    await screen.findByText(en.protocolEditButton);
+    expect(screen.getByTestId('protocol-group-header-Hold-0')).toBeInTheDocument();
+  });
 });

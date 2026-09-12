@@ -624,3 +624,158 @@ descriptions:
 
 No protocol/raw-data e2e spec failed in any run, isolated or full,
 before or after the merge.
+
+## Second refinement: fold redundant singleton-band headers (team-lead follow-up)
+
+The corrected height numbers in the previous section (1171px → 1165px,
+~6px) pointed at a remaining real problem, not just a measurement
+artifact: **a single-step band whose phase name only repeats its own
+step's label produced a header row saying the exact same word the step
+row already says, directly above it.** In the reported fixture, 5 of 8
+bands were exactly this (`Pre-read`, `Initial Denaturation`, `Secondary
+Denaturation Hold`, `Final Extension Hold`, `Post-read`) — the same kind
+of literal repetition the user's original complaint was about, and the
+reason the height barely moved despite removing GOTO rows and merging
+the fluorescence cards.
+
+### Same-name rule (checked against both parsers, not assumed)
+
+`isRedundantSingletonBand(band, steps)` (`protocol-phase-groups.ts`) is
+true only for a **single-step** band whose `phase` equals that step's own
+`label`, compared **case/whitespace-insensitively**. Confirmed directly
+against the backend rather than guessed:
+
+- `app/parsers/pcrd_raw.py` and `app/parsers/eds_raw.py` both emit phase
+  `"Pre-read"` / `"Post-read"` (lowercase r) but label `"Pre-Read"` /
+  `"Post-Read"` (uppercase R) for the very same step — an exact-string
+  compare would wrongly treat these as *different* and keep a genuinely
+  redundant header. Case-insensitive comparison is required, not
+  optional, to correctly fold these two very common phases.
+- A plain single `"Initial Denaturation"` or `"Hold"` step emits an
+  identical phase and label string in both parsers, byte for byte —
+  already redundant even under exact comparison.
+- Multi-step bands are **never** folded regardless of naming (test:
+  *"keeps the header row for a real multi-step band even if every step
+  happens to share the phase name as its label"*, a synthetic 2-step
+  `"Hold"`/`"Hold"` band) — only a band's own single step's own label is
+  ever compared, never collapsing a real multi-step group's header.
+
+### What changed, what didn't
+
+- `ProtocolStepsTable.tsx`: for a redundant singleton band, no
+  `ProtocolPhaseGroupHeader` row is rendered. The step's own row instead
+  gets a `PhaseDot` (same phase-colored dot the header used) placed
+  before the label, and — new — `PhaseBandBadges` (refactored out of the
+  header component, shared logic, not a second copy) placed *after* the
+  label, carrying whatever the header would have: a GOTO range/stale
+  notice, or a `×N` cycles badge. Verified with a band that is BOTH
+  redundant-by-name AND a genuine repeat (`"Extension (Touchdown)"`, 12
+  cycles, `goto_label` present): its GOTO badge renders directly on that
+  step's row, not dropped (test: *"inlines a redundant singleton band's
+  GOTO/cycles badge onto its own step row instead of dropping it"*).
+- The row's own left border (in the phase color) was **already** present
+  on every row regardless of band position — this was never a
+  color-only cue that needed adding; the dot is the *additional*
+  non-color cue team-lead asked for, now attached to the row itself
+  instead of a separate line above it.
+- `ProtocolThermalProfile.tsx` / `protocol-phase-groups.ts`'s
+  `groupPhaseBands` are **untouched** — the diagram still draws all 8
+  bands for this fixture exactly as before; `isRedundantSingletonBand` is
+  a separate, additive function the table calls, not a change to what a
+  "band" is.
+- `cyclesVary` is unaffected (a single-step band can't disagree with
+  itself, so it's always `false` there; the existing suppression rule for
+  multi-step bands is untouched).
+
+### `data-testid` impact (checked, none broken)
+
+`grep`ped every `protocol-group-header-*` reference before touching
+anything. Of the pre-existing tests that reference it: the P0-T0.2 value-
+lock test (phase ≠ label — synthetic `s1`/`s2`/... labels), the
+"colors each phase group header..." test and the "drops the single x-N
+cycle badge..." test (both 2-step `Amplification 1` bands) are all
+**multi-step or name-distinct**, so none of them were affected — verified
+by running the full suite, not just assumed. Two spots *did* need
+updating, both because the fixture's phase/label happened to collide
+(not because the testid convention itself changed):
+- The row-count regression test (previous section) — 6 of its 8 bands
+  are now redundant singletons, so `protocol-table tbody tr` count
+  changed from `10 + 8` to `10 + 2`, and its wait-condition
+  (`findByTestId('protocol-group-header-Post-read-9')`) no longer
+  resolves since that header is gone by design; switched to
+  `findAllByText('Post-read')` (ambiguous by design against the
+  diagram's title/legend, which is fine for a presence check).
+- "does not break for a single phase group spanning the whole protocol"
+  test kept passing unmodified, since its fixture's `label` (`'Synthetic
+  step'`) never matches its `phase` (`'Post-read'`) — it exercises the
+  *header-kept* path, which was never in question.
+
+New tests (RED confirmed by running before the corresponding
+`ProtocolStepsTable.tsx`/`ProtocolPhaseGroupHeader.tsx` changes existed,
+same as this task's established pattern for new pure-logic + integration
+pairs):
+- `protocol-phase-groups.test.ts`: `isRedundantSingletonBand` — exact
+  match, case-insensitive match (Pre-read/Pre-Read), phase-adds-
+  information (false), multi-step band never folds (false) even when
+  every step's label happens to equal the phase.
+- `ProtocolTab.test.tsx` (`describe('redundant singleton phase-band
+  header folding')`): no header for same-name singleton; folds across a
+  case-only difference; keeps header when phase adds information; keeps
+  header for a genuine multi-step band even when every step shares the
+  phase name as a label.
+
+### Re-verified height (now a real, not artifact-inflated, reduction)
+
+Same synthetic fixture, labels adjusted to match real parser
+capitalization (`"Pre-Read"`/`"Post-Read"`, and generic `"Hold"` for the
+two plain single-hold phases, matching `pcrd_raw.py`'s actual output
+convention instead of the earlier made-up
+`"Secondary Denaturation Hold"`/`"Final Extension Hold"` names):
+
+| | Before (always-open edit form + 2 separate collapsed cards) | After (read-only default, folded headers) |
+|---|---|---|
+| Protocol card height | 913.5px | **807px** |
+| Whole Raw data tab height | 1171px | **994px** (−177px, ~15.1% shorter) |
+| Table rows (`tbody tr`) | 13 (10 steps + 3 GOTO rows) | **12** (10 steps + 2 real multi-step headers) |
+
+This is a genuine reduction, not a repeat of the earlier clipping
+artifact — `document.querySelectorAll('#protocol-table tbody tr').length`
+was checked live (12) and `rowCount`/`headerCount` were logged from the
+same Playwright run that produced the screenshots below, not inferred
+from a static measurement.
+
+All 4 screenshots regenerated again (`P10-PROTOCOL-after-readonly-*.png`,
+`P10-PROTOCOL-after-edit-*.png`): every singleton phase (`Pre-Read`,
+`Initial Denaturation`, `Hold` ×2, `Post-Read`) now shows once, as its own
+step row with a colored dot, not twice; `Extension (Touchdown)`'s repeat
+badge (`↩ 단계 8 · 총 12회`) renders on its own row, right after its
+label, not lost.
+
+### Verification (all 4 gates + unit/full suites)
+
+```
+$ npx tsc --noEmit          # 0 errors
+$ npm run lint              # 0 errors, 0 warnings
+$ npm run test               # 122 files, 895 tests passed
+$ npm run build              # tsc -b (including test files) + vite build: success
+```
+
+(`npm run build`'s `tsc -b` caught one test-file-only error `npx tsc
+--noEmit` did not — a missing `describe` import in `ProtocolTab.test.tsx`
+after adding a `describe` block — confirming why both are run, per this
+evidence doc's own earlier note.)
+
+E2E: full root suite re-run against this refinement's build (isolated
+backend, port 8175, scratch DB): **133 passed / 4 failed**. Different
+individual specs flaked than the previous section's run (that round:
+`17-manual-group:143`, `24-responsive:4`, `24-responsive:51`; this round:
+`17-manual-group:58`, `20-keyboard:28`, `24-responsive:4`,
+`24-responsive:51`) — consistent with these being genuinely
+non-deterministic under concurrent multi-agent load, not a fixed set tied
+to this change. All 4 individually reproduced by isolated rerun:
+`17-manual-group:58` and `20-keyboard:28` passed cleanly alone;
+`24-responsive:4` passed cleanly alone (again); `24-responsive:51` failed
+again alone with the identical `1111 > 1000` bound violation, matching
+its status as team-lead's own documented, separately-tracked
+flaky-under-load spec. No protocol/raw-data e2e spec failed in this run
+either.

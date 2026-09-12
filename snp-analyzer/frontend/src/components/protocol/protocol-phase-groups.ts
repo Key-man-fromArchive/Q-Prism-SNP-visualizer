@@ -56,3 +56,28 @@ export function groupPhaseBands(steps: ProtocolStep[]): PhaseBand[] {
   });
   return bands;
 }
+
+/** True for a single-step band whose phase name says nothing a reader
+ *  doesn't already get from that one step's own label -- a dedicated
+ *  header row above it would just repeat the same text on two lines
+ *  (P10 follow-up: this is exactly what the reported UI still looked
+ *  cluttered doing).
+ *
+ *  The "same" comparison is case/whitespace-insensitive, confirmed
+ *  against both current parsers rather than assumed:
+ *  - `app/parsers/pcrd_raw.py` (and identically `eds_raw.py`) emit
+ *    phase `"Pre-read"`/`"Post-read"` (lowercase r) but label
+ *    `"Pre-Read"`/`"Post-Read"` (uppercase R) for the same step --
+ *    an exact-string compare would wrongly treat these as *different*
+ *    and keep a genuinely redundant header.
+ *  - A plain single "Initial Denaturation" or "Hold" step emits the
+ *    identical phase and label string in both parsers, byte for byte.
+ *  Multi-step bands are never folded this way regardless of naming --
+ *  team-lead's request, and this project's own existing tests, only
+ *  ever asked for de-duplicating a *single* step's own repeated name,
+ *  not collapsing a real multi-step group's header. */
+export function isRedundantSingletonBand(band: PhaseBand, steps: ProtocolStep[]): boolean {
+  if (band.startIndex !== band.endIndex) return false;
+  const label = steps[band.startIndex]?.label ?? '';
+  return band.phase.trim().toLowerCase() === label.trim().toLowerCase();
+}

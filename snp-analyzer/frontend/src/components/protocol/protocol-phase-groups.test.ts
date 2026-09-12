@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupPhaseBands, getPhaseColor } from './protocol-phase-groups';
+import { groupPhaseBands, getPhaseColor, isRedundantSingletonBand } from './protocol-phase-groups';
 import type { ProtocolStep } from '@/types/api';
 
 function makeStep(overrides: Partial<ProtocolStep>): ProtocolStep {
@@ -61,6 +61,35 @@ describe('groupPhaseBands', () => {
 
   it('does not break on an empty protocol', () => {
     expect(groupPhaseBands([])).toEqual([]);
+  });
+});
+
+describe('isRedundantSingletonBand', () => {
+  it('is true for a single step whose phase exactly matches its own label', () => {
+    const steps = [makeStep({ step: 1, phase: 'Initial Denaturation', label: 'Initial Denaturation' })];
+    expect(isRedundantSingletonBand(groupPhaseBands(steps)[0], steps)).toBe(true);
+  });
+
+  // app/parsers/pcrd_raw.py and eds_raw.py both emit phase "Pre-read" /
+  // "Post-read" (lowercase r) but label "Pre-Read" / "Post-Read"
+  // (uppercase R) for the very same step -- a case-sensitive compare
+  // would wrongly keep a header that repeats the same word.
+  it('is true across a capitalization-only difference (Pre-read phase vs Pre-Read label)', () => {
+    const steps = [makeStep({ step: 1, phase: 'Pre-read', label: 'Pre-Read' })];
+    expect(isRedundantSingletonBand(groupPhaseBands(steps)[0], steps)).toBe(true);
+  });
+
+  it('is false when the phase name adds information the label does not have', () => {
+    const steps = [makeStep({ step: 1, phase: 'Amplification 1', label: 'Denaturation' })];
+    expect(isRedundantSingletonBand(groupPhaseBands(steps)[0], steps)).toBe(false);
+  });
+
+  it('is false for a multi-step band even when every step happens to share the phase name as a label', () => {
+    const steps = [
+      makeStep({ step: 1, phase: 'Hold', label: 'Hold' }),
+      makeStep({ step: 2, phase: 'Hold', label: 'Hold' }),
+    ];
+    expect(isRedundantSingletonBand(groupPhaseBands(steps)[0], steps)).toBe(false);
   });
 });
 

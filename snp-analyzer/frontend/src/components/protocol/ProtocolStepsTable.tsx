@@ -23,8 +23,8 @@
 import { Fragment } from 'react';
 import type { ProtocolStep } from '@/types/api';
 import type { Translations } from '@/locales/en';
-import { getPhaseColor, groupPhaseBands } from './protocol-phase-groups';
-import { ProtocolPhaseGroupHeader } from './ProtocolPhaseGroupHeader';
+import { getPhaseColor, groupPhaseBands, isRedundantSingletonBand, type PhaseBand } from './protocol-phase-groups';
+import { ProtocolPhaseGroupHeader, PhaseDot, PhaseBandBadges } from './ProtocolPhaseGroupHeader';
 import { stepEndTemperature, roundTo1 } from './protocol-step-temp';
 
 type EditHandlers = {
@@ -91,20 +91,30 @@ export function ProtocolStepsTable(
           {steps.map((step, stepIndex) => {
             const band = bandAtStart.get(stepIndex);
             const color = getPhaseColor(step.phase || '');
+            // A single-step band whose phase name only repeats that
+            // step's own label gets no separate header row -- it would
+            // say the exact same word on two lines (see
+            // isRedundantSingletonBand's doc comment). The phase color
+            // dot and any GOTO-range/cycles badges the header would have
+            // carried are shown inline on the row itself instead.
+            const inlineBand = band && isRedundantSingletonBand(band, steps) ? band : undefined;
+            const headerBand = band && !inlineBand ? band : undefined;
             return (
               <Fragment key={step.step}>
-                {band && <ProtocolPhaseGroupHeader band={band} steps={steps} colSpan={colSpan} t={t} />}
+                {headerBand && <ProtocolPhaseGroupHeader band={headerBand} steps={steps} colSpan={colSpan} t={t} />}
                 {props.editable ? (
                   <EditableStepRow
                     step={step}
                     stepIndex={stepIndex}
                     color={color}
+                    inlineBand={inlineBand}
+                    steps={steps}
                     onChange={props.onChange}
                     onDelete={props.onDelete}
                     t={t}
                   />
                 ) : (
-                  <ReadOnlyStepRow step={step} color={color} t={t} />
+                  <ReadOnlyStepRow step={step} color={color} inlineBand={inlineBand} steps={steps} t={t} />
                 )}
               </Fragment>
             );
@@ -118,10 +128,14 @@ export function ProtocolStepsTable(
 function ReadOnlyStepRow({
   step,
   color,
+  inlineBand,
+  steps,
   t,
 }: {
   step: ProtocolStep;
   color: { border: string; label: string };
+  inlineBand?: PhaseBand;
+  steps: ProtocolStep[];
   t: Translations;
 }) {
   const hasTouchdown = step.temp_increment != null && step.cycles > 1;
@@ -130,7 +144,13 @@ function ReadOnlyStepRow({
     <tr className="border-b border-border" style={{ borderLeft: `3px solid ${color.border}` }}>
       <td className="text-text-muted" style={{ padding: '6px 8px' }}>{step.step}</td>
       <td className="text-text" style={{ padding: '6px 8px' }}>
+        {inlineBand && <span className="mr-2"><PhaseDot phase={inlineBand.phase} /></span>}
         {step.label}
+        {inlineBand && (
+          <span className="ml-2">
+            <PhaseBandBadges band={inlineBand} steps={steps} t={t} showPhaseName={false} />
+          </span>
+        )}
         {step.plate_read && (
           <span
             className="ml-2 rounded-full bg-info/10 text-info"
@@ -164,6 +184,8 @@ function EditableStepRow({
   step,
   stepIndex,
   color,
+  inlineBand,
+  steps,
   onChange,
   onDelete,
   t,
@@ -171,6 +193,8 @@ function EditableStepRow({
   step: ProtocolStep;
   stepIndex: number;
   color: { border: string; label: string };
+  inlineBand?: PhaseBand;
+  steps: ProtocolStep[];
   onChange: <K extends keyof ProtocolStep>(index: number, field: K, value: ProtocolStep[K]) => void;
   onDelete: (index: number) => void;
   t: Translations;
@@ -179,6 +203,12 @@ function EditableStepRow({
     <tr className="protocol-edit-row border-b border-border" style={{ borderLeft: `3px solid ${color.border}` }}>
       <td data-field="step" style={{ padding: '8px' }}>{step.step}</td>
       <td data-field="label" style={{ padding: '8px' }}>
+        {inlineBand && (
+          <div className="mb-1 flex items-center gap-2">
+            <PhaseDot phase={inlineBand.phase} />
+            <PhaseBandBadges band={inlineBand} steps={steps} t={t} showPhaseName={false} />
+          </div>
+        )}
         <input
           type="text"
           aria-label={`${t.label} ${step.step}`}
