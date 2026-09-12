@@ -111,6 +111,17 @@ const en = {
   errLoadQuality: 'Failed to fetch quality data',
   errLoadExample: 'Failed to load example',
   overlayLoading: 'Loading overlay...',
+  overlayShow: 'Show Overlay',
+  overlayHide: 'Hide Overlay',
+  overlayColorByLabel: 'Color by',
+  overlayColorByGenotype: 'Genotype',
+  overlayColorByWellType: 'Well type',
+  // Colors trace-by-trace differently from genotype/well-type, but does NOT
+  // mean "raw signal": the plotted Y is still norm_fam/norm_allele2 either
+  // way (see AmplificationOverlay.tsx). It is a call-color-free VIEW.
+  overlayColorBySolid: 'Solid color',
+  overlayProcessingStatus: (requestedRox: boolean, applied: boolean) =>
+    `Reference normalization requested: ${requestedRox ? 'yes' : 'no'}; actually applied: ${applied ? 'yes' : 'no'}.`,
   batchAddTo: (name: string, msg: string) => `Add to "${name}": ${msg}`,
   batchAddResult: (added: number, count: number, name: string, leftover: number) => `Added ${added}/${count} to "${name}" (${leftover} already in project or missing)`,
   batchBulkAddTo: (name: string, msg: string) => `Bulk add to "${name}": ${msg}`,

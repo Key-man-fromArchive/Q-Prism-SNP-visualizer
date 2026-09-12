@@ -657,6 +657,12 @@ export type PlateResponse = RoleLabelMetadata & {
 
 export type AmplificationResponse = RoleLabelMetadata & {
   allele2_dye: string;
+  background_mode?: BackgroundMode;
+  /** What the curves below actually are (see `normalization_applies()` in
+   *  app/processing/normalize.py), NOT what the `use_rox` request asked
+   *  for -- a run with no passive reference stays raw regardless of the
+   *  request, same distinction ScatterResponse/PlateResponse already make. */
+  normalization_applied?: boolean;
   curves: AmplificationCurve[];
 };
 

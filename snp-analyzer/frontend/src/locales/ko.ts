@@ -113,6 +113,16 @@ const ko: Translations = {
   errLoadQuality: '품질 데이터를 불러오지 못했습니다',
   errLoadExample: '예제를 불러오지 못했습니다',
   overlayLoading: '오버레이 로딩 중...',
+  overlayShow: '오버레이 표시',
+  overlayHide: '오버레이 숨기기',
+  overlayColorByLabel: '색 기준',
+  overlayColorByGenotype: '유전형',
+  overlayColorByWellType: '웰 타입',
+  // 판정 색에서 자유로운 보기일 뿐 "원시 신호"가 아니다 -- Y값은 이 모드에서도
+  // norm_fam/norm_allele2 그대로다 (AmplificationOverlay.tsx 참고).
+  overlayColorBySolid: '단색',
+  overlayProcessingStatus: (requestedRox: boolean, applied: boolean) =>
+    `참조 정규화 요청: ${requestedRox ? '예' : '아니오'}; 실제 적용: ${applied ? '예' : '아니오'}.`,
   batchAddTo: (name: string, msg: string) => `"${name}"에 추가: ${msg}`,
   batchAddResult: (added: number, count: number, name: string, leftover: number) => `"${name}"에 ${added}/${count} 추가 (${leftover}개는 이미 있거나 없음)`,
   batchBulkAddTo: (name: string, msg: string) => `"${name}"에 일괄 추가: ${msg}`,

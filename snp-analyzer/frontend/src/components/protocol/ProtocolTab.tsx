@@ -5,6 +5,7 @@ import { Fragment } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useProtocolEditor } from './use-protocol-editor';
 import { ProtocolThermalProfile } from './ProtocolThermalProfile';
+import { AmplificationOverlay } from '@/components/analysis/AmplificationOverlay';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useI18n } from '@/hooks/use-i18n';
@@ -25,7 +26,20 @@ export function ProtocolTab() {
   const owner = useAuthStore(s => s.generation);
   const { t } = useI18n();
   if (!sessionId) return <p role="status" className="p-6">{t.noData}</p>;
-  return <ProtocolEditor key={`${owner}:${entry}:${sessionId}`} sessionId={sessionId} />;
+  return (
+    <>
+      <ProtocolEditor key={`${owner}:${entry}:${sessionId}`} sessionId={sessionId} />
+      {/* FB-06: plate-wide amplification view lives here too, outside the
+          protocol-save <form> (a bare <button> defaults to type="submit"
+          inside a form, and this toggle must not trigger a protocol save).
+          idPrefix scopes its ids against the Analysis tab's own overlay,
+          which stays mounted (merely hidden) behind this tab -- see
+          AmplificationOverlay.tsx and App.tsx. */}
+      <div className="px-4 pb-4 sm:px-6">
+        <AmplificationOverlay idPrefix="rawdata-" />
+      </div>
+    </>
+  );
 }
 
 function ProtocolEditor({ sessionId }: { sessionId: string }) {
