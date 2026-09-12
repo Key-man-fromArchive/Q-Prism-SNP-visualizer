@@ -38,10 +38,21 @@
 
 즉 **두 곳에 마운트**되어 있고, 둘 다 분석 탭 안이다. 프로토콜 탭에는 없다.
 
-> **정정 (리뷰 반영)**: 두 마운트 지점은 **동시에 활성화되지 않는다.**
-> `AnalysisWorkspace.tsx`의 분기가 배타적이기 때문이다:
-> `markers.length > 0 ? <MultiMarkerAnalysisPanel/> : <AnalysisTab/>`.
-> 즉 현재 DOM에는 오버레이가 항상 **하나만** 존재한다.
+> **정정 (리뷰 반영)**: `AnalysisWorkspace.tsx`의 분기가 배타적이므로
+> (`markers.length > 0 ? <MultiMarkerAnalysisPanel/> : <AnalysisTab/>`),
+> **이 두 지점끼리는** 동시에 활성화되지 않는다. 변경 전 DOM에는 오버레이가 하나만 존재했다.
+>
+> **재정정 (P2-S2-T1 구현 중 발견, 2026-09-12)**: 위 문장을 "세 번째 마운트를 추가해도 안전하다"로
+> 읽으면 **틀린다.** `App.tsx:187`이 분석 패널을 **언마운트하지 않고 CSS `hidden`으로만 숨긴다**:
+>
+> ```tsx
+> <div id="main-panel-analysis" … className={activeTab === "analysis" ? "" : "hidden"}>
+>   <AnalysisWorkspace />
+> ```
+>
+> 따라서 프로토콜(Raw data) 화면에 오버레이를 추가하면 사용자가 그 탭에 있어도 분석 쪽 오버레이가
+> DOM에 그대로 남아 **실제로 동시 마운트된다.** DOM id 스코프화는 정돈이 아니라 **필수 선행 조건**이었다.
+> 오케스트레이터의 사전 분석이 이 지점을 놓쳤고, 구현 담당이 바로잡았다.
 
 ### 오버레이가 분석 상태에 결합되어 있다
 
