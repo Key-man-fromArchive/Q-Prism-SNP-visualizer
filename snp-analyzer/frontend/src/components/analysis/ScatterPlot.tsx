@@ -1,9 +1,11 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import Plotly from "plotly.js-dist-min";
 import type { Data, Layout, Config, Shape, PlotlyHTMLElement, PlotMouseEvent, PlotSelectionEvent } from "plotly.js";
 import { useSessionStore } from "@/stores/session-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import type { ScatterAspect } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { getScatter } from "@/lib/api";
@@ -31,6 +33,14 @@ type PlotlyGraphDiv = HTMLDivElement & {
   _fullLayout?: { xaxis?: PlotlyAxis; yaxis?: PlotlyAxis };
   data?: Array<Record<string, unknown>>;
 };
+
+// Feeds `.analysis-scatter-canvas`'s `aspect-ratio` (index.css, P4-S1-T1):
+// the canvas is bound by width so the ratio always holds, and the ratio
+// itself comes from here rather than a fixed value (FB-04 §3-1, D-6).
+function scatterAspectVars(aspect: ScatterAspect): CSSProperties {
+  const [w, h] = aspect === "1:1" ? [1, 1] : [4, 3];
+  return { "--scatter-aspect-w": w, "--scatter-aspect-h": h } as CSSProperties;
+}
 
 function useBoundaryDraft(seed: number[] | null) {
   const [previousSeed, setPreviousSeed] = useState(seed);
@@ -79,6 +89,7 @@ export function ScatterPlot() {
   const axisMode = useSettingsStore((s) => s.axisMode);
   const lockAspect = useSettingsStore((s) => s.lockAspect);
   const scatterTool = useSettingsStore((s) => s.scatterTool);
+  const scatterAspect = useSettingsStore((s) => s.scatterAspect);
   const xMin = useSettingsStore((s) => s.xMin);
   const xMax = useSettingsStore((s) => s.xMax);
   const yMin = useSettingsStore((s) => s.yMin);
@@ -594,6 +605,19 @@ export function ScatterPlot() {
 
   useEffect(() => () => { if (plotRef.current) clearActiveChart(plotRef.current); }, []);
 
+  // Toggling scatterAspect only resizes the CSS-driven container (P4-S1-T1,
+  // FB-04 §3-1); it changes no trace or axis data, so the main render effect
+  // above deliberately does not depend on it. Plotly's own `responsive: true`
+  // config already reacts to that resize in a real browser, but forcing a
+  // resize here keeps the redraw deterministic instead of relying on an
+  // internal observer we do not control -- and makes it exercisable in a
+  // test, where no layout engine ever fires it on its own.
+  useEffect(() => {
+    if (!initialized.current || !plotRef.current) return;
+    const resize = (Plotly as unknown as { Plots?: { resize?: (el: HTMLElement) => void } }).Plots?.resize;
+    resize?.(plotRef.current);
+  }, [scatterAspect]);
+
   // Declaring the assay's dosage ceiling. Re-clusters in AUTO mode with the
   // ceiling as a constraint rather than switching to a threshold override:
   // the mixture fit is what finds the clusters, and the declaration only tells
@@ -999,7 +1023,7 @@ export function ScatterPlot() {
         {originNote} — {controlLabels.fam} {ratioOrigin.fam.toFixed(normalizationApplied ? 4 : 1)},{" "}
         {controlLabels.allele2} {ratioOrigin.allele2.toFixed(normalizationApplied ? 4 : 1)}
       </p>
-      <div className="relative analysis-scatter-canvas">
+      <div className="relative analysis-scatter-canvas" style={scatterAspectVars(scatterAspect)}>
         <div
           id="scatter-plot"
           data-visible-wells={visiblePoints.length}
