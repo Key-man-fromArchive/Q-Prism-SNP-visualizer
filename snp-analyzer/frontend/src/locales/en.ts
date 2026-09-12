@@ -508,7 +508,7 @@ const en = {
   plateScrollHint: 'Plate review: scroll horizontally within this area when needed.',
   resultsScrollHint: 'Genotype review: scroll horizontally within this area when needed.',
   analysisAdvancedSettings: 'Advanced settings',
-  analysisNumericDetails: 'Detailed readings and amplification curve',
+  analysisNumericDetails: 'Detailed readings',
   analysisScopeDetails: 'How scope and exclusions are counted',
   analysisNtcMode: (explicit: boolean) => explicit ? 'Explicit NTC' : 'Auto NTC',
   analysisAspectState: (locked: boolean) => locked ? 'Equal scales' : 'Independent scales',

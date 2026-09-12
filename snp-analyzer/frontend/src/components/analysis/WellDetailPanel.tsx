@@ -222,7 +222,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
               </tr>
           </tbody>
         </table>
-        <details className="well-detail-expanded" onToggle={event => { if (event.currentTarget.open && plotRef.current && plotInitRef.current) void Plotly.relayout(plotRef.current, { autosize: true }); }}>
+        <details className="well-detail-expanded">
           <summary className="cursor-pointer text-xs text-primary py-2">{t.analysisNumericDetails}</summary>
           <p className="text-xs text-text-muted" data-testid="scatter-reading-basis">{t.scatterReferenceBasis(useRox, normalizationReported, normalizationApplied)}</p>
           <table className="detail-table w-full text-sm"><tbody>
@@ -259,23 +259,18 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
           </tbody>
         </table>
 
-        {numCycles > 1 && (
-          <>
-          <p className="text-xs text-text-muted">{t.referenceBasisUnknown}</p>
-          <div
-            id="amplification-plot"
-            ref={attachPlot}
-            style={{ width: "100%", height: "200px", marginTop: "12px" }}
-          />
-          {/* P7-VALUES (FB-06 Q-1): the plot above shows shape; this shows
-              the SAME curve's numbers -- the current-cycle table above this
-              <details> stays untouched, this adds the rest of the series. */}
+          {/* P7-VALUES (FB-06 Q-1): the numeric table above shows the SAME
+              curve's numbers -- this stays inside the numeric-details
+              disclosure with the rest of the detail rows; the plot itself
+              (below, outside </details>) is the panel's primary
+              visualization and must not require expanding this disclosure
+              to be seen (P8-E2E-DEBT). */}
           {/* curve.well === selectedWell guards against showing a stale
               series from a previous well: `curve` is only ever replaced (not
               reset) by the fetch effect above, since it must not call
               setState synchronously in the effect body's early-return
               branches (react-hooks/set-state-in-effect). */}
-          {curve && curve.well === selectedWell && (
+          {numCycles > 1 && curve && curve.well === selectedWell && (
             <div style={{ marginTop: "12px" }}>
               <p className="text-xs font-semibold text-text-muted mb-1">{t.wellTimeSeriesTitle}</p>
               <div
@@ -309,9 +304,21 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
               </div>
             </div>
           )}
+        </details>
+
+        {/* P8-E2E-DEBT: moved out of the disclosure above -- the curve is
+            the reason a well was clicked, not a numeric detail, and must be
+            visible without expanding "Detailed readings". */}
+        {numCycles > 1 && (
+          <>
+          <p className="text-xs text-text-muted">{t.referenceBasisUnknown}</p>
+          <div
+            id="amplification-plot"
+            ref={attachPlot}
+            style={{ width: "100%", height: "200px", marginTop: "12px" }}
+          />
           </>
         )}
-        </details>
       </div>
     </div>
   );

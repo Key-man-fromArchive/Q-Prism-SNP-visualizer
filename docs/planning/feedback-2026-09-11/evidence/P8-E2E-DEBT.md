@@ -141,14 +141,40 @@ plot** (a primary graphical result, not a numeric stat row) behind the same disc
 table reads like scope creep from the closing-tag placement, not a deliberate design decision to
 hide the curve. But I can't rule out that hiding it was intentional without asking.
 
-**Not fixed pending your call — two options, either is a small change:**
-- **(a) App fix:** move the `numCycles > 1 && <div id="amplification-plot".../>` block (currently
-  inside the `<details>`) to just *after* the closing `</details>`, so the curve stays always-visible
-  the way the test (and `05-interactions`) both expect, and only the numeric stat rows stay collapsed.
-- **(b) Test fix:** if the disclosure is deliberate, click the `analysisNumericDetails` summary
-  (`.well-detail-expanded > summary`) before asserting `#amplification-plot` visible.
+**Orchestrator decision: (a) app fix, approved.** `#amplification-plot` (and its
+`referenceBasisUnknown` normalization-basis caption, which explains the curve and belongs with it,
+not with the numeric rows) moved to *after* the closing `</details>`. The numeric stat table and the
+P7-added full-cycle time-series table stay inside the disclosure — those genuinely are "detailed
+readings". Also found and fixed while doing this: `analysisNumericDetails` ("Detailed readings and
+amplification curve" / "상세 측정값과 증폭 곡선") was the *same* string `3923909` wrote to describe
+what it put inside the disclosure — accurate then, but it would have become a lie the moment the
+curve moved out, so it's now `"Detailed readings"` / `"상세 측정값"` in both locales.
 
-I have not touched `WellDetailPanel.tsx` (out of write-scope without approval) or this spec file.
+TDD sequence followed: added a new Vitest unit test in `WellDetailPanel.test.tsx`
+("shows the amplification curve without expanding the numeric-details disclosure") asserting
+`#amplification-plot` is `toBeVisible()` while `details.open === false`; confirmed it failed (RED)
+against the pre-fix component (`Received element is not visible`); applied the JSX move; confirmed
+it passed (GREEN); ran the full `WellDetailPanel.test.tsx` file — one pre-existing test broke as a
+direct, expected consequence (see next paragraph) and was fixed; all 16 tests in the file pass.
+
+**`onToggle`/`Plotly.relayout` handler removed**, per your request to re-examine it: it existed
+solely to fix Plotly's layout after the plot was un-hidden by expanding the disclosure it used to
+live inside (a Plotly instance created/measured while its container has zero rendered width needs an
+explicit `relayout({autosize:true})` once real width is available). Now that the plot is mounted
+outside the `<details>` from the start — always at real width — nothing inside the disclosure is a
+Plotly instance anymore, so there is nothing left for a toggle-triggered relayout to fix. Confirmed
+by removing it and asserting `Plotly.relayout` is never called in the updated
+`WellDetailPanel.test.tsx` test (previously named "...resizes the retained curve on disclosure...",
+renamed and rewritten since that behavior no longer exists by design, not because the assertion was
+wrong).
+
+`tests/05-interactions.spec.ts:161` **strengthened** per your instruction: `not.toHaveClass(/hidden/)`
+→ `toBeVisible()`, since the former is exactly the check that let this regression through undetected
+for 5 days (native `<details>` semantics use no CSS class at all).
+
+Verified: `test-windows.spec.ts:109` passes; `05-interactions.spec.ts` full file passes; frontend
+`tsc -b`/`eslint` clean on all touched files; rebuilt and re-served, confirmed via the isolated
+server's index.html referencing the new asset hash.
 
 ---
 
@@ -171,19 +197,32 @@ state after `markers-changed`. I have not root-caused this further — it needs 
 and is outside this task's write-scope (would mean editing app source under uncertainty, not a
 one-line evidenced fix). Flagging it rather than masking it with a longer timeout.
 
+**Update:** the same class of failure also hit test 1 (`17:58`, the drag-select test) during a later
+4/5-file batch run, at its own NTC-corner-drag section (`waitForRequest` on `/cluster` timing out
+after the corner drag, ~line 129) — passed 3/3 when rerun in isolation immediately after. So this is
+not confined to test 2; it's the same underlying NTC-threshold/scatter-state timing issue surfacing
+wherever a test interacts with the NTC-corner marker in a longer run. Not fixed, per your direction
+to document rather than mask it.
+
 ---
 
 ## Current state
 
-- Fixed and verified: (1) `06-import-mapping.spec.ts`, (2) both assertions in
-  `17-manual-group-and-plate-drag.spec.ts:58` test, (3) `17-manual-group-and-plate-drag.spec.ts:143`
-  test's originally-reported assertion.
-- Not fixed, pending your decision: (4) `test-windows.spec.ts:122` (app-fix vs test-fix, write-scope
-  requires approval before touching `WellDetailPanel.tsx`).
-- Newly found, out of scope: intermittent NTC-corner flake in test 17's second test (see above),
-  needs a separate task.
+All 4 originally-reported failures fixed and verified:
+- (1) `06-import-mapping.spec.ts`
+- (2) both assertions in `17-manual-group-and-plate-drag.spec.ts:58` test
+- (3) `17-manual-group-and-plate-drag.spec.ts:143` test's originally-reported assertion
+- (4) `test-windows.spec.ts:122` (app fix, approved: `#amplification-plot` moved out of the
+  numeric-details disclosure; see above)
 
-Full-suite runs (isolated server, `--workers=1`, single run each):
+Also done per orchestrator direction: `05-interactions.spec.ts:161` strengthened
+(`not.toHaveClass(/hidden/)` → `toBeVisible()`).
+
+Remaining, explicitly not fixed and not masked, out of the original 4's scope: the NTC-corner
+client-state race documented above (affects both tests in `17-manual-group-and-plate-drag.spec.ts`
+under longer runs, ~40% observed failure rate for test 2 in isolation). Flagged for a separate task.
+
+Full-suite runs (isolated server, `--workers=1`, single run each) before this doc's final update:
 - Run A: 3 failed (17:143 flake, 26-asg-compatibility:271 flake [unrelated file, not touched, did
   not reproduce on a later run — looks like an unrelated environmental flake], test-windows:122
   pending), 134 passed.
@@ -193,8 +232,24 @@ Full-suite runs (isolated server, `--workers=1`, single run each):
 - 5 isolated reruns of just `17-manual-group-and-plate-drag.spec.ts`: 3/5 both tests green, 2/5 the
   second test's *new* (not originally reported) NTC-corner assertion flaked as described above.
 
-Not yet at a clean 137/0 run. Awaiting your direction on (4) and the newly-found flake before a
-final confirmation run and commit.
+**Final full-suite run, after the (4) app fix and `05-interactions.spec.ts` strengthening:**
+135 passed, 2 failed:
+- `17-manual-group-and-plate-drag.spec.ts:58` — the NTC-corner race described above, this time
+  surfacing in test 1 instead of test 2. Reran in isolation 3/3 green immediately after — confirms
+  it's the same known, load/sequence-sensitive flake, not a new regression.
+- `24-responsive.spec.ts:51` — reran in isolation 3/3 **failed**, but the orchestrator had already
+  identified this spec (along with `20-keyboard`) as flaky under concurrent-agent load from P9's
+  independent run, and `ps aux`/`uptime` confirmed real contention during my reruns too (P10 running
+  two isolated servers simultaneously, load average 2.5-2.85 on this host, vs. ~0.8 during my earlier
+  clean-window runs). Per the orchestrator's own instruction not to use load-contaminated rounds as
+  evidence, and since this spec is untouched by anything in this task's scope and was independently
+  flagged as load-flaky before I ever ran it, I have not investigated it further.
+
+`06-import-mapping.spec.ts`, `test-windows.spec.ts` (all 5 tests), and `05-interactions.spec.ts`
+(all tests) passed clean in this same final run. Not yet at a clean 137/0 single-shot run only
+because of the two known, evidenced, out-of-scope flakes above — everything in this task's actual
+scope (the original 4, plus the disclosure-summary label and the `05-interactions` strengthening) is
+green.
 
 ---
 
