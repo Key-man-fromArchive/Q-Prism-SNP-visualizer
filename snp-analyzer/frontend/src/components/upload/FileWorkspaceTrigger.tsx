@@ -48,7 +48,7 @@ export function FileWorkspaceTrigger({ placement, className }: FileWorkspaceTrig
       <FileStack size={14} aria-hidden="true" />
       {label}
       {openSessionCount > 0 && (
-        <span className="rounded-full bg-primary px-1.5 text-[10px] leading-4 text-white">
+        <span className="rounded-full bg-primary px-1.5 text-[10px] leading-4 text-on-primary">
           {openSessionCount}
         </span>
       )}

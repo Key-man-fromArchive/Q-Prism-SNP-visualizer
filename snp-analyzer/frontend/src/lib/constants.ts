@@ -13,6 +13,19 @@
  * they previously weren't -- a behavior change, not a refactor. Brand
  * palette replacement (if any of these become theme-aware) is P6-S2-T1,
  * gated on decision D-2.
+ *
+ * P6-S2-T1 resolution: D-2 replaced index.css's --color-primary with Deep
+ * Teal, but every BRAND_HEX value here is left untouched. blue600/blue500
+ * are the FAM channel color (D-4: qPCR convention, independent of the UI
+ * brand color, and identical to --color-fam only by pre-existing
+ * coincidence -- WELL_TYPE_INFO['Allele 1 Homo'] and genotype.ts's diploid
+ * allele-1 pole must keep reading blue, not teal). COLORS.primary is dead
+ * code (no import site outside this module and its own value-lock test);
+ * updating it would just be a cosmetic drift with no runtime effect, so it
+ * stays for now rather than widening this task's diff for zero behavior
+ * change. The live UI primary/accent/bg/surface/border/text tokens are
+ * index.css's, which is what plotly-theme.ts and every `bg-primary`/
+ * `text-on-primary` Tailwind utility actually read.
  */
 export const BRAND_HEX = {
   /** Allele-1 / FAM channel blue. Used below (COLORS.fam, COLORS.primary,

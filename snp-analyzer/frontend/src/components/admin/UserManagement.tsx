@@ -183,7 +183,7 @@ function AdminWorkspace() {
                     onClick={() => setSelectedMember(u)}
                   >
                     {/* Avatar */}
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-on-primary text-sm font-bold shrink-0 ${
                       u.role === 'admin' ? 'bg-primary' : 'bg-accent'
                     }`}>
                       {(u.display_name || u.username).charAt(0).toUpperCase()}
@@ -265,7 +265,7 @@ function AdminWorkspace() {
             <h2 className="text-lg font-semibold text-text">{t.userManagement}</h2>
             <button
               onClick={() => setShowCreate(!showCreate)}
-              className="px-3 py-1.5 bg-primary text-white rounded text-sm hover:opacity-90 transition-opacity"
+              className="px-3 py-1.5 bg-primary text-on-primary rounded text-sm hover:opacity-90 transition-opacity"
             >
               {showCreate ? t.cancel : t.newUser}
             </button>
@@ -362,7 +362,7 @@ function MemberDetail({ user, onBack }: { user: AdminDashboardUser; onBack: () =
         >
           &larr; {t.backToOverview}
         </button>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-on-primary text-sm font-bold ${
           user.role === 'admin' ? 'bg-primary' : 'bg-accent'
         }`}>
           {(user.display_name || user.username).charAt(0).toUpperCase()}
@@ -547,7 +547,7 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
       <button
         type="submit"
         disabled={loading}
-        className="px-3 py-1.5 bg-primary text-white rounded text-sm hover:opacity-90 disabled:opacity-50"
+        className="px-3 py-1.5 bg-primary text-on-primary rounded text-sm hover:opacity-90 disabled:opacity-50"
       >
         {loading ? t.creating : t.create}
       </button>

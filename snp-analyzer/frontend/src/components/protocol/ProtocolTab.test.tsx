@@ -80,6 +80,12 @@ for (const operation of ['load', 'save'] as const) {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 }
+it('styles Add step through the --color-primary token, not a hardcoded blue (P6-S2-T1)', async () => {
+  vi.mocked(getProtocol).mockResolvedValue({ steps: [step] });
+  render(<ProtocolTab />);
+  const addStepBtn = await screen.findByText(en.addStep);
+  expect(addStepBtn).toHaveStyle({ background: 'var(--color-primary)', color: 'var(--color-on-primary)' });
+});
 it('distinguishes failed lookup, retry-empty and saved without losing added steps', async () => {
   vi.mocked(getProtocol).mockRejectedValueOnce(new Error('private')).mockResolvedValue({ steps: [] });
   vi.mocked(updateProtocol).mockResolvedValue({ status: 'ok' });

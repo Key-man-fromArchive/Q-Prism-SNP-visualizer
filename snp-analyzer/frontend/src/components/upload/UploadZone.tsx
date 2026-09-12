@@ -390,7 +390,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
               e.stopPropagation();
               fileInputRef.current?.click();
             }}
-            className="px-6 py-2 bg-primary text-white rounded-lg text-sm cursor-pointer border-none hover:bg-primary-hover transition-colors"
+            className="px-6 py-2 bg-primary text-on-primary rounded-lg text-sm cursor-pointer border-none hover:bg-primary-hover transition-colors"
           >
             {t.browseFiles}
           </button>
@@ -649,7 +649,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
                       <ArrowRight size={14} aria-hidden="true" />
                     </span>
                   )}
-                  <div className="w-6 h-6 mx-auto mb-1.5 rounded-full bg-primary text-white flex items-center justify-center text-[11px] font-bold">
+                  <div className="w-6 h-6 mx-auto mb-1.5 rounded-full bg-primary text-on-primary flex items-center justify-center text-[11px] font-bold">
                     {step.icon}
                   </div>
                   <p className="text-[13px] font-medium mb-0.5">{step.title}</p>

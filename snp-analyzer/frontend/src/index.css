@@ -1,22 +1,32 @@
 @import "tailwindcss";
 
 @theme {
-  /* Base colors from legacy style.css */
-  --color-bg: #f5f7fa;
+  /* Brand palette (Deep Teal, P6-S2-T1 / decision D-2). Replaces the
+     Tailwind-default blue --color-primary was borrowing, which happened to
+     collide with --color-fam below (same hex) so buttons and FAM data
+     points were indistinguishable by color alone. */
+  --color-bg: #f5f8f8;
   --color-surface: #ffffff;
-  --color-border: #e0e4e8;
-  --color-text: #1a1a2e;
-  --color-text-muted: #6b7280;
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
+  --color-border: #dde5e4;
+  --color-text: #16211f;
+  --color-text-muted: #5f6f6c;
+  --color-primary: #0f766e;
+  --color-primary-hover: #115e59;
+  /* Foreground for text/icons placed on a --color-primary surface. Light
+     mode's primary is dark enough for white; dark mode's is a light mint
+     (#2dd4bf) that fails contrast with white, so it takes a dark
+     foreground instead (see body.dark below). */
+  --color-on-primary: #ffffff;
+  /* qPCR channel colors -- fixed by decision D-4, independent of the brand
+     palette. Do not move these to follow --color-primary. */
   --color-fam: #2563eb;
   --color-allele2: #dc2626;
-  --color-accent: #10b981;
+  --color-accent: #7c3aed;
   --color-danger: #ef4444;
   /* Semantic status colors (single source; use text-success/warning/info etc.) */
   --color-success: #10b981;
   --color-warning: #f59e0b;
-  --color-info: #2563eb;
+  --color-info: #0f766e;
   /* Plot-only tokens (P0-T0.2): no existing token matched these exactly,
      so they're added here rather than reusing a semantically different
      one. Read by src/lib/plotly-theme.ts; values are the pre-refactor
@@ -30,23 +40,26 @@
   --radius-lg: 12px;
 }
 
-/* Dark mode via body.dark class (matches legacy dark-theme.css exactly) */
+/* Dark mode via body.dark class (matches legacy dark-theme.css exactly,
+   plus the P6-S2-T1 brand palette below) */
 body.dark {
-  --color-bg: #0f1117;
-  --color-surface: #1a1d27;
-  --color-border: #2d3040;
-  --color-text: #e4e4e7;
-  --color-text-muted: #9ca3af;
-  --color-primary: #3b82f6;
-  --color-primary-hover: #2563eb;
-  --color-accent: #10b981;
+  --color-bg: #0e1413;
+  --color-surface: #17201f;
+  --color-border: #2a3a38;
+  --color-text: #e3ecea;
+  --color-text-muted: #93a5a2;
+  --color-primary: #2dd4bf;
+  --color-primary-hover: #14b8a6;
+  /* Dark foreground: white fails contrast on this light mint. */
+  --color-on-primary: #0e1413;
+  --color-accent: #a78bfa;
   --color-danger: #ef4444;
   --color-fam: #60a5fa;
   --color-allele2: #f87171;
   /* Slightly brighter status hues for dark backgrounds */
   --color-success: #34d399;
   --color-warning: #fbbf24;
-  --color-info: #60a5fa;
+  --color-info: #2dd4bf;
   /* Plot-only tokens (P0-T0.2), dark-mode values -- see the @theme block. */
   --color-plot-grid: #2d3040;
   --color-plot-legend-bg: rgba(26, 29, 39, 0.8);
@@ -62,6 +75,13 @@ body {
   min-height: 100vh;
   margin: 0;
   transition: background-color 0.3s, color 0.3s;
+}
+
+/* Native range inputs (the cycle slider) otherwise keep the browser's
+   default accent color -- previously blue, and unaffected by any palette
+   swap -- since nothing else styles them. */
+input[type="range"] {
+  accent-color: var(--color-primary);
 }
 
 /* Badge component (matching legacy .badge) */

@@ -222,7 +222,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
           onClick={handleAnalyze}
           disabled={loading || !sessionId}
           title={t.analyzeHint}
-          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-on-primary hover:bg-primary-hover disabled:opacity-60"
         >
           {loading ? t.analyzing : <><Target size={14} aria-hidden="true" /> {t.analyzeButton}</>}
         </button>

@@ -90,7 +90,7 @@ export function CycleControl() {
               key={w.name}
               className={`window-btn px-3 py-1 text-xs rounded border ${
                 idx === activeWindowIdx
-                  ? 'active bg-primary text-white border-primary'
+                  ? 'active bg-primary text-on-primary border-primary'
                   : 'bg-surface text-text-muted border-border hover:border-primary'
               }`}
               onClick={() => {

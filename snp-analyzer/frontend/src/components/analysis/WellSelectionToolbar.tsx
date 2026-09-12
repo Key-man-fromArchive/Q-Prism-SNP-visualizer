@@ -209,7 +209,7 @@ export function WellSelectionToolbar({ groupFilter, emptyWellsToggle }: WellSele
               placeholder={t.manualGroupNamePlaceholder}
               className="w-28 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text"
             />
-            <button type="submit" className="rounded-md bg-primary px-2 py-1 text-xs text-white">
+            <button type="submit" className="rounded-md bg-primary px-2 py-1 text-xs text-on-primary">
               {t.add}
             </button>
             <button type="button" onClick={() => setAdding(false)} aria-label={t.cancel}>
@@ -258,7 +258,7 @@ export function WellSelectionToolbar({ groupFilter, emptyWellsToggle }: WellSele
           onClick={() => setFocusSelectedWells(!focusSelectedWells)}
           className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
             focusSelectedWells
-              ? "border-primary bg-primary text-white"
+              ? "border-primary bg-primary text-on-primary"
               : "border-border bg-surface text-text hover:border-primary"
           }`}
         >

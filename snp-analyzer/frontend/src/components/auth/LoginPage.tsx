@@ -66,7 +66,7 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={loading || !username || !password}
-            className="w-full py-2 bg-primary text-white rounded text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-2 bg-primary text-on-primary rounded text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? t.signingIn : t.signIn}
           </button>

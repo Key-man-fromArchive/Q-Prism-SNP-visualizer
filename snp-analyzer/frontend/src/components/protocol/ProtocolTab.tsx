@@ -208,8 +208,8 @@ function ProtocolEditor({ sessionId }: { sessionId: string }) {
             disabled={loading}
             style={{
               padding: '8px 16px',
-              background: '#3b82f6',
-              color: 'white',
+              background: 'var(--color-primary)',
+              color: 'var(--color-on-primary)',
               border: 'none',
               borderRadius: '6px',
               cursor: loading ? 'not-allowed' : 'pointer',

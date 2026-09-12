@@ -178,7 +178,7 @@ function CompareWorkspace() {
               <button
                 onClick={handleCompare}
                 disabled={!canCompare || isLoading}
-                className="px-4 py-1.5 bg-primary text-white rounded text-sm font-medium disabled:opacity-50"
+                className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-medium disabled:opacity-50"
               >
                 {isLoading ? t.comparing : t.compare}
               </button>

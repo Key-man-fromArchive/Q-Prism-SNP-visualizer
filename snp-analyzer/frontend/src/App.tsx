@@ -155,7 +155,7 @@ export default function App() {
             {launchError && <p className="text-xs text-danger mb-4">{t.restoreLaunchFailed}</p>}
             <a
               href={asgHomeUrl}
-              className="inline-block px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary-hover"
+              className="inline-block px-4 py-2 bg-primary text-on-primary rounded-md text-sm font-medium hover:bg-primary-hover"
             >
               {t.backToAsgDesigner}
             </a>

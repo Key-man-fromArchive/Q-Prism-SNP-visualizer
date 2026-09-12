@@ -240,7 +240,7 @@ export function ScatterViewControls({
             onClick={() => setScatterTool("select")}
             className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium ${
               scatterTool === "select"
-                ? "border-primary bg-primary text-white"
+                ? "border-primary bg-primary text-on-primary"
                 : "border-border bg-surface text-text hover:border-primary"
             }`}
           >
@@ -344,7 +344,7 @@ export function ScatterViewControls({
               aria-label={t.axisLockAspect}
               className={`rounded-md border p-1.5 disabled:opacity-40 ${
                 lockAspect
-                  ? "border-primary bg-primary text-white"
+                  ? "border-primary bg-primary text-on-primary"
                   : "border-border bg-surface text-text hover:border-primary"
               }`}
             >
@@ -363,7 +363,7 @@ export function ScatterViewControls({
               aria-label={t.axisSettingsButton}
               className={`rounded-md border p-1.5 ${
                 axisPopoverVisible
-                  ? "border-primary bg-primary text-white"
+                  ? "border-primary bg-primary text-on-primary"
                   : "border-border bg-surface text-text hover:border-primary"
               }`}
             >
@@ -552,7 +552,7 @@ export function ScatterViewControls({
                 data-testid="dosage-max-apply"
                 disabled={draftCeiling === String(dosageCeiling.applied ?? dosageCeiling.ploidy)}
                 onClick={() => dosageCeiling.onApply(Number(draftCeiling))}
-                className="rounded-md border border-primary bg-primary px-2 py-1 text-xs font-semibold text-white disabled:opacity-40"
+                className="rounded-md border border-primary bg-primary px-2 py-1 text-xs font-semibold text-on-primary disabled:opacity-40"
               >
                 {t.apply}
               </button>
