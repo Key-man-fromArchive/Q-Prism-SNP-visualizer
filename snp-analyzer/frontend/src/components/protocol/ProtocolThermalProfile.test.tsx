@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ProtocolThermalProfile } from './ProtocolThermalProfile';
-import { estimateTextWidth, fitPhaseLabel } from './protocol-thermal-label-fit';
+import { estimateTextWidth, fitPhaseLabel, LABEL_HORIZONTAL_PADDING_PX } from './protocol-thermal-label-fit';
 import { useLanguageStore } from '@/stores/language-store';
 import type { ProtocolStep } from '@/types/api';
 
@@ -85,6 +85,21 @@ describe('ProtocolThermalProfile', () => {
     ];
     render(<ProtocolThermalProfile steps={steps} />);
     expect(screen.getByTestId('protocol-phase-band-Amplification 1-0')).toHaveTextContent('10');
+  });
+
+  // A band's steps normally share one cycle count (every parser emits one
+  // GOTO group per stage), but manual editing of a single step's `cycles`
+  // field can desynchronize them -- printing "x 10" in that case would
+  // assert a single count that is no longer true for the whole band.
+  it('does not print a single x-N cycle count when a band\'s steps disagree on cycles', () => {
+    const steps = [
+      makeStep({ step: 1, phase: 'Amplification 1', cycles: 10 }),
+      makeStep({ step: 2, phase: 'Amplification 1', cycles: 12 }),
+    ];
+    render(<ProtocolThermalProfile steps={steps} />);
+    const band = screen.getByTestId('protocol-phase-band-Amplification 1-0');
+    expect(band).not.toHaveTextContent('×10');
+    expect(band).not.toHaveTextContent('×12');
   });
 
   // --- P9: narrow-band label overlap -------------------------------------
@@ -212,5 +227,41 @@ describe('ProtocolThermalProfile', () => {
     expect(screen.getByTestId('protocol-step-1')).toBeInTheDocument();
     expect(screen.getByTestId('protocol-step-2')).toBeInTheDocument();
     expect(screen.getByTestId('protocol-read-marker-1')).toBeInTheDocument();
+  });
+
+  // --- P10 follow-up: adjacent band labels must not visually touch --------
+  // P9 guaranteed a label never overflows its OWN band, but two adjacent
+  // one-step bands each filled right up to that limit still end up with
+  // their text only ~4px apart (evidence:
+  // P9-THERMAL-LABELS-after-harsh-wide-light.png -- "Ampl. 1 (TD…Ampl.
+  // 2 ×1…" reads as one run-on string). Fitting must leave real breathing
+  // room, not just avoid outright overflow.
+  it('leaves a visible gap between two adjacent full-width band labels, not just non-overflow', () => {
+    const steps = [
+      makeStep({ step: 1, phase: 'Amplification 1', cycles: 10 }),
+      makeStep({ step: 2, phase: 'Amplification 2', cycles: 13 }),
+    ];
+    const { container } = render(<ProtocolThermalProfile steps={steps} />);
+    const bandGroups = Array.from(container.querySelectorAll('[data-testid^="protocol-phase-band-"]'));
+    const [first, second] = bandGroups.map((g) => {
+      const rect = g.querySelector('rect');
+      const text = g.querySelector('text');
+      const x0 = Number(rect?.getAttribute('x'));
+      const width = Number(rect?.getAttribute('width'));
+      const labelWidth = text ? estimateTextWidth(text.textContent ?? '') : 0;
+      return { center: x0 + width / 2, labelWidth };
+    });
+    const firstLabelRightEdge = first.center + first.labelWidth / 2;
+    const secondLabelLeftEdge = second.center - second.labelWidth / 2;
+    expect(secondLabelLeftEdge - firstLabelRightEdge).toBeGreaterThanOrEqual(12);
+  });
+
+  it('keeps at least 16px of the padding budget for horizontal clearance, split across both sides of a label', () => {
+    // 8px clearance per side is the minimum that reads as a visible gap
+    // rather than touching text at this diagram's font size (10px,
+    // weight 600) -- see the adjacent-label test above and
+    // evidence/P10-PROTOCOL-UI.md for the before/after screenshots this
+    // was checked against.
+    expect(LABEL_HORIZONTAL_PADDING_PX).toBeGreaterThanOrEqual(16);
   });
 });

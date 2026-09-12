@@ -35,18 +35,23 @@ export function useProtocolEditor(sessionId: string) {
       .finally(() => { if (accepted()) busy.current = false; });
     return () => { current = false; active.current = false; };
   }, [sessionId, reload]);
-  const save = async () => {
-    if (busy.current) return;
+  // Returns whether the save actually landed (used by ProtocolTab to leave
+  // edit mode on success only -- checking `phase` after this resolves would
+  // read a stale closure value, since the setPhase calls above haven't
+  // re-rendered yet at that point).
+  const save = async (): Promise<boolean> => {
+    if (busy.current) return false;
     busy.current = true; setPhase('saving');
     const owner = identity();
     const accepted = () => active.current && identity() === owner;
     const submitted = steps.map(step => ({ ...step }));
     try {
       await updateProtocol(sessionId, submitted);
-      if (!accepted()) return;
+      if (!accepted()) return false;
       saved.current = submitted; setPhase('saved');
       window.dispatchEvent(new CustomEvent('asg-result-dirty'));
-    } catch { if (accepted()) setPhase('save-error'); }
+      return true;
+    } catch { if (accepted()) setPhase('save-error'); return false; }
     finally { busy.current = false; }
   };
   const cancel = () => { setSteps(saved.current); setPhase('ready'); };

@@ -575,6 +575,25 @@ const en = {
     `${steps} steps, ${reads} plate read${reads === 1 ? '' : 's'}, ${minTemp}\u2013${maxTemp}\u00b0C. Step order, not real time.`,
   protocolThermalProfilePhaseLegend: 'Phase legend (full names and cycle counts, independent of on-diagram label abbreviation)',
   protocolReadChannels: 'Read Channels',
+  protocolEditButton: 'Edit protocol',
+  protocolSummaryEmpty: 'No protocol steps.',
+  protocolStepRead: 'Read',
+  protocolTempChange: (start: number, end: number, perCycle: number) =>
+    `${start}→${end}°C · ${perCycle > 0 ? '+' : ''}${perCycle}°C/cycle`,
+  protocolGotoRange: (first: number, last: number, totalCycles: number) =>
+    first === last
+      ? `↩ Step ${first} · ${totalCycles} total`
+      : `↩ Steps ${first}–${last} · ${totalCycles} total`,
+  protocolGotoStale: 'Step edits changed the numbering; the original repeat range can no longer be shown reliably.',
+  protocolCyclesVary: 'Cycles vary within this group',
+
+  // Raw data tab: merged amplification curve/value card (P10)
+  amplificationDataTitle: 'Amplification data',
+  fluorescenceShow: 'Show',
+  fluorescenceHide: 'Hide',
+  fluorescenceViewTabsLabel: 'View',
+  fluorescenceViewCurve: 'Curve',
+  fluorescenceViewValues: 'Values',
 
   // Keyboard Help
   keyboardShortcuts: 'Keyboard Shortcuts',

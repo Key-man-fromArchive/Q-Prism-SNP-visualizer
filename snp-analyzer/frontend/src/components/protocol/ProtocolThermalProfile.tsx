@@ -9,20 +9,9 @@
 import { useId } from 'react';
 import { useI18n } from '@/hooks/use-i18n';
 import type { ProtocolStep } from '@/types/api';
-import { PROTOCOL_PHASE_COLORS, PROTOCOL_AMP_COLORS, PROTOCOL_PHASE_FALLBACK } from '@/lib/constants';
 import { fitPhaseLabel } from './protocol-thermal-label-fit';
-
-// Duplicated (not imported) from ProtocolTab.tsx: importing it back from
-// there would create a component <-> component import cycle. Both read the
-// same source-of-truth color maps from src/lib/constants.ts, so the two
-// copies cannot drift into different colors, only into different
-// *selection* code -- and this selection logic is a 3-line lookup.
-function getPhaseColor(phase: string) {
-  if (PROTOCOL_PHASE_COLORS[phase]) return PROTOCOL_PHASE_COLORS[phase];
-  const m = phase.match(/Amplification\s+(\d+)/);
-  if (m) return PROTOCOL_AMP_COLORS[(parseInt(m[1]) - 1) % PROTOCOL_AMP_COLORS.length];
-  return PROTOCOL_PHASE_FALLBACK;
-}
+import { getPhaseColor, groupPhaseBands } from './protocol-phase-groups';
+import { stepEndTemperature } from './protocol-step-temp';
 
 const STEP_WIDTH = 72;
 const MARGIN_LEFT = 44;
@@ -31,33 +20,18 @@ const MARGIN_TOP = 56;
 const PLOT_HEIGHT = 120;
 const MARGIN_BOTTOM = 40;
 
-type PhaseBand = { phase: string; startIndex: number; endIndex: number; cycles: number };
-
-function groupPhaseBands(steps: ProtocolStep[]): PhaseBand[] {
-  const bands: PhaseBand[] = [];
-  steps.forEach((step, i) => {
-    const phase = step.phase || '';
-    if (!phase) return;
-    const last = bands[bands.length - 1];
-    if (last && last.phase === phase && last.endIndex === i - 1) {
-      last.endIndex = i;
-    } else {
-      bands.push({ phase, startIndex: i, endIndex: i, cycles: step.cycles });
-    }
-  });
-  return bands;
-}
-
-/** The temperature this step ends at: its starting temperature, ramped by
- *  `temp_increment` across its own cycles (touchdown), or unchanged. */
-function stepEndTemperature(step: ProtocolStep): number {
-  if (step.temp_increment == null || step.cycles <= 1) return step.temperature;
-  return step.temperature + step.temp_increment * (step.cycles - 1);
-}
-
 function formatIncrement(value: number): string {
   const sign = value > 0 ? '+' : '';
   return `${sign}${value}°C/cyc`;
+}
+
+/** " ×N" for a band whose steps agree on a cycle count > 1, or '' when
+ *  there's nothing to show OR the band's steps disagree (see
+ *  groupPhaseBands' `cyclesVary` -- printing one count would assert a
+ *  single truth that isn't true for the whole band). */
+function bandCyclesSuffix(band: { cycles: number; cyclesVary: boolean }): string {
+  if (band.cyclesVary || band.cycles <= 1) return '';
+  return ` ×${band.cycles}`;
 }
 
 export function ProtocolThermalProfile({ steps }: { steps: ProtocolStep[] }) {
@@ -111,7 +85,7 @@ export function ProtocolThermalProfile({ steps }: { steps: ProtocolStep[] }) {
           const color = getPhaseColor(band.phase);
           const x0 = xStart(band.startIndex);
           const x1 = xEnd(band.endIndex);
-          const cyclesSuffix = band.cycles > 1 ? ` ×${band.cycles}` : '';
+          const cyclesSuffix = bandCyclesSuffix(band);
           const fullLabel = `${band.phase}${cyclesSuffix}`;
           const displayLabel = fitPhaseLabel(band.phase, cyclesSuffix, x1 - x0);
           return (
@@ -196,7 +170,7 @@ export function ProtocolThermalProfile({ steps }: { steps: ProtocolStep[] }) {
           SVG happened to have room to draw. */}
       <ul className="sr-only" aria-label={t.protocolThermalProfilePhaseLegend}>
         {bands.map((band, bandIndex) => {
-          const cyclesSuffix = band.cycles > 1 ? ` ×${band.cycles}` : '';
+          const cyclesSuffix = bandCyclesSuffix(band);
           return <li key={`legend-${band.phase}-${bandIndex}`}>{`${band.phase}${cyclesSuffix}`}</li>;
         })}
       </ul>

@@ -170,16 +170,29 @@ for (const width of [390, 1024, 1440]) for (const language of ['en', 'ko'] as co
     await page.getByRole('textbox', { name: t.newPresetName }).fill('Synthetic long draft '.repeat(10));
     await page.screenshot({ path: testInfo.outputPath('settings.png'), fullPage: true });
     await page.locator('#tab-rawdata').click();
+    // P10: the protocol panel opens read-only; inputs only exist once
+    // "Edit protocol" is clicked, and Cancel returns to read-only again.
+    await page.locator('#edit-protocol-btn').click();
     await expect(page.locator('#protocol-table input').first()).toBeVisible();
     await page.locator('#protocol-table input').first().fill('Long synthetic protocol label '.repeat(12));
     await page.getByRole('button', { name: t.cancel, exact: true }).click();
+    await expect(page.locator('#protocol-table input')).toHaveCount(0);
+    await expect(page.getByText(/Long synthetic protocol label/)).not.toBeVisible();
+    await page.locator('#edit-protocol-btn').click();
     await expect(page.locator('#protocol-table input').first()).not.toHaveValue(/Long synthetic/);
     await page.locator('#protocol-table input').first().press('Enter');
     await expect(page.getByRole('status').filter({ hasText: t.protocolSaved })).toBeVisible();
+    // A successful save returns to the read-only summary (P10) -- re-enter
+    // edit mode before exercising the failed-save path below.
+    await expect(page.locator('#protocol-table input')).toHaveCount(0);
     await page.route(/\/api\/data\/[^/]+\/protocol$/, route => route.fulfill({ status: 500, json: { detail: 'private diagnostic must not render' } }), { times: 1 });
+    await page.locator('#edit-protocol-btn').click();
     await page.locator('#protocol-table input').first().press('Enter');
     await expect(page.getByRole('alert')).toContainText(t.errSaveProtocol);
     await expect(page.getByRole('alert')).not.toContainText('private diagnostic');
+    // A failed save must NOT return to read-only -- the edit form (and the
+    // user's unsaved input) must still be there.
+    await expect(page.locator('#protocol-table input').first()).toBeVisible();
     await bounded();
     await page.screenshot({ path: testInfo.outputPath('protocol-error.png'), fullPage: true });
     await page.locator('#protocol-table input').first().press('Enter');

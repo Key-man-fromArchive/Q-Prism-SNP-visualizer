@@ -571,6 +571,25 @@ const ko: Translations = {
   protocolThermalProfilePhaseLegend: '구간 범례 (전체 단계명과 사이클 수, 다이어그램 라벨 축약과 무관)',
   protocolReadChannels: '판독 채널',
   saving: '저장 중...',
+  protocolEditButton: '프로토콜 편집',
+  protocolSummaryEmpty: '프로토콜 단계가 없습니다.',
+  protocolStepRead: '판독',
+  protocolTempChange: (start: number, end: number, perCycle: number) =>
+    `${start}→${end}°C · ${perCycle > 0 ? '+' : ''}${perCycle}°C/사이클`,
+  protocolGotoRange: (first: number, last: number, totalCycles: number) =>
+    first === last
+      ? `↩ 단계 ${first} · 총 ${totalCycles}회`
+      : `↩ 단계 ${first}–${last} · 총 ${totalCycles}회`,
+  protocolGotoStale: '단계 편집으로 번호가 바뀌어 원래 반복 범위를 더 이상 정확히 표시할 수 없습니다.',
+  protocolCyclesVary: '이 구간 내 사이클 수가 다릅니다',
+
+  // 원시 데이터 탭: 증폭 곡선/값 통합 카드 (P10)
+  amplificationDataTitle: '증폭 데이터',
+  fluorescenceShow: '표시',
+  fluorescenceHide: '숨기기',
+  fluorescenceViewTabsLabel: '보기',
+  fluorescenceViewCurve: '곡선',
+  fluorescenceViewValues: '값',
 
   // Keyboard Help
   keyboardShortcuts: '키보드 단축키',

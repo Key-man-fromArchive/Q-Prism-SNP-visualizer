@@ -27,6 +27,17 @@
   --color-success: #10b981;
   --color-warning: #f59e0b;
   --color-info: #0f766e;
+  /* Foreground for text/icons placed directly on a solid --color-success /
+     --color-danger button (P10-PROTOCOL: replaces ProtocolTab's hardcoded
+     `color: 'white'` / `color: '#dc2626'` button styles, which read fine in
+     light mode but fell to ~1.9:1 against dark mode's brighter
+     --color-success (#34d399) -- the same class of bug --color-on-primary
+     already exists to prevent. Both --color-success and --color-danger
+     hexes are dark/saturated enough in every mode this app has that one
+     shared dark foreground clears WCAG AA (4.5:1) against all of them; see
+     evidence/P10-PROTOCOL-UI.md for the measured ratios. */
+  --color-on-success: #0e1413;
+  --color-on-danger: #0e1413;
   /* Plot-only tokens (P0-T0.2): no existing token matched these exactly,
      so they're added here rather than reusing a semantically different
      one. Read by src/lib/plotly-theme.ts; values are the pre-refactor
@@ -215,12 +226,13 @@ body.dark .panel {
 }
 .analysis-advanced-settings > div { max-height: 18rem; overflow: auto; }
 .well-detail-expanded { max-height: 22rem; overflow: auto; }
-/* P7-VALUES (FB-06 Q-1): well x cycle value table can be 96 wells x N
-   cycles regardless of viewport width (unlike ResultsTable, which is only
-   promoted out of a clipped view at >=1280px) -- always capped, both axes,
-   so a large plate/run never makes the page grow unboundedly tall. */
-[data-testid="well-cycle-values-scroll-region"] { max-height: 28rem; overflow: auto; }
-[data-testid="well-cycle-values-scroll-region"] thead th { position: sticky; top: 0; background: var(--color-surface); z-index: 1; }
+/* P7-VALUES (FB-06 Q-1), folded into FluorescenceDataCard by P10: the
+   values view can be 96 wells x N cycles regardless of viewport width
+   (unlike ResultsTable, which is only promoted out of a clipped view at
+   >=1280px) -- always capped, both axes, so a large plate/run never makes
+   the page grow unboundedly tall. */
+[data-testid="fluorescence-values-scroll-region"] { max-height: 28rem; overflow: auto; }
+[data-testid="fluorescence-values-scroll-region"] thead th { position: sticky; top: 0; background: var(--color-surface); z-index: 1; }
 [data-testid="well-timeseries-scroll-region"] { max-height: 12rem; overflow: auto; }
 [data-testid="well-timeseries-scroll-region"] thead th { position: sticky; top: 0; background: var(--color-surface); z-index: 1; }
 .current-cycle-row { background: var(--color-bg); font-weight: 600; }
@@ -256,3 +268,33 @@ body.dark .panel {
 @media (min-width: 768px) { :root { --workspace-gutter: 1.5rem; } }
 @media (min-width: 1280px) { .analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 767px) { .header-actions { justify-content: flex-start; } }
+
+/* P10-PROTOCOL: at 768px and below, a 6-column input table (Step/Label/
+   Temp/Duration/Cycles/Delete) cannot shrink far enough to avoid
+   horizontal scrolling, so each step becomes a 2-column field card
+   instead. The DOM stays a real <table>/<tr>/<td> tree at every width (see
+   ProtocolStepsTable.tsx's comment) -- this media query only changes how
+   it's painted, so `.closest('tr')` in existing tests keeps resolving a
+   real <tr> regardless of viewport. */
+@media (max-width: 768px) {
+  .protocol-edit-table { display: block; }
+  .protocol-edit-table thead { display: none; }
+  .protocol-edit-table tbody { display: block; }
+  .protocol-edit-table tr.protocol-edit-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  /* Blockified automatically by being a grid item (CSS Display §2.7), but
+     stated explicitly for clarity since <td>'s UA default is table-cell. */
+  .protocol-edit-table tr.protocol-edit-row > td { display: block; }
+  .protocol-edit-table tr.protocol-edit-row > td[data-field="label"],
+  .protocol-edit-table tr.protocol-edit-row > td[data-field="actions"] {
+    grid-column: 1 / -1;
+  }
+  .protocol-edit-table tr[data-testid^="protocol-group-header-"] { display: block; }
+}

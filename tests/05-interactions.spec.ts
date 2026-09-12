@@ -125,6 +125,9 @@ test.describe('Raw Data Tab', () => {
 
     await page.locator('.tab[data-tab="rawdata"]').click();
     await page.waitForTimeout(1000);
+    // P10: the protocol panel opens read-only; #add-step-btn only exists
+    // once "Edit protocol" is clicked.
+    await page.locator('#edit-protocol-btn').click();
 
     const rowsBefore = await page.locator('#protocol-table tbody tr').count();
     await page.locator('#add-step-btn').click();
@@ -138,6 +141,8 @@ test.describe('Raw Data Tab', () => {
 
     await page.locator('.tab[data-tab="rawdata"]').click();
     await page.waitForTimeout(1000);
+    // P10: the delete affordance only exists in edit mode.
+    await page.locator('#edit-protocol-btn').click();
 
     const rowsBefore = await page.locator('#protocol-table tbody tr').count();
     // Delete last row
