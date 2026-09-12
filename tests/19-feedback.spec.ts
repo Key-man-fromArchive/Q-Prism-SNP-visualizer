@@ -160,8 +160,11 @@ test('reporter files feedback from any screen and reads it back', async ({ page 
     category: 'improvement',
     title: 'Axes flip after reload',
   });
-  // The report carries the tab it was filed from, with no session open.
-  expect(store.submitted[0].context).toMatchObject({ page_key: 'analysis' });
+  // The report carries the tab it was filed from. With no session open the
+  // workspace's default stored tab ('results', navigation-store.ts's
+  // `initial`) resolves straight through `resolveDisplayTab` -- P3-S1-T1
+  // retired the 'analysis' tab id these reports used to carry.
+  expect(store.submitted[0].context).toMatchObject({ page_key: 'results' });
 
   store.items = [item({ id: 'fb-new', title: 'Axes flip after reload', owner_name: 'admin' })];
   await page.locator('[data-testid="feedback-subtab-mine"]').click();

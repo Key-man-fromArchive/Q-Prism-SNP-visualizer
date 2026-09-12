@@ -4,7 +4,7 @@ import { getSessionInfo } from '@/lib/api';
 import { useSettingsStore } from '@/stores/settings-store';
 import type { UploadResponse } from '@/types/api';
 import { useAnalysisStore } from './analysis-store';
-import { useNavigationStore } from './navigation-store';
+import { useNavigationStore, remapLegacyQuery } from './navigation-store';
 import { useSelectionStore } from './selection-store';
 import { useUndoStore } from './undo-store';
 
@@ -101,7 +101,12 @@ export const useSessionStore = create<SessionState>()(
    *  navigate to a plate that is no longer the one being opened. */
   loadSession: async (id) => {
     const revision = ++sessionLoadRevision;
-    const remembered = get().sessionQueries[id] ?? null;
+    // P3-S2-T1: a plate left open across the P3-S1-T1 tab restructure can
+    // still have its last position recorded with the retired
+    // `tab=analysis`(+`surface`)/`tab=protocol` ids -- remap on the way back
+    // in, same as a bookmarked URL. A no-op for anything already canonical.
+    const stored = get().sessionQueries[id] ?? null;
+    const remembered = stored !== null ? remapLegacyQuery(stored) : null;
     const info = await getSessionInfo(id);
     if (revision !== sessionLoadRevision) return false;
     get().setSession(id, info, 'reopen', remembered);

@@ -64,6 +64,25 @@ it.each(['project', 'references', 'library'])('restores independent %s without s
 it.each(['quality', 'invalid', 'users'])('falls back safely from unavailable independent tab %s', async tab => {
   history.replaceState(null, '', `/?tab=${tab}`);
   await createLocationRestore('u').run();
-  expect(useNavigationStore.getState()).toMatchObject({ tab: 'analysis', reasons: ['tab'] });
+  expect(useNavigationStore.getState()).toMatchObject({ tab: 'results', reasons: ['tab'] });
   expect(getSessionInfo).not.toHaveBeenCalled(); expect(location.search).toBe(`?tab=${tab}`);
+});
+it.each([
+  ['?session=s&tab=analysis&surface=plate', 'session=s&tab=plate&surface=plate'],
+  ['?session=s&tab=analysis&surface=analysis', 'session=s&tab=results&surface=analysis'],
+  ['?session=s&tab=analysis', 'session=s&tab=plate&surface=plate'],
+  ['?session=s&tab=protocol', 'session=s&tab=rawdata'],
+])('remaps a legacy bookmarked URL %s and rewrites the address bar to canonical form', async (legacy, canonical) => {
+  vi.mocked(getSessionInfo).mockResolvedValue(info);
+  history.replaceState(null, '', `/${legacy}`);
+  await createLocationRestore('u').run();
+  expect(getSessionInfo).toHaveBeenCalledWith('s');
+  expect(useSessionStore.getState().restoreQuery).toBe(canonical);
+  expect(location.search).toBe(`?${canonical}`);
+});
+it('does not rewrite the address bar when the URL is already canonical', async () => {
+  vi.mocked(getSessionInfo).mockResolvedValue(info);
+  history.replaceState(null, '', '/?session=s&tab=plate');
+  await createLocationRestore('u').run();
+  expect(location.search).toBe('?session=s&tab=plate');
 });

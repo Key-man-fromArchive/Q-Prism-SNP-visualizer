@@ -45,7 +45,7 @@ test.describe("P4-S0: single-marker default + split affordance", () => {
 
     await page.getByTestId("split-marker-cta").click();
     await expect(page.getByTestId("workspace-panel-plate")).toBeVisible();
-    await expect(page.getByTestId("workspace-tab-plate")).toHaveAttribute(
+    await expect(page.locator("#tab-plate")).toHaveAttribute(
       "aria-selected",
       "true",
     );

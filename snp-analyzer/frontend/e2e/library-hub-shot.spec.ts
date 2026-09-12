@@ -49,7 +49,7 @@ test("10 — Library tab: 레이아웃 sub-tab with a saved layout", async ({ pa
   await loadExample(page, 6);
   await defineMarkersOnColumns(page, ["qSwet5.3"], 6);
 
-  await page.getByTestId("workspace-tab-plate").click();
+  await page.locator("#tab-plate").click();
   await page.getByTestId("layout-save-open").click();
   await page.getByTestId("layout-save-name-input").fill("라이브러리 허브 레이아웃");
   await page.getByTestId("layout-save-confirm").click();

@@ -15,7 +15,7 @@ export async function defineMarkersOnColumns(
   names: string[],
   ploidy: number = 6,
 ): Promise<void> {
-  await page.getByTestId("workspace-tab-plate").click();
+  await page.locator("#tab-plate").click();
   await expect(page.getByTestId("workspace-panel-plate")).toBeVisible();
 
   let col = 1;

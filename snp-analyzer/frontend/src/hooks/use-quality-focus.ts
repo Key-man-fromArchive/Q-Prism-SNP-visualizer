@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, type RefObject } from 'react';
-import { useNavigationStore, type WorkspaceSurface } from '@/stores/navigation-store';
+import { useNavigationStore, isWorkspaceTab, type WorkspaceSurface } from '@/stores/navigation-store';
 import { useQualityReveal } from './use-quality-reveal';
 
 function findWell(root: HTMLElement, well: string) {
@@ -14,7 +14,9 @@ export function useQualityFocus(ref: RefObject<HTMLElement | null>, surface: Wor
   const notify = useEffectEvent((well: string) => onFocus?.(well));
   useEffect(() => {
     const root = ref.current;
-    if (!target || !root || active !== surface || tab !== 'analysis') return;
+    // P3-S1-T1: the workspace's top-level tab is now `plate`/`results` (or
+    // the transient legacy `analysis` quality-navigation.ts still writes).
+    if (!target || !root || active !== surface || !isWorkspaceTab(tab)) return;
     let completed = false;
     const focus = () => {
       if (completed) return;

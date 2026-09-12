@@ -313,8 +313,9 @@ const en = {
   guideTip4: 'Drag multiple files at once for batch upload',
 
   // Tabs
-  tabAnalysis: 'Analysis',
-  tabProtocol: 'Protocol',
+  tabPlate: 'Plate Setup',
+  tabRawdata: 'Raw data',
+  tabResults: 'Results',
   tabSettings: 'Settings',
   tabQuality: 'Quality',
   tabStatistics: 'Statistics',

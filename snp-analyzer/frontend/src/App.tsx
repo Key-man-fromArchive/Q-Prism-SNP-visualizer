@@ -8,7 +8,7 @@ import { Header } from "@/components/layout/Header";
 import { UploadZone } from "@/components/upload/UploadZone";
 import { TabNavigation } from "@/components/layout/TabNavigation";
 import { QualityNavigationNotice } from '@/components/shared/QualityNavigationNotice';
-import { useNavigationStore } from "@/stores/navigation-store";
+import { useNavigationStore, resolveDisplayTab, type NavigationTab } from "@/stores/navigation-store";
 import { connectAnalysisProjection } from "@/lib/analysis-projection";
 import { SettingsTab } from "@/components/settings/SettingsTab";
 import { AnalysisWorkspace } from "@/components/analysis/AnalysisWorkspace";
@@ -39,6 +39,18 @@ const ASG_LAUNCH_TOKEN_STORAGE_KEY = "__asg_launch_token";
 function workspaceVisibility(ready: boolean, session: string | null, projectOnly: boolean) {
   return { upload: ready && !session && !projectOnly, panels: ready && Boolean(session || projectOnly) };
 }
+// The two top-level tabs AnalysisWorkspace owns (Plate Setup / Results).
+const workspaceTabs: readonly NavigationTab[] = ['plate', 'results'];
+function isWorkspaceTab(tab: NavigationTab): boolean {
+  return workspaceTabs.includes(tab);
+}
+// Tabs whose content already provides its own top-level landmark/heading
+// semantics, so the generic wrapper below skips role="tabpanel"/aria-labelledby
+// to avoid a duplicate/conflicting accessibility tree node.
+const semanticOwnTabs: readonly NavigationTab[] = [...workspaceTabs, 'references', 'users'];
+function ownsSemanticsElsewhere(tab: NavigationTab): boolean {
+  return semanticOwnTabs.includes(tab);
+}
 
 declare global {
   interface Window {
@@ -47,7 +59,11 @@ declare global {
 }
 
 export default function App() {
-  const activeTab = useNavigationStore(state => state.tab);
+  // `state.tab` still transiently holds the pre-P3-S1-T1 `'analysis'` value
+  // right after a quality-target jump (quality-navigation.ts, P3-S2-T1); this
+  // resolves it to the concrete top-level tab (`plate`/`results`) so rendering
+  // and TabNavigation highlighting never see the removed id.
+  const activeTab = useNavigationStore(state => resolveDisplayTab(state.tab, state.surface));
   const workspaceReady = useNavigationStore(state => state.status === 'ready');
   const setActiveTab = useNavigationStore(state => state.setTab);
   useEffect(connectAnalysisProjection, []);
@@ -178,32 +194,40 @@ export default function App() {
           <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} hasSession={!!sessionId} isAdmin={isAdmin} />
           <QualityNavigationNotice />
 
-          {/* Keep Analysis mounted across tab switches so the analysed cycle,
-              clustering and view state persist (and it isn't re-initialised to
-              the amplification default when you return). AnalysisWorkspace is
-              the P4 2-surface shell (Plate Setup / Analysis) wrapping the
-              existing AnalysisTab. */}
+          {/* Keep the workspace mounted across tab switches so the analysed
+              cycle, clustering and view state persist (and it isn't
+              re-initialised to the amplification default when you return).
+              AnalysisWorkspace is the P4 2-surface shell (Plate Setup /
+              Results); P3-S1-T1 gave each surface its own top-level tab, so
+              it renders its own `main-panel-plate` / `main-panel-results`
+              panels directly -- this wrapper only CSS-hides the whole thing
+              (never unmounts it) while neither tab is active. */}
           {sessionId && (
-            <div id="main-panel-analysis" role="tabpanel" aria-labelledby="tab-analysis" className={activeTab === "analysis" ? "" : "hidden"}>
+            <div className={isWorkspaceTab(activeTab) ? "" : "hidden"}>
               <AnalysisWorkspace />
             </div>
           )}
-          {!sessionId && <div id="main-panel-analysis" role="tabpanel" aria-labelledby="tab-analysis" hidden />}
-          <div id={activeTab === 'analysis' ? undefined : `main-panel-${activeTab}`} role={['analysis', 'references', 'users'].includes(activeTab) ? undefined : 'tabpanel'} aria-labelledby={['analysis', 'references', 'users'].includes(activeTab) ? undefined : `tab-${activeTab}`} hidden={activeTab === 'analysis'}>
-          {sessionId && activeTab === "protocol" && <ProtocolTab />}
+          {!sessionId && (
+            <>
+              <div id="main-panel-plate" role="tabpanel" aria-labelledby="tab-plate" hidden />
+              <div id="main-panel-results" role="tabpanel" aria-labelledby="tab-results" hidden />
+            </>
+          )}
+          <div id={isWorkspaceTab(activeTab) ? undefined : `main-panel-${activeTab}`} role={ownsSemanticsElsewhere(activeTab) ? undefined : 'tabpanel'} aria-labelledby={ownsSemanticsElsewhere(activeTab) ? undefined : `tab-${activeTab}`} hidden={isWorkspaceTab(activeTab)}>
+          {sessionId && activeTab === "rawdata" && <ProtocolTab />}
           {sessionId && activeTab === "settings" && <SettingsTab />}
           {sessionId && activeTab === "quality" && <QualityTab />}
           {sessionId && activeTab === "statistics" && <StatisticsTab />}
           {sessionId && activeTab === "compare" && <CompareTab />}
           {activeTab === "project" && (
-            <BatchTab onLoadSession={() => setActiveTab("analysis")} />
+            <BatchTab onLoadSession={() => setActiveTab("results")} />
           )}
           {activeTab === "users" && isAdmin && <UserManagement />}
           {activeTab === "references" && <ReferencesTab />}
           {activeTab === "library" && <LibraryTab />}
           {activeTab === "feedback" && isAdmin && <FeedbackAdminPanel />}
           </div>
-          {['protocol', 'settings', 'quality', 'statistics', 'compare', 'project', 'library'].filter(tab => tab !== activeTab).map(tab =>
+          {['rawdata', 'settings', 'quality', 'statistics', 'compare', 'project', 'library'].filter(tab => tab !== activeTab).map(tab =>
             <div key={tab} id={`main-panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} hidden />)}
         </div>
       </main>

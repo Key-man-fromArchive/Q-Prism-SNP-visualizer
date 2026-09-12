@@ -44,7 +44,10 @@ test('preset failure preserves input; successful save and failed refresh remain 
     }
     return route.fulfill(failList ? { status: 500, json: { detail: 'private-secret' } } : { json: { presets: [] } });
   });
-  await page.locator('#tab-settings').click();
+  // Settings moved into the "More" overflow (P3-S1-T1); #tab-settings no
+  // longer exists as a primary-row selector.
+  await page.getByRole('button', { name: /^(More|더보기)$/ }).click();
+  await page.getByRole('menuitem', { name: /^(Settings|설정)$/ }).click();
   await page.locator('#preset-name-input').fill('Keep this form');
   await page.locator('#save-preset-btn').click();
   await expect(page.getByRole('alert')).toContainText(/server|서버/);

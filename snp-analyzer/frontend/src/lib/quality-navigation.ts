@@ -47,7 +47,13 @@ function apply(accepted: AcceptedTarget) {
   const { session, tab, marker, cycle } = nav;
   const view: NavigationValue = { session, tab, marker, cycle, surface: nav.surface };
   useSelectionStore.getState().setPlaying(false);
-  useNavigationStore.setState({ tab: 'analysis', surface, marker: target.marker, cycle: target.cycle,
+  // P3-S2-T1: derive the top-level tab straight from `surface` instead of
+  // writing the retired `'analysis'` tab id. `navigationTabs` (and
+  // `parseNavigation`'s `tab()` guard) no longer recognize `'analysis'`
+  // post-P3-S1-T1, so writing it here made the URL this state gets
+  // serialized to (by `workspace-history.ts`, on any quality-target jump)
+  // unparseable on its own way back in via browser history/`returnFromQuality`.
+  useNavigationStore.setState({ tab: surface === 'plate' ? 'plate' : 'results', surface, marker: target.marker, cycle: target.cycle,
     qualityTarget: target, qualityError: null, qualityNavigating: false,
     qualityEpoch: sequence,
     qualityReturn: nav.qualityReturn ?? { view, selection: [...useSelectionStore.getState().selectedWells] },

@@ -32,24 +32,29 @@ test('fresh entry URL, reload and back/forward preserve the saved result without
   expect(new URL(page.url()).searchParams.has('token')).toBe(false);
   let posts = 0;
   page.on('request', request => { if (request.method() === 'POST' && /\/(cluster|suggest-cycle)(\?|$)/.test(request.url())) posts++; });
-  await page.locator('#tab-settings').click();
+  // Settings moved into the "More" overflow (P3-S1-T1); it no longer has its
+  // own primary `#tab-settings` button.
+  await page.getByRole('button', { name: /^(More|더보기)$/ }).click();
+  await page.getByRole('menuitem', { name: /^(Settings|설정)$/ }).click();
   const rox = page.locator('#rox-normalize-checkbox');
   await expect(rox).toBeVisible();
   await rox.uncheck();
-  await page.locator('#tab-analysis').click();
-  await page.getByTestId('workspace-tab-plate').click();
+  // Plate Setup is now a single top-level tab (`plate`) -- no more hopping
+  // through a top-level "Analysis" tab into a nested Plate Setup sub-tab.
+  await page.locator('#tab-plate').click();
   await expect.poll(() => new URL(page.url()).searchParams.get('surface')).toBe('plate');
   await page.reload();
-  await expect(page.getByTestId('workspace-tab-plate')).toHaveAttribute('aria-selected', 'true');
-  await page.getByTestId('workspace-tab-analysis').click();
+  await expect(page.locator('#tab-plate')).toHaveAttribute('aria-selected', 'true');
+  await page.locator('#tab-results').click();
   await expect(page.locator('#cycle-slider')).toBeVisible();
   await page.goBack();
-  await expect(page.getByTestId('workspace-tab-plate')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#tab-plate')).toHaveAttribute('aria-selected', 'true');
   await page.goForward();
-  await expect(page.getByTestId('workspace-tab-analysis')).toHaveAttribute('aria-selected', 'true');
-  await page.locator('#tab-settings').click();
+  await expect(page.locator('#tab-results')).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('button', { name: /^(More|더보기)$/ }).click();
+  await page.getByRole('menuitem', { name: /^(Settings|설정)$/ }).click();
   await expect(rox).not.toBeChecked();
-  await page.locator('#tab-analysis').click();
+  await page.locator('#tab-results').click();
   const saved = await (await page.request.get(`/api/data/${session}/cluster`)).json();
   expect(result.analysis_context.result_revision).toEqual(expect.any(String));
   expect(result.analysis_context.result_revision.length).toBeGreaterThan(0);

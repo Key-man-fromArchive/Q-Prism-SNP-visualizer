@@ -36,7 +36,7 @@ for (const language of ['en', 'ko']) for (const dark of [false, true]) {
     await expect(page.getByTestId('scatter-reading-basis')).toContainText(language === 'en' ? 'actually applied' : '실제 적용');
     await expect(page.locator('.detail-panel')).toContainText(language === 'en' ? 'Amplification curve normalization basis: unknown' : '증폭 곡선의 정규화 적용 기준: 미확인');
     await page.screenshot({ path: test.info().outputPath('single.png'), fullPage: true });
-    await page.getByTestId('workspace-tab-plate').click();
+    await page.locator('#tab-plate').click();
     await page.getByTestId('add-marker-button').click();
     await page.getByTestId('marker-name-input').fill('Marker presentation');
     await page.getByTestId('marker-form-save').click();
@@ -52,7 +52,7 @@ for (const language of ['en', 'ko']) for (const dark of [false, true]) {
     await page.getByTestId('selection-bar').getByTestId('marker-pick-button').filter({ hasText: 'Marker second' }).click();
     const secondSaved = page.waitForResponse(response => response.url().endsWith('/markers') && response.request().method() !== 'GET');
     await page.getByTestId('assign-button').click(); await secondSaved;
-    await page.getByTestId('workspace-tab-analysis').click();
+    await page.locator('#tab-results').click();
     const markerAnalyzed = page.waitForResponse(response => response.url().endsWith('/cluster') && response.request().method() === 'POST');
     await page.getByTestId('multi-analyze-current').click(); await markerAnalyzed;
     await expectCategories(page);

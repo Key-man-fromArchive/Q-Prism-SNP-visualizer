@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { ClusteringRequest } from '@/types/api';
 import { useAnalysisStore } from '@/stores/analysis-store';
-import { useNavigationStore } from '@/stores/navigation-store';
+import { useNavigationStore, isWorkspaceTab } from '@/stores/navigation-store';
 
 /** Each request field belongs to its explicit control; untouched manual fields stay owned by the direct action. */
 function patchCurrentView(previous: ClusteringRequest, next: ClusteringRequest) {
@@ -18,9 +18,19 @@ function patchCurrentView(previous: ClusteringRequest, next: ClusteringRequest) 
   useAnalysisStore.getState().setCurrentRequest({ ...current, ...patch, threshold_config: thresholds });
 }
 
-/** Register the active surface's explicit request builder, never result-derived fitted parameters. */
+/**
+ * Register the active surface's explicit request builder, never
+ * result-derived fitted parameters.
+ *
+ * `surface: 'analysis'` predates P3-S1-T1's Plate Setup/Results split: it
+ * means "either workspace tab is open" (AnalysisTab/MultiMarkerAnalysisPanel
+ * are mounted -- and stay registered -- whether the top-level tab is `plate`
+ * or `results`, exactly like before the split), so it matches via
+ * `isWorkspaceTab` rather than an exact `state.tab` comparison.
+ */
 export function useCurrentAnalysisRequest(request: ClusteringRequest, surface: 'analysis' | 'settings') {
-  const active = useNavigationStore(state => state.tab === surface && state.status === 'ready');
+  const active = useNavigationStore(state =>
+    (surface === 'analysis' ? isWorkspaceTab(state.tab) : state.tab === surface) && state.status === 'ready');
   const session = useAnalysisStore(state => state.sessionId);
   const previous = useRef<ClusteringRequest | null>(null);
   useEffect(() => { previous.current = null; }, [session]);

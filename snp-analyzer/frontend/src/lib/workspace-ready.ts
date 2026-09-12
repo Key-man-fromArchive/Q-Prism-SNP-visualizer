@@ -16,7 +16,7 @@ function navigationFor(session: string, value: ReadyAnalysisSession, cycles: num
   const cycle = preferred !== null && cycles.includes(preferred) ? preferred : cycles.at(-1) ?? null;
   return parseNavigation(useSessionStore.getState().restoreQuery ?? '', {
     session, cycles, windows: value.info.data_windows ?? [], markers: value.markers.map(marker => marker.id),
-    defaults: { session, tab: 'analysis', surface: 'analysis', marker: value.markers[0]?.id ?? null, cycle },
+    defaults: { session, tab: 'results', surface: 'analysis', marker: value.markers[0]?.id ?? null, cycle },
   });
 }
 /** All cross-store values are applied behind the restoring barrier; ready is the final publication. */

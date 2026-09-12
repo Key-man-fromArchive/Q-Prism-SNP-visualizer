@@ -38,7 +38,7 @@ setup("authenticate", async ({ page }) => {
   // Successful login swaps LoginPage for the app shell: either the upload
   // zone (no session yet) or the tab navigation (existing session).
   await expect(
-    page.locator("#upload-zone, #tab-analysis").first(),
+    page.locator("#upload-zone, #tab-results").first(),
   ).toBeVisible({ timeout: 15_000 });
 
   await page.context().storageState({ path: authFile });

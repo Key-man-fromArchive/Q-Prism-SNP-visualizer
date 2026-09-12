@@ -163,12 +163,13 @@ for (const width of [390, 1024, 1440]) for (const language of ['en', 'ko'] as co
     const analyzed = page.waitForResponse(response => response.url().endsWith('/cluster') && response.request().method() === 'POST');
     await page.locator('#example-select').selectOption('2'); await analyzed;
     await page.route('**/api/presets', route => route.fulfill({ json: { presets: [{ id: 'long', name: 'Synthetic long preset '.repeat(12), builtin: true, settings: {} }] } }));
-    await page.locator('#tab-settings').click();
+    // Settings moved into the "More" overflow (P3-S1-T1).
+    await openOverflowTab(page, t.tabSettings);
     await expect(page.getByRole('combobox', { name: t.selectPreset })).toBeVisible();
     await page.locator('#preset-select').selectOption('long'); await bounded();
     await page.getByRole('textbox', { name: t.newPresetName }).fill('Synthetic long draft '.repeat(10));
     await page.screenshot({ path: testInfo.outputPath('settings.png'), fullPage: true });
-    await page.locator('#tab-protocol').click();
+    await page.locator('#tab-rawdata').click();
     await expect(page.locator('#protocol-table input').first()).toBeVisible();
     await page.locator('#protocol-table input').first().fill('Long synthetic protocol label '.repeat(12));
     await page.getByRole('button', { name: t.cancel, exact: true }).click();
@@ -239,7 +240,7 @@ test('keyboard curve jump temporarily reveals a group-hidden well and Return res
 
 test('NTC jumps select another marker, preserve same-URL well history, and clear ephemeral state on reload', async ({ page }) => {
   await openExample(page);
-  await page.getByTestId('workspace-tab-plate').click();
+  await page.locator('#tab-plate').click();
   for (const [column, name] of [[1, 'Marker A'], [2, 'Marker B']] as const) {
     await page.getByTestId('add-marker-button').click();
     await page.getByTestId('marker-name-input').fill(name);
@@ -251,7 +252,7 @@ test('NTC jumps select another marker, preserve same-URL well history, and clear
     // Clear the previous column before selecting the next marker membership.
     await page.getByTestId(`col-header-${column}`).click();
   }
-  await page.getByTestId('workspace-tab-analysis').click();
+  await page.locator('#tab-results').click();
   const analyzed = page.waitForResponse(response => response.url().endsWith('/cluster') && response.request().method() === 'POST');
   await page.getByTestId('multi-analyze-current').click(); await analyzed;
   await page.route(/\/api\/data\/[^/]+\/qc(?:\?|$)/, async route => {
@@ -299,7 +300,7 @@ test('NTC jumps select another marker, preserve same-URL well history, and clear
 
 test('unassigned warning opens Plate Setup; an absent inventory target reports a safe state', async ({ page }) => {
   await openExample(page);
-  await page.getByTestId('workspace-tab-plate').click();
+  await page.locator('#tab-plate').click();
   await page.getByTestId('add-marker-button').click();
   await page.getByTestId('marker-name-input').fill('Marker A');
   await page.getByTestId('marker-form-save').click();
@@ -309,7 +310,7 @@ test('unassigned warning opens Plate Setup; an absent inventory target reports a
   await page.locator('#tab-quality').click();
   const target = page.locator('#main-panel-quality').getByRole('button', { name: 'A2', exact: true });
   await target.focus(); await page.keyboard.press('Space');
-  await expect(page.getByTestId('workspace-tab-plate')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#tab-plate')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('well-A2')).toBeFocused();
   await expect(page.getByTestId('well-inspector')).toContainText('A2');
   await page.getByRole('button', { name: 'Clear temporary reveal and return' }).click();

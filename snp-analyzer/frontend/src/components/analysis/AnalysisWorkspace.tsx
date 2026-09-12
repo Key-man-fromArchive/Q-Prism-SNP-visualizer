@@ -1,10 +1,10 @@
-// @TASK P4-S0/P4-S1 - Multi-marker workspace shell (플레이트 설정 / 분석)
+// @TASK P4-S0/P4-S1/P3-S1-T1 - Multi-marker workspace shell (Plate Setup / Results)
 // @SPEC docs/multi-marker-ux-decision.md §0 (2-surface workspace, free navigation)
+//       docs/planning/feedback-2026-09-11/FB-07-identity-and-ia.md §3-1 (top-level Plate Setup / Results tabs)
 // @TEST e2e/p4-s0-single-marker-default.spec.ts, e2e/p4-s1-plate-setup.spec.ts
 
 import { useState, type ReactNode } from "react";
 import type { MarkerRegion } from '@/types/api';
-import { navigateTabs } from '@/lib/tab-keyboard';
 import { X } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { Callout, StatusState } from "@/components/shared/ui";
@@ -17,20 +17,6 @@ import { MultiMarkerAnalysisPanel } from "./MultiMarkerAnalysisPanel";
 import { AnalysisResultStatus } from './AnalysisResultStatus';
 import { PlateScopeSummary } from './PlateScopeSummary';
 
-function WorkspaceTabs() {
-  const { t } = useI18n();
-  const active = useNavigationStore(state => state.surface);
-  const setSurface = useNavigationStore(state => state.setSurface);
-  return (['plate', 'analysis'] as const).map(surface => <button
-    key={surface} type="button" role="tab" id={`workspace-tab-${surface}`}
-    tabIndex={active === surface ? 0 : -1} aria-controls={`workspace-panel-${surface}`}
-    data-testid={`workspace-tab-${surface}`} aria-selected={active === surface}
-    onClick={() => setSurface(surface)}
-    className={`px-4 py-2 rounded-t-md text-sm font-medium cursor-pointer ${active === surface
-      ? 'bg-bg text-primary border border-b-0 border-border' : 'text-text-muted hover:text-text'}`}>
-    {surface === 'plate' ? t.wsTabPlate : t.wsTabAnalysis}
-  </button>);
-}
 function panelClass(active: string, surface: string): string { return active === surface ? '' : 'hidden'; }
 function availableScope(markers: MarkerRegion[], available: boolean) { return available ? markers : null; }
 function MarkerAvailability({ available, children }: { available: boolean; children: ReactNode }) {
@@ -38,9 +24,19 @@ function MarkerAvailability({ available, children }: { available: boolean; child
 }
 
 /**
- * Always-present 2-surface workspace (Plate Setup + Analysis), replacing the
- * bare `<AnalysisTab/>` mount inside the top-level "Analysis" tab. Free
- * back-and-forth between surfaces -- never a wizard gate (§0/§1 Q2).
+ * Always-present 2-surface workspace (Plate Setup + Results), mounted once a
+ * session is ready. Free back-and-forth between surfaces -- never a wizard
+ * gate (§0/§1 Q2).
+ *
+ * P3-S1-T1: this used to be reached through a single top-level "Analysis" tab
+ * with its own `WorkspaceTabs` sub-navigation (Plate Setup | Analysis). Each
+ * surface is now its own top-level tab (`plate` / `results`, see
+ * TabNavigation.tsx) -- there is no more sub-tab hop to Plate Setup, and the
+ * inner `role="tablist"` is gone. `navigation-store`'s `surface` field is kept
+ * (still read by quality-navigation.ts/quality-target.ts for routing back to
+ * the correct surface) but is now driven by `setTab`, so switching surfaces
+ * from inside this component goes through `setTab` too, keeping the
+ * top-level tab highlight and the visible surface in sync.
  *
  * S0: on load, the whole plate is auto-analysed as one marker (existing
  * `AnalysisTab` behavior, unchanged) and shown wrapped in
@@ -52,18 +48,18 @@ export function AnalysisWorkspace() {
   const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
   const activeSurface = useNavigationStore(state => state.surface);
-  const setActiveSurface = useNavigationStore(state => state.setSurface);
+  const setTab = useNavigationStore(state => state.setTab);
   const { ready, status, markers, markersAvailable, retry } = useAnalysisWorkspace();
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
-  // The session's saved marker (assay) set decides which Analysis surface
+  // The session's saved marker (assay) set decides which Results surface
   // renders: >=1 marker => the per-marker MultiMarkerAnalysisPanel (P4-S2),
   // 0 markers => the legacy single-marker (whole-plate) view + split banner
   // (P4-S0). Re-fetched on session change and every time this surface is
   // updated through the markers-changed event, so merely switching surfaces
   // does not repeat an identical API request and analysis render.
 
-  // A freshly-loaded session starts back on the Analysis surface with the
+  // A freshly-loaded session starts back on the Results surface with the
   // banner re-offered (zero friction for the single-marker case, §0/Q1), and
   // its marker list reset (the new session hasn't been fetched yet). Computed
   // during render (React's documented "adjusting state when a prop changes"
@@ -77,17 +73,8 @@ export function AnalysisWorkspace() {
   return (
     <div>
       <div
-        role="tablist"
-        onKeyDown={navigateTabs}
-        aria-label={t.wsTabAnalysis}
-        className="flex gap-1 px-6 pt-3 border-b border-border bg-surface"
-      >
-        <WorkspaceTabs />
-      </div>
-
-      <div
         data-testid="workspace-panel-plate"
-        id="workspace-panel-plate" role="tabpanel" aria-labelledby="workspace-tab-plate"
+        id="main-panel-plate" role="tabpanel" aria-labelledby="tab-plate"
         className={panelClass(activeSurface, 'plate')}
       >
         {ready && <PlateSetupTab />}
@@ -95,7 +82,7 @@ export function AnalysisWorkspace() {
 
       <div
         data-testid="workspace-panel-analysis"
-        id="workspace-panel-analysis" role="tabpanel" aria-labelledby="workspace-tab-analysis"
+        id="main-panel-results" role="tabpanel" aria-labelledby="tab-results"
         className={panelClass(activeSurface, 'analysis')}
       >
         {ready && <div className="analysis-context-summary">
@@ -116,7 +103,7 @@ export function AnalysisWorkspace() {
                     <button
                       type="button"
                       data-testid="split-marker-cta"
-                      onClick={() => setActiveSurface("plate")}
+                      onClick={() => setTab("plate")}
                       className="px-3 py-1 rounded-md text-sm font-semibold text-primary hover:bg-bg cursor-pointer"
                     >
                       {t.wsSplitBannerCta}

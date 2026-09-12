@@ -26,7 +26,7 @@ import { loadExample } from "./helpers/load-example";
 test.describe("P4-S3: Layout save/load/delete", () => {
   test.beforeEach(async ({ page }) => {
     await loadExample(page, 6);
-    await page.getByTestId("workspace-tab-plate").click();
+    await page.locator("#tab-plate").click();
 
     await page.getByTestId("add-marker-button").click();
     await page.getByTestId("marker-name-input").fill("qSwet5.3");
@@ -80,8 +80,8 @@ test.describe("P4-S3: Layout save/load/delete", () => {
     // should be visible (PlateSetupTab stays mounted the whole time and
     // refetches its marker set on the Library tab's "markers-changed"
     // announcement, so no reload is needed).
-    await page.locator("#tab-analysis").click();
-    await page.getByTestId("workspace-tab-plate").click();
+    await page.locator("#tab-results").click();
+    await page.locator("#tab-plate").click();
     await expect(page.getByTestId("well-A1")).toHaveAttribute("data-assigned", "true");
   });
 

@@ -47,6 +47,29 @@ it('returns a reopened plate to where it was left, not to its defaults', async (
   expect(useSessionStore.getState().restoreQuery).toContain('cycle=32');
 });
 
+it('remaps a legacy (pre-P3-S1-T1) tab=analysis+surface sessionQueries entry to the new tab id on reopen', async () => {
+  const store = useSessionStore.getState();
+  store.setSession('a', info('a'), 'fresh');
+  // Recorded before the P3-S1-T1 tab restructure -- 'analysis'/'protocol' no
+  // longer exist as tab ids, but this is exactly what sessionStorage still
+  // holds for any plate left open across the deploy.
+  setLocation('?session=a&tab=analysis&surface=plate&cycle=8');
+  store.setSession('b', info('b'), 'fresh');
+
+  await useSessionStore.getState().loadSession('a');
+
+  expect(useSessionStore.getState().restoreQuery).toBe('session=a&tab=plate&surface=plate&cycle=8');
+});
+it('remaps a legacy tab=protocol sessionQueries entry to rawdata on reopen', async () => {
+  const store = useSessionStore.getState();
+  store.setSession('a', info('a'), 'fresh');
+  setLocation('?session=a&tab=protocol&cycle=8');
+  store.setSession('b', info('b'), 'fresh');
+
+  await useSessionStore.getState().loadSession('a');
+
+  expect(useSessionStore.getState().restoreQuery).toBe('session=a&tab=rawdata&cycle=8');
+});
 it('forgets a plate that was closed or deleted elsewhere', async () => {
   const store = useSessionStore.getState();
   store.setSession('a', info('a'), 'fresh');

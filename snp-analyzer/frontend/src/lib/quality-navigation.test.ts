@@ -3,7 +3,7 @@ import { getCluster, getMarkers, getSessionInfo } from './api';
 import { navigateQualityTarget, restoreQualityNavigation, returnFromQuality } from './quality-navigation';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
-import { useNavigationStore } from '@/stores/navigation-store';
+import { parseNavigation, serializeNavigation, useNavigationStore } from '@/stores/navigation-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import type { QualityTarget } from './quality-target';
@@ -52,8 +52,20 @@ it('rejects an NTC target when background changes while authorized metadata is p
 });
 it('checks current authorized metadata before selecting and preserves user filters', async () => {
   expect(await navigateQualityTarget(target)).toBe(true);
-  expect(useNavigationStore.getState()).toMatchObject({ tab: 'analysis', surface: 'analysis', cycle: 0, qualityTarget: target });
+  // P3-S2-T1: quality-navigation now derives the top-level tab straight from
+  // `surface` instead of writing the retired `'analysis'` tab id (which
+  // `navigationTabs`/`parseNavigation`'s `tab()` guard rejects post-P3-S1-T1
+  // -- see the round-trip regression test below).
+  expect(useNavigationStore.getState()).toMatchObject({ tab: 'results', surface: 'analysis', cycle: 0, qualityTarget: target });
   expect(useSelectionStore.getState()).toMatchObject({ selectedWell: 'A1', selectedGroup: 'keep', focusSelectedWells: true });
+});
+it('writes a tab id that survives its own URL round-trip (regression: this used to write the retired tab=analysis id)', async () => {
+  expect(await navigateQualityTarget(target)).toBe(true);
+  const state = useNavigationStore.getState();
+  const query = serializeNavigation(state);
+  expect(query).toContain('tab=results');
+  const restored = parseNavigation(query, { session: state.session!, cycles: [0, 10, 40], windows: [], markers: [], defaults: state });
+  expect(restored.reasons).not.toContain('tab');
 });
 it('returns to the original view and selection without touching filters or reentering the session', async () => {
   useNavigationStore.setState({ tab: 'quality', cycle: 40 });

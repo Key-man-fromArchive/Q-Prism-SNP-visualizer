@@ -313,8 +313,9 @@ const ko: Translations = {
   guideTip4: '여러 파일을 한번에 드래그하면 일괄 업로드됩니다',
 
   // Tabs
-  tabAnalysis: '분석',
-  tabProtocol: '프로토콜',
+  tabPlate: '플레이트 설정',
+  tabRawdata: '원시 데이터',
+  tabResults: '결과',
   tabSettings: '설정',
   tabQuality: '품질',
   tabStatistics: '통계',

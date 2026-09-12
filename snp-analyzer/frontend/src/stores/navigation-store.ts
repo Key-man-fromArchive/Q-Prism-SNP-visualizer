@@ -2,18 +2,81 @@ import { create } from 'zustand';
 import type { DataWindow } from '@/types/api';
 import type { QualityTarget } from '@/lib/quality-target';
 
-export const navigationTabs = ['analysis', 'protocol', 'settings', 'quality', 'statistics', 'compare', 'project', 'users', 'references', 'library', 'feedback'] as const;
+// P3-S1-T1: top-level IA is Plate Setup / Raw data / Results (+ Quality/Statistics/
+// Compare/Library/Project, Settings demoted to overflow). `analysis` + `protocol`
+// no longer exist as tab ids -- `plate` and `results` each own one former
+// `analysis` sub-surface directly, `rawdata` replaces `protocol`.
+export const navigationTabs = ['plate', 'rawdata', 'results', 'settings', 'quality', 'statistics', 'compare', 'project', 'users', 'references', 'library', 'feedback'] as const;
 export type NavigationTab = typeof navigationTabs[number];
 export type WorkspaceSurface = 'plate' | 'analysis';
+/**
+ * `NavigationValue.tab` also still accepts the pre-P3-S1-T1 `'analysis'` value:
+ * `quality-navigation.ts` (P3-S2-T1) writes it directly via `setState` when
+ * routing to a quality target, and root `tests/**`/other unit tests use it as a
+ * generic "the workspace is open" placeholder. Nothing here should compare
+ * against the literal `'analysis'` string to decide what to *render* --
+ * `isWorkspaceTab` and `resolveDisplayTab` below normalize it into `plate`/
+ * `results`. `setTab` (used by the top-level TabNavigation) never writes it.
+ */
+type StoredTab = NavigationTab | 'analysis';
 export type NavigationValue = {
-  session: string | null; tab: NavigationTab; surface: WorkspaceSurface; marker: string | null; cycle: number | null;
+  session: string | null; tab: StoredTab; surface: WorkspaceSurface; marker: string | null; cycle: number | null;
 };
 export type NavigationDomain = {
   session: string; cycles: number[]; windows: DataWindow[]; markers: string[]; defaults: NavigationValue;
 };
 export type ValidatedNavigation = { value: NavigationValue; reasons: string[] };
 const keys = ['session', 'tab', 'surface', 'marker', 'cycle'] as const;
-const initial: NavigationValue = { session: null, tab: 'analysis', surface: 'plate', marker: null, cycle: null };
+const initial: NavigationValue = { session: null, tab: 'results', surface: 'plate', marker: null, cycle: null };
+/** True while `tab` is (or, via the pre-migration `'analysis'` synonym, resolves
+ *  to) one of the two workspace surfaces -- used by keyboard-authority and
+ *  quality-focus gating instead of a stale exact match on `'analysis'`. */
+export function isWorkspaceTab(tab: StoredTab): boolean {
+  return tab === 'plate' || tab === 'results' || tab === 'analysis';
+}
+/** The tab the top-level nav should actually highlight/render for a given
+ *  stored (tab, surface) pair -- collapses the legacy `'analysis'` synonym
+ *  into the surface-appropriate new id. Never returns `'analysis'`. */
+export function resolveDisplayTab(tab: StoredTab, surfaceValue: WorkspaceSurface): NavigationTab {
+  if (tab !== 'analysis') return tab;
+  return surfaceValue === 'plate' ? 'plate' : 'results';
+}
+
+/**
+ * P3-S2-T1: old bookmarked/persisted URLs and `session-store.sessionQueries`
+ * entries (from before P3-S1-T1's tab restructure) still use `tab=analysis`
+ * paired with a `surface` sub-value, or `tab=protocol`. `parseNavigation`'s
+ * `tab()` guard already refuses those as unrecognized and falls back to the
+ * session's default tab -- a crash-safe fallback, but one that throws away
+ * the user's actual destination (a bookmarked "Plate Setup" link would land
+ * on the default tab instead). This maps them, meaning-preserving, onto the
+ * new top-level tab id *and* keeps `surface` consistent with it (so
+ * `AnalysisWorkspace`, which still reads `surface` directly to choose which
+ * of its two panels is visible, doesn't end up showing the surface for a
+ * different tab than the one the top nav highlights). A query with no
+ * legacy `tab` value is returned completely unchanged -- same string, not
+ * just an equivalent one -- so an already-canonical query is never
+ * reordered or rewritten.
+ *
+ * `surface` defaulted to `'plate'` pre-migration (see this store's `initial`
+ * before P3-S1-T1), so a bare `tab=analysis` with no `surface` maps the same
+ * way `surface=plate` would.
+ */
+export function remapLegacyQuery(query: string): string {
+  const params = new URLSearchParams(query);
+  const legacyTab = params.get('tab');
+  if (legacyTab === 'protocol') {
+    params.set('tab', 'rawdata');
+    return params.toString();
+  }
+  if (legacyTab === 'analysis') {
+    const resolvedSurface: WorkspaceSurface = params.get('surface') === 'analysis' ? 'analysis' : 'plate';
+    params.set('tab', resolvedSurface === 'analysis' ? 'results' : 'plate');
+    params.set('surface', resolvedSurface);
+    return params.toString();
+  }
+  return query;
+}
 
 /** Whitelist only. Never serializes playback, auth credentials or report metadata. */
 export function serializeNavigation<T extends NavigationValue>(value: T): string {
@@ -30,7 +93,7 @@ function validCycle(value: number | null, domain: NavigationDomain): value is nu
 }
 function safeDefaults(domain: NavigationDomain): NavigationValue {
   const fallbackCycle = domain.cycles.find(value => validCycle(value, domain)) ?? null;
-  return { session: domain.session, tab: tab(domain.defaults.tab) ? domain.defaults.tab : 'analysis',
+  return { session: domain.session, tab: tab(domain.defaults.tab) ? domain.defaults.tab : 'results',
     surface: surface(domain.defaults.surface) ? domain.defaults.surface : 'plate',
     marker: defaultMarker(domain),
     cycle: validCycle(domain.defaults.cycle, domain) ? domain.defaults.cycle : fallbackCycle };
@@ -107,7 +170,12 @@ export function createNavigationStore() {
     setQualityTarget: target => set({ qualityTarget: target ? { ...target } : null }),
     availableCycles: [],
     setAvailableCycles: cycles => set({ availableCycles: [...cycles] }),
-    setTab: tab => set({ tab }),
+    // Keeps `surface` (still consumed by quality-navigation.ts/quality-target.ts
+    // and history/return-view snapshots) in sync whenever the top-level nav
+    // moves to one of the two workspace tabs; leaves it untouched otherwise so
+    // a later return-from-quality/history restore still knows which surface
+    // to come back to.
+    setTab: tab => set(state => ({ tab, surface: tab === 'plate' ? 'plate' : tab === 'results' ? 'analysis' : state.surface })),
     setSurface: surface => set({ surface }),
     setCycle: cycle => set({ cycle }),
     setMarker: marker => set({ marker }),

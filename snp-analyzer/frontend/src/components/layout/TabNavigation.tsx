@@ -2,8 +2,11 @@ import { MoreHorizontal } from 'lucide-react';
 import { useI18n } from '@/hooks/use-i18n';
 import { Menu, type MenuItem } from '@/components/shared/ui';
 import { navigateTabs } from '@/lib/tab-keyboard';
+import type { NavigationTab } from '@/stores/navigation-store';
 
-export type TabId = 'analysis' | 'protocol' | 'settings' | 'quality' | 'statistics' | 'compare' | 'project' | 'users' | 'references' | 'library' | 'feedback';
+// Single source of truth for the top-level tab ids lives in navigation-store.ts
+// (its `NavigationTab` union) so the two can never drift apart.
+export type TabId = NavigationTab;
 
 export type TabNavigationProps = {
   activeTab: TabId;
@@ -26,15 +29,21 @@ type Tab = {
   overflow?: boolean;
 };
 
+// Target IA (FB-07 §3-1, feedback 36be23963de2477d): Plate Setup is reached in
+// one click (no more nested Plate Setup/Analysis sub-tabs), Raw data comes
+// right after it, and the results view is labelled "Results" rather than
+// "Analysis". Settings drops into the overflow menu -- P4 moves normalization/
+// axis controls onto the plot header, so it no longer needs a primary slot.
 const tabs: Tab[] = [
-  { id: 'analysis', label: 'Analysis', dataTab: 'analysis' },
-  { id: 'protocol', label: 'Protocol', dataTab: 'protocol' },
-  { id: 'settings', label: 'Settings', dataTab: 'settings' },
+  { id: 'plate', label: 'Plate Setup', dataTab: 'plate' },
+  { id: 'rawdata', label: 'Raw data', dataTab: 'rawdata' },
+  { id: 'results', label: 'Results', dataTab: 'results' },
   { id: 'quality', label: 'Quality', dataTab: 'quality' },
   { id: 'statistics', label: 'Statistics', dataTab: 'statistics' },
   { id: 'compare', label: 'Compare Runs', dataTab: 'compare' },
   { id: 'library', label: 'Library', dataTab: 'library', sessionFree: true },
   { id: 'project', label: 'Project', dataTab: 'project', sessionFree: true },
+  { id: 'settings', label: 'Settings', dataTab: 'settings', overflow: true },
   { id: 'references', label: 'References', dataTab: 'references', sessionFree: true, overflow: true },
   { id: 'users', label: 'Users', dataTab: 'users', sessionFree: true, adminOnly: true, overflow: true },
   { id: 'feedback', label: 'Feedback', dataTab: 'feedback', sessionFree: true, adminOnly: true, overflow: true },
@@ -43,8 +52,9 @@ const tabs: Tab[] = [
 export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdmin = false }: TabNavigationProps) {
   const { t } = useI18n();
   const tabLabels: Record<TabId, string> = {
-    analysis: t.tabAnalysis,
-    protocol: t.tabProtocol,
+    plate: t.tabPlate,
+    rawdata: t.tabRawdata,
+    results: t.tabResults,
     settings: t.tabSettings,
     quality: t.tabQuality,
     statistics: t.tabStatistics,
@@ -65,6 +75,10 @@ export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdm
     onSelect: () => onTabChange(tab.id),
   }));
   const activeInOverflow = overflow.some((tab) => tab.id === activeTab);
+  // When the active tab lives in the "More" overflow menu, none of the
+  // visible `role="tab"` buttons are selected -- anchor roving tabIndex to
+  // the first primary tab instead of hard-coding a removed id.
+  const firstPrimaryId = primary[0]?.id;
 
   return (
     <nav className="app-navigation flex flex-wrap items-center gap-0 border-b border-border bg-surface">
@@ -80,7 +94,7 @@ export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdm
             role="tab"
             aria-selected={activeTab === tab.id}
             aria-controls={`main-panel-${tab.id}`}
-            tabIndex={activeTab === tab.id || (activeInOverflow && tab.id === 'analysis') ? 0 : -1}
+            tabIndex={activeTab === tab.id || (activeInOverflow && tab.id === firstPrimaryId) ? 0 : -1}
             onClick={() => { if (!disabled) onTabChange(tab.id); }}
             disabled={disabled}
             className={`
