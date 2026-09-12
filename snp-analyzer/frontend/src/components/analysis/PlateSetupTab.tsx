@@ -887,7 +887,7 @@ export function PlateSetupTab() {
                   type="button"
                   data-testid="marker-form-save"
                   onClick={saveMarkerForm}
-                  className="flex-1 rounded-md py-1.5 font-semibold text-sm bg-primary text-white cursor-pointer"
+                  className="flex-1 rounded-md py-1.5 font-semibold text-sm bg-primary text-on-primary cursor-pointer"
                 >
                   {t.wsMarkerFormSave}
                 </button>
@@ -942,7 +942,7 @@ export function PlateSetupTab() {
                 data-testid="layout-save-confirm"
                 disabled={savingLayout || !layoutSaveName.trim()}
                 onClick={confirmSaveLayout}
-                className="flex-none rounded-md px-3 py-1.5 text-xs font-semibold bg-primary text-white disabled:opacity-40 cursor-pointer"
+                className="flex-none rounded-md px-3 py-1.5 text-xs font-semibold bg-primary text-on-primary disabled:opacity-40 cursor-pointer"
               >
                 {t.save}
               </button>
@@ -1040,7 +1040,7 @@ export function PlateSetupTab() {
                         data-testid="apply-previous-layout-confirm"
                         disabled={applyingLayoutId !== null}
                         onClick={confirmApplyPrevious}
-                        className="px-3 py-1.5 rounded-md text-sm font-semibold bg-primary text-white disabled:opacity-40 cursor-pointer"
+                        className="px-3 py-1.5 rounded-md text-sm font-semibold bg-primary text-on-primary disabled:opacity-40 cursor-pointer"
                       >
                         {t.apply}
                       </button>
@@ -1089,7 +1089,7 @@ export function PlateSetupTab() {
                 data-testid="assign-button"
                 disabled={!pickMarkerId}
                 onClick={applyAssign}
-                className="ml-auto px-4 py-1.5 rounded-md text-sm font-semibold bg-primary text-white disabled:opacity-40 cursor-pointer"
+                className="ml-auto px-4 py-1.5 rounded-md text-sm font-semibold bg-primary text-on-primary disabled:opacity-40 cursor-pointer"
               >
                 {t.wsAssignButton}
               </button>
@@ -1262,7 +1262,7 @@ export function PlateSetupTab() {
                   aria-pressed={currentWellType === WellType.UNKNOWN}
                   onClick={() => setWellType(WellType.UNKNOWN)}
                   className={`px-2.5 py-1.5 rounded-md text-xs font-semibold cursor-pointer border border-border ${
-                    currentWellType === WellType.UNKNOWN ? "bg-primary text-white" : "bg-bg text-text"
+                    currentWellType === WellType.UNKNOWN ? "bg-primary text-on-primary" : "bg-bg text-text"
                   }`}
                 >
                   {t.wsWellTypeSample}
@@ -1273,7 +1273,7 @@ export function PlateSetupTab() {
                   aria-pressed={currentWellType === WellType.NTC}
                   onClick={() => setWellType(WellType.NTC)}
                   className={`px-2.5 py-1.5 rounded-md text-xs font-semibold cursor-pointer border border-border ${
-                    currentWellType === WellType.NTC ? "bg-primary text-white" : "bg-bg text-text"
+                    currentWellType === WellType.NTC ? "bg-primary text-on-primary" : "bg-bg text-text"
                   }`}
                 >
                   {t.wsWellTypeNtc}
@@ -1284,7 +1284,7 @@ export function PlateSetupTab() {
                   aria-pressed={currentWellType === WellType.POSITIVE_CONTROL}
                   onClick={() => setWellType(WellType.POSITIVE_CONTROL)}
                   className={`px-2.5 py-1.5 rounded-md text-xs font-semibold cursor-pointer border border-border ${
-                    currentWellType === WellType.POSITIVE_CONTROL ? "bg-primary text-white" : "bg-bg text-text"
+                    currentWellType === WellType.POSITIVE_CONTROL ? "bg-primary text-on-primary" : "bg-bg text-text"
                   }`}
                 >
                   {t.wsWellTypePositive}
@@ -1295,7 +1295,7 @@ export function PlateSetupTab() {
                   aria-pressed={currentWellType === WellType.ALLELE1_CONTROL}
                   onClick={() => setWellType(WellType.ALLELE1_CONTROL)}
                   className={`px-2.5 py-1.5 rounded-md text-xs font-semibold cursor-pointer border border-border ${
-                    currentWellType === WellType.ALLELE1_CONTROL ? "bg-primary text-white" : "bg-bg text-text"
+                    currentWellType === WellType.ALLELE1_CONTROL ? "bg-primary text-on-primary" : "bg-bg text-text"
                   }`}
                 >
                   {t.wsWellTypeA1}
@@ -1306,7 +1306,7 @@ export function PlateSetupTab() {
                   aria-pressed={currentWellType === WellType.ALLELE2_CONTROL}
                   onClick={() => setWellType(WellType.ALLELE2_CONTROL)}
                   className={`px-2.5 py-1.5 rounded-md text-xs font-semibold cursor-pointer border border-border ${
-                    currentWellType === WellType.ALLELE2_CONTROL ? "bg-primary text-white" : "bg-bg text-text"
+                    currentWellType === WellType.ALLELE2_CONTROL ? "bg-primary text-on-primary" : "bg-bg text-text"
                   }`}
                 >
                   {t.wsWellTypeA2}
@@ -1318,7 +1318,7 @@ export function PlateSetupTab() {
                     aria-pressed={currentWellType === WellType.HETEROZYGOUS}
                     onClick={() => setWellType(WellType.HETEROZYGOUS)}
                     className={`px-2.5 py-1.5 rounded-md text-xs font-semibold cursor-pointer border border-border ${
-                      currentWellType === WellType.HETEROZYGOUS ? "bg-primary text-white" : "bg-bg text-text"
+                      currentWellType === WellType.HETEROZYGOUS ? "bg-primary text-on-primary" : "bg-bg text-text"
                     }`}
                   >
                     {t.wsWellTypeHet}
@@ -1330,7 +1330,7 @@ export function PlateSetupTab() {
                   aria-pressed={currentWellType === WellType.OMIT}
                   onClick={() => setWellType(WellType.OMIT)}
                   className={`px-2.5 py-1.5 rounded-md text-xs font-semibold cursor-pointer border border-border ${
-                    currentWellType === WellType.OMIT ? "bg-primary text-white" : "bg-bg text-text"
+                    currentWellType === WellType.OMIT ? "bg-primary text-on-primary" : "bg-bg text-text"
                   }`}
                 >
                   {t.wsWellTypeNoAmp}

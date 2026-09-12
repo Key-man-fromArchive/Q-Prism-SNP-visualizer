@@ -25,7 +25,7 @@ export function AppFooter() {
   return (
     <footer className="px-6 py-3 text-center text-xs text-text-muted print:hidden">
       <span data-testid="app-version">
-        ASG-PCR SNP {build.version.startsWith("v") ? build.version : `v${build.version}`}
+        Q-prism® {build.version.startsWith("v") ? build.version : `v${build.version}`}
       </span>
       {build.commit && <span className="ml-2 font-mono">{build.commit}</span>}
       {build.built_at && <span className="ml-2">{build.built_at}</span>}

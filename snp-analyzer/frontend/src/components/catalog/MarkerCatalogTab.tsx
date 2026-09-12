@@ -281,7 +281,7 @@ function CatalogWorkspace() {
             type="button"
             data-testid="catalog-add-button"
             onClick={openNew}
-            className="flex-none px-3 py-1.5 rounded-md text-sm font-semibold bg-primary text-white cursor-pointer"
+            className="flex-none px-3 py-1.5 rounded-md text-sm font-semibold bg-primary text-on-primary cursor-pointer"
           >
             {t.mcatAddButton}
           </button>
@@ -566,7 +566,7 @@ function CatalogWorkspace() {
               data-testid="catalog-form-save"
               disabled={saving || !draft.name.trim()}
               onClick={handleSave}
-              className="px-4 py-1.5 rounded-md text-sm font-semibold bg-primary text-white disabled:opacity-40 cursor-pointer"
+              className="px-4 py-1.5 rounded-md text-sm font-semibold bg-primary text-on-primary disabled:opacity-40 cursor-pointer"
             >
               {t.save}
             </button>

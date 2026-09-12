@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CycleControl } from './CycleControl';
 import { useSessionStore } from '@/stores/session-store';
@@ -42,4 +42,25 @@ it('keeps the existing 150ms slider debounce', () => {
   expect(useSelectionStore.getState().currentCycle).toBe(2);
   act(() => vi.advanceTimersByTime(1));
   expect(useSelectionStore.getState().currentCycle).toBe(1);
+});
+
+it('styles the active window button through --color-on-primary, not a hardcoded white (P6-S2-T1)', () => {
+  useSessionStore.setState({ sessionId: 'synthetic', sessionInfo: {
+    session_id: 'synthetic', instrument: 'Synthetic', allele2_dye: 'HEX',
+    num_cycles: 3, num_wells: 1, has_rox: false,
+    data_windows: [
+      { name: 'Pre-read', start_cycle: 1, end_cycle: 1 },
+      { name: 'Amplification', start_cycle: 2, end_cycle: 3 },
+    ],
+    suggested_cycle: 2, well_groups: null,
+  } });
+  const generation = useNavigationStore.getState().beginRestore('synthetic');
+  useNavigationStore.getState().setAvailableCycles([1, 2, 3]);
+  useNavigationStore.getState().complete(generation, { reasons: [], value: {
+    session: 'synthetic', tab: 'analysis', surface: 'analysis', marker: null, cycle: 2,
+  } });
+  render(<CycleControl />);
+  const active = screen.getByText('Amplification');
+  expect(active.className).toContain('text-on-primary');
+  expect(active.className).not.toMatch(/\btext-white\b/);
 });

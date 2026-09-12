@@ -392,7 +392,7 @@ function ProjectWorkspace({ onLoadSession }: BatchTabProps) {
                 disabled={loading} />
               <button onClick={handleCreateProject}
                 disabled={loading || !newProjectName.trim()}
-                className="px-3 py-1.5 bg-primary text-white rounded text-sm font-medium disabled:opacity-50">{t.create}</button>
+                className="px-3 py-1.5 bg-primary text-on-primary rounded text-sm font-medium disabled:opacity-50">{t.create}</button>
             </div>
           </div>
           {projects.length > 0 ? (
@@ -546,7 +546,7 @@ function ProjectWorkspace({ onLoadSession }: BatchTabProps) {
             <h2 title={currentProject.name} className="min-w-0 break-words text-xl font-semibold text-text">{currentProject.name}</h2>
           </div>
           <button onClick={handleExportCsv}
-            className="flex-none px-3 py-1.5 bg-primary text-white rounded text-sm font-medium">{t.exportCSVBtn}</button>
+            className="flex-none px-3 py-1.5 bg-primary text-on-primary rounded text-sm font-medium">{t.exportCSVBtn}</button>
         </div>
 
         {/* Add Session */}
@@ -563,7 +563,7 @@ function ProjectWorkspace({ onLoadSession }: BatchTabProps) {
             ))}
           </select>
           <button onClick={handleAddSession} disabled={loading || !selectedSession}
-            className="px-3 py-1.5 bg-primary text-white rounded text-sm font-medium disabled:opacity-50">{t.add}</button>
+            className="px-3 py-1.5 bg-primary text-on-primary rounded text-sm font-medium disabled:opacity-50">{t.add}</button>
         </div>
 
         {/* Bulk remove bar */}

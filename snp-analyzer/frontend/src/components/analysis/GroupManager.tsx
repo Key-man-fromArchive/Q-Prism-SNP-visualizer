@@ -143,7 +143,7 @@ export function GroupManager({ sessionId, onClose }: GroupManagerProps) {
                 onKeyDown={(e) => e.key === "Enter" && handleCreate()}
               />
               <button
-                className="px-3 py-1 text-xs rounded bg-primary text-white border-none cursor-pointer disabled:opacity-50"
+                className="px-3 py-1 text-xs rounded bg-primary text-on-primary border-none cursor-pointer disabled:opacity-50"
                 onClick={handleCreate}
                 disabled={
                   loading || !newName.trim() || selectedWells.length === 0

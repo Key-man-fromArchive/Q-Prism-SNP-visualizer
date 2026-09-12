@@ -1,4 +1,4 @@
-# Q-Prism® SNP Visualizer
+# Q-prism® Cluster Caller
 
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)
@@ -6,9 +6,9 @@
 ![Tests](https://img.shields.io/badge/backend-120%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-A web-based analysis tool for Allele-Specific Genotyping PCR (ASG-PCR) SNP discrimination. Q-Prism® provides interactive visualization of real-time PCR fluorescence data, enabling rapid genotype analysis directly in the browser.
+A web-based analysis tool for Allele-Specific Genotyping PCR (ASG-PCR) SNP discrimination. Q-prism® Cluster Caller provides interactive visualization of real-time PCR fluorescence data, enabling rapid genotype analysis directly in the browser.
 
-> **Disclaimer**: Q-Prism® is a project name. It is not affiliated with or endorsed by Applied Biosystems, Thermo Fisher Scientific, or Bio-Rad Laboratories.
+> **Disclaimer**: Q-prism® is a project name. It is not affiliated with or endorsed by Applied Biosystems, Thermo Fisher Scientific, or Bio-Rad Laboratories.
 
 ## Screenshots
 
@@ -18,7 +18,7 @@ A web-based analysis tool for Allele-Specific Genotyping PCR (ASG-PCR) SNP discr
 
 ## Overview
 
-The SNP Visualizer parses qPCR fluorescence exports and renders interactive scatter plots, plate views, and amplification curves. It supports direct raw-file imports for existing QuantStudio and Bio-Rad workflows, plus a preview-and-mapping workflow for generic per-cycle fluorescence tables, Q-Prism RDES templates, and RDML files.
+The SNP Visualizer parses qPCR fluorescence exports and renders interactive scatter plots, plate views, and amplification curves. It supports direct raw-file imports for existing QuantStudio and Bio-Rad workflows, plus a preview-and-mapping workflow for generic per-cycle fluorescence tables, Q-prism RDES templates, and RDML files.
 
 ## Features
 
@@ -27,7 +27,7 @@ The SNP Visualizer parses qPCR fluorescence exports and renders interactive scat
 - **Cycle-by-Cycle Slider** -- Animate amplification progress with play/pause controls
 - **Per-Well Amplification Curves** -- Click any well to view its full fluorescence trajectory
 - **Smart File Detection** -- Auto-identifies direct vendor formats and routes ambiguous tables to preview/mapping
-- **Template-Based Imports** -- Downloadable Q-Prism RDES, generic long CSV, and generic wide CSV templates
+- **Template-Based Imports** -- Downloadable Q-prism RDES, generic long CSV, and generic wide CSV templates
 - **Role-Aware Mapping** -- Keeps dye/channel names separate from WT/MT roles and selected normalization channel
 - **PCR Protocol Editor** -- Interactive thermal profile visualization
 - **Multi-File Drag-and-Drop** -- Drop multiple XML files or entire folders; client-side ZIP packaging via JSZip
@@ -42,7 +42,7 @@ The SNP Visualizer parses qPCR fluorescence exports and renders interactive scat
 | | `.xlsx` | Amplification Results, End Point Results, or Allelic Discrimination |
 | | `.zip` | Archived XML exports (~16 files per run) |
 | | Folder / multi-XML | Drag-and-drop XML files or folders (auto-zipped client-side) |
-| **Q-Prism Template Imports** | `.tsv`, `.csv` | RDES extension, generic long, and generic wide template downloads |
+| **Q-prism Template Imports** | `.tsv`, `.csv` | RDES extension, generic long, and generic wide template downloads |
 | **Generic qPCR Tables** | `.csv`, `.tsv`, `.txt`, `.xlsx` | Preview-first mapping of well, cycle, channel/dye, RFU, sample, and target columns |
 | **RDML / Rotor-Gene** | `.rdml`, `.rdm` | Preview-first RDML parser with run, target, channel, and role confirmation |
 | **Vendor Presets** | text/CSV/XLSX/RDML | Roche LightCycler text, Analytik Jena qPCRsoft, and Qiagen Rotor-Gene presets prefill mappings only |
@@ -59,7 +59,7 @@ The upload screen offers these templates from `/templates/`:
 - `qprism-generic-long-template.csv`
 - `qprism-generic-wide-template.csv`
 
-Strict RDES files without Q-Prism role/channel columns are preview-only. The Q-Prism RDES extension includes explicit per-channel role data so WT/MT duplex files can be validated and imported.
+Strict RDES files without Q-prism role/channel columns are preview-only. The Q-prism RDES extension includes explicit per-channel role data so WT/MT duplex files can be validated and imported.
 
 ## Quick Start
 
@@ -121,7 +121,7 @@ npx playwright test
 
 - **Smart Detector** (`detector.py`) -- routes direct vendor files to legacy parsers
 - **Import Preview API** -- `/api/import/preview` and `/api/import/parse` handle mapping-configured imports
-- **Parsers** -- QuantStudio, CFX Opus, CFX XML ZIP, Q-Prism RDES, generic tables, and RDML
+- **Parsers** -- QuantStudio, CFX Opus, CFX XML ZIP, Q-prism RDES, generic tables, and RDML
 - **Normalization** -- uses selected mapping normalization channel/mode when present, with legacy ROX fallback
 - **Session Store** -- In-memory with Pydantic `UnifiedData` model
 - **Endpoints** -- `POST /api/upload`, `POST /api/import/preview`, `POST /api/import/parse`, `GET /api/data/{session_id}/scatter`, `/plate`, `/amplification`
@@ -148,7 +148,7 @@ snp-analyzer/
       cfx_xml_parser.py     # CFX XML ZIP parser
       eds_raw.py            # QuantStudio .eds raw parser
       generic_table.py      # Generic CSV/TSV/TXT/XLSX mapping parser
-      rdes.py               # Q-Prism RDES template parser
+      rdes.py               # Q-prism RDES template parser
       rdml.py               # RDML preview/import parser
       vendor_presets.py     # Mapping prefill presets
       xlsx_fixer.py         # CFX xlsx repair utility

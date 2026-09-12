@@ -182,7 +182,7 @@ function LayoutsWorkspace() {
                         data-testid="layout-load-button"
                         disabled={applyingId !== null}
                         onClick={() => load(l)}
-                        className="border border-primary text-primary rounded-md px-2.5 py-1 text-xs font-semibold hover:bg-primary hover:text-white disabled:opacity-40 cursor-pointer"
+                        className="border border-primary text-primary rounded-md px-2.5 py-1 text-xs font-semibold hover:bg-primary hover:text-on-primary disabled:opacity-40 cursor-pointer"
                       >
                         {t.libLoadOntoCurrentButton}
                       </button>
@@ -268,7 +268,7 @@ function LayoutsWorkspace() {
                   data-testid="library-layout-save-confirm"
                   disabled={saving || !saveName.trim()}
                   onClick={confirmSave}
-                  className="flex-none rounded-md px-3 py-1.5 text-xs font-semibold bg-primary text-white disabled:opacity-40 cursor-pointer"
+                  className="flex-none rounded-md px-3 py-1.5 text-xs font-semibold bg-primary text-on-primary disabled:opacity-40 cursor-pointer"
                 >
                   {t.save}
                 </button>

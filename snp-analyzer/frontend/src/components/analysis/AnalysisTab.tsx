@@ -233,7 +233,7 @@ export function AnalysisTab() {
           title={showManualTypes ? t.boundaryLinesHint : t.boundaryLinesManualOnly}
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer disabled:opacity-50 ${
             showBoundaryLines && showManualTypes
-              ? "bg-primary text-white"
+              ? "bg-primary text-on-primary"
               : "border border-border text-text"
           }`}
         >
@@ -245,7 +245,7 @@ export function AnalysisTab() {
           onClick={handleAnalyze}
           disabled={analyzing || !sessionId}
           title={t.analyzeHint}
-          className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary-hover disabled:opacity-60 cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-primary text-on-primary rounded-md text-sm font-medium hover:bg-primary-hover disabled:opacity-60 cursor-pointer"
         >
           {analyzing ? (
             t.analyzing

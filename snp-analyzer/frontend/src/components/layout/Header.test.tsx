@@ -210,3 +210,19 @@ describe('file workspace trigger placement', () => {
     expect(screen.queryByTestId('file-workspace-trigger-header')).not.toBeInTheDocument();
   });
 });
+
+// P6-S3-T1 (FB 2026-09-11): "Powered by Invirustech" stays in the header
+// while a session is open, but moves to the upload screen's own footer
+// (UploadZone) once there is no session -- it must not show in both places.
+describe('"Powered by Invirustech" placement', () => {
+  it('keeps it in the header while a session is active', () => {
+    render(<Header />); // beforeEach sets sessionId: 'run-a'
+    expect(screen.getByRole('link', { name: /Powered by Invirustech/ })).toBeInTheDocument();
+  });
+
+  it('hides it from the header when there is no session (UploadZone owns the footer copy)', () => {
+    useSessionStore.setState({ sessionId: null, sessionInfo: null });
+    render(<Header />);
+    expect(screen.queryByRole('link', { name: /Powered by Invirustech/ })).not.toBeInTheDocument();
+  });
+});

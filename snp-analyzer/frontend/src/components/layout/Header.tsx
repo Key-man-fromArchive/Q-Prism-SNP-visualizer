@@ -275,14 +275,18 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
 
       {/* Right region: actions + user + locale + theme */}
       <div className="header-actions">
-        <a
-          href="https://www.invirustech.com"
-          target="_blank"
-          rel="noopener"
-          className="text-xs text-text-muted border border-border rounded-xl px-2.5 py-0.5 hover:text-primary hover:border-primary transition-colors no-underline"
-        >
-          {t.poweredBy}
-        </a>
+        {/* P6-S3-T1: while there is no session, UploadZone's own footer
+            carries this credit instead -- it must not show in both places. */}
+        {sessionId && (
+          <a
+            href="https://www.invirustech.com"
+            target="_blank"
+            rel="noopener"
+            className="text-xs text-text-muted border border-border rounded-xl px-2.5 py-0.5 hover:text-primary hover:border-primary transition-colors no-underline"
+          >
+            {t.poweredBy}
+          </a>
+        )}
 
         {sessionId && (
           <div id="export-buttons" className="flex flex-wrap items-center gap-1">

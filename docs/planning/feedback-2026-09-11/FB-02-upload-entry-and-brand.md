@@ -69,7 +69,7 @@ partialize: state => ({ openSessionIds: state.openSessionIds, sessionQueries: st
 
 - `frontend/public/`: `templates/` 아래 CSV/TSV 3개뿐. **이미지 에셋 0개, 파비콘 없음.**
 - `frontend/index.html`: `<link rel="icon">` 없음.
-- 리포지토리 전체 grep 결과 Q-Prism 브랜드 팔레트/로고 정의 **없음**. `README.md:11`은 "Q-Prism®은 프로젝트 명칭"이라고만 명시.
+- 리포지토리 전체 grep 결과 Q-prism 브랜드 팔레트/로고 정의 **없음**. `README.md:11`은 "Q-prism®은 프로젝트 명칭"이라고만 명시.
 
 ## 3. 해결 방향
 
@@ -109,7 +109,7 @@ partialize: state => ({ openSessionIds: state.openSessionIds, sessionQueries: st
 
 ```
 ┌──────────────────────────────────────────────┐
-│  [Q-Prism 마크]  Q-Prism® Cluster Caller       │  ← D-1 확정 후
+│  [Q-prism 마크]  Q-prism® Cluster Caller       │  ← D-1 확정 후
 │  SNP 판별 · 대립유전자 클러스터링              │
 │  ┌────────────────────────────────────────┐  │
 │  │   (드롭존 — 기존 UploadZone 본문)        │  │
@@ -128,7 +128,7 @@ partialize: state => ({ openSessionIds: state.openSessionIds, sessionQueries: st
 | 에셋 | 경로(제안) | 상태 |
 |------|-----------|------|
 | 파비콘 | `frontend/public/favicon.svg` + `index.html` `<link rel="icon">` | **미제공** |
-| Q-Prism 마크 | `frontend/public/brand/qprism-mark.svg` | **미제공** |
+| Q-prism 마크 | `frontend/public/brand/qprism-mark.svg` | **미제공** |
 | Invirustech 로고 | `frontend/public/brand/invirustech.svg` | **미제공** |
 | 히어로 아트 | `frontend/public/brand/qprism-hero.svg` | **미제공** |
 

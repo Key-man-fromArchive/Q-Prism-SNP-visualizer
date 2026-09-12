@@ -291,7 +291,7 @@ export function ImportMappingWizard({
                 onClick={() => reachable && goToStep(n)}
                 className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                   active
-                    ? "border-primary bg-primary text-white"
+                    ? "border-primary bg-primary text-on-primary"
                     : done
                     ? "border-success/40 text-success hover:bg-bg"
                     : "border-border text-text-muted hover:bg-bg disabled:opacity-40 disabled:hover:bg-transparent"
@@ -558,7 +558,7 @@ export function ImportMappingWizard({
             data-testid="wizard-next"
             onClick={() => goToStep(step + 1)}
             disabled={!stepComplete(step)}
-            className="inline-flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary-hover disabled:opacity-50 disabled:cursor-default"
+            className="inline-flex items-center gap-1.5 px-5 py-2 bg-primary text-on-primary rounded-md text-sm hover:bg-primary-hover disabled:opacity-50 disabled:cursor-default"
           >
             {t.imwNext}
             <ChevronRight size={16} aria-hidden="true" />
@@ -570,7 +570,7 @@ export function ImportMappingWizard({
             onClick={handleImport}
             disabled={importing || previewing || !canImport}
             title={!canImport ? t.imwRequiredRoles(requiredRoles.join(", ")) : undefined}
-            className="inline-flex items-center gap-2 px-5 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary-hover disabled:opacity-60 disabled:cursor-default"
+            className="inline-flex items-center gap-2 px-5 py-2 bg-primary text-on-primary rounded-md text-sm hover:bg-primary-hover disabled:opacity-60 disabled:cursor-default"
           >
             <UploadCloud size={16} />
             {importing ? t.imwImporting : t.imwImport}
@@ -647,7 +647,7 @@ function SegmentedButton({
       onClick={onClick}
       className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
         active
-          ? "border-primary bg-primary text-white"
+          ? "border-primary bg-primary text-on-primary"
           : "border-border bg-surface hover:bg-[var(--color-bg)]"
       }`}
     >

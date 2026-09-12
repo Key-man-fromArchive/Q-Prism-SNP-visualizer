@@ -418,7 +418,7 @@ export function FileWorkspaceDrawer({ onOpenSession, onGoToProject }: FileWorksp
                 <button
                   type="button"
                   onClick={() => inputRef.current?.click()}
-                  className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-white hover:bg-primary-hover"
+                  className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-on-primary hover:bg-primary-hover"
                 >
                   {t.browseFiles}
                 </button>

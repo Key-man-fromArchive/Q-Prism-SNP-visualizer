@@ -21,8 +21,8 @@
 | b | "분석" → "결과" 명명 변경 | 정보구조 |
 | c | 플레이트 설정을 워크스페이스 하위 탭에서 최상위로 승격 | 정보구조 |
 | d | 결과 분석에 맞는 레이아웃 | → **FB-03에서 처리** |
-| e | Q-Prism 컬러 적용 | 브랜드 (**정의 부재**) |
-| f | 제품명 `Q-Prism® Cluster Caller` | 브랜드 (**결정 필요**) |
+| e | Q-prism 컬러 적용 | 브랜드 (**정의 부재**) |
+| f | 제품명 `Q-prism® Cluster Caller` | 브랜드 (**결정 필요**) |
 
 ## 2. 현행 정보구조 (코드 근거)
 
@@ -83,8 +83,8 @@ body.dark { /* 동일 토큰 재정의 */ }
 `--color-primary: #2563eb`는 **Tailwind 기본 blue-600**이다. 브랜드 색이 아니라 프레임워크 기본값이다.
 사용자가 "촌스럽다"고 한 것의 물리적 근거가 이것이다.
 
-**그리고 리포지토리 전체에 "Q-Prism 컬러"의 정의가 존재하지 않는다.**
-`README.md:11`은 "Q-Prism®은 프로젝트 명칭이며 Applied Biosystems/Thermo Fisher/Bio-Rad와 무관"이라고만 밝힌다.
+**그리고 리포지토리 전체에 "Q-prism 컬러"의 정의가 존재하지 않는다.**
+`README.md:11`은 "Q-prism®은 프로젝트 명칭이며 Applied Biosystems/Thermo Fisher/Bio-Rad와 무관"이라고만 밝힌다.
 
 추가로, 차트 색은 CSS 토큰을 쓰지 않고 `frontend/src/lib/plotly-theme.ts`에 HEX로 **따로 하드코딩**되어 있다:
 ```ts
@@ -153,7 +153,7 @@ gridColor: dark ? "#2d3040" : "#e5e7eb", …
 
 ### 3-2. 제품명 (요구 f)
 
-사용자 제안: `Q-Prism® Cluster Caller`
+사용자 제안: `Q-prism® Cluster Caller`
 
 변경 지점:
 | 위치 | 현재 |
@@ -162,24 +162,24 @@ gridColor: dark ? "#2d3040" : "#e5e7eb", …
 | `locales/en.ts` `appTitle` | `ASG-PCR SNP Discrimination Analyzer` |
 | `frontend/index.html` `<title>` | `ASG-PCR SNP Discrimination Analyzer` |
 | `index.html` `og:title` / `description` / `keywords` / `canonical` | ASG-PCR 중심 |
-| `README.md` | `Q-Prism® SNP Visualizer` (또 다른 이름) |
+| `README.md` | `Q-prism® SNP Visualizer` (또 다른 이름) |
 | 내보내기 산출물(PDF/PNG 헤더) | `app/reporting/` 확인 필요 |
 
-> **결정됨 (2026-09-11)**: `Q-Prism® Cluster Caller` 채택. `Q-Prism`은 인바이러스테크 자사 저작물이므로
+> **결정됨 (2026-09-11)**: `Q-prism® Cluster Caller` 채택. `Q-prism`은 인바이러스테크 자사 저작물이므로
 > `®` 표기를 사용한다. 사용자(인바이러스테크) 확인 완료.
 
 **주의 사항:**
 1. ~~® 기호 사용 가능 여부~~ — **해결.** 자사 저작물이므로 사용 가능.
-   단, `README.md:11`의 "Q-Prism®은 프로젝트 명칭이며 Applied Biosystems/Thermo Fisher/Bio-Rad와 무관"이라는
+   단, `README.md:11`의 "Q-prism®은 프로젝트 명칭이며 Applied Biosystems/Thermo Fisher/Bio-Rad와 무관"이라는
    **면책 문구는 유지한다** — 타사 상표와의 혼동 방지 목적이므로 자사 소유권과 무관하게 여전히 유효하다.
-2. 현재 리포지토리에 **세 가지 이름**이 공존한다: `ASG-PCR SNP 판별 분석기`(UI), `Q-Prism® SNP Visualizer`(README), `SNP analyzer`(컨테이너/경로).
+2. 현재 리포지토리에 **세 가지 이름**이 공존한다: `ASG-PCR SNP 판별 분석기`(UI), `Q-prism® SNP Visualizer`(README), `SNP analyzer`(컨테이너/경로).
    이번 기회에 **하나로 통일**해야 한다.
 3. SEO: `canonical` `https://snpanalyze.ivttools.com/`와 키워드가 ASG-PCR 기반이다. 명칭 변경 시 검색 유입 영향 검토.
 4. ASG 플랫폼 연동 문구(`Save result to ASG Designer`, `backToAsgDesigner`)는 **상대 시스템의 이름**이므로 유지한다.
 
 ### 3-3. 브랜드 팔레트 (요구 e) — **정의부터 필요**
 
-"Q-Prism 컬러"가 코드에도 문서에도 없으므로, 두 갈래다.
+"Q-prism 컬러"가 코드에도 문서에도 없으므로, 두 갈래다.
 
 **(i) 브랜드 가이드가 존재하는 경우** → HEX 값을 제공받아 토큰에 매핑.
 **(ii) 존재하지 않는 경우** → 팔레트를 **설계해야 하며, 이는 승인 대상이다.**
@@ -287,8 +287,8 @@ export function plotlyColors() {
 
 | ID | 질문 |
 |----|------|
-| ~~**D-1**~~ | **해결 (2026-09-11)** — `Q-Prism® Cluster Caller` 채택. `®` 사용 가능(자사 저작물). README의 `Q-Prism® SNP Visualizer`는 이 이름으로 통일한다. |
-| **D-2** | Q-Prism 브랜드 팔레트 HEX 값. 기존 가이드가 있는가, 신규 설계가 필요한가? |
+| ~~**D-1**~~ | **해결 (2026-09-11)** — `Q-prism® Cluster Caller` 채택. `®` 사용 가능(자사 저작물). README의 `Q-prism® SNP Visualizer`는 이 이름으로 통일한다. |
+| **D-2** | Q-prism 브랜드 팔레트 HEX 값. 기존 가이드가 있는가, 신규 설계가 필요한가? |
 | **D-4** | `--color-fam`/`--color-allele2`를 브랜드 색으로 바꿀 것인가? (권장: 유지) |
 | ~~**D-5**~~ | **해결 (2026-09-11)** — 전면 재편(3-1-a) 채택. 실측 영향: 루트 E2E 20개 중 7개 스펙(25곳), 프론트 e2e 23곳, 단위 1개 파일(`TabNavigation.keyboard.test.tsx`). 대부분 기계적 치환이며 초안의 "대량 수정"은 과장이었다. |
 | — | `설정` 탭 강등 동의 여부 |
