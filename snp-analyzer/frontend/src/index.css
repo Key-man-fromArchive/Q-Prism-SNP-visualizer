@@ -167,9 +167,23 @@ body.dark .panel {
    viewport-relative max-height (P4-S1-T1, FB-04 §3-1). `--scatter-aspect-w/h`
    are set inline from `settings-store.scatterAspect` ('4:3' default, '1:1'
    alternate); the 4/3 fallback below only covers a render before that inline
-   style attaches. */
+   style attaches.
+   P4-S3-T1 followup: a bare `min(70vh, 640px)` ignores how much chrome sits
+   above the canvas (header, tabs, context summary, scope selector, primary
+   toolbar, well-selection toolbar, the plot header bar and its collapsed
+   advanced-settings summary) -- at 1920x911 that measured out to 555px
+   (Playwright `getBoundingClientRect`, single-marker view, no active
+   warnings; see evidence/P4-S3-T1.md), leaving only 356px before the fold.
+   `100dvh - 555px` folds that in as a third, viewport-relative cap so a
+   short window shrinks the canvas instead of pushing its bottom off-screen.
+   911px minus that same 555px chrome is still less than `min-height`'s
+   360px floor -- the floor wins there (as it must: it exists to keep
+   Plotly from mounting into a 0/near-0-height box), so a few px of residual
+   overflow at exactly this viewport is expected and documented, not a bug
+   to chase by breaking the floor. Sessions with less chrome above the fold
+   (no group-filter bar, no active warnings) clear 911 with room to spare. */
 .analysis-scatter-canvas {
-  --scatter-max-h: min(70vh, 640px);
+  --scatter-max-h: min(70vh, 640px, calc(100dvh - 555px));
   --scatter-aspect-w: 4;
   --scatter-aspect-h: 3;
   aspect-ratio: var(--scatter-aspect-w) / var(--scatter-aspect-h);

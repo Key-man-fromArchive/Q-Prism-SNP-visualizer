@@ -493,7 +493,7 @@ const en = {
   } as Record<string, string>)[targetType] ?? 'ASG linked',
   plateScrollHint: 'Plate review: scroll horizontally within this area when needed.',
   resultsScrollHint: 'Genotype review: scroll horizontally within this area when needed.',
-  analysisAdvancedSettings: 'View and calculation settings — expand to change',
+  analysisAdvancedSettings: 'Advanced settings',
   analysisNumericDetails: 'Detailed readings and amplification curve',
   analysisScopeDetails: 'How scope and exclusions are counted',
   analysisNtcMode: (explicit: boolean) => explicit ? 'Explicit NTC' : 'Auto NTC',

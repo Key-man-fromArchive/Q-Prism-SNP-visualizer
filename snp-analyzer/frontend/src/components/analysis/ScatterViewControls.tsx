@@ -9,7 +9,7 @@
 // controls; the NTC corner arrives by prop because the plate keeps it in the
 // data store while a marker keeps it in its own threshold_config.
 import { useEffect, useState } from "react";
-import { AlertTriangle, Crosshair, MousePointer2, RotateCcw } from "lucide-react";
+import { AlertTriangle, Crosshair, Lock, Maximize2, MousePointer2, RotateCcw, SlidersHorizontal, Unlock } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSettingsStore, type AxisMode, type ScatterAspect } from "@/stores/settings-store";
 import { normalizationLabel } from "@/lib/channel-labels";
@@ -196,99 +196,104 @@ export function ScatterViewControls({
           visible. It used to share a collapsed <details> with the NTC
           quadrant and dosage ceiling below -- reachable only after
           discovering and expanding "View and calculation settings" (FB-04
-          §3-2). Only the low-frequency, expert settings stay collapsed. */}
+          §3-2). Only the low-frequency, expert settings stay collapsed.
+          P4-S3-T1 followup: this used to wrap to 2 rows (each group stacked
+          a text label over its control row, and the axis-range group alone
+          spelled out "Fit to data"/"Equal x/y scale"/"Axis settings…" in
+          full) -- pushing the canvas 83px further down the page than right
+          after P4-S1-T1. Per-group labels are now `aria-label`s on a
+          `role="group"` wrapper (not a visible line), and the three
+          axis-range actions are icon-only buttons with the same text as a
+          title/aria-label, so all 4 groups fit on one row without losing
+          any control or its `data-testid`. */}
       <div
         data-testid="scatter-plot-header"
-        className="flex flex-wrap items-end gap-x-4 gap-y-2 rounded-md border border-border bg-bg px-3 py-2"
+        className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border bg-bg px-3 py-2"
       >
         {/* What a drag does. Kept first: it is the control that decides whether
             the plot is selectable at all. */}
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-text-muted">{t.scatterToolLabel}</span>
-          <div className="flex gap-1" role="group" aria-label={t.scatterToolLabel}>
-            <button
-              type="button"
-              data-testid="scatter-tool-select"
-              aria-pressed={scatterTool === "select"}
-              onClick={() => setScatterTool("select")}
-              className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium ${
-                scatterTool === "select"
-                  ? "border-primary bg-primary text-white"
-                  : "border-border bg-surface text-text hover:border-primary"
-              }`}
-            >
-              <MousePointer2 size={13} aria-hidden="true" /> {t.scatterToolSelect}
-            </button>
-            <button
-              type="button"
-              data-testid="scatter-tool-edit"
-              aria-pressed={scatterTool === "edit"}
-              onClick={() => setScatterTool("edit")}
-              className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium ${
-                scatterTool === "edit"
-                  ? "border-amber-500 bg-amber-500 text-black"
-                  : "border-border bg-surface text-text hover:border-amber-500"
-              }`}
-            >
-              <Crosshair size={13} aria-hidden="true" /> {t.scatterToolEdit}
-            </button>
-          </div>
+        <div className="flex items-center gap-1" role="group" aria-label={t.scatterToolLabel}>
+          <button
+            type="button"
+            data-testid="scatter-tool-select"
+            aria-pressed={scatterTool === "select"}
+            onClick={() => setScatterTool("select")}
+            className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium ${
+              scatterTool === "select"
+                ? "border-primary bg-primary text-white"
+                : "border-border bg-surface text-text hover:border-primary"
+            }`}
+          >
+            <MousePointer2 size={13} aria-hidden="true" /> {t.scatterToolSelect}
+          </button>
+          <button
+            type="button"
+            data-testid="scatter-tool-edit"
+            aria-pressed={scatterTool === "edit"}
+            onClick={() => setScatterTool("edit")}
+            className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium ${
+              scatterTool === "edit"
+                ? "border-amber-500 bg-amber-500 text-black"
+                : "border-border bg-surface text-text hover:border-amber-500"
+            }`}
+          >
+            <Crosshair size={13} aria-hidden="true" /> {t.scatterToolEdit}
+          </button>
         </div>
+
+        <div className="h-6 w-px bg-border" aria-hidden="true" />
 
         {/* Normalization: the toggle, which channel it divides by, and
             whether the run even has one to divide by. */}
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-text-muted">
-            {normalizationLabel(labels)}
-          </span>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex items-center gap-1 text-xs text-text">
-              <input
-                type="checkbox"
-                data-testid="scatter-use-rox"
-                checked={useRox}
-                disabled={!hasNormalizationChannel}
-                onChange={(event) => setUseRox(event.target.checked)}
-              />
-              {t.normalizeByReference}
-            </label>
-            {/* Runtime re-assignment of the reference channel is out of
-                scope: the saved session model keeps one reference slot, not
-                the full set of collected channels (FB-04 §3-4 Step 2). This
-                shows the one channel actually in force. */}
-            <select
-              data-testid="normalization-channel-select"
-              aria-label={t.normalizationChannelLabel}
-              value={referenceChannelName}
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label={normalizationLabel(labels)}>
+          <label className="inline-flex items-center gap-1 text-xs text-text">
+            <input
+              type="checkbox"
+              data-testid="scatter-use-rox"
+              checked={useRox}
               disabled={!hasNormalizationChannel}
-              onChange={() => {}}
-              className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text disabled:opacity-40"
+              onChange={(event) => setUseRox(event.target.checked)}
+            />
+            {t.normalizeByReference}
+          </label>
+          {/* Runtime re-assignment of the reference channel is out of
+              scope: the saved session model keeps one reference slot, not
+              the full set of collected channels (FB-04 §3-4 Step 2). This
+              shows the one channel actually in force. */}
+          <select
+            data-testid="normalization-channel-select"
+            aria-label={t.normalizationChannelLabel}
+            value={referenceChannelName}
+            disabled={!hasNormalizationChannel}
+            onChange={() => {}}
+            className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text disabled:opacity-40"
+          >
+            <option value={referenceChannelName}>{referenceChannelName}</option>
+          </select>
+          {!hasNormalizationChannel && (
+            <span data-testid="normalization-channel-reason" className="text-xs text-text-muted">
+              {t.normalizationChannelUnavailable}
+            </span>
+          )}
+          {roxOutlierWells.length > 0 && (
+            <span
+              data-testid="rox-outlier-warning"
+              title={roxOutlierWells.join(", ")}
+              className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning"
             >
-              <option value={referenceChannelName}>{referenceChannelName}</option>
-            </select>
-            {!hasNormalizationChannel && (
-              <span data-testid="normalization-channel-reason" className="text-xs text-text-muted">
-                {t.normalizationChannelUnavailable}
-              </span>
-            )}
-            {roxOutlierWells.length > 0 && (
-              <span
-                data-testid="rox-outlier-warning"
-                title={roxOutlierWells.join(", ")}
-                className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning"
-              >
-                {t.roxOutlierWells(roxOutlierWells.length)}
-              </span>
-            )}
-          </div>
+              {t.roxOutlierWells(roxOutlierWells.length)}
+            </span>
+          )}
         </div>
+
+        <div className="h-6 w-px bg-border" aria-hidden="true" />
 
         {/* Axis range */}
         <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-text-muted">{t.axisRangeLabel}</span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1" role="group" aria-label={t.axisRangeLabel}>
             <select
               data-testid="axis-mode"
+              aria-label={t.axisRangeLabel}
               value={axisMode}
               onChange={(event) => setAxisMode(event.target.value as AxisMode)}
               className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text"
@@ -303,20 +308,28 @@ export function ScatterViewControls({
               type="button"
               data-testid="axis-fit-to-data"
               onClick={fitToData}
-              className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary"
+              title={t.axisFitToData}
+              aria-label={t.axisFitToData}
+              className="rounded-md border border-border bg-surface p-1.5 text-text hover:border-primary"
             >
-              {t.axisFitToData}
+              <Maximize2 size={14} aria-hidden="true" />
             </button>
-            <label className="ml-1 inline-flex items-center gap-1 text-xs text-text">
-              <input
-                type="checkbox"
-                data-testid="axis-lock-aspect"
-                checked={lockAspect}
-                disabled={manual}
-                onChange={(event) => setLockAspect(event.target.checked)}
-              />
-              {t.axisLockAspect}
-            </label>
+            <button
+              type="button"
+              data-testid="axis-lock-aspect"
+              aria-pressed={lockAspect}
+              disabled={manual}
+              onClick={() => setLockAspect(!lockAspect)}
+              title={t.axisLockAspect}
+              aria-label={t.axisLockAspect}
+              className={`rounded-md border p-1.5 disabled:opacity-40 ${
+                lockAspect
+                  ? "border-primary bg-primary text-white"
+                  : "border-border bg-surface text-text hover:border-primary"
+              }`}
+            >
+              {lockAspect ? <Lock size={14} aria-hidden="true" /> : <Unlock size={14} aria-hidden="true" />}
+            </button>
             {/* "Axis settings…" IS the manual bounds request (FB-04 §3-2,
                 user feedback 7ec0ec1e5e8a4870 item 4): opening it commits to
                 manual mode instead of asking the operator to find and pick
@@ -326,9 +339,15 @@ export function ScatterViewControls({
               data-testid="axis-settings-toggle"
               aria-expanded={axisPopoverVisible}
               onClick={toggleAxisSettings}
-              className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary"
+              title={t.axisSettingsButton}
+              aria-label={t.axisSettingsButton}
+              className={`rounded-md border p-1.5 ${
+                axisPopoverVisible
+                  ? "border-primary bg-primary text-white"
+                  : "border-border bg-surface text-text hover:border-primary"
+              }`}
             >
-              {t.axisSettingsButton}
+              <SlidersHorizontal size={14} aria-hidden="true" />
             </button>
           </div>
           {axisPopoverVisible && (
@@ -356,13 +375,15 @@ export function ScatterViewControls({
           )}
         </div>
 
+        <div className="h-6 w-px bg-border" aria-hidden="true" />
+
         {/* Canvas aspect ratio (P4-S1-T1's settings-store.scatterAspect --
             this is only the control, the state and the CSS geometry it
             drives live there). */}
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-text-muted">{t.scatterAspectLabel}</span>
+        <div className="flex items-center gap-1.5" role="group" aria-label={t.scatterAspectLabel}>
           <select
             data-testid="scatter-aspect-select"
+            aria-label={t.scatterAspectLabel}
             value={scatterAspect}
             onChange={(event) => setScatterAspect(event.target.value as ScatterAspect)}
             className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text"
@@ -377,10 +398,16 @@ export function ScatterViewControls({
       </div>
 
       <details data-testid="analysis-advanced-settings" className="analysis-advanced-settings">
+        {/* P4-S3-T1 followup: axis mode and lock-aspect are dropped from this
+            summary -- both are now always visible above (axis-mode select,
+            axis-lock-aspect icon toggle), so repeating them here just made
+            an already-long line wrap to 2 lines for no new information.
+            `ScatterReferenceBasis`'s text/testid are untouched (root E2E
+            tests/26-chart-semantics.spec.ts asserts on it directly). */}
         <summary className="cursor-pointer text-xs text-text rounded border border-border p-2">
-          {t.analysisAdvancedSettings} · {axisModeLabel(axisMode)} · {labels.fam}/{labels.allele2} · <ScatterReferenceBasis requested={useRox} applied={normalizationApplied} /> · {t.chartBackground(backgroundMode)}
+          {t.analysisAdvancedSettings} · {labels.fam}/{labels.allele2} · <ScatterReferenceBasis requested={useRox} applied={normalizationApplied} /> · {t.chartBackground(backgroundMode)}
           {' · '}{t.ntcAxisOffsetLabel}: {ntcOffsets.x}, {ntcOffsets.y}
-          {' · '}{t.analysisNtcMode(ntcCorner !== null)}: {labels.fam} ≤{roundBound(effectiveNtcCorner.fam)}, {labels.allele2} ≤{roundBound(effectiveNtcCorner.allele2)} · {t.analysisAspectState(lockAspect)}
+          {' · '}{t.analysisNtcMode(ntcCorner !== null)}: {labels.fam} ≤{roundBound(effectiveNtcCorner.fam)}, {labels.allele2} ≤{roundBound(effectiveNtcCorner.allele2)}
         </summary>
         <div
           data-testid="scatter-view-controls"

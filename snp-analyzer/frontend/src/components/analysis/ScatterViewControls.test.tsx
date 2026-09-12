@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { ScatterViewControls } from './ScatterViewControls';
 import { useLanguageStore } from '@/stores/language-store';
@@ -24,7 +24,13 @@ it.each(['en', 'ko'] as const)('summarizes inferred thresholds and unlocked axes
   expect(summary).toHaveTextContent('FAM ≤0.12');
   expect(summary).toHaveTextContent('VIC ≤0.34');
   expect(summary).toHaveTextContent(language === 'en' ? 'Auto' : '자동');
-  expect(summary).toHaveTextContent(language === 'en' ? 'Independent scales' : '독립 축');
+  // P4-S3-T1 followup: axis mode and lock-aspect used to be repeated here
+  // too, but both are already always-visible above (axis-mode select,
+  // axis-lock-aspect icon toggle) -- summarizing them again just made an
+  // already-long line wrap. The lock-aspect state is asserted on that
+  // promoted control instead, right below.
+  expect(summary).not.toHaveTextContent(language === 'en' ? 'Independent scales' : '독립 축');
+  expect(screen.getByTestId('axis-lock-aspect')).toHaveAttribute('aria-pressed', 'false');
   fireEvent.click(summary);
   expect(change).not.toHaveBeenCalled();
   expect(useSettingsStore.getState().lockAspect).toBe(false);
@@ -39,7 +45,8 @@ it.each(['en', 'ko'] as const)('summarizes explicit thresholds and locked axes (
     onNtcCornerChange={vi.fn()} normalizationApplied />);
   const summary = screen.getByTestId('analysis-advanced-settings').querySelector('summary')!;
   expect(summary).toHaveTextContent(language === 'en' ? 'Explicit NTC' : '지정 NTC');
-  expect(summary).toHaveTextContent(language === 'en' ? 'Equal scales' : '동일 축');
+  expect(summary).not.toHaveTextContent(language === 'en' ? 'Equal scales' : '동일 축');
+  expect(screen.getByTestId('axis-lock-aspect')).toHaveAttribute('aria-pressed', 'true');
 });
 
 it('edits and resets the raw NTC axis margins without touching manual bounds', () => {
@@ -101,6 +108,45 @@ it('promotes drag tool, normalization, axis mode and aspect above the collapsed 
   expect(within(details).getByTestId('ntc-fam-max')).toBeInTheDocument();
   expect(within(details).getByTestId('ntc-axis-x-offset')).toBeInTheDocument();
   expect(within(details).getByTestId('scatter-view-controls')).toBeInTheDocument();
+});
+
+// P4-S3-T1 followup (FB-03, canvas-below-the-fold regression): the plot
+// header bar used to wrap to 2 rows -- the axis-range group alone spelled
+// out "Fit to data"/"Equal x/y scale"/"Axis settings…" in full text. These
+// three are now icon-only buttons (same testids, same behavior, label moved
+// to title/aria-label) so all 4 groups fit on one row.
+it('fits the axes to the data bounds from the icon-only "fit to data" button', () => {
+  useSettingsStore.getState().resetToDefaults();
+  render(<ScatterViewControls {...baseProps} dataBounds={{ xMin: -1, xMax: 5, yMin: -2, yMax: 6 }} />);
+  fireEvent.click(screen.getByTestId('axis-fit-to-data'));
+  expect(useSettingsStore.getState()).toMatchObject({ xMin: -1, xMax: 5, yMin: -2, yMax: 6 });
+});
+
+it('toggles lockAspect from the icon-only "lock aspect" button, disabled in manual axis mode', () => {
+  useSettingsStore.getState().resetToDefaults();
+  useSettingsStore.setState({ lockAspect: false, axisMode: 'zero' });
+  render(<ScatterViewControls {...baseProps} />);
+  const lockButton = screen.getByTestId('axis-lock-aspect');
+  expect(lockButton).not.toBeDisabled();
+  expect(lockButton).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(lockButton);
+  expect(useSettingsStore.getState().lockAspect).toBe(true);
+  fireEvent.click(lockButton);
+  expect(useSettingsStore.getState().lockAspect).toBe(false);
+  act(() => useSettingsStore.setState({ axisMode: 'manual' }));
+  expect(screen.getByTestId('axis-lock-aspect')).toBeDisabled();
+});
+
+it('lays out the plot header bar controls in 4 named groups on a single row', () => {
+  useSettingsStore.getState().resetToDefaults();
+  render(<ScatterViewControls {...baseProps} />);
+  const header = screen.getByTestId('scatter-plot-header');
+  expect(header.className).toContain('flex-wrap');
+  // Each group now carries its accessible name as a role="group" aria-label
+  // instead of a separate visible text line above the controls.
+  expect(within(header).getByRole('group', { name: /drag/i })).toBeInTheDocument();
+  expect(within(header).getByRole('group', { name: /axis range/i })).toBeInTheDocument();
+  expect(within(header).getByRole('group', { name: /aspect ratio/i })).toBeInTheDocument();
 });
 
 it('opens axis bounds from the "axis settings" button without picking manual mode first', () => {
