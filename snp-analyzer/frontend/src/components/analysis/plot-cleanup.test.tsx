@@ -52,3 +52,35 @@ it('opens the overlay with typed Plotly axis titles and effective genotype label
   expect(layout).toMatchObject({ xaxis: { title: { text: 'Cycle' } }, yaxis: { title: { text: 'Norm. FAM RFU' } } });
   expect(traces).toEqual([expect.objectContaining({ name: 'NTC', y: [1, 2] })]);
 });
+
+// P2-S2-T1: the Raw data tab mounts a second, plate-wide AmplificationOverlay
+// alongside the one that already lives in the Analysis tab (AnalysisTab
+// never unmounts -- App.tsx just toggles a `hidden` class -- so both are
+// simultaneously in the DOM once the operator opens the Raw data tab).
+// Their fixed ids used to be hardcoded, so two instances would have produced
+// invalid duplicate-id HTML and made this very file's querySelector('#...')
+// lookups ambiguous. idPrefix scopes them; the default ("") is unchanged so
+// this file's other assertions and e2e/p4-s2-analysis-tab.spec.ts's
+// `#toggle-overlay-btn` locator keep working for the Analysis-tab instance.
+it('scopes DOM ids so two concurrently mounted overlays do not collide', async () => {
+  const view = render(
+    <>
+      <AmplificationOverlay />
+      <AmplificationOverlay idPrefix="rawdata-" />
+    </>
+  );
+
+  const plots = view.container.querySelectorAll('[id$="overlay-plot"]');
+  expect(plots).toHaveLength(2);
+  const ids = Array.from(plots).map((el) => el.id);
+  expect(new Set(ids).size).toBe(2);
+  expect(ids).toContain('overlay-plot');
+  expect(ids).toContain('rawdata-overlay-plot');
+
+  fireEvent.click(view.container.querySelector('#toggle-overlay-btn')!);
+  fireEvent.click(view.container.querySelector('#rawdata-toggle-overlay-btn')!);
+  await waitFor(() => expect(Plotly.react).toHaveBeenCalledTimes(2));
+
+  const renderedNodes = vi.mocked(Plotly.react).mock.calls.map((call) => call[0]);
+  expect(renderedNodes[0]).not.toBe(renderedNodes[1]);
+});

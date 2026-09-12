@@ -106,7 +106,7 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
 | --- | --- | --- |
 | BE-TEST | BE | `venv/bin/python -m pytest tests/<task_test>.py --tb=short -q` |
 | BE-ALL | BE | `venv/bin/python -m pytest --tb=short -q` |
-| BE-LINT | BE | **변경한 `.py` 파일에 대해서만** `venv/bin/ruff check <changed…>` 및 `venv/bin/ruff format --check <changed…>` (P0-T0.1에서 수정됨 — 아래 주석) |
+| BE-LINT | BE | `venv/bin/ruff check <변경한 .py>` (전부 통과 필수) + `venv/bin/ruff format --check <신규 생성 .py만>` (P0-T0.1 / P2-R1-T1에서 정밀화 — 아래 주석) |
 | FE-TEST | FE | `npm run test -- src/<task_test>` |
 | FE-ALL | FE | `npm run test` |
 | FE-CHECK | FE | `npx tsc --noEmit`, `npm run lint`, `npm run build` 각각 실행 |
@@ -125,7 +125,12 @@ FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
   `ruff format --check` **122개 파일 미포맷**이다. 리포지토리에 ruff 설정 파일이 없어 기본 규칙이 적용되며,
   코드베이스는 그 규칙으로 작성되지 않았다. 전체를 고치는 것은 이번 계약 범위 밖이며
   (122개 파일 포맷은 모든 후속 diff·blame을 오염시킨다), **별도 계약으로 분리한다.**
-  신규·수정 파일은 통과해야 하고, 기준선 수치가 늘면 회귀로 본다.
+  **`ruff check`(린트 규칙)**: 변경한 `.py` 파일 전부가 통과해야 한다.
+  **`ruff format --check`(포맷)**: **신규 생성 파일에만** 요구한다. `ruff format`은 파일 단위 판정이라
+  기존 파일에 적용하면 그 파일 전체를 재포맷하게 되고, 이는 바로 위에서 배제한 diff·blame 오염과 같은 일이 된다.
+  실제로 P2-R1-T1이 수정한 `app/models.py`, `app/parsers/{pcrd,eds}_raw.py`, `app/routers/data.py`는
+  **main에서도 이미 미포맷**이었고, 같은 태스크가 새로 만든 `tests/test_protocol_step_read_fields.py`는 포맷을 만족했다.
+  기존 파일에 추가하는 코드는 주변 스타일을 따른다. 기준선 수치(36 / 122)가 늘면 회귀로 본다.
 - 백엔드는 임시 `DB_PATH`와 합성 계정·local 인증으로 실행한다. **운영 DB(`/app/data/snp_analyzer.db`)는 읽기 조회 외에 사용하지 않는다.**
 - 증거는 `docs/planning/feedback-2026-09-11/evidence/<task-id>.md`에 커밋·명령·결과·남은 문제를 기록한다.
   스크린샷·trace는 격리 artifact 경로에 두고 링크한다. 비공개 샘플명·인증 파일은 커밋하지 않는다.

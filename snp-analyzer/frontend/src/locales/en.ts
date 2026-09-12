@@ -111,6 +111,22 @@ const en = {
   errLoadQuality: 'Failed to fetch quality data',
   errLoadExample: 'Failed to load example',
   overlayLoading: 'Loading overlay...',
+  overlayShow: 'Show Overlay',
+  overlayHide: 'Hide Overlay',
+  overlayColorByLabel: 'Color by',
+  overlayColorByGenotype: 'Genotype',
+  overlayColorByWellType: 'Well type',
+  // Colors trace-by-trace differently from genotype/well-type, but does NOT
+  // mean "raw signal": the plotted Y is still norm_fam/norm_allele2 either
+  // way (see AmplificationOverlay.tsx). It is a call-color-free VIEW.
+  overlayColorBySolid: 'Solid color',
+  overlayProcessingStatus: (requestedRox: boolean, applied: boolean) =>
+    `Reference normalization requested: ${requestedRox ? 'yes' : 'no'}; actually applied: ${applied ? 'yes' : 'no'}.`,
+  // The server did not echo whether normalization was applied (older
+  // response shape). Must NOT fall back to the request value -- "not
+  // reported" and "not applied" are different facts.
+  overlayProcessingStatusUnreported: (requestedRox: boolean) =>
+    `Reference normalization requested: ${requestedRox ? 'yes' : 'no'}; actually applied: not reported by the server.`,
   batchAddTo: (name: string, msg: string) => `Add to "${name}": ${msg}`,
   batchAddResult: (added: number, count: number, name: string, leftover: number) => `Added ${added}/${count} to "${name}" (${leftover} already in project or missing)`,
   batchBulkAddTo: (name: string, msg: string) => `Bulk add to "${name}": ${msg}`,
@@ -537,6 +553,10 @@ const en = {
   addStep: 'Add Step',
   saveProtocol: 'Save Protocol',
   saving: 'Saving...',
+  protocolThermalProfile: 'Thermal-cycling profile',
+  protocolThermalProfileSummary: (steps: number, reads: number, minTemp: number, maxTemp: number) =>
+    `${steps} steps, ${reads} plate read${reads === 1 ? '' : 's'}, ${minTemp}\u2013${maxTemp}\u00b0C. Step order, not real time.`,
+  protocolReadChannels: 'Read Channels',
 
   // Keyboard Help
   keyboardShortcuts: 'Keyboard Shortcuts',

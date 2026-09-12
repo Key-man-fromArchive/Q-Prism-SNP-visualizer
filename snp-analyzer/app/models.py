@@ -163,6 +163,10 @@ class ProtocolStep(BaseModel):
     label: str = ""
     phase: str = ""        # e.g., "Pre-read", "Amplification 1 (Touchdown)", "Post-read"
     goto_label: str = ""   # e.g., "↩ Repeat Steps 3-4 × 10 cycles"
+    # All three default so existing stored JSON (pre-P2-R1-T1) still deserializes.
+    plate_read: bool = False               # whether this step captured a fluorescence read
+    temp_increment: float | None = None    # per-cycle temperature delta (touchdown; negative = descending)
+    read_channels: list[str] = Field(default_factory=list)  # step-level read channels; empty when source format has none
 
 
 class WellType(str, Enum):

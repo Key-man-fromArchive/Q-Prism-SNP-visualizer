@@ -39,6 +39,16 @@ export type ProtocolStep = {
   label: string;
   phase: string;
   goto_label: string;
+  /** Whether this step actually reads the plate; source of truth for the
+   *  camera marker (do NOT infer this from `label`, which is free text). */
+  plate_read: boolean;
+  /** Per-cycle touchdown temperature delta (signed; e.g. -0.6 for a 0.6°C/cycle
+   *  ramp-down). `null` when this step has no touchdown. */
+  temp_increment: number | null;
+  /** Per-step read channels. Always empty for formats that only carry a
+   *  run-wide channel list (see `ProtocolResponse`'s role-label metadata) —
+   *  do not treat an empty array as "no channels were read". */
+  read_channels: string[];
 };
 
 export type UnifiedData = {
@@ -647,10 +657,16 @@ export type PlateResponse = RoleLabelMetadata & {
 
 export type AmplificationResponse = RoleLabelMetadata & {
   allele2_dye: string;
+  background_mode?: BackgroundMode;
+  /** What the curves below actually are (see `normalization_applies()` in
+   *  app/processing/normalize.py), NOT what the `use_rox` request asked
+   *  for -- a run with no passive reference stays raw regardless of the
+   *  request, same distinction ScatterResponse/PlateResponse already make. */
+  normalization_applied?: boolean;
   curves: AmplificationCurve[];
 };
 
-export type ProtocolResponse = {
+export type ProtocolResponse = RoleLabelMetadata & {
   steps: ProtocolStep[];
 };
 

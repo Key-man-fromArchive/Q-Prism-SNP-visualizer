@@ -314,7 +314,13 @@ export function AnalysisTab() {
       </div>
 
       <div className="analysis-secondary px-4 pb-4 sm:px-6"><ResultsTable /></div>
-      {/* Amplification Overlay - full width below grid */}
+      {/* FB-06: this stays the auxiliary, collapsed-by-default overlay for
+          checking curves mid-analysis -- the Raw data (protocol) tab now
+          also mounts a plate-wide one (ProtocolTab.tsx), and this one is
+          NOT removed in favor of it: it's the only overlay that can take
+          MultiMarkerAnalysisPanel's `ploidyOverride` for marker-scoped
+          curves. Default (empty) idPrefix keeps its ids unscoped, matching
+          e2e/p4-s2-analysis-tab.spec.ts's `#toggle-overlay-btn` locator. */}
       <div style={{ padding: "0 24px 16px" }}>
         <AmplificationOverlay />
       </div>
