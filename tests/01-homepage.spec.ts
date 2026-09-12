@@ -4,7 +4,7 @@ import { login } from './helpers';
 test.describe('Homepage & Initial State', () => {
   test('page loads with correct title', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveTitle('ASG-PCR SNP Discrimination Analyzer');
+    await expect(page).toHaveTitle('Q-prism® Cluster Caller');
   });
 
   test('local login page is visible before authentication', async ({ page }) => {
@@ -45,7 +45,7 @@ test.describe('Homepage & Initial State', () => {
     await page.goto('/');
     const version = page.getByTestId('app-version');
     await expect(version).toBeVisible();
-    await expect(version).toHaveText(/ASG-PCR SNP v\d+\.\d+\.\d+/);
+    await expect(version).toHaveText(/Q-prism® v\d+\.\d+\.\d+/);
 
     await login(page);
     await expect(page.getByTestId('app-version')).toBeVisible();
@@ -71,7 +71,7 @@ test.describe('Homepage & Initial State', () => {
   test('CSS and layout render properly', async ({ page }) => {
     await login(page);
     const header = page.locator('header h1');
-    await expect(header).toHaveText(/ASG-PCR SNP (Discrimination Analyzer|판별 분석기)/);
+    await expect(header).toHaveText(/Q-prism® Cluster Caller/);
     await expect(header).toBeVisible();
   });
 

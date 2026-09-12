@@ -11,7 +11,7 @@ describe('AppFooter', () => {
   it('states the running version', async () => {
     api.getVersion.mockResolvedValue({ version: '1.0.0', commit: '', built_at: '' });
     render(<AppFooter />);
-    expect(await screen.findByTestId('app-version')).toHaveTextContent('ASG-PCR SNP v1.0.0');
+    expect(await screen.findByTestId('app-version')).toHaveTextContent('Q-prism® v1.0.0');
   });
 
   it('adds the build provenance when the image supplied it', async () => {
