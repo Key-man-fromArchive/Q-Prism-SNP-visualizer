@@ -137,6 +137,12 @@ body.dark .panel {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
+/* PlateLegend swatches: a border keeps a black/near-black call (e.g. NTC)
+   distinguishable from the surface behind it in dark mode. */
+.plate-legend-swatch {
+  border: 1px solid var(--color-border);
+}
+
 /* Tailwind owns .hidden so responsive display variants retain their cascade. */
 
 :root { --workspace-gutter: 1rem; --workspace-gap: 1rem; }
@@ -162,11 +168,41 @@ body.dark .panel {
 .protocol-editor td { overflow-wrap: anywhere; }
 .analysis-grid > *, .panel { min-width: 0; }
 .analysis-review-stack { display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
-.analysis-scatter-canvas { height: 420px; }
+/* Canvas ratio is bounded by width, not clipped by height, so
+   `aspect-ratio` always holds true instead of being cut short by a
+   viewport-relative max-height (P4-S1-T1, FB-04 §3-1). `--scatter-aspect-w/h`
+   are set inline from `settings-store.scatterAspect` ('4:3' default, '1:1'
+   alternate); the 4/3 fallback below only covers a render before that inline
+   style attaches.
+   P4-S3-T1 followup (reverted): a `calc(100dvh - 555px)` term was added
+   here briefly to chase a "no scroll at 1920x911" target -- that target was
+   never in the user's request (FB-03 explicitly accepts scrolling for
+   secondary content) and it collided with `min-height: 360px` below,
+   sinking the canvas to the same ~360px the user was already complaining
+   about (300px). Reverted to the plain `min(70vh, 640px)`; the header-bar
+   compaction that freed real space above the canvas stays (see
+   evidence/P4-S3-T1.md's "orchestrator correction" note). */
+.analysis-scatter-canvas {
+  --scatter-max-h: min(70vh, 640px);
+  --scatter-aspect-w: 4;
+  --scatter-aspect-h: 3;
+  aspect-ratio: var(--scatter-aspect-w) / var(--scatter-aspect-h);
+  height: auto;
+  width: 100%;
+  max-width: calc(var(--scatter-max-h) * var(--scatter-aspect-w) / var(--scatter-aspect-h));
+  min-height: 360px; /* guards against a 0-height Plotly mount */
+  margin-inline: auto;
+}
 .analysis-advanced-settings > div { max-height: 18rem; overflow: auto; }
 .well-detail-expanded { max-height: 22rem; overflow: auto; }
 .analysis-secondary { min-width: 0; }
-[data-testid="results-scroll-region"] { max-height: 24rem; overflow-y: auto; }
+/* P4-S3-T1 (FB-03 §3-4): ResultsTable is promoted to a first-class area at
+   the >=1280px breakpoint where the two-column analysis-grid also applies
+   (no more 24rem clip hiding genotype calls below the fold). Below that,
+   the plate is narrow enough that internal scrolling is still worth it. */
+@media (max-width: 1279px) {
+  [data-testid="results-scroll-region"] { max-height: 24rem; overflow-y: auto; }
+}
 @media (min-width: 1280px) {
   [data-testid="analysis-selection-toolbar"] > span:first-child { width: auto; }
   .analysis-grid { padding-top: .5rem; }
@@ -176,18 +212,16 @@ body.dark .panel {
   .detail-panel #detail-content > table td { overflow-wrap: anywhere; }
   [data-testid="marker-selector-sidebar"] { max-height: 32rem; overflow: auto; }
   [data-testid="marker-warnings"] { max-height: 5rem; overflow: auto; }
-  .analysis-scatter-canvas { max-height: 300px; }
   .analysis-primary-toolbar { display: flex; align-items: center; }
   .analysis-primary-toolbar > * { flex: 1; min-width: 0; }
   .analysis-primary-toolbar #cycle-control { flex: .8; }
   .analysis-review-stack [data-testid="plate-scroll-region"] { max-height: none; overflow-x: auto; overflow-y: hidden; }
-  .analysis-context-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; padding: .5rem 1.5rem 0; }
-  .analysis-context-summary > section { margin: 0; padding: .5rem; font-size: .75rem; }
+  .analysis-context-summary-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; padding: .5rem 1.5rem 0; }
+  .analysis-context-summary-body > section { margin: 0; padding: .5rem; font-size: .75rem; }
   .analysis-grid { align-items: start; }
   .analysis-grid .panel { padding: 12px; }
-  .analysis-scatter-canvas { height: 360px; }
   [data-testid="analysis-warnings"] { max-height: 5rem; overflow: auto; }
-  [data-testid="split-marker-banner"] { margin-top: .5rem; }
+  [data-testid="analysis-scope-selector"] { margin-top: .5rem; }
   [data-testid="analysis-result-status"] { padding: .5rem .75rem; }
 }
 @media (min-width: 768px) { :root { --workspace-gutter: 1.5rem; } }

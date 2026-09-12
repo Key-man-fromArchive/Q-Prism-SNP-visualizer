@@ -136,6 +136,7 @@ const en = {
   axisCycle: 'Cycle',
   axisNormRFU: 'Norm. RFU',
   plateGridAria: 'Plate wells (arrow keys to move, Enter to select, Shift+arrows to extend)',
+  plateLegendAria: 'Plate legend',
   wellSelectedState: 'selected',
   wellEmptyState: 'empty',
   toggleColumnAria: (c: string | number) => `Toggle column ${c}`,
@@ -330,9 +331,7 @@ const en = {
   group: 'Group:',
   allWells: (n: number) => `All Wells (${n})`,
   showEmpty: 'Show Empty',
-  plusGroup: '+ Group',
   manageGroups: 'Manage groups',
-  createWellGroups: 'Create well groups',
 
   // Cycle Control
   cycle: 'Cycle:',
@@ -383,6 +382,8 @@ const en = {
   normalization: 'Normalization',
   roxNormalization: 'ROX normalization (FAM/ROX, Allele2/ROX)',
   roxDescription: 'Recommended for ABI/QuantStudio. Not recommended for Bio-Rad CFX (ROX crosstalk).',
+  roxNormalizationMovedNotice: (enabled: boolean) =>
+    `Currently ${enabled ? 'on' : 'off'}. Adjust it from the checkbox above the allele-discrimination plot, not here.`,
   backgroundSubtraction: 'Background subtraction',
   backgroundNone: 'None — raw RFU (default)',
   backgroundPreRead: 'Pre-read (30 °C) as baseline',
@@ -491,7 +492,7 @@ const en = {
   } as Record<string, string>)[targetType] ?? 'ASG linked',
   plateScrollHint: 'Plate review: scroll horizontally within this area when needed.',
   resultsScrollHint: 'Genotype review: scroll horizontally within this area when needed.',
-  analysisAdvancedSettings: 'View and calculation settings — expand to change',
+  analysisAdvancedSettings: 'Advanced settings',
   analysisNumericDetails: 'Detailed readings and amplification curve',
   analysisScopeDetails: 'How scope and exclusions are counted',
   analysisNtcMode: (explicit: boolean) => explicit ? 'Explicit NTC' : 'Auto NTC',
@@ -690,9 +691,11 @@ const en = {
   // Multi-marker workspace (P4)
   wsTabPlate: 'Plate Setup',
   wsTabAnalysis: 'Analysis',
-  wsSplitBannerText: 'Multiple markers on this plate? Split into markers to genotype each independently.',
   wsSplitBannerCta: 'Split into markers',
-  wsSplitBannerDismiss: 'Dismiss',
+  // P4-S3-T1 (FB-03 §3-3): the always-present scope selector replacing the
+  // old dismissible split-marker banner.
+  wsScopeSelectorLabel: 'Analysis scope',
+  wsScopeWholePlateOption: 'Whole plate',
   wsAddMarkerButton: '+ Add marker',
   wsMarkerFormTitleNew: 'New marker',
   wsMarkerFormTitleEdit: 'Edit marker',
@@ -843,6 +846,10 @@ const en = {
   axisModeManual: 'Manual',
   axisFitToData: 'Fit to data',
   axisLockAspect: 'Equal x/y scale',
+  axisSettingsButton: 'Axis settings…',
+  scatterAspectLabel: 'Aspect ratio',
+  normalizationChannelLabel: 'Reference channel',
+  normalizationChannelUnavailable: 'No reference channel in this run',
   ntcAxisOffsetLabel: 'NTC margin (x/y)',
   ntcAxisOffsetReset: 'Reset margins',
   ntcQuadrantLabel: 'NTC quadrant',
@@ -861,6 +868,17 @@ const en = {
   analysisWarningLowN: 'Too few wells to fit clusters — calls are provisional.',
   analysisWarningAnchorConflict: 'Control wells disagree with the fitted dosage ladder.',
   analysisWarningsTitle: 'Analysis warnings',
+  // P4-S3-T1 (FB-03 §3-1): toolbar badge counting both severities, jumping
+  // to whichever warning block (blocking, above the fold, or advisory,
+  // demoted below ResultsTable) is currently relevant.
+  analysisWarningsBadge: (n: number) => `⚠ ${n} warning${n === 1 ? '' : 's'}`,
+  // P4-S3-T1 (FB-03 §3-1): one-line summary shown when the context summary
+  // is collapsed. `markerCount` is null while marker membership hasn't
+  // loaded/failed to load (mirrors wsMarkerScopeUnknown's caution).
+  analysisContextSummaryLine: (cycle: number, totalCycles: number, wells: number, markerCount: number | null) =>
+    `Cycle ${cycle}/${totalCycles} · ${wells} wells · ${
+      markerCount === null ? 'marker scope unknown' : markerCount > 0 ? `${markerCount} marker split` : 'no marker split'
+    }`,
 
   // The assay's dosage ceiling, declared by the operator rather than inferred.
   // A hexaploid marker commonly tops out at dosage 3, so its classes are

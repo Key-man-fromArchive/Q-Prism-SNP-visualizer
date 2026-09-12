@@ -8,6 +8,7 @@
 // global stores. ScatterPlot.tsx itself is left untouched (still used by
 // the single-marker default view) to avoid regressing S0/S1.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import Plotly from "plotly.js-dist-min";
 import { dosageOfLabel, defaultRatioCuts } from "@/lib/genotype";
 import { chartCategory, callLabel, chartPointState, chartStateText } from "@/lib/chart-semantics";
@@ -26,6 +27,7 @@ import { useQualityRevealedWell } from '@/hooks/use-quality-reveal';
 import { useWellFilter } from '@/hooks/use-well-filter';
 import { visibleQualityPoint } from '@/lib/quality-display';
 import { useSettingsStore } from "@/stores/settings-store";
+import type { ScatterAspect } from "@/stores/settings-store";
 import { useSessionStore } from "@/stores/session-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { useIsDarkMode } from "@/hooks/use-dark-mode";
@@ -47,6 +49,13 @@ type PlotlyGraphDiv = HTMLDivElement & {
   _fullLayout?: { xaxis?: PlotlyAxis; yaxis?: PlotlyAxis };
   data?: unknown[];
 };
+
+// Feeds `.analysis-scatter-canvas`'s `aspect-ratio` (index.css, P4-S1-T1);
+// see the sibling copy in ScatterPlot.tsx for the rationale.
+function scatterAspectVars(aspect: ScatterAspect): CSSProperties {
+  const [w, h] = aspect === "1:1" ? [1, 1] : [4, 3];
+  return { "--scatter-aspect-w": w, "--scatter-aspect-h": h } as CSSProperties;
+}
 
 type MarkerScatterPlotProps = {
   sessionId: string;
@@ -111,6 +120,8 @@ export function MarkerScatterPlot({
   // A drag either selects wells or moves a threshold; both at once made the
   // plot unselectable wherever a threshold happened to lie. See ScatterTool.
   const editing = useSettingsStore((s) => s.scatterTool) === "edit";
+  const scatterAspect = useSettingsStore((s) => s.scatterAspect);
+  const hasNormalizationChannel = useSessionStore((s) => s.sessionInfo?.has_rox === true);
   const normalizationApplied = useDataStore((s) => s.normalizationApplied);
   const ntcAxisOffsets = useMemo(
     () => normalizationApplied
@@ -553,6 +564,15 @@ export function MarkerScatterPlot({
 
   useEffect(() => () => { if (plotRef.current) clearActiveChart(plotRef.current); }, []);
 
+  // See the sibling effect in ScatterPlot.tsx: scatterAspect only resizes
+  // the CSS-driven container, so the render effect above does not depend on
+  // it, and Plotly is nudged to redraw at the new size explicitly rather
+  // than relying on its own responsive observer picking up the change.
+  useEffect(() => {
+    if (!initialized.current || !plotRef.current) return;
+    Plotly.Plots.resize(plotRef.current);
+  }, [scatterAspect]);
+
   // Drag a radial boundary line; persists to the marker's threshold_config on
   // release (PUT /markers/{id}) then asks the parent to re-cluster so the
   // override is reflected everywhere (and survives tab-switch/re-cluster --
@@ -714,6 +734,7 @@ export function MarkerScatterPlot({
         onNtcCornerChange={handleNtcCornerChange}
         normalizationApplied={normalizationApplied}
         roxOutlierWells={roxOutlierWells}
+        hasNormalizationChannel={hasNormalizationChannel}
         dosageCeiling={{
           ploidy,
           applied: region?.dosage_max ?? marker.threshold_config?.dosage_max ?? null,
@@ -729,7 +750,7 @@ export function MarkerScatterPlot({
         data-visible-wells={scopedPoints.length}
         ref={plotRef}
         className="analysis-scatter-canvas"
-        style={{ width: "100%" }}
+        style={{ width: "100%", ...scatterAspectVars(scatterAspect) }}
       />
     </div>
   );

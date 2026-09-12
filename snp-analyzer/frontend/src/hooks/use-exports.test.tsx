@@ -59,6 +59,53 @@ function storedChart(): HTMLElement {
   return element;
 }
 
+function mockElementSize(element: HTMLElement, width: number, height: number): void {
+  vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+    width, height, top: 0, left: 0, right: width, bottom: height, x: 0, y: 0, toJSON: () => ({}),
+  } as DOMRect);
+}
+
+it('RED/GREEN: captures a square PNG at the rendered element size, not the legacy 4:3 default', async () => {
+  const element = document.createElement('div'); document.body.append(element);
+  mockElementSize(element, 638, 638);
+  setActiveChart({ element, sessionId: 'run-a', resultRevision: 'rev-a', cycle: 40, useRox: false,
+    backgroundMode: 'none', entry: 7, ownerId: 'u', caption: 'cycle 40', identity: 'square-40' });
+  useNavigationStore.setState({ cycle: 40 });
+  mockPngCaption();
+  const { result: hook } = renderHook(() => useExports());
+  await hook.current.exportPNG();
+  expect(Plotly.toImage).toHaveBeenCalledWith(element, expect.objectContaining({ width: 1200, height: 1200 }));
+  element.remove();
+});
+
+it('RED/GREEN: captures a ~4:3 PNG matching a wider-than-tall rendered element', async () => {
+  const element = document.createElement('div'); document.body.append(element);
+  mockElementSize(element, 850, 638);
+  setActiveChart({ element, sessionId: 'run-a', resultRevision: 'rev-a', cycle: 40, useRox: false,
+    backgroundMode: 'none', entry: 7, ownerId: 'u', caption: 'cycle 40', identity: 'wide-40' });
+  useNavigationStore.setState({ cycle: 40 });
+  mockPngCaption();
+  const { result: hook } = renderHook(() => useExports());
+  await hook.current.exportPNG();
+  const [, options] = vi.mocked(Plotly.toImage).mock.calls[0] as [unknown, { width: number; height: number }];
+  expect(options.width).toBe(1200);
+  expect(options.height).toBeGreaterThanOrEqual(895);
+  expect(options.height).toBeLessThanOrEqual(905);
+  element.remove();
+});
+
+it('RED/GREEN: falls back to the legacy 1200x900 capture when the element has no rendered size', async () => {
+  const element = document.createElement('div'); document.body.append(element);
+  setActiveChart({ element, sessionId: 'run-a', resultRevision: 'rev-a', cycle: 40, useRox: false,
+    backgroundMode: 'none', entry: 7, ownerId: 'u', caption: 'cycle 40', identity: 'zero-40' });
+  useNavigationStore.setState({ cycle: 40 });
+  mockPngCaption();
+  const { result: hook } = renderHook(() => useExports());
+  await hook.current.exportPNG();
+  expect(Plotly.toImage).toHaveBeenCalledWith(element, expect.objectContaining({ width: 1200, height: 900 }));
+  element.remove();
+});
+
 it('RED/GREEN: rejects old-cycle pixels as a structured mismatch before PNG encoding', async () => {
   const element = document.createElement('div'); document.body.append(element);
   setActiveChart({ element, sessionId: 'run-a', resultRevision: 'rev-a', cycle: 40, useRox: false,

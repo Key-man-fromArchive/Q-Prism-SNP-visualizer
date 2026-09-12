@@ -9,6 +9,27 @@ import Plotly from 'plotly.js-dist-min';
 import { getActiveChart, type ActiveChart } from '@/lib/chart-export-registry';
 import type { BackgroundMode } from '@/types/api';
 
+// The legacy fallback: exactly what shipped before per-chart sizing existed,
+// used whenever the element hasn't been laid out (0-size, disconnected, or
+// jsdom in tests) so a PNG export still succeeds instead of encoding garbage.
+const FALLBACK_CAPTURE_SIZE = { width: 1200, height: 900 };
+const CAPTURE_LONG_SIDE = 1200;
+
+// Derives the PNG capture size from the chart element's own rendered
+// aspect ratio (not from settings-store.scatterAspect directly) so the
+// export always matches whatever the user is actually looking at --
+// including a 70vh-clamped viewport where the CSS aspect-ratio can't hold.
+function pngCaptureSize(element: HTMLElement): { width: number; height: number } {
+  const rect = element.getBoundingClientRect();
+  const width = rect.width || element.clientWidth;
+  const height = rect.height || element.clientHeight;
+  if (!width || !height) return FALLBACK_CAPTURE_SIZE;
+  if (width >= height) {
+    return { width: CAPTURE_LONG_SIDE, height: Math.round(CAPTURE_LONG_SIDE * (height / width)) };
+  }
+  return { width: Math.round(CAPTURE_LONG_SIDE * (width / height)), height: CAPTURE_LONG_SIDE };
+}
+
 async function captionPng(dataUrl: string, caption: string): Promise<string> {
   const image = new Image();
   await new Promise<void>((resolve, reject) => {
@@ -175,10 +196,11 @@ export function useExports(): {
     const chart = requirePngChart(current);
 
     try {
+      const { width, height } = pngCaptureSize(chart.element);
       const dataUrl = await Plotly.toImage(chart.element, {
         format: 'png',
-        width: 1200,
-        height: 900,
+        width,
+        height,
         scale: 2,
       });
 

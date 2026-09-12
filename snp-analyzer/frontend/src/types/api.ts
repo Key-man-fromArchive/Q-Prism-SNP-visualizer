@@ -360,6 +360,10 @@ export type ClusteringResult = {
   // plate) run; `assignments` above is then the flat merge across regions.
   regions?: RegionResult[] | null;
   warnings?: string[] | null;
+  // P4-R1-T1 (FB-03 §8): severity-graded mirror of `warnings` above, additive
+  // and backward-compatible -- code that only reads `warnings` is unaffected.
+  // See snp-analyzer/app/models.py::WARNING_SEVERITY for per-code rationale.
+  warning_details?: WarningDetail[] | null;
   analysis_context?: AnalysisContext | null;
   context_status?: 'verified' | 'legacy_unknown';
   input_revision?: number;
@@ -599,8 +603,17 @@ export type RegionResult = {
   low_separation: boolean;
   genotype_counts?: Record<string, number> | null;
   warnings?: string[] | null;
+  // P4-R1-T1: see ClusteringResult.warning_details above.
+  warning_details?: WarningDetail[] | null;
   input_hash?: string | null;
 };
+
+// P4-R1-T1 (FB-03 §8): severity tier for one graded analysis warning.
+// "blocking" -- bears on genotype-call reliability; must not be demoted
+// below the fold by any future warning-demotion UI.
+// "advisory" -- informational; safe to demote.
+export type WarningSeverity = 'blocking' | 'advisory';
+export type WarningDetail = { code: string; severity: WarningSeverity };
 
 // ============================================================================
 // Analysis Results

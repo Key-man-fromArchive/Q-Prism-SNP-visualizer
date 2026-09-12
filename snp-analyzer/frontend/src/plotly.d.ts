@@ -16,6 +16,12 @@ declare module "plotly.js-dist-min" {
     restyle(root: HTMLElement, update: any, traceIndex?: number | number[]): Promise<void>;
     relayout(root: HTMLElement, update: any): Promise<void>;
     purge(root: HTMLElement): void;
+    // Real, public Plotly API (used to force a redraw at a new container
+    // size -- P4-S1-T1's aspect-ratio toggle). Declared here rather than
+    // cast around at each call site.
+    Plots: {
+      resize(root: HTMLElement): void;
+    };
     toImage(
       root: HTMLElement,
       options?: {

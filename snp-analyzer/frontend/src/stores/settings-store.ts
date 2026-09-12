@@ -22,11 +22,21 @@ export type AxisMode = 'zero' | 'auto' | 'manual';
  *  selection box, so selection often could not be started at all. */
 export type ScatterTool = 'select' | 'edit';
 
+/** Scatter canvas aspect ratio (FB-04 §3-1, decision D-6). The height-only
+ *  `max-height` clamp that used to bound the canvas cannot guarantee a
+ *  ratio -- it clips height instead of holding width and height in lockstep
+ *  -- so the canvas width is bound by this ratio instead. Left as an
+ *  explicit user choice rather than a fixed value: readers differ on
+ *  whether a square or a 4:3 rectangle reads better, and picking one
+ *  forecloses the other. */
+export type ScatterAspect = '4:3' | '1:1';
+
 interface SettingsState {
   useRox: boolean;
   backgroundMode: BackgroundMode;
   axisMode: AxisMode;
   scatterTool: ScatterTool;
+  scatterAspect: ScatterAspect;
   /** Equal data-per-pixel on both axes. A fam-fraction is an ANGLE about the
    *  ratio origin, so the radial boundary rays only look like the cuts they
    *  are when x and y are on the same scale. Raw RFU is ~8x wider in x than
@@ -58,6 +68,7 @@ interface SettingsState {
   setBackgroundMode: (v: BackgroundMode) => void;
   setAxisMode: (v: AxisMode) => void;
   setScatterTool: (v: ScatterTool) => void;
+  setScatterAspect: (v: ScatterAspect) => void;
   setLockAspect: (v: boolean) => void;
   setAxisRange: (r: { xMin: number; xMax: number; yMin: number; yMax: number }) => void;
   setFixAxis: (v: boolean) => void;
@@ -87,6 +98,7 @@ const defaults = {
   backgroundMode: 'none' as BackgroundMode,
   axisMode: 'zero' as AxisMode,
   scatterTool: 'select' as ScatterTool,
+  scatterAspect: '4:3' as ScatterAspect,
   lockAspect: true,
   // Kept for the Settings-tab control and the saved presets that carry it;
   // `axisMode: 'manual'` is the same thing reachable from the plot itself.
@@ -122,6 +134,7 @@ export const useSettingsStore = create<SettingsState>()(
       setBackgroundMode: (v) => set({ backgroundMode: v }),
       setAxisMode: (v) => set({ axisMode: v, fixAxis: v === 'manual' }),
       setScatterTool: (v) => set({ scatterTool: v }),
+      setScatterAspect: (v) => set({ scatterAspect: v }),
       setLockAspect: (v) => set({ lockAspect: v }),
       setAxisRange: ({ xMin, xMax, yMin, yMax }) =>
         set({ xMin, xMax, yMin, yMax }),

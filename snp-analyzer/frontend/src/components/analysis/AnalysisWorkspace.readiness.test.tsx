@@ -197,3 +197,36 @@ it('withdraws verified view equality during a held marker reload without discard
   expect(screen.getByText(/Current analysis conditions cannot be compared/)).toBeInTheDocument();
   expect(screen.getByText('Last completed cycle: 20')).toBeInTheDocument();
 });
+
+// P4-S3-T1 (FB-03 §3-3): an always-present scope selector replaces the old
+// dismissible split-marker banner and its bannerDismissed/prevSessionId state.
+it('shows an always-present scope selector instead of a dismissible split-marker banner', async () => {
+  vi.mocked(getCluster).mockResolvedValue({ algorithm: null, cycle: 0, assignments: {} });
+  render(<AnalysisWorkspace />);
+  await screen.findByText('single-ready');
+  expect(screen.getByTestId('analysis-scope-selector')).toBeInTheDocument();
+  expect(screen.getByTestId('scope-whole-plate')).toBeInTheDocument();
+  expect(screen.getByTestId('scope-split-marker-cta')).toBeInTheDocument();
+  expect(screen.queryByTestId('split-marker-banner')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('split-marker-dismiss')).not.toBeInTheDocument();
+});
+
+it('routes to the Plate Setup surface from the scope selector split CTA', async () => {
+  vi.mocked(getCluster).mockResolvedValue({ algorithm: null, cycle: 0, assignments: {} });
+  render(<AnalysisWorkspace />);
+  await screen.findByText('single-ready');
+  fireEvent.click(screen.getByTestId('scope-split-marker-cta'));
+  expect(useNavigationStore.getState().tab).toBe('plate');
+});
+
+// P4-S3-T1 (FB-03 §3-1): the context summary is a collapsed disclosure by
+// default -- only its one-line summary is on by default.
+it('collapses the analysis context summary to a one-line disclosure by default', async () => {
+  vi.mocked(getCluster).mockResolvedValue({ algorithm: null, cycle: 0, assignments: {} });
+  render(<AnalysisWorkspace />);
+  await screen.findByText('single-ready');
+  const details = screen.getByTestId('analysis-context-summary');
+  expect(details.tagName).toBe('DETAILS');
+  expect(details).not.toHaveAttribute('open');
+  expect(screen.getByTestId('analysis-context-summary-line')).toBeInTheDocument();
+});

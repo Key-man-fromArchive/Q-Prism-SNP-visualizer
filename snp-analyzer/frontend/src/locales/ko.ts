@@ -136,6 +136,7 @@ const ko: Translations = {
   axisCycle: '사이클',
   axisNormRFU: '정규화 RFU',
   plateGridAria: '플레이트 웰 (화살표로 이동, Enter로 선택, Shift+화살표로 범위 선택)',
+  plateLegendAria: '플레이트 범례',
   wellSelectedState: '선택됨',
   wellEmptyState: '빈 웰',
   toggleColumnAria: (c: string | number) => `${c}열 전체 토글`,
@@ -330,9 +331,7 @@ const ko: Translations = {
   group: '그룹:',
   allWells: (n: number) => `전체 웰 (${n})`,
   showEmpty: '빈 웰 표시',
-  plusGroup: '+ 그룹',
   manageGroups: '그룹 관리',
-  createWellGroups: '웰 그룹 생성',
 
   // Cycle Control
   cycle: '사이클:',
@@ -383,6 +382,8 @@ const ko: Translations = {
   normalization: '정규화',
   roxNormalization: 'ROX 정규화 (FAM/ROX, Allele2/ROX)',
   roxDescription: 'ABI/QuantStudio에 권장. Bio-Rad CFX에는 비권장 (ROX 크로스토크).',
+  roxNormalizationMovedNotice: (enabled: boolean) =>
+    `현재 ${enabled ? '켜짐' : '꺼짐'}. 이 화면이 아니라 대립유전자 판별 플롯 위 체크박스에서 조절하세요.`,
   backgroundSubtraction: '배경 차감',
   backgroundNone: '없음 — raw RFU (기본)',
   backgroundPreRead: '사전 판독(30 °C) 기준 차감',
@@ -491,7 +492,7 @@ const ko: Translations = {
   } as Record<string, string>)[targetType] ?? 'ASG 연동',
   plateScrollHint: '플레이트 검토: 필요한 경우 이 영역 안에서 가로로 스크롤하세요.',
   resultsScrollHint: '유전자형 검토: 필요한 경우 이 영역 안에서 가로로 스크롤하세요.',
-  analysisAdvancedSettings: '표시·계산 설정 — 펼쳐서 변경',
+  analysisAdvancedSettings: '고급 설정',
   analysisNumericDetails: '상세 측정값과 증폭 곡선',
   analysisScopeDetails: '분석 범위와 제외 수의 산정 기준',
   analysisNtcMode: (explicit: boolean) => explicit ? '지정 NTC' : '자동 NTC',
@@ -690,9 +691,9 @@ const ko: Translations = {
   // Multi-marker workspace (P4)
   wsTabPlate: '플레이트 설정',
   wsTabAnalysis: '분석',
-  wsSplitBannerText: '이 플레이트에 마커가 여러 개인가요? 마커로 분할하면 각각 독립적으로 판정합니다.',
   wsSplitBannerCta: '마커로 분할',
-  wsSplitBannerDismiss: '닫기',
+  wsScopeSelectorLabel: '분석 범위',
+  wsScopeWholePlateOption: '전체 플레이트',
   wsAddMarkerButton: '+ 마커 추가',
   wsMarkerFormTitleNew: '새 마커',
   wsMarkerFormTitleEdit: '마커 편집',
@@ -841,6 +842,10 @@ const ko: Translations = {
   axisModeManual: '직접 지정',
   axisFitToData: '데이터에 맞추기',
   axisLockAspect: 'x/y 배율 동일',
+  axisSettingsButton: '축 설정…',
+  scatterAspectLabel: '종횡비',
+  normalizationChannelLabel: '기준 채널',
+  normalizationChannelUnavailable: '이 런에는 기준 채널이 없습니다',
   ntcAxisOffsetLabel: 'NTC 여백 (x/y)',
   ntcAxisOffsetReset: '여백 초기화',
   ntcQuadrantLabel: 'NTC 사분면',
@@ -859,6 +864,11 @@ const ko: Translations = {
   analysisWarningLowN: '클러스터를 적합할 웰이 부족합니다 — 판정은 잠정적입니다.',
   analysisWarningAnchorConflict: '대조군 웰이 적합된 dosage 사다리와 어긋납니다.',
   analysisWarningsTitle: '분석 경고',
+  analysisWarningsBadge: (n: number) => `⚠ 경고 ${n}건`,
+  analysisContextSummaryLine: (cycle: number, totalCycles: number, wells: number, markerCount: number | null) =>
+    `사이클 ${cycle}/${totalCycles} · ${wells}웰 · ${
+      markerCount === null ? '마커 분할 여부 확인 불가' : markerCount > 0 ? `마커 ${markerCount}개 분할` : '마커 분할 없음'
+    }`,
 
   // assay가 낼 수 있는 최대 dosage — 추정이 아니라 사용자가 선언.
   // 6배체 마커가 dosage 3까지만 나오는 건 플레이트가 아니라 assay의 성질입니다.
