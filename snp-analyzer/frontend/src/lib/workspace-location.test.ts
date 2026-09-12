@@ -64,6 +64,6 @@ it.each(['project', 'references', 'library'])('restores independent %s without s
 it.each(['quality', 'invalid', 'users'])('falls back safely from unavailable independent tab %s', async tab => {
   history.replaceState(null, '', `/?tab=${tab}`);
   await createLocationRestore('u').run();
-  expect(useNavigationStore.getState()).toMatchObject({ tab: 'analysis', reasons: ['tab'] });
+  expect(useNavigationStore.getState()).toMatchObject({ tab: 'results', reasons: ['tab'] });
   expect(getSessionInfo).not.toHaveBeenCalled(); expect(location.search).toBe(`?tab=${tab}`);
 });

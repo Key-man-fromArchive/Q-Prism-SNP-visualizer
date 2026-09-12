@@ -39,7 +39,7 @@ test.describe("Screenshots: multi-marker UI", () => {
 
     // defineMarkersOnColumns leaves us on the Plate Setup tab already, but
     // be explicit for a stable, repeatable shot.
-    await page.getByTestId("workspace-tab-plate").click();
+    await page.locator("#tab-plate").click();
     await expect(page.getByTestId("workspace-panel-plate")).toBeVisible();
     await expect(page.getByTestId("marker-card").filter({ hasText: "qSwet5.3" })).toBeVisible();
     await expect(page.getByTestId("marker-card").filter({ hasText: "qTotal11.1" })).toBeVisible();
@@ -60,7 +60,7 @@ test.describe("Screenshots: multi-marker UI", () => {
     await loadExample(page, 6);
     await defineMarkersOnColumns(page, ["qSwet5.3", "qTotal11.1"], 6);
 
-    await page.getByTestId("workspace-tab-analysis").click();
+    await page.locator("#tab-results").click();
     const selector = page.getByTestId("marker-selector-dropdown");
     await expect(selector).toBeVisible();
     await selector.selectOption({ label: "qSwet5.3" });
@@ -83,7 +83,7 @@ test.describe("Screenshots: multi-marker UI", () => {
     await loadExample(page, 6);
     await defineMarkersOnColumns(page, ["qSwet5.3", "qTotal11.1"], 6);
 
-    await page.getByTestId("workspace-tab-analysis").click();
+    await page.locator("#tab-results").click();
     const selector = page.getByTestId("marker-selector-dropdown");
     await expect(selector).toBeVisible();
     // Only 2 markers -> dropdown mode, no sidebar (per Q8 count-based swap).
@@ -109,7 +109,7 @@ test.describe("Screenshots: multi-marker UI", () => {
     await loadExample(page, 6);
     await defineMarkersOnColumns(page, ["qSwet5.3", "qTotal11.1"], 6);
 
-    await page.getByTestId("workspace-tab-plate").click();
+    await page.locator("#tab-plate").click();
     await expect(page.getByTestId("workspace-panel-plate")).toBeVisible();
 
     // "현재 배치 저장" is a contextual quick action that stays on Plate Setup

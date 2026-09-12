@@ -315,7 +315,7 @@ export function Header() {
         )}
 
         <FileWorkspaceDrawer
-          onOpenSession={() => useNavigationStore.getState().setTab('analysis')}
+          onOpenSession={() => useNavigationStore.getState().setTab('results')}
           onGoToProject={() => useNavigationStore.getState().setTab('project')}
         />
 

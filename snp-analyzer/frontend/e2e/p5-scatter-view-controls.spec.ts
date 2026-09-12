@@ -216,7 +216,7 @@ test.describe("dosage ceiling in the marker form", () => {
     // the analysis screen.
     await loadExample(page, 6);
     await page.getByTestId('analysis-advanced-settings').locator('summary').click();
-    await page.getByTestId("workspace-tab-plate").click();
+    await page.locator("#tab-plate").click();
     await page.getByTestId("add-marker-button").click();
 
     await page.getByTestId("marker-ploidy-select").selectOption("6");

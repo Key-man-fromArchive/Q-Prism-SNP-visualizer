@@ -22,8 +22,8 @@ export async function loadExample(page: Page, ploidy: ExamplePloidy = 2): Promis
   await exampleSelect.selectOption(String(ploidy));
 
   // Loading an example creates a session; the app swaps UploadZone for the
-  // tabbed workspace (#analysis-panel), landing on the "analysis" tab by
-  // default (see src/App.tsx `activeTab` initial state).
-  await expect(page.locator("#tab-analysis")).toBeVisible({ timeout: 20_000 });
-  await expect(page.locator("#tab-analysis")).toBeEnabled({ timeout: 20_000 });
+  // tabbed workspace (#analysis-panel), landing on the "results" tab by
+  // default (see workspace-ready.ts `navigationFor` defaults).
+  await expect(page.locator("#tab-results")).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator("#tab-results")).toBeEnabled({ timeout: 20_000 });
 }

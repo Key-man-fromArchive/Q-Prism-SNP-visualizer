@@ -22,7 +22,7 @@ test.describe("P4-S2: Analysis tab — per-marker results", () => {
     await loadExample(page, 6);
     await defineMarkersOnColumns(page, ["qSwet5.3"], 6);
 
-    await page.getByTestId("workspace-tab-analysis").click();
+    await page.locator("#tab-results").click();
     await expect(page.locator("#cycle-control")).toBeVisible();
     await expect(page.locator("#cycle-slider")).toBeVisible();
   });
@@ -31,7 +31,7 @@ test.describe("P4-S2: Analysis tab — per-marker results", () => {
     await loadExample(page, 6);
     await defineMarkersOnColumns(page, ["qSwet5.3", "qTotal11.1"], 6);
 
-    await page.getByTestId("workspace-tab-analysis").click();
+    await page.locator("#tab-results").click();
     await expect(page.locator("#plate-grid")).toBeVisible();
     await expect(page.locator("#results-plate")).toBeVisible();
     await expect(page.locator("#detail-content")).toBeVisible();
@@ -55,7 +55,7 @@ test.describe("P4-S2: Analysis tab — per-marker results", () => {
     await loadExample(page, 6);
     await defineMarkersOnColumns(page, ["qSwet5.3", "qTotal11.1"], 6);
 
-    await page.getByTestId("workspace-tab-analysis").click();
+    await page.locator("#tab-results").click();
     const selector = page.getByTestId("marker-selector-dropdown");
     await expect(selector).toBeVisible();
     await expect(page.getByTestId("marker-selector-sidebar")).toHaveCount(0);
@@ -83,7 +83,7 @@ test.describe("P4-S2: Analysis tab — per-marker results", () => {
   test("cycle playback defers clustering until playback stops", async ({ page }) => {
     await loadExample(page, 6);
     await defineMarkersOnColumns(page, ["qSwet5.3"], 6);
-    await page.getByTestId("workspace-tab-analysis").click();
+    await page.locator("#tab-results").click();
     await expect(page.getByTestId("marker-scatter")).toBeVisible();
     await page.waitForTimeout(700);
 
@@ -106,7 +106,7 @@ test.describe("P4-S2: Analysis tab — per-marker results", () => {
     await loadExample(page, 2);
     await defineMarkersOnColumns(page, ["m1", "m2", "m3", "m4"], 2);
 
-    await page.getByTestId("workspace-tab-analysis").click();
+    await page.locator("#tab-results").click();
     await expect(page.getByTestId("marker-selector-sidebar")).toBeVisible();
     await expect(page.getByTestId("marker-selector-dropdown")).toHaveCount(0);
 
@@ -123,7 +123,7 @@ test.describe("P4-S2: Analysis tab — per-marker results", () => {
     await loadExample(page, 6);
     await defineMarkersOnColumns(page, ["qSwet5.3", "qTotal11.1"], 6);
 
-    await page.getByTestId("workspace-tab-analysis").click();
+    await page.locator("#tab-results").click();
     await page.getByTestId("marker-selector-dropdown").selectOption({ label: "qSwet5.3" });
 
     // Must not claim a plate-global NTC/background — each marker computes
@@ -138,7 +138,7 @@ test.describe("P4-S2: Analysis tab — per-marker results", () => {
   }) => {
     await loadExample(page, 6);
     await defineMarkersOnColumns(page, ["qSwet5.3"], 6);
-    await page.getByTestId("workspace-tab-analysis").click();
+    await page.locator("#tab-results").click();
 
     await expect(page.getByTestId("marker-ploidy-badge")).toBeVisible();
     await expect(page.getByTestId("marker-expected-classes")).toBeVisible();

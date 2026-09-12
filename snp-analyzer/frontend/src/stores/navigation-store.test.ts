@@ -1,8 +1,8 @@
 import { expect, it } from 'vitest';
-import { createNavigationStore, parseNavigation, serializeNavigation } from './navigation-store';
+import { createNavigationStore, isWorkspaceTab, parseNavigation, resolveDisplayTab, serializeNavigation } from './navigation-store';
 import type { QualityTarget } from '@/lib/quality-target';
 
-const defaults = { session: 's', tab: 'analysis' as const, surface: 'plate' as const, marker: 'm', cycle: 20 };
+const defaults = { session: 's', tab: 'results' as const, surface: 'plate' as const, marker: 'm', cycle: 20 };
 const available = { session: 's', cycles: [0, 20, 40], windows: [{ name: 'post', start_cycle: 20, end_cycle: 40 }], markers: ['m'], defaults };
 it('keeps a temporary quality target out of URLs and clears it at entry reset', () => {
   const store = createNavigationStore();
@@ -53,4 +53,26 @@ it('completes once, keeps context fallbacks valid, and invalidates on clear', ()
   expect(parseNavigation('?cycle=-1', available).value.cycle).toBe(20);
   expect(parseNavigation('', { ...available, defaults: { ...defaults, cycle: 99, marker: 'deleted' } }).value).toEqual(defaults);
   expect(parseNavigation('?cycle=0', { ...available, windows: [] }).value.cycle).toBe(0);
+});
+it('recognizes plate/results (and the pre-P3-S1-T1 analysis synonym) as the workspace, nothing else', () => {
+  expect(isWorkspaceTab('plate')).toBe(true);
+  expect(isWorkspaceTab('results')).toBe(true);
+  expect(isWorkspaceTab('analysis')).toBe(true);
+  expect(isWorkspaceTab('quality')).toBe(false);
+  expect(isWorkspaceTab('settings')).toBe(false);
+});
+it('resolves the legacy analysis tab to the surface-appropriate new tab, and passes new tabs through unchanged', () => {
+  expect(resolveDisplayTab('analysis', 'plate')).toBe('plate');
+  expect(resolveDisplayTab('analysis', 'analysis')).toBe('results');
+  expect(resolveDisplayTab('plate', 'analysis')).toBe('plate');
+  expect(resolveDisplayTab('quality', 'plate')).toBe('quality');
+});
+it('setTab keeps surface in sync with the two workspace tabs and leaves it alone elsewhere', () => {
+  const store = createNavigationStore();
+  store.getState().setTab('plate');
+  expect(store.getState().surface).toBe('plate');
+  store.getState().setTab('results');
+  expect(store.getState().surface).toBe('analysis');
+  store.getState().setTab('quality');
+  expect(store.getState()).toMatchObject({ tab: 'quality', surface: 'analysis' });
 });

@@ -1,4 +1,4 @@
-import { useNavigationStore } from '@/stores/navigation-store';
+import { useNavigationStore, isWorkspaceTab } from '@/stores/navigation-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useSelectionStore } from '@/stores/selection-store';
@@ -10,8 +10,11 @@ export function keyboardAnalysisReady(): boolean {
   const nav = useNavigationStore.getState();
   const analysis = useAnalysisStore.getState();
   const session = useSessionStore.getState().sessionId;
+  // P3-S1-T1: the single "Analysis" tab split into top-level "Plate Setup" /
+  // "Results" tabs -- shortcuts stay live on either (isWorkspaceTab also
+  // covers the transient legacy 'analysis' value quality-navigation.ts still writes).
   return Boolean(session) && nav.session === session && analysis.sessionId === session
-    && nav.tab === 'analysis' && nav.status === 'ready' && !nav.exportRestoring
+    && isWorkspaceTab(nav.tab) && nav.status === 'ready' && !nav.exportRestoring
     && !analysis.pending && !analysis.inputRevisionRefreshing;
 }
 export function keyboardCanExecute(action: ShortcutAction): boolean {

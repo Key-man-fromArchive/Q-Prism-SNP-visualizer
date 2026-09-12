@@ -24,6 +24,12 @@ it('requires a selection for mutations and preserves theme/help outside analysis
   expect(keyboardCanExecute('help')).toBe(true);
   expect(keyboardCanExecute('toggleDarkMode')).toBe(true);
 });
+it.each(['plate', 'results'] as const)('keeps analysis shortcuts live on both workspace tabs (%s)', tab => {
+  useSelectionStore.getState().selectWell('A1');
+  useNavigationStore.getState().setTab(tab);
+  expect(keyboardCanExecute('assignWellType')).toBe(true);
+  expect(keyboardCanExecute('nextCycle')).toBe(true);
+});
 it.each(['restoring', 'error'] as const)('blocks all analysis shortcuts when navigation is %s', status => {
   useNavigationStore.setState({ status });
   expect(keyboardCanExecute('togglePlay')).toBe(false);

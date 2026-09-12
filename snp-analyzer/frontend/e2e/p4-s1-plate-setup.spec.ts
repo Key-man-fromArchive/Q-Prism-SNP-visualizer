@@ -24,7 +24,7 @@ import { loadExample } from "./helpers/load-example";
  */
 
 async function goToPlateSetup(page: Page) {
-  await page.getByTestId("workspace-tab-plate").click();
+  await page.locator("#tab-plate").click();
   await expect(page.getByTestId("workspace-panel-plate")).toBeVisible();
   await expect(page.getByTestId("workspace-panel-plate").getByTestId("analysis-scope-counts")).toBeVisible();
 }
@@ -37,15 +37,15 @@ test.describe("P4-S1: Plate Setup tab", () => {
     await goToPlateSetup(page);
   });
 
-  test("two-surface tabs exist: 플레이트 설정 / 분석, freely switchable", async ({ page }) => {
-    await expect(page.getByTestId("workspace-tab-plate")).toContainText("플레이트 설정");
-    await expect(page.getByTestId("workspace-tab-analysis")).toContainText("분석");
+  test("two-surface tabs exist: 플레이트 설정 / 결과, freely switchable", async ({ page }) => {
+    await expect(page.locator("#tab-plate")).toContainText("플레이트 설정");
+    await expect(page.locator("#tab-results")).toContainText("결과");
 
-    await page.getByTestId("workspace-tab-analysis").click();
+    await page.locator("#tab-results").click();
     await expect(page.getByTestId("workspace-panel-analysis")).toBeVisible();
 
     // Free round-trip, not a one-way wizard step.
-    await page.getByTestId("workspace-tab-plate").click();
+    await page.locator("#tab-plate").click();
     await expect(page.getByTestId("workspace-panel-plate")).toBeVisible();
   });
 
@@ -233,7 +233,7 @@ test.describe("P4-S1: Plate Setup tab", () => {
     await expect(panel.getByTestId("analysis-scope-counts")).toContainText("입력 웰: 96");
 
     // Analysis tab must remain reachable — unassigned wells never block work.
-    await page.getByTestId("workspace-tab-analysis").click();
+    await page.locator("#tab-results").click();
     await expect(page.getByTestId("workspace-panel-analysis")).toBeVisible();
   });
 
