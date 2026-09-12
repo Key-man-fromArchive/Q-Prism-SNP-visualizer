@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, Crosshair, MousePointer2, RotateCcw } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
-import { useSettingsStore, type AxisMode } from "@/stores/settings-store";
+import { useSettingsStore, type AxisMode, type ScatterAspect } from "@/stores/settings-store";
 import { normalizationLabel } from "@/lib/channel-labels";
 import { roundBound, type AxisBounds } from "@/lib/scatter-axes";
 import type { ChannelLabels } from "@/types/api";
@@ -74,6 +74,8 @@ export type ScatterViewControlsProps = {
   dosageCeiling?: DosageCeiling | null;
 };
 
+const SCATTER_ASPECTS: ScatterAspect[] = ["4:3", "1:1"];
+
 const AXIS_MODES: AxisMode[] = ["zero", "auto", "manual"];
 
 export function ScatterViewControls({
@@ -94,6 +96,8 @@ export function ScatterViewControls({
   const setLockAspect = useSettingsStore((s) => s.setLockAspect);
   const scatterTool = useSettingsStore((s) => s.scatterTool);
   const setScatterTool = useSettingsStore((s) => s.setScatterTool);
+  const scatterAspect = useSettingsStore((s) => s.scatterAspect);
+  const setScatterAspect = useSettingsStore((s) => s.setScatterAspect);
   const useRox = useSettingsStore((s) => s.useRox);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
   const setUseRox = useSettingsStore((s) => s.setUseRox);
@@ -129,6 +133,22 @@ export function ScatterViewControls({
 
   const manual = axisMode === "manual";
   const step = Math.max(Math.abs(dataBounds.xMax) / 100, 0.0001);
+
+  // The "Axis settings…" popover IS the request to go manual (FB-04 §3-2):
+  // the operator asked for min/max text entry reachable directly, not gated
+  // behind first finding and picking "Manual" in the mode dropdown. Visible
+  // only while in manual mode, so switching the mode dropdown away closes it
+  // instead of leaving disabled inputs open.
+  const [axisPopoverOpen, setAxisPopoverOpen] = useState(false);
+  const axisPopoverVisible = manual && axisPopoverOpen;
+  const toggleAxisSettings = () => {
+    if (axisPopoverVisible) {
+      setAxisPopoverOpen(false);
+      return;
+    }
+    if (!manual) setAxisMode("manual");
+    setAxisPopoverOpen(true);
+  };
 
   const fitToData = () =>
     setAxisRange({
@@ -167,264 +187,344 @@ export function ScatterViewControls({
     />
   );
 
+  const referenceChannelName = normalizationLabel(labels);
+
   return (
-    <details data-testid="analysis-advanced-settings" className="analysis-advanced-settings mb-2">
-      <summary className="cursor-pointer text-xs text-text rounded border border-border p-2">
-        {t.analysisAdvancedSettings} · {axisModeLabel(axisMode)} · {labels.fam}/{labels.allele2} · <ScatterReferenceBasis requested={useRox} applied={normalizationApplied} /> · {t.chartBackground(backgroundMode)}
-        {' · '}{t.ntcAxisOffsetLabel}: {ntcOffsets.x}, {ntcOffsets.y}
-        {' · '}{t.analysisNtcMode(ntcCorner !== null)}: {labels.fam} ≤{roundBound(effectiveNtcCorner.fam)}, {labels.allele2} ≤{roundBound(effectiveNtcCorner.allele2)} · {t.analysisAspectState(lockAspect)}
-      </summary>
-    <div
-      data-testid="scatter-view-controls"
-      className="flex flex-wrap items-end gap-x-4 gap-y-2 rounded-md border border-border bg-bg px-3 py-2"
-    >
-      {/* What a drag does. Kept first: it is the control that decides whether
-          the plot is selectable at all. */}
-      <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-text-muted">{t.scatterToolLabel}</span>
-        <div className="flex gap-1" role="group" aria-label={t.scatterToolLabel}>
-          <button
-            type="button"
-            data-testid="scatter-tool-select"
-            aria-pressed={scatterTool === "select"}
-            onClick={() => setScatterTool("select")}
-            className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium ${
-              scatterTool === "select"
-                ? "border-primary bg-primary text-white"
-                : "border-border bg-surface text-text hover:border-primary"
-            }`}
-          >
-            <MousePointer2 size={13} aria-hidden="true" /> {t.scatterToolSelect}
-          </button>
-          <button
-            type="button"
-            data-testid="scatter-tool-edit"
-            aria-pressed={scatterTool === "edit"}
-            onClick={() => setScatterTool("edit")}
-            className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium ${
-              scatterTool === "edit"
-                ? "border-amber-500 bg-amber-500 text-black"
-                : "border-border bg-surface text-text hover:border-amber-500"
-            }`}
-          >
-            <Crosshair size={13} aria-hidden="true" /> {t.scatterToolEdit}
-          </button>
+    <div className="mb-2 flex flex-col gap-2">
+      {/* The plot header bar: everything decided while looking at the plot
+          (drag tool, normalization, axis range/aspect) lives here, always
+          visible. It used to share a collapsed <details> with the NTC
+          quadrant and dosage ceiling below -- reachable only after
+          discovering and expanding "View and calculation settings" (FB-04
+          §3-2). Only the low-frequency, expert settings stay collapsed. */}
+      <div
+        data-testid="scatter-plot-header"
+        className="flex flex-wrap items-end gap-x-4 gap-y-2 rounded-md border border-border bg-bg px-3 py-2"
+      >
+        {/* What a drag does. Kept first: it is the control that decides whether
+            the plot is selectable at all. */}
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-text-muted">{t.scatterToolLabel}</span>
+          <div className="flex gap-1" role="group" aria-label={t.scatterToolLabel}>
+            <button
+              type="button"
+              data-testid="scatter-tool-select"
+              aria-pressed={scatterTool === "select"}
+              onClick={() => setScatterTool("select")}
+              className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium ${
+                scatterTool === "select"
+                  ? "border-primary bg-primary text-white"
+                  : "border-border bg-surface text-text hover:border-primary"
+              }`}
+            >
+              <MousePointer2 size={13} aria-hidden="true" /> {t.scatterToolSelect}
+            </button>
+            <button
+              type="button"
+              data-testid="scatter-tool-edit"
+              aria-pressed={scatterTool === "edit"}
+              onClick={() => setScatterTool("edit")}
+              className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium ${
+                scatterTool === "edit"
+                  ? "border-amber-500 bg-amber-500 text-black"
+                  : "border-border bg-surface text-text hover:border-amber-500"
+              }`}
+            >
+              <Crosshair size={13} aria-hidden="true" /> {t.scatterToolEdit}
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Axis range */}
-      <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-text-muted">{t.axisRangeLabel}</span>
-        <div className="flex items-center gap-1">
-          <select
-            data-testid="axis-mode"
-            value={axisMode}
-            onChange={(event) => setAxisMode(event.target.value as AxisMode)}
-            className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text"
-          >
-            {AXIS_MODES.map((mode) => (
-              <option key={mode} value={mode}>
-                {axisModeLabel(mode)}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            data-testid="axis-fit-to-data"
-            onClick={fitToData}
-            className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary"
-          >
-            {t.axisFitToData}
-          </button>
-          <label className="ml-1 inline-flex items-center gap-1 text-xs text-text">
-            <input
-              type="checkbox"
-              data-testid="axis-lock-aspect"
-              checked={lockAspect}
-              disabled={manual}
-              onChange={(event) => setLockAspect(event.target.checked)}
-            />
-            {t.axisLockAspect}
-          </label>
-        </div>
-        <div className="flex flex-wrap items-center gap-1 text-xs text-text-muted">
-          <span className="w-4">x</span>
-          {numberInput("axis-x-min", xMin, (v) => setAxisRange({ xMin: v, xMax, yMin, yMax }), !manual)}
-          <span>–</span>
-          {numberInput("axis-x-max", xMax, (v) => setAxisRange({ xMin, xMax: v, yMin, yMax }), !manual)}
-          <span className="ml-2 w-4">y</span>
-          {numberInput("axis-y-min", yMin, (v) => setAxisRange({ xMin, xMax, yMin: v, yMax }), !manual)}
-          <span>–</span>
-          {numberInput("axis-y-max", yMax, (v) => setAxisRange({ xMin, xMax, yMin, yMax: v }), !manual)}
-        </div>
-      </div>
-
-      {/* The default range starts a small, operator-controlled distance before
-          the NTC ratio origin. Raw RFU and normalized values have different
-          units, so each basis has its own persisted pair. */}
-      <div className="flex flex-col gap-1" data-testid="ntc-axis-offsets">
-        <span className="text-xs font-medium text-text-muted">{t.ntcAxisOffsetLabel}</span>
-        <div className="flex flex-wrap items-center gap-1 text-xs text-text-muted">
-          <label htmlFor="ntc-axis-x-offset">{labels.fam}</label>
-          {numberInput(
-            "ntc-axis-x-offset",
-            ntcOffsets.x,
-            (v) => setNtcAxisOffset(offsetBasis, "x", v),
-            axisMode !== "zero",
-            normalizationApplied ? 0.01 : 10,
-            `${labels.fam} ${t.ntcAxisOffsetLabel}`,
-            0,
-          )}
-          <label htmlFor="ntc-axis-y-offset" className="ml-1">{labels.allele2}</label>
-          {numberInput(
-            "ntc-axis-y-offset",
-            ntcOffsets.y,
-            (v) => setNtcAxisOffset(offsetBasis, "y", v),
-            axisMode !== "zero",
-            normalizationApplied ? 0.01 : 10,
-            `${labels.allele2} ${t.ntcAxisOffsetLabel}`,
-            0,
-          )}
-          <button
-            type="button"
-            data-testid="ntc-axis-offset-reset"
-            disabled={offsetsAtDefault}
-            onClick={() => resetNtcAxisOffsets(offsetBasis)}
-            title={t.ntcAxisOffsetReset}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary disabled:opacity-40"
-          >
-            <RotateCcw size={12} aria-hidden="true" /> {t.ntcAxisOffsetReset}
-          </button>
-        </div>
-      </div>
-
-      {/* NTC quadrant, by number rather than only by drag */}
-      <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-text-muted">
-          {t.ntcQuadrantLabel}
-          {!ntcCorner && <span className="ml-1 opacity-70">({t.ntcQuadrantInferred})</span>}
-        </span>
-        <div className="flex flex-wrap items-center gap-1 text-xs text-text-muted">
-          <span>{labels.fam} ≤</span>
-          {numberInput(
-            "ntc-fam-max",
-            roundBound(effectiveNtcCorner.fam),
-            (v) => onNtcCornerChange({ fam: v, allele2: effectiveNtcCorner.allele2 }),
-            false
-          )}
-          <span className="ml-1">{labels.allele2} ≤</span>
-          {numberInput(
-            "ntc-allele2-max",
-            roundBound(effectiveNtcCorner.allele2),
-            (v) => onNtcCornerChange({ fam: effectiveNtcCorner.fam, allele2: v }),
-            false
-          )}
-          <button
-            type="button"
-            data-testid="ntc-quadrant-reset"
-            disabled={!ntcCorner}
-            onClick={() => onNtcCornerChange(null)}
-            title={t.ntcQuadrantReset}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary disabled:opacity-40"
-          >
-            <RotateCcw size={12} aria-hidden="true" /> {t.ntcQuadrantReset}
-          </button>
-        </div>
-      </div>
-
-      {/* The assay's dosage ceiling, declared rather than inferred */}
-      {dosageCeiling && dosageCeiling.ploidy > 2 && (
-        <div className="flex flex-col gap-1" data-testid="dosage-ceiling">
+        {/* Normalization: the toggle, which channel it divides by, and
+            whether the run even has one to divide by. */}
+        <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-text-muted">
-            {t.dosageMaxLabel}
+            {normalizationLabel(labels)}
           </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-1 text-xs text-text">
+              <input
+                type="checkbox"
+                data-testid="scatter-use-rox"
+                checked={useRox}
+                disabled={!hasNormalizationChannel}
+                onChange={(event) => setUseRox(event.target.checked)}
+              />
+              {t.normalizeByReference}
+            </label>
+            {/* Runtime re-assignment of the reference channel is out of
+                scope: the saved session model keeps one reference slot, not
+                the full set of collected channels (FB-04 §3-4 Step 2). This
+                shows the one channel actually in force. */}
+            <select
+              data-testid="normalization-channel-select"
+              aria-label={t.normalizationChannelLabel}
+              value={referenceChannelName}
+              disabled={!hasNormalizationChannel}
+              onChange={() => {}}
+              className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text disabled:opacity-40"
+            >
+              <option value={referenceChannelName}>{referenceChannelName}</option>
+            </select>
+            {!hasNormalizationChannel && (
+              <span data-testid="normalization-channel-reason" className="text-xs text-text-muted">
+                {t.normalizationChannelUnavailable}
+              </span>
+            )}
+            {roxOutlierWells.length > 0 && (
+              <span
+                data-testid="rox-outlier-warning"
+                title={roxOutlierWells.join(", ")}
+                className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning"
+              >
+                {t.roxOutlierWells(roxOutlierWells.length)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Axis range */}
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-text-muted">{t.axisRangeLabel}</span>
           <div className="flex items-center gap-1">
             <select
-              data-testid="dosage-max-select"
-              value={draftCeiling}
-              onChange={(event) => setDraftCeiling(event.target.value)}
+              data-testid="axis-mode"
+              value={axisMode}
+              onChange={(event) => setAxisMode(event.target.value as AxisMode)}
               className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text"
             >
-              {/* Dosage 0 would mean the assay can only ever produce one
-                  class, which is not a ceiling anyone sets deliberately. */}
-              {Array.from({ length: dosageCeiling.ploidy }, (_, i) => i + 1).map((d) => (
-                <option key={d} value={String(d)}>
-                  {d}
+              {AXIS_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {axisModeLabel(mode)}
                 </option>
               ))}
             </select>
             <button
               type="button"
-              data-testid="dosage-max-apply"
-              disabled={draftCeiling === String(dosageCeiling.applied ?? dosageCeiling.ploidy)}
-              onClick={() => dosageCeiling.onApply(Number(draftCeiling))}
-              className="rounded-md border border-primary bg-primary px-2 py-1 text-xs font-semibold text-white disabled:opacity-40"
+              data-testid="axis-fit-to-data"
+              onClick={fitToData}
+              className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary"
             >
-              {t.apply}
+              {t.axisFitToData}
             </button>
+            <label className="ml-1 inline-flex items-center gap-1 text-xs text-text">
+              <input
+                type="checkbox"
+                data-testid="axis-lock-aspect"
+                checked={lockAspect}
+                disabled={manual}
+                onChange={(event) => setLockAspect(event.target.checked)}
+              />
+              {t.axisLockAspect}
+            </label>
+            {/* "Axis settings…" IS the manual bounds request (FB-04 §3-2,
+                user feedback 7ec0ec1e5e8a4870 item 4): opening it commits to
+                manual mode instead of asking the operator to find and pick
+                "Manual" in the dropdown above first. */}
             <button
               type="button"
-              data-testid="dosage-max-reset"
-              disabled={dosageCeiling.applied === null}
-              onClick={() => dosageCeiling.onApply(null)}
-              title={t.dosageMaxReset}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary disabled:opacity-40"
+              data-testid="axis-settings-toggle"
+              aria-expanded={axisPopoverVisible}
+              onClick={toggleAxisSettings}
+              className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary"
             >
-              <RotateCcw size={12} aria-hidden="true" /> {t.dosageMaxReset}
+              {t.axisSettingsButton}
             </button>
-            {dosageCeiling.uncertain && (
-              <span
-                data-testid="dosage-window-uncertain"
-                title={t.dosageWindowUncertainHint}
-                className="text-warning"
-              >
-                <AlertTriangle size={14} aria-hidden="true" />
-              </span>
-            )}
           </div>
-          {/* What the calls on screen were actually made under, so a stale
-              draft in the dropdown can never be mistaken for the result. */}
-          <span data-testid="dosage-window-observed" className="text-xs text-text-muted">
-            {t.dosageWindowObserved(
-              dosageCeiling.observedFrom,
-              dosageCeiling.observedFrom + Math.max(dosageCeiling.observedClasses - 1, 0)
-            )}
-            {" · "}
-            {dosageCeiling.applied === null
-              ? t.dosageMaxUndeclared(dosageCeiling.ploidy)
-              : t.dosageMaxApplied(dosageCeiling.applied)}
-          </span>
-        </div>
-      )}
-
-      {/* Normalization: the toggle, and what the plotted numbers actually are */}
-      <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-text-muted">
-          {normalizationLabel(labels)}
-        </span>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="inline-flex items-center gap-1 text-xs text-text">
-            <input
-              type="checkbox"
-              data-testid="scatter-use-rox"
-              checked={useRox}
-              disabled={!hasNormalizationChannel}
-              onChange={(event) => setUseRox(event.target.checked)}
-            />
-            {t.normalizeByReference}
-          </label>
-          {roxOutlierWells.length > 0 && (
-            <span
-              data-testid="rox-outlier-warning"
-              title={roxOutlierWells.join(", ")}
-              className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning"
+          {axisPopoverVisible && (
+            <div
+              data-testid="axis-settings-popover"
+              className="flex flex-wrap items-center gap-1 rounded-md border border-border bg-surface p-2 text-xs text-text-muted"
             >
-              {t.roxOutlierWells(roxOutlierWells.length)}
-            </span>
+              <span className="w-4">x</span>
+              {numberInput("axis-x-min", xMin, (v) => setAxisRange({ xMin: v, xMax, yMin, yMax }), false)}
+              <span>–</span>
+              {numberInput("axis-x-max", xMax, (v) => setAxisRange({ xMin, xMax: v, yMin, yMax }), false)}
+              <span className="ml-2 w-4">y</span>
+              {numberInput("axis-y-min", yMin, (v) => setAxisRange({ xMin, xMax, yMin: v, yMax }), false)}
+              <span>–</span>
+              {numberInput("axis-y-max", yMax, (v) => setAxisRange({ xMin, xMax, yMin, yMax: v }), false)}
+              <button
+                type="button"
+                data-testid="axis-settings-close"
+                onClick={() => setAxisPopoverOpen(false)}
+                className="ml-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary"
+              >
+                {t.close}
+              </button>
+            </div>
           )}
         </div>
+
+        {/* Canvas aspect ratio (P4-S1-T1's settings-store.scatterAspect --
+            this is only the control, the state and the CSS geometry it
+            drives live there). */}
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-text-muted">{t.scatterAspectLabel}</span>
+          <select
+            data-testid="scatter-aspect-select"
+            value={scatterAspect}
+            onChange={(event) => setScatterAspect(event.target.value as ScatterAspect)}
+            className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text"
+          >
+            {SCATTER_ASPECTS.map((aspect) => (
+              <option key={aspect} value={aspect}>
+                {aspect}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
+
+      <details data-testid="analysis-advanced-settings" className="analysis-advanced-settings">
+        <summary className="cursor-pointer text-xs text-text rounded border border-border p-2">
+          {t.analysisAdvancedSettings} · {axisModeLabel(axisMode)} · {labels.fam}/{labels.allele2} · <ScatterReferenceBasis requested={useRox} applied={normalizationApplied} /> · {t.chartBackground(backgroundMode)}
+          {' · '}{t.ntcAxisOffsetLabel}: {ntcOffsets.x}, {ntcOffsets.y}
+          {' · '}{t.analysisNtcMode(ntcCorner !== null)}: {labels.fam} ≤{roundBound(effectiveNtcCorner.fam)}, {labels.allele2} ≤{roundBound(effectiveNtcCorner.allele2)} · {t.analysisAspectState(lockAspect)}
+        </summary>
+        <div
+          data-testid="scatter-view-controls"
+          className="flex flex-wrap items-end gap-x-4 gap-y-2 rounded-md border border-border bg-bg px-3 py-2"
+        >
+        {/* The default range starts a small, operator-controlled distance before
+            the NTC ratio origin. Raw RFU and normalized values have different
+            units, so each basis has its own persisted pair. */}
+        <div className="flex flex-col gap-1" data-testid="ntc-axis-offsets">
+          <span className="text-xs font-medium text-text-muted">{t.ntcAxisOffsetLabel}</span>
+          <div className="flex flex-wrap items-center gap-1 text-xs text-text-muted">
+            <label htmlFor="ntc-axis-x-offset">{labels.fam}</label>
+            {numberInput(
+              "ntc-axis-x-offset",
+              ntcOffsets.x,
+              (v) => setNtcAxisOffset(offsetBasis, "x", v),
+              axisMode !== "zero",
+              normalizationApplied ? 0.01 : 10,
+              `${labels.fam} ${t.ntcAxisOffsetLabel}`,
+              0,
+            )}
+            <label htmlFor="ntc-axis-y-offset" className="ml-1">{labels.allele2}</label>
+            {numberInput(
+              "ntc-axis-y-offset",
+              ntcOffsets.y,
+              (v) => setNtcAxisOffset(offsetBasis, "y", v),
+              axisMode !== "zero",
+              normalizationApplied ? 0.01 : 10,
+              `${labels.allele2} ${t.ntcAxisOffsetLabel}`,
+              0,
+            )}
+            <button
+              type="button"
+              data-testid="ntc-axis-offset-reset"
+              disabled={offsetsAtDefault}
+              onClick={() => resetNtcAxisOffsets(offsetBasis)}
+              title={t.ntcAxisOffsetReset}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary disabled:opacity-40"
+            >
+              <RotateCcw size={12} aria-hidden="true" /> {t.ntcAxisOffsetReset}
+            </button>
+          </div>
+        </div>
+
+        {/* NTC quadrant, by number rather than only by drag */}
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-text-muted">
+            {t.ntcQuadrantLabel}
+            {!ntcCorner && <span className="ml-1 opacity-70">({t.ntcQuadrantInferred})</span>}
+          </span>
+          <div className="flex flex-wrap items-center gap-1 text-xs text-text-muted">
+            <span>{labels.fam} ≤</span>
+            {numberInput(
+              "ntc-fam-max",
+              roundBound(effectiveNtcCorner.fam),
+              (v) => onNtcCornerChange({ fam: v, allele2: effectiveNtcCorner.allele2 }),
+              false
+            )}
+            <span className="ml-1">{labels.allele2} ≤</span>
+            {numberInput(
+              "ntc-allele2-max",
+              roundBound(effectiveNtcCorner.allele2),
+              (v) => onNtcCornerChange({ fam: effectiveNtcCorner.fam, allele2: v }),
+              false
+            )}
+            <button
+              type="button"
+              data-testid="ntc-quadrant-reset"
+              disabled={!ntcCorner}
+              onClick={() => onNtcCornerChange(null)}
+              title={t.ntcQuadrantReset}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary disabled:opacity-40"
+            >
+              <RotateCcw size={12} aria-hidden="true" /> {t.ntcQuadrantReset}
+            </button>
+          </div>
+        </div>
+
+        {/* The assay's dosage ceiling, declared rather than inferred */}
+        {dosageCeiling && dosageCeiling.ploidy > 2 && (
+          <div className="flex flex-col gap-1" data-testid="dosage-ceiling">
+            <span className="text-xs font-medium text-text-muted">
+              {t.dosageMaxLabel}
+            </span>
+            <div className="flex items-center gap-1">
+              <select
+                data-testid="dosage-max-select"
+                value={draftCeiling}
+                onChange={(event) => setDraftCeiling(event.target.value)}
+                className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text"
+              >
+                {/* Dosage 0 would mean the assay can only ever produce one
+                    class, which is not a ceiling anyone sets deliberately. */}
+                {Array.from({ length: dosageCeiling.ploidy }, (_, i) => i + 1).map((d) => (
+                  <option key={d} value={String(d)}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                data-testid="dosage-max-apply"
+                disabled={draftCeiling === String(dosageCeiling.applied ?? dosageCeiling.ploidy)}
+                onClick={() => dosageCeiling.onApply(Number(draftCeiling))}
+                className="rounded-md border border-primary bg-primary px-2 py-1 text-xs font-semibold text-white disabled:opacity-40"
+              >
+                {t.apply}
+              </button>
+              <button
+                type="button"
+                data-testid="dosage-max-reset"
+                disabled={dosageCeiling.applied === null}
+                onClick={() => dosageCeiling.onApply(null)}
+                title={t.dosageMaxReset}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:border-primary disabled:opacity-40"
+              >
+                <RotateCcw size={12} aria-hidden="true" /> {t.dosageMaxReset}
+              </button>
+              {dosageCeiling.uncertain && (
+                <span
+                  data-testid="dosage-window-uncertain"
+                  title={t.dosageWindowUncertainHint}
+                  className="text-warning"
+                >
+                  <AlertTriangle size={14} aria-hidden="true" />
+                </span>
+              )}
+            </div>
+            {/* What the calls on screen were actually made under, so a stale
+                draft in the dropdown can never be mistaken for the result. */}
+            <span data-testid="dosage-window-observed" className="text-xs text-text-muted">
+              {t.dosageWindowObserved(
+                dosageCeiling.observedFrom,
+                dosageCeiling.observedFrom + Math.max(dosageCeiling.observedClasses - 1, 0)
+              )}
+              {" · "}
+              {dosageCeiling.applied === null
+                ? t.dosageMaxUndeclared(dosageCeiling.ploidy)
+                : t.dosageMaxApplied(dosageCeiling.applied)}
+            </span>
+          </div>
+        )}
+        </div>
+      </details>
     </div>
-    </details>
   );
 }

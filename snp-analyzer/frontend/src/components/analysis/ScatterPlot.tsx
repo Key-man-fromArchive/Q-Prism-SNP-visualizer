@@ -85,6 +85,7 @@ export function ScatterPlot() {
   const exportRender = useRef(0);
 
   const sessionId = useSessionStore((s) => s.sessionId);
+  const hasNormalizationChannel = useSessionStore((s) => s.sessionInfo?.has_rox === true);
   const useRox = useSettingsStore((s) => s.useRox);
   const axisMode = useSettingsStore((s) => s.axisMode);
   const lockAspect = useSettingsStore((s) => s.lockAspect);
@@ -1006,6 +1007,7 @@ export function ScatterPlot() {
         onNtcCornerChange={setNtcCorner}
         normalizationApplied={normalizationApplied}
         roxOutlierWells={roxOutlierWells}
+        hasNormalizationChannel={hasNormalizationChannel}
         dosageCeiling={{
           ploidy,
           applied: dosageMax,

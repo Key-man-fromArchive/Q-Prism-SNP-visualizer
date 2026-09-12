@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { SettingsTab } from './SettingsTab';
 import { useSettingsStore } from '@/stores/settings-store';
@@ -65,4 +65,36 @@ it('publishes a settings analysis through the shared result owner', async () => 
   const { container } = render(<SettingsTab />);
   fireEvent.click(container.querySelector('#run-clustering-btn')!);
   await waitFor(() => expect(useAnalysisStore.getState().result?.assignments).toEqual({ A1: 'NTC' }));
+});
+
+// P4-S2-T1 (FB-04 §3-3): the normalization checkbox used to be duplicated
+// here and on the plot header, and this was the copy operators actually
+// found -- hence "I have to go into Settings to normalize." The editable
+// control is now only on the plot; this panel reports state, it does not
+// change it.
+it('reports normalization state without a second editable checkbox', () => {
+  useSessionStore.setState({
+    sessionInfo: {
+      session_id: 's', instrument: 'synthetic', allele2_dye: 'VIC', num_wells: 1, num_cycles: 2,
+      has_rox: true, data_windows: null, suggested_cycle: 40, well_groups: null,
+    },
+  });
+  useSettingsStore.setState({ useRox: true });
+  render(<SettingsTab />);
+  expect(screen.queryByRole('checkbox', { name: /rox/i })).toBeNull();
+  expect(screen.getByTestId('rox-normalize-status')).toHaveTextContent(/on/i);
+
+  act(() => useSettingsStore.setState({ useRox: false }));
+  expect(screen.getByTestId('rox-normalize-status')).toHaveTextContent(/off/i);
+});
+
+it('hides the normalization panel entirely when the run has no reference channel', () => {
+  useSessionStore.setState({
+    sessionInfo: {
+      session_id: 's', instrument: 'synthetic', allele2_dye: 'VIC', num_wells: 1, num_cycles: 2,
+      has_rox: false, data_windows: null, suggested_cycle: 40, well_groups: null,
+    },
+  });
+  render(<SettingsTab />);
+  expect(screen.queryByTestId('rox-normalize-status')).toBeNull();
 });

@@ -209,22 +209,20 @@ export function SettingsTab() {
         </div>
       </Card>
 
-      {/* Panel 2: Normalization */}
+      {/* Panel 2: Normalization -- read-only here. The editable control now
+          lives on the plot header (P4-S2-T1, FB-04 §3-2/§3-3): it used to be
+          duplicated in both places, and the settings tab was the one an
+          operator actually found, which is why the feedback read as "I have
+          to go into Settings to normalize." `useRox` itself stays in
+          settings-store (presets still carry it); only the second, editable
+          copy of the control is gone. */}
       {sessionInfo?.has_rox === true && (
         <Card id="rox-normalize-group" title={t.normalization}>
           <div className="mb-4">
-            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-              <input
-                id="rox-normalize-checkbox"
-                type="checkbox"
-                className="accent-primary w-4 h-4"
-                checked={useRox}
-                onChange={(e) => setUseRox(e.target.checked)}
-              />
-              {t.roxNormalization}
-            </label>
-            <p className="text-xs text-text-muted mt-1 ml-6">
-              {t.roxDescription}
+            <p className="text-sm font-medium text-text">{t.roxNormalization}</p>
+            <p className="text-xs text-text-muted mt-1">{t.roxDescription}</p>
+            <p className="text-xs text-text-muted mt-1" data-testid="rox-normalize-status">
+              {t.roxNormalizationMovedNotice(useRox)}
             </p>
           </div>
         </Card>

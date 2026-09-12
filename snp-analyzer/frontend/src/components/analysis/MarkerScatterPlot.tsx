@@ -121,6 +121,7 @@ export function MarkerScatterPlot({
   // plot unselectable wherever a threshold happened to lie. See ScatterTool.
   const editing = useSettingsStore((s) => s.scatterTool) === "edit";
   const scatterAspect = useSettingsStore((s) => s.scatterAspect);
+  const hasNormalizationChannel = useSessionStore((s) => s.sessionInfo?.has_rox === true);
   const normalizationApplied = useDataStore((s) => s.normalizationApplied);
   const ntcAxisOffsets = useMemo(
     () => normalizationApplied
@@ -733,6 +734,7 @@ export function MarkerScatterPlot({
         onNtcCornerChange={handleNtcCornerChange}
         normalizationApplied={normalizationApplied}
         roxOutlierWells={roxOutlierWells}
+        hasNormalizationChannel={hasNormalizationChannel}
         dosageCeiling={{
           ploidy,
           applied: region?.dosage_max ?? marker.threshold_config?.dosage_max ?? null,
