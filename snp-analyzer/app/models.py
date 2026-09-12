@@ -318,6 +318,73 @@ class MarkerCatalogEntry(BaseModel):
         return "putative"
 
 
+# P4-R1-T1 (FB-03 SS8): severity grading for the analysis warning codes above.
+# FB-03 wants low-signal warnings demoted to the bottom of the results screen,
+# but that is only safe for warnings that are purely informational. Anything
+# that bears on genotype-call RELIABILITY must stay where the operator will
+# see it. Two tiers:
+#   "blocking" -- affects call reliability; the UI must not demote it below
+#                 the fold.
+#   "advisory" -- informational; safe to demote.
+WarningSeverity = Literal["blocking", "advisory"]
+
+# Per-code classification, decided from what each code actually means (see the
+# call sites in app/processing/clustering.py for the full reasoning):
+#
+#   "relative_ntc" (clustering.py:360) -- flips the affected wells' label from
+#     NTC to Undetermined because the auto-NTC gap test was not conclusive
+#     (clustering.py:340-348, "C4"). This changes what is reported for those
+#     wells' genotype call outcome, so it is "blocking".
+#   "low_n" (clustering.py:385) -- fewer than 4 signal wells means no mixture
+#     model was fit; the calls that follow are capped at
+#     ``_SMALL_REGION_CONFIDENCE`` specifically because there is no
+#     statistical evidence behind them ("C3"). A call made without that
+#     evidence is exactly what a human should be able to review, so
+#     "blocking".
+#   "anchor_conflict" (clustering.py:838) -- emitted only when the operator's
+#     allele-1/allele-2 anchor wells are mutually inconsistent (inverted or
+#     degenerate scale) and the anchor-based dosage scale is discarded
+#     entirely, falling back to the unanchored path. Anchors set WHERE
+#     dosage 0 and dosage `ploidy` sit on the ratio axis -- i.e. the origin
+#     genotype calls are measured against -- so a discarded anchor scale is
+#     "blocking".
+#
+# All three known codes are "blocking" as of this task. No warning is
+# demoted here -- demoting any of these would be a QC policy decision for the
+# product owner to make explicitly, not something to infer from this
+# refactor.
+WARNING_SEVERITY: dict[str, WarningSeverity] = {
+    "relative_ntc": "blocking",
+    "low_n": "blocking",
+    "anchor_conflict": "blocking",
+}
+# An unrecognised diagnostic code (e.g. one added by a future change without
+# updating this map) defaults to "blocking": showing an unfamiliar diagnostic
+# prominently is safer than silently demoting one nobody has vetted yet.
+_DEFAULT_WARNING_SEVERITY: WarningSeverity = "blocking"
+
+
+class WarningDetail(BaseModel):
+    """One graded analysis warning: the raw code plus its severity tier."""
+    code: str
+    severity: WarningSeverity
+
+
+def _graded_warnings(codes: list[str] | None) -> list[WarningDetail] | None:
+    """Turn a ``warnings`` code list into graded ``WarningDetail`` entries.
+
+    Mirrors the existing ``warnings`` contract: ``None`` (not ``[]``) when
+    there is nothing to report, so a clean run's ``warning_details`` is also
+    absent rather than an empty list.
+    """
+    if not codes:
+        return None
+    return [
+        WarningDetail(code=code, severity=WARNING_SEVERITY.get(code, _DEFAULT_WARNING_SEVERITY))
+        for code in codes
+    ]
+
+
 class RegionResult(BaseModel):
     """Per-marker clustering output (mirrors ClusteringResult, scoped to a region)."""
     id: str
@@ -342,6 +409,14 @@ class RegionResult(BaseModel):
     # this result was computed. Lets a future dirty-flag UI detect when the
     # marker definition has since changed without needing to diff full state.
     input_hash: str | None = None
+
+    # P4-R1-T1: additive, backward-compatible severity grading for `warnings`
+    # above. Existing consumers that only read `warnings` (a list[str]) are
+    # unaffected -- this field is derived, not a replacement.
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def warning_details(self) -> list[WarningDetail] | None:
+        return _graded_warnings(self.warnings)
 
 
 class ClusteringRequest(BaseModel):
@@ -431,6 +506,15 @@ class ClusteringResult(BaseModel):
     # for the single-marker (whole-plate) path. None when clean, so an
     # unaffected/legacy run's JSON is byte-for-byte unchanged.
     warnings: list[str] | None = None
+
+    # P4-R1-T1: additive, backward-compatible severity grading for `warnings`
+    # above (see RegionResult.warning_details and WARNING_SEVERITY for the
+    # per-code rationale). Existing consumers that only read `warnings` (a
+    # list[str]) are unaffected -- this field is derived, not a replacement.
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def warning_details(self) -> list[WarningDetail] | None:
+        return _graded_warnings(self.warnings)
 
 
 class ManualWellTypeUpdate(BaseModel):
