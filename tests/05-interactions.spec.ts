@@ -78,39 +78,40 @@ test.describe('Detail Panel Content', () => {
 });
 
 test.describe('Tab Switching', () => {
-  test('protocol tab switches correctly', async ({ page }) => {
+  test('rawdata tab switches correctly', async ({ page }) => {
     await uploadAndWait(page, CFX_AMPLIFICATION);
 
-    // Click Protocol tab
-    const protocolTab = page.locator('.tab[data-tab="protocol"]');
-    await protocolTab.click();
+    // Click Raw data tab (was "Protocol" pre-P3-S1-T1)
+    const rawdataTab = page.locator('.tab[data-tab="rawdata"]');
+    await rawdataTab.click();
 
-    // Protocol content should be visible
-    await expect(page.locator('#tab-protocol')).toHaveClass(/active/);
-    await expect(page.locator('#tab-analysis')).not.toHaveClass(/active/);
+    // Raw data content should be visible
+    await expect(page.locator('#tab-rawdata')).toHaveClass(/active/);
+    await expect(page.locator('#tab-results')).not.toHaveClass(/active/);
 
     // Protocol table should be visible
     await expect(page.locator('#protocol-table')).toBeVisible();
   });
 
-  test('switching back to analysis tab works', async ({ page }) => {
+  test('switching back to results tab works', async ({ page }) => {
     await uploadAndWait(page, CFX_AMPLIFICATION);
 
-    // Go to protocol
-    await page.locator('.tab[data-tab="protocol"]').click();
-    await expect(page.locator('#tab-protocol')).toHaveClass(/active/);
+    // Go to raw data
+    await page.locator('.tab[data-tab="rawdata"]').click();
+    await expect(page.locator('#tab-rawdata')).toHaveClass(/active/);
 
-    // Go back to analysis
-    await page.locator('.tab[data-tab="analysis"]').click();
-    await expect(page.locator('#tab-analysis')).toHaveClass(/active/);
+    // Go back to results (the top-level tab that now owns the former
+    // "Analysis" surface -- plate/detail view)
+    await page.locator('.tab[data-tab="results"]').click();
+    await expect(page.locator('#tab-results')).toHaveClass(/active/);
   });
 });
 
-test.describe('Protocol Tab', () => {
+test.describe('Raw Data Tab', () => {
   test('default protocol steps are loaded', async ({ page }) => {
     await uploadAndWait(page, CFX_AMPLIFICATION);
 
-    await page.locator('.tab[data-tab="protocol"]').click();
+    await page.locator('.tab[data-tab="rawdata"]').click();
     await page.waitForTimeout(1000);
 
     // Should have protocol steps (default is 6 steps)
@@ -122,7 +123,7 @@ test.describe('Protocol Tab', () => {
   test('add step button works', async ({ page }) => {
     await uploadAndWait(page, CFX_AMPLIFICATION);
 
-    await page.locator('.tab[data-tab="protocol"]').click();
+    await page.locator('.tab[data-tab="rawdata"]').click();
     await page.waitForTimeout(1000);
 
     const rowsBefore = await page.locator('#protocol-table tbody tr').count();
@@ -135,7 +136,7 @@ test.describe('Protocol Tab', () => {
   test('delete step button works', async ({ page }) => {
     await uploadAndWait(page, CFX_AMPLIFICATION);
 
-    await page.locator('.tab[data-tab="protocol"]').click();
+    await page.locator('.tab[data-tab="rawdata"]').click();
     await page.waitForTimeout(1000);
 
     const rowsBefore = await page.locator('#protocol-table tbody tr').count();

@@ -48,15 +48,25 @@ for (const wells of [96, 384]) test(`keyboard-only ${wells}-well tabs, grids, he
   await expect(cycle).toBeVisible();
   const originalCycle = await cycle.inputValue();
 
-  await tabTo(page, '#tab-analysis');
+  // P3-S1-T1 top-level order is plate, rawdata, results, quality, statistics,
+  // compare, library, project; the default landing tab after analysis is
+  // `results`, and `settings` moved into the "More" overflow (no longer part
+  // of this roving-tabindex `role="tab"` list), so the reachable-by-arrow-keys
+  // sequence below no longer stops at settings -- it exercises `quality` and
+  // `statistics` instead, then returns to `results` via two more ArrowRights
+  // (still keyboard-only) since `Home` always lands on the first tab (`plate`).
+  await tabTo(page, '#tab-results');
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('#tab-protocol')).toBeFocused();
+  await expect(page.locator('#tab-quality')).toBeFocused();
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('#tab-settings')).toBeFocused();
+  await expect(page.locator('#tab-statistics')).toBeFocused();
   await page.keyboard.press('Space');
-  await expect(page.locator('#tab-settings')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#tab-statistics')).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('Home');
-  await expect(page.locator('#tab-analysis')).toBeFocused();
+  await expect(page.locator('#tab-plate')).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#tab-results')).toBeFocused();
 
   const first = page.locator('#plate-grid [data-well="A1"]');
   await expect(page.locator('#plate-grid [role="gridcell"]')).toHaveCount(wells);

@@ -6,7 +6,7 @@ test('multi-marker 384 review keeps long context and warnings inside bounded reg
   await login(page);
   await page.locator('#example-select').selectOption('2');
   const names = ['Long marker identity '.repeat(4), 'Marker B', 'Marker C', 'Marker D'];
-  await page.getByTestId('workspace-tab-plate').click();
+  await page.locator('#tab-plate').click();
   for (const [index, name] of names.entries()) {
     await page.getByTestId('add-marker-button').click();
     await page.getByTestId('marker-name-input').fill(name);
@@ -17,7 +17,7 @@ test('multi-marker 384 review keeps long context and warnings inside bounded reg
     await page.getByTestId('selection-bar').getByTestId('marker-pick-button').filter({ hasText: name }).click();
     await page.getByTestId('assign-button').click();
   }
-  await page.getByTestId('workspace-tab-analysis').click();
+  await page.locator('#tab-results').click();
   await expect(page.getByTestId('marker-selector-sidebar')).toBeVisible();
   await page.getByTestId('multi-analyze-current').click();
   await expect(page.getByTestId('marker-scatter').locator('.scatterlayer .point').first()).toBeVisible();
@@ -168,10 +168,18 @@ for (const width of [390, 768, 1024, 1280, 1440]) {
         await page.keyboard.press('Escape');
         await expect(exportButton).toBeFocused();
         await expect(menu).not.toBeVisible();
-        await expect(page.getByRole('tab')).toHaveCount(10);
+        // P3-S1-T1: 8 top-level primary tabs (plate/rawdata/results/quality/
+        // statistics/compare/library/project); the removed WorkspaceTabs
+        // sub-navigation no longer adds 2 more (was 10 before the restructure).
+        await expect(page.getByRole('tab')).toHaveCount(8);
         const more = page.getByRole('button', { name: /^(More|더보기)$/ });
         await more.focus(); await page.keyboard.press('Enter');
-        await expect(page.getByRole('menu', { name: /^(More|더보기)$/ }).getByRole('menuitem')).toHaveCount(2);
+        // Overflow for an admin account (helpers.login uses the admin
+        // credentials): Settings, References, Users, Feedback -- this
+        // assertion was stale even before P3 (it predates the `feedback`
+        // overflow tab added in 38fda85 and was never bumped from 2 to 3,
+        // let alone the current 4).
+        await expect(page.getByRole('menu', { name: /^(More|더보기)$/ }).getByRole('menuitem')).toHaveCount(4);
         await page.keyboard.press('Escape'); await expect(more).toBeFocused();
         const project = page.locator('header').getByRole('button', { name: /^\+ (Project|프로젝트)$/ });
         await project.focus(); await page.keyboard.press('Enter');
@@ -181,7 +189,9 @@ for (const width of [390, 768, 1024, 1280, 1440]) {
         await page.keyboard.press('Escape'); await expect(project).toBeFocused();
         await expect(dialog).not.toBeVisible();
         await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden');
-        const firstTab = page.locator('#tab-analysis');
+        // First primary tab in DOM order is now `plate` (not `results`),
+        // since P3-S1-T1 removed the old `analysis` tab id entirely.
+        const firstTab = page.locator('#tab-plate');
         await firstTab.focus();
         const primaryTabs = page.locator('.app-navigation [role="tab"]');
         for (let index = 1; index < await primaryTabs.count(); index++) {
@@ -190,6 +200,13 @@ for (const width of [390, 768, 1024, 1280, 1440]) {
           await expect(primaryTabs.nth(index)).toHaveAttribute('aria-selected', 'true');
         }
         await page.keyboard.press('Home'); await expect(firstTab).toBeFocused();
+        // `.analysis-grid` lives on the `results` surface, not `plate` (the
+        // new first tab) -- return there (2 more ArrowRights: plate ->
+        // rawdata -> results, still keyboard-only) so the panel is actually
+        // rendered before reading its resolved grid-template-columns.
+        await page.keyboard.press('ArrowRight');
+        await page.keyboard.press('ArrowRight');
+        await expect(page.locator('#tab-results')).toBeFocused();
         await expect.poll(() => page.locator('.analysis-grid').first().evaluate(node =>
           getComputedStyle(node).gridTemplateColumns.split(' ').length,
         )).toBe(width >= 1280 ? 2 : 1);

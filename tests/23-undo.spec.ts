@@ -45,7 +45,7 @@ test('keyboard multi-well edit, header undo, keyboard redo and reload preserve e
 
 test('plate setup shares header history, failed undo retains pointer, conflict clears without retry', async ({ page }) => {
   const sid = await openRun(page);
-  await page.getByTestId('workspace-tab-plate').click();
+  await page.locator('#tab-plate').click();
   await page.getByTestId('well-A1').click();
   await page.getByTestId('well-type-no-amp').click();
   await expect(undo(page)).toBeEnabled();
