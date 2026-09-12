@@ -61,6 +61,33 @@ it('shows the response-echoed processing status, not the requested settings valu
   expect(status!.textContent).toContain(ko.overlayProcessingStatus(true, false));
 });
 
+it('does not assert "applied" from the request when the response omits the echo', async () => {
+  // Older/hypothetical response shape: normalization_applied is entirely
+  // absent, not `false`. useRox (the request) is true. The old
+  // `response.normalization_applied ?? useRox` fallback would render
+  // "applied: yes" here purely from the request -- the exact bug this
+  // task exists to remove.
+  getAllAmplificationMock.mockResolvedValue({
+    allele2_dye: 'HEX',
+    curves: [
+      { well: 'A1', cycles: [1, 2], norm_fam: [1, 2], norm_allele2: [2, 3], effective_type: 'Allele 1 Homo' },
+    ],
+  });
+
+  const view = render(<AmplificationOverlay />);
+  fireEvent.click(view.container.querySelector('#toggle-overlay-btn')!);
+  await waitFor(() => expect(Plotly.react).toHaveBeenCalled());
+
+  const status = view.container.querySelector('[data-testid="overlay-processing-status"]');
+  expect(status).not.toBeNull();
+  expect(status).toHaveAttribute('data-requested', 'true');
+  // Must be a distinct "not reported" state, never "true" (the request
+  // value) and never silently "false" either -- those are different facts.
+  expect(status).toHaveAttribute('data-applied', 'unreported');
+  expect(status!.textContent).not.toContain(ko.overlayProcessingStatus(true, true));
+  expect(status!.textContent).toContain(ko.overlayProcessingStatusUnreported(true));
+});
+
 it('renders the toggle button in Korean under the ko locale, not hardcoded English', async () => {
   const view = render(<AmplificationOverlay />);
   const button = view.container.querySelector('#toggle-overlay-btn')!;

@@ -123,6 +123,10 @@ const ko: Translations = {
   overlayColorBySolid: '단색',
   overlayProcessingStatus: (requestedRox: boolean, applied: boolean) =>
     `참조 정규화 요청: ${requestedRox ? '예' : '아니오'}; 실제 적용: ${applied ? '예' : '아니오'}.`,
+  // 서버가 정규화 적용 여부를 에코하지 않은 경우(구 응답 형태). 요청값으로
+  // 대체하지 않는다 -- "보고되지 않음"과 "적용 안 됨"은 다른 사실이다.
+  overlayProcessingStatusUnreported: (requestedRox: boolean) =>
+    `참조 정규화 요청: ${requestedRox ? '예' : '아니오'}; 실제 적용: 서버가 보고하지 않음.`,
   batchAddTo: (name: string, msg: string) => `"${name}"에 추가: ${msg}`,
   batchAddResult: (added: number, count: number, name: string, leftover: number) => `"${name}"에 ${added}/${count} 추가 (${leftover}개는 이미 있거나 없음)`,
   batchBulkAddTo: (name: string, msg: string) => `"${name}"에 일괄 추가: ${msg}`,

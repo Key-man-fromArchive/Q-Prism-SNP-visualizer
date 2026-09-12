@@ -122,6 +122,11 @@ const en = {
   overlayColorBySolid: 'Solid color',
   overlayProcessingStatus: (requestedRox: boolean, applied: boolean) =>
     `Reference normalization requested: ${requestedRox ? 'yes' : 'no'}; actually applied: ${applied ? 'yes' : 'no'}.`,
+  // The server did not echo whether normalization was applied (older
+  // response shape). Must NOT fall back to the request value -- "not
+  // reported" and "not applied" are different facts.
+  overlayProcessingStatusUnreported: (requestedRox: boolean) =>
+    `Reference normalization requested: ${requestedRox ? 'yes' : 'no'}; actually applied: not reported by the server.`,
   batchAddTo: (name: string, msg: string) => `Add to "${name}": ${msg}`,
   batchAddResult: (added: number, count: number, name: string, leftover: number) => `Added ${added}/${count} to "${name}" (${leftover} already in project or missing)`,
   batchBulkAddTo: (name: string, msg: string) => `Bulk add to "${name}": ${msg}`,

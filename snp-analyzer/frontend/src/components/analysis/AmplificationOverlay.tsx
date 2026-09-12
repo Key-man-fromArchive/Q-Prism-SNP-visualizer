@@ -206,8 +206,8 @@ export function AmplificationOverlay({ ploidyOverride, idPrefix = "" }: Amplific
         {response && (
           <OverlayProcessingStatus
             requestedRox={useRox}
-            normalizationApplied={response.normalization_applied ?? useRox}
-            backgroundMode={response.background_mode ?? backgroundMode}
+            normalizationApplied={response.normalization_applied}
+            backgroundMode={response.background_mode}
           />
         )}
       </div>
@@ -231,25 +231,41 @@ export function AmplificationOverlay({ ploidyOverride, idPrefix = "" }: Amplific
 /** Honest processing badge: `applied`/`backgroundMode` MUST come from the
  *  response echo (app/routers/data.py's amplification/all), never asserted
  *  from settings-store's request value -- a run with no passive reference
- *  stays raw regardless of what use_rox asked for. */
+ *  stays raw regardless of what use_rox asked for.
+ *
+ *  Both fields are typed optional on `AmplificationResponse` (matching
+ *  `ScatterResponse`/`PlateResponse`, for a hypothetical older backend that
+ *  predates e5edefc's echo). `undefined` here means "the server didn't say" --
+ *  that is NOT the same fact as "not applied", and must not silently fall
+ *  back to the request value either: falling back to `useRox` is exactly the
+ *  request-asserts-the-result bug this task exists to remove. So an absent
+ *  echo renders a third, explicit "not reported" state instead of guessing
+ *  true or false from what was asked for. */
 function OverlayProcessingStatus({
   requestedRox,
   normalizationApplied,
   backgroundMode,
 }: {
   requestedRox: boolean;
-  normalizationApplied: boolean;
-  backgroundMode: BackgroundMode;
+  normalizationApplied: boolean | undefined;
+  backgroundMode: BackgroundMode | undefined;
 }) {
   const { t } = useI18n();
+  const reported = normalizationApplied !== undefined;
   return (
     <span
       data-testid="overlay-processing-status"
       data-requested={requestedRox}
-      data-applied={normalizationApplied}
+      data-applied={reported ? String(normalizationApplied) : "unreported"}
       className="text-xs text-text-muted"
     >
-      {t.overlayProcessingStatus(requestedRox, normalizationApplied)} {t.chartBackground(backgroundMode)}
+      {reported
+        ? t.overlayProcessingStatus(requestedRox, normalizationApplied)
+        : t.overlayProcessingStatusUnreported(requestedRox)}{" "}
+      {/* chartBackground() already falls back to its own "unknown" copy for
+          any mode it doesn't recognize, including undefined -- reused as-is
+          rather than inventing a second "not reported" string for it. */}
+      {t.chartBackground(backgroundMode ?? "")}
     </span>
   );
 }
