@@ -21,7 +21,15 @@ Both requirements are real and both had to stay satisfied:
 2. `#scatter-plot`, `#plate-grid` and `.detail-panel` must all fit inside
    1000px with `window.scrollY === 0` at 1440×1000 (P4/the test's assertion).
 
-## Measurements — before (this task, no load, 1440×1000, en, well A1 selected)
+## Measurements — before (this task, no load, 1440×1000, well A1 selected)
+
+(Captured with a scratch Playwright script against the app's default
+language, which renders Korean when no language preference is stored --
+*not* the `en` the actual `tests/24-responsive.spec.ts:51` forces via
+`localStorage`. This table is an internal before/after comparison to
+account for where each pixel came from; see "Measurements — after, actual
+test locale (en)" below for the number that matches the real assertion's
+exact condition.)
 
 | Element | y | height | bottom |
 |---|---|---|---|
@@ -87,7 +95,7 @@ The final numbers were tuned to leave ~15-20px of buffer below the 1000px
 line rather than landing exactly on it, since this is a hand-tuned pixel
 budget that shouldn't flip on minor rendering variance.
 
-## Measurements — after (1440×1000, en, well A1 selected)
+## Measurements — after (same default-language script, well A1 selected)
 
 | Element | y | height | bottom |
 |---|---|---|---|
@@ -99,6 +107,60 @@ budget that shouldn't flip on minor rendering variance.
 `window.scrollY === 0` still holds; `.well-detail-expanded` (the "Detailed
 readings" disclosure) is still closed by default and `#amplification-plot` is
 still visible without opening it (unit tests below confirm this explicitly).
+
+## Measurements — after, actual test locale (en), post y-axis-title fix
+
+This is the config that matches `tests/24-responsive.spec.ts:51` exactly
+(`localStorage` language forced to `en`), re-measured after the y-axis title
+fix below (`automargin: true` plus a shorter title string can, in principle,
+change the plot's internal layout slightly):
+
+| Element | y | height | bottom |
+|---|---|---|---|
+| `#scatter-plot` | 500 | 496.5 | 996.5 |
+| `#plate-grid` | 426 | 266 | 692 |
+| **`.detail-panel`** | 729 | 259 | **988** ✓ (12px under budget) |
+
+`window.scrollY === 0`. English text is generally a little more compact than
+Korean in this UI's header/toolbar rows, which is why these y-offsets differ
+slightly from the default-language table above; both are comfortably inside
+the 1000px budget. The actual e2e test (which runs in exactly this
+configuration) is the authoritative signal and passed 10/10 runs (see E2E
+section).
+
+## Y-axis title was truncated at 135px — follow-up fix
+
+After the height cut, `#amplification-plot`'s y-axis title ("Reported curve
+signal (normalization basis unknown)") no longer fit Plotly's rotated-title
+space at this height and rendered truncated on both ends (e.g.
+`ve signal (normalizati`) -- a real defect (an unlabeled axis in a
+scientific tool), not a cosmetic one, per the "don't leave a truncated
+string" requirement.
+
+Fix (`WellDetailPanel.tsx`, `en.ts`, `ko.ts`):
+- Shortened the axis title: `"Reported curve signal (normalization basis
+  unknown)"` → `"Reported signal"` (en); `"응답 곡선 신호 (정규화 적용 기준
+  미확인)"` → `"응답 신호"` (ko). No information is lost: the caption
+  paragraph immediately above the plot (`t.referenceBasisUnknown`) already
+  states the normalization-basis-unknown fact in a full sentence
+  ("Amplification curve normalization basis: unknown (curve response does
+  not report it)."). This locale key (`curveReportedSignal`) has no other
+  consumers (checked), so shortening it doesn't affect any other screen.
+- Added `yaxis.automargin: true` as a defensive measure so a future longer
+  translation shrinks/reserves space instead of silently overflowing again.
+
+Verified by screenshot, both languages, both themes:
+- `P11-VIEWPORT-BUDGET-v2-yaxis-closeup-en.png` — "Reported signal" renders
+  in full, not clipped.
+- `P11-VIEWPORT-BUDGET-v2-yaxis-closeup-ko.png` — "응답 신호" renders in full
+  (Plotly draws CJK axis titles as vertically stacked characters, reading
+  top-to-bottom; each character is fully legible, not truncated).
+- `P11-VIEWPORT-BUDGET-v2-1440-light.png` / `-v2-1440-dark.png` / full
+  1440px screenshots showing the whole panel with the fixed title.
+
+The curve height itself (135px) was **not** changed for this follow-up --
+the task flagged the axis-title text as the defect, not the curve size, and
+the trace lines/legend/x-axis were already confirmed legible at 135px.
 
 ## Screenshots
 
@@ -116,6 +178,13 @@ still visible without opening it (unit tests below confirm this explicitly).
   and scrolls (existing, accepted behavior per FB-03/P4 evidence — the
   no-scroll budget is a >=1280px guarantee only); nothing overlaps or clips at
   768px in either theme.
+- `P11-VIEWPORT-BUDGET-v2-1440-light.png`, `-v2-1440-dark.png`,
+  `-v2-768-light.png`, `-v2-768-dark.png` — re-captured after the y-axis
+  title fix, English locale (matching the actual test), well A1 selected.
+  Y-axis title now reads "Reported signal" in full.
+- `P11-VIEWPORT-BUDGET-v2-yaxis-closeup-en.png`,
+  `-v2-yaxis-closeup-ko.png` — cropped close-ups of just `#amplification-plot`
+  confirming the y-axis title is no longer truncated in either language.
 
 ## Preserved
 
@@ -154,13 +223,14 @@ spacing/height values did, and all three tests still pass unmodified.
 
 ## Verification — 4/4
 
-Run from `snp-analyzer/frontend`:
+Run from `snp-analyzer/frontend`, **both before and again after** the
+y-axis-title follow-up fix (locale strings + `automargin`):
 
 ```
 npx tsc --noEmit   → 0 errors
 npm run lint       → 0 errors, 0 warnings
-npm run test       → 122 files / 895 tests passed (matches stated baseline)
-npm run build      → tsc -b + vite build succeeded
+npm run test       → 122 files / 895 tests passed (matches stated baseline, both times)
+npm run build      → tsc -b + vite build succeeded (both times)
 ```
 
 ## E2E
@@ -172,7 +242,9 @@ times back-to-back: **4/4 passed**, deterministic.
 Full `tests/24-responsive.spec.ts` file (23 tests, all locales/widths/themes):
 **23/23 passed**.
 
-Full suite (`npx playwright test`, 137 tests total), run 4 times to check for
+### Full-suite runs (before the y-axis-title follow-up)
+
+Full suite (`npx playwright test`, 137 tests total), run 5 times to check for
 determinism under the shared machine's variable load (multiple other
 specialist agents were running their own heavy npm/Playwright work
 concurrently on this box during this task):
@@ -206,9 +278,29 @@ Cleanup: backend PID was started explicitly for this task
 manages; no `pkill` by port was used, and the production port 8002 / DB
 `/app/data/snp_analyzer.db` were never touched.
 
+### Re-verification after the y-axis-title follow-up
+
+Per instruction, the full 137-test suite was not re-run this round (the
+orchestrator runs it after integration); the following targeted checks were:
+
+- `npx tsc --noEmit`, `npm run lint`, `npm run test` (122/895), `npm run build`
+  — all green again (see Verification table above).
+- Full `tests/24-responsive.spec.ts` file: **23/23 passed** (re-run after the
+  fix, fresh backend on port 8185, fresh `/tmp/p11.db`).
+- `tests/24-responsive.spec.ts:51` alone: **3/3 passed** in this round (on
+  top of the 4/4 from before the fix and the pass inside this file re-run,
+  i.e. the target test has now passed in every one of **8** runs across both
+  rounds).
+- `.detail-panel` re-measured directly (see "Measurements — after, actual
+  test locale (en)" above): bottom **988px**, 12px under the 1000px budget —
+  confirms `automargin: true` did not reopen the budget the curve-height cut
+  had just closed.
+
 ## Files changed
 
 - `snp-analyzer/frontend/src/index.css`
 - `snp-analyzer/frontend/src/components/analysis/WellDetailPanel.tsx`
 - `snp-analyzer/frontend/src/components/analysis/PlateView.tsx`
 - `snp-analyzer/frontend/src/components/analysis/PlateLegend.tsx`
+- `snp-analyzer/frontend/src/locales/en.ts` (y-axis title follow-up)
+- `snp-analyzer/frontend/src/locales/ko.ts` (y-axis title follow-up)

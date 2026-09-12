@@ -110,7 +110,12 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
         const c = plotlyColors();
         const layout: Partial<Layout> = {
           xaxis: { title: { text: t.axisCycle }, gridcolor: c.gridColor },
-          yaxis: { title: { text: t.curveReportedSignal }, gridcolor: c.gridColor },
+          // automargin: a fixed-height container (P11-VIEWPORT-BUDGET) means
+          // a longer title in a future translation could still get clipped
+          // by the plot's own height rather than growing the margin --
+          // automargin asks Plotly to reserve/shrink the axis title's space
+          // to actually fit instead of overflowing silently.
+          yaxis: { title: { text: t.curveReportedSignal }, automargin: true, gridcolor: c.gridColor },
           paper_bgcolor: c.paper_bgcolor,
           plot_bgcolor: c.plot_bgcolor,
           font: { color: c.fontColor },
