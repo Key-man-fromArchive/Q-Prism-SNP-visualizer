@@ -188,3 +188,25 @@ describe('ASG linked context label', () => {
     expect(document.querySelector('.header-linked-context')).not.toBeInTheDocument();
   });
 });
+
+// P5-S1-T1: the header's file workspace trigger is hidden while UploadZone
+// (and its own inline trigger) is on screen -- App.tsx passes this through
+// `showFileWorkspaceTrigger`, tied to the same `visibility.upload` boolean.
+// The prop defaults to visible so every render site above, which never
+// passes it, keeps its pre-existing header exactly as before.
+describe('file workspace trigger placement', () => {
+  it('shows the header trigger by default, for callers that do not pass the prop', () => {
+    render(<Header />);
+    expect(screen.getByTestId('file-workspace-trigger-header')).toBeInTheDocument();
+  });
+
+  it('shows the header trigger when a session is active', () => {
+    render(<Header showFileWorkspaceTrigger />);
+    expect(screen.getByTestId('file-workspace-trigger-header')).toBeInTheDocument();
+  });
+
+  it('hides the header trigger while the central upload screen owns the inline one', () => {
+    render(<Header showFileWorkspaceTrigger={false} />);
+    expect(screen.queryByTestId('file-workspace-trigger-header')).not.toBeInTheDocument();
+  });
+});

@@ -1,6 +1,6 @@
-import { beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, uploadFile } from './api';
-import { runUploadJobs } from './upload-jobs';
+import { MAX_FILES_PER_DROP, MAX_TOTAL_BYTES, runUploadJobs, uploadLimitViolation } from './upload-jobs';
 import { useUploadJobStore } from '@/stores/upload-job-store';
 import { useAuthStore } from '@/stores/auth-store';
 import type { UploadResponse } from '@/types/api';
@@ -44,4 +44,26 @@ it('does not publish a partial 200 response that has a session ID but lacks requ
   vi.mocked(uploadFile).mockResolvedValue({ session_id: 'partial' } as UploadResponse);
   expect(await runUploadJobs([new File([], 'partial.eds')])).toBeNull();
   expect(useUploadJobStore.getState().jobs[0]).toMatchObject({ stage: 'unknown', reason: 'response_lost', sessionId: null });
+});
+
+// P5-S2-T1: FileWorkspaceDrawer and UploadZone are two separate upload
+// implementations that are not being unified (D-7), but both must reject an
+// oversized drop with the same numbers — so both read this one function
+// instead of keeping their own count/size thresholds.
+describe('uploadLimitViolation', () => {
+  it('accepts a drop within both the count and the total-size limit', () => {
+    const files = Array.from({ length: MAX_FILES_PER_DROP }, (_, i) => new File(['x'], `f${i}.eds`));
+    expect(uploadLimitViolation(files)).toBeNull();
+  });
+  it('flags a drop with more files than the shared per-drop maximum', () => {
+    const files = Array.from({ length: MAX_FILES_PER_DROP + 1 }, (_, i) => new File(['x'], `f${i}.eds`));
+    expect(uploadLimitViolation(files)).toBe('too_many_files');
+  });
+  it('flags a drop whose combined byte size exceeds the shared total-size maximum', () => {
+    // A real (MAX_TOTAL_BYTES + 1)-byte buffer would be wasteful to allocate
+    // in a test; only `size` matters to the check, so fake it on a tiny file.
+    const big = new File(['x'], 'big.eds');
+    Object.defineProperty(big, 'size', { value: MAX_TOTAL_BYTES + 1 });
+    expect(uploadLimitViolation([big])).toBe('total_too_large');
+  });
 });

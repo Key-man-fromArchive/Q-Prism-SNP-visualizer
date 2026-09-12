@@ -14,7 +14,7 @@ import { useLanguageStore } from "@/stores/language-store";
 import { QcBadges } from "@/components/shared/QcBadges";
 import { ManualEditStatus } from "@/components/shared/ManualEditStatus";
 import { AddToProjectButton } from "@/components/analysis/AddToProjectButton";
-import { FileWorkspaceDrawer } from "@/components/upload/FileWorkspaceDrawer";
+import { FileWorkspaceTrigger } from "@/components/upload/FileWorkspaceTrigger";
 import { Button, IconButton, Menu, Modal, type MenuItem } from "@/components/shared/ui";
 import { ApiError, logout, saveAsgResult } from "@/lib/api";
 import { analyzeCurrent } from "@/lib/analysis-actions";
@@ -65,7 +65,17 @@ function useAsgSavePresentation(sessionId: string | null, currentCycle: number |
   return { asgSaveState, setAsgSaveState, asgAnalysisId, setAsgAnalysisId, asgSaveError, setAsgSaveError };
 }
 
-export function Header() {
+type HeaderProps = {
+  // Defaults to visible so every existing render site/test that doesn't
+  // care about upload-entry placement keeps its current header. App.tsx is
+  // the one caller that passes this explicitly, tying it to the same
+  // `visibility.upload` that decides whether UploadZone (and its own inline
+  // FileWorkspaceTrigger) is on screen — the two are mutually exclusive by
+  // construction, never both, never neither.
+  showFileWorkspaceTrigger?: boolean;
+};
+
+export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
   type ExportKind = "csv" | "png" | "pdf" | "xlsx";
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const sessionId = useSessionStore((s) => s.sessionId);
@@ -314,10 +324,7 @@ export function Header() {
           </div>
         )}
 
-        <FileWorkspaceDrawer
-          onOpenSession={() => useNavigationStore.getState().setTab('results')}
-          onGoToProject={() => useNavigationStore.getState().setTab('project')}
-        />
+        {showFileWorkspaceTrigger && <FileWorkspaceTrigger placement="header" />}
 
         {user && (
           <div className="header-account flex items-center flex-wrap gap-2">

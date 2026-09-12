@@ -969,6 +969,7 @@ const en = {
   // File workspace (several plates open at once)
   // ---------------------------------------------------------------------------
   workspaceFiles: 'Files',
+  workspaceManageFiles: 'Manage multiple files',
   workspaceTitle: 'File workspace',
   workspaceDescription: 'Upload several runs and switch without leaving your analysis.',
   workspaceDropTitle: 'Drop PCR files here',

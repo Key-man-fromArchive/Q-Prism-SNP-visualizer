@@ -1,9 +1,25 @@
+import type { ComponentProps } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { FileWorkspaceDrawer } from './FileWorkspaceDrawer';
+import { FileWorkspaceTrigger } from './FileWorkspaceTrigger';
+import { useFileWorkspaceStore } from '@/stores/file-workspace-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useLanguageStore } from '@/stores/language-store';
 import type { UploadResponse } from '@/types/api';
+
+// P5-S1-T1: the panel no longer renders its own trigger button (it is
+// portal-rendered and mounted independently of any trigger) -- these tests
+// open it the way production does, through a FileWorkspaceTrigger sharing
+// the same file-workspace-store.
+function renderWorkspace(props: ComponentProps<typeof FileWorkspaceDrawer> = {}) {
+  return render(
+    <>
+      <FileWorkspaceTrigger placement="header" />
+      <FileWorkspaceDrawer {...props} />
+    </>,
+  );
+}
 
 const api = vi.hoisted(() => ({
   getSessions: vi.fn(),
@@ -42,6 +58,7 @@ describe('FileWorkspaceDrawer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useLanguageStore.setState({ language: 'en' });
+    useFileWorkspaceStore.setState({ open: false, triggers: {} });
     sessionStorage.clear();
     useSessionStore.setState({
       sessionId: null,
@@ -75,7 +92,7 @@ describe('FileWorkspaceDrawer', () => {
     api.uploadFile
       .mockResolvedValueOnce(info('new-a', 'new-a.pcrd'))
       .mockResolvedValueOnce(info('new-b', 'new-b.eds'));
-    render(<FileWorkspaceDrawer />);
+    renderWorkspace();
 
     fireEvent.click(screen.getByRole('button', { name: /files/i }));
     const dropTarget = screen.getByText(/drop pcr files here/i).closest('div');
@@ -108,7 +125,7 @@ describe('FileWorkspaceDrawer', () => {
     ]);
     api.getSessionInfo.mockResolvedValue(info('recent', 'recent.pcrd'));
     const onOpenSession = vi.fn();
-    render(<FileWorkspaceDrawer onOpenSession={onOpenSession} />);
+    renderWorkspace({ onOpenSession });
 
     fireEvent.click(screen.getByRole('button', { name: /files/i }));
     await screen.findByText('recent.pcrd');
@@ -124,7 +141,7 @@ describe('FileWorkspaceDrawer', () => {
     api.uploadFile
       .mockReturnValueOnce(first.promise)
       .mockResolvedValueOnce(info('second', 'second.pcrd'));
-    render(<FileWorkspaceDrawer />);
+    renderWorkspace();
 
     fireEvent.click(screen.getByRole('button', { name: /files/i }));
     const dropTarget = screen.getByText(/drop pcr files here/i).closest('div');
@@ -156,7 +173,7 @@ describe('FileWorkspaceDrawer', () => {
       .mockReturnValueOnce(initialList.promise)
       .mockResolvedValueOnce([uploaded]);
     api.uploadFile.mockResolvedValue(info('new-session', 'new-session.pcrd'));
-    render(<FileWorkspaceDrawer />);
+    renderWorkspace();
 
     fireEvent.click(screen.getByRole('button', { name: /files/i }));
     const dropTarget = screen.getByText(/drop pcr files here/i).closest('div');

@@ -956,6 +956,7 @@ const ko: Translations = {
   // File workspace (several plates open at once)
   // ---------------------------------------------------------------------------
   workspaceFiles: '파일',
+  workspaceManageFiles: '여러 파일 관리하기',
   workspaceTitle: '파일 작업공간',
   workspaceDescription: '분석 화면을 벗어나지 않고 여러 실험 파일을 업로드하고 전환합니다.',
   workspaceDropTitle: 'PCR 파일을 여기에 놓으세요',

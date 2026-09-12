@@ -6,6 +6,26 @@ import { useSessionStore } from '@/stores/session-store';
 import { useUploadJobStore, type UploadTicket } from '@/stores/upload-job-store';
 import type { UploadResponse } from '@/types/api';
 
+// Shared batch limits: the file workspace drawer and the central drop zone are
+// two separate implementations (by design, see FB-02 D-7 — not unified), but
+// they must reject the same oversized drop with the same numbers and the same
+// message. Both read these constants instead of keeping their own copies.
+export const MAX_FILES_PER_DROP = 20;
+export const MAX_TOTAL_BYTES = 500 * 1024 * 1024;
+export const MAX_TOTAL_MB = MAX_TOTAL_BYTES / (1024 * 1024);
+
+export type UploadLimitViolation = 'too_many_files' | 'total_too_large';
+
+/** Neither caller pre-filters for supported extensions the same way, so this
+ *  only judges the count/size of whatever file list it is given — each
+ *  caller narrows to its own "supported" subset first. */
+export function uploadLimitViolation(files: readonly File[]): UploadLimitViolation | null {
+  if (files.length > MAX_FILES_PER_DROP) return 'too_many_files';
+  const totalBytes = files.reduce((total, file) => total + file.size, 0);
+  if (totalBytes > MAX_TOTAL_BYTES) return 'total_too_large';
+  return null;
+}
+
 function current(ticket: UploadTicket): boolean {
   return useAuthStore.getState().user?.id === ticket.ownerId && useUploadJobStore.getState().current(ticket);
 }

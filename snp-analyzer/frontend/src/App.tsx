@@ -6,6 +6,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { bootstrapAuth } from '@/lib/auth-bootstrap';
 import { Header } from "@/components/layout/Header";
 import { UploadZone } from "@/components/upload/UploadZone";
+import { FileWorkspaceDrawer } from "@/components/upload/FileWorkspaceDrawer";
 import { TabNavigation } from "@/components/layout/TabNavigation";
 import { QualityNavigationNotice } from '@/components/shared/QualityNavigationNotice';
 import { useNavigationStore, resolveDisplayTab, type NavigationTab } from "@/stores/navigation-store";
@@ -184,7 +185,18 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-bg">
-      <Header />
+      <Header showFileWorkspaceTrigger={!visibility.upload} />
+      {/* Mounted once, permanently, independent of session/tab state -- see
+          FileWorkspaceDrawer.tsx. It portals its own dialog, so its position
+          in this tree only matters for the queue/session-list state it
+          owns, never for where it renders on screen. The two
+          FileWorkspaceTrigger buttons that open it (one here via Header,
+          one inside UploadZone) come and go with `visibility.upload`
+          without ever affecting this panel's lifecycle. */}
+      <FileWorkspaceDrawer
+        onOpenSession={() => setActiveTab('results')}
+        onGoToProject={() => setActiveTab('project')}
+      />
       <main>
         <WorkspaceRestoreNotice />
         {visibility.upload && <UploadZone onGoToProject={() => setActiveTab("project")} />}
