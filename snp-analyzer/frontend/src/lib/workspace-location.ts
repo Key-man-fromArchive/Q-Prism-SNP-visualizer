@@ -2,7 +2,7 @@ import { getSessionInfo } from './api';
 import { isRecord } from './session-view-cache';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
-import { useNavigationStore } from '@/stores/navigation-store';
+import { useNavigationStore, remapLegacyQuery } from '@/stores/navigation-store';
 import type { NavigationTab } from '@/stores/navigation-store';
 
 function restoreIndependentTab(query: string) {
@@ -28,7 +28,16 @@ export function createLocationRestore(owner: string) {
   const run = async () => {
     if (useAuthStore.getState().user?.id !== owner) return;
     const request = ++sequence;
-    const query = location.search;
+    const rawQuery = location.search;
+    // P3-S2-T1: a bookmarked/shared URL from before the P3-S1-T1 tab
+    // restructure may still carry `tab=analysis`(+`surface`)/`tab=protocol`.
+    // Remap it to the new tab id and rewrite the address bar to the
+    // canonical form immediately -- before the (async) session lookup --
+    // so a refresh always shows the new URL. `remapLegacyQuery` returns the
+    // exact same string when there is nothing to remap, so this is a no-op
+    // for every already-canonical URL.
+    const query = remapLegacyQuery(rawQuery);
+    if (query !== rawQuery) history.replaceState(null, '', `${location.pathname}?${query}${location.hash}`);
     const sessions = new URLSearchParams(query).getAll('session');
     useSessionStore.getState().reset();
     if (sessions.length === 0) { restoreIndependentTab(query); return; }

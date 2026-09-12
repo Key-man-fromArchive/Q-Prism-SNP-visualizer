@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createNavigationStore, isWorkspaceTab, parseNavigation, resolveDisplayTab, serializeNavigation } from './navigation-store';
+import { createNavigationStore, isWorkspaceTab, parseNavigation, remapLegacyQuery, resolveDisplayTab, serializeNavigation } from './navigation-store';
 import type { QualityTarget } from '@/lib/quality-target';
 
 const defaults = { session: 's', tab: 'results' as const, surface: 'plate' as const, marker: 'm', cycle: 20 };
@@ -66,6 +66,20 @@ it('resolves the legacy analysis tab to the surface-appropriate new tab, and pas
   expect(resolveDisplayTab('analysis', 'analysis')).toBe('results');
   expect(resolveDisplayTab('plate', 'analysis')).toBe('plate');
   expect(resolveDisplayTab('quality', 'plate')).toBe('quality');
+});
+it('remaps a legacy (pre-P3-S1-T1) tab+surface query onto the new top-level tab id, meaning-preserving', () => {
+  expect(remapLegacyQuery('session=s&tab=analysis&surface=plate')).toBe('session=s&tab=plate&surface=plate');
+  expect(remapLegacyQuery('session=s&tab=analysis&surface=analysis')).toBe('session=s&tab=results&surface=analysis');
+  // No `surface` param at all followed the same default the old store used
+  // (`initial.surface === 'plate'`) -- so it lands on `plate`, not `results`.
+  expect(remapLegacyQuery('session=s&tab=analysis')).toBe('session=s&tab=plate&surface=plate');
+  expect(remapLegacyQuery('session=s&tab=protocol&cycle=8')).toBe('session=s&tab=rawdata&cycle=8');
+});
+it('leaves an already-canonical (or unrelated/unknown) query untouched, byte for byte', () => {
+  expect(remapLegacyQuery('session=s&tab=plate&cycle=8')).toBe('session=s&tab=plate&cycle=8');
+  expect(remapLegacyQuery('')).toBe('');
+  expect(remapLegacyQuery('tab=quality')).toBe('tab=quality');
+  expect(remapLegacyQuery('tab=evil')).toBe('tab=evil');
 });
 it('setTab keeps surface in sync with the two workspace tabs and leaves it alone elsewhere', () => {
   const store = createNavigationStore();

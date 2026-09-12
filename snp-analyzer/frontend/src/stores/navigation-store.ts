@@ -42,6 +42,42 @@ export function resolveDisplayTab(tab: StoredTab, surfaceValue: WorkspaceSurface
   return surfaceValue === 'plate' ? 'plate' : 'results';
 }
 
+/**
+ * P3-S2-T1: old bookmarked/persisted URLs and `session-store.sessionQueries`
+ * entries (from before P3-S1-T1's tab restructure) still use `tab=analysis`
+ * paired with a `surface` sub-value, or `tab=protocol`. `parseNavigation`'s
+ * `tab()` guard already refuses those as unrecognized and falls back to the
+ * session's default tab -- a crash-safe fallback, but one that throws away
+ * the user's actual destination (a bookmarked "Plate Setup" link would land
+ * on the default tab instead). This maps them, meaning-preserving, onto the
+ * new top-level tab id *and* keeps `surface` consistent with it (so
+ * `AnalysisWorkspace`, which still reads `surface` directly to choose which
+ * of its two panels is visible, doesn't end up showing the surface for a
+ * different tab than the one the top nav highlights). A query with no
+ * legacy `tab` value is returned completely unchanged -- same string, not
+ * just an equivalent one -- so an already-canonical query is never
+ * reordered or rewritten.
+ *
+ * `surface` defaulted to `'plate'` pre-migration (see this store's `initial`
+ * before P3-S1-T1), so a bare `tab=analysis` with no `surface` maps the same
+ * way `surface=plate` would.
+ */
+export function remapLegacyQuery(query: string): string {
+  const params = new URLSearchParams(query);
+  const legacyTab = params.get('tab');
+  if (legacyTab === 'protocol') {
+    params.set('tab', 'rawdata');
+    return params.toString();
+  }
+  if (legacyTab === 'analysis') {
+    const resolvedSurface: WorkspaceSurface = params.get('surface') === 'analysis' ? 'analysis' : 'plate';
+    params.set('tab', resolvedSurface === 'analysis' ? 'results' : 'plate');
+    params.set('surface', resolvedSurface);
+    return params.toString();
+  }
+  return query;
+}
+
 /** Whitelist only. Never serializes playback, auth credentials or report metadata. */
 export function serializeNavigation<T extends NavigationValue>(value: T): string {
   const query = new URLSearchParams();
