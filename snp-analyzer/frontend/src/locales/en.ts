@@ -537,6 +537,10 @@ const en = {
   addStep: 'Add Step',
   saveProtocol: 'Save Protocol',
   saving: 'Saving...',
+  protocolThermalProfile: 'Thermal-cycling profile',
+  protocolThermalProfileSummary: (steps: number, reads: number, minTemp: number, maxTemp: number) =>
+    `${steps} steps, ${reads} plate read${reads === 1 ? '' : 's'}, ${minTemp}\u2013${maxTemp}\u00b0C. Step order, not real time.`,
+  protocolReadChannels: 'Read Channels',
 
   // Keyboard Help
   keyboardShortcuts: 'Keyboard Shortcuts',

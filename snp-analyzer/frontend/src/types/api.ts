@@ -39,6 +39,16 @@ export type ProtocolStep = {
   label: string;
   phase: string;
   goto_label: string;
+  /** Whether this step actually reads the plate; source of truth for the
+   *  camera marker (do NOT infer this from `label`, which is free text). */
+  plate_read: boolean;
+  /** Per-cycle touchdown temperature delta (signed; e.g. -0.6 for a 0.6°C/cycle
+   *  ramp-down). `null` when this step has no touchdown. */
+  temp_increment: number | null;
+  /** Per-step read channels. Always empty for formats that only carry a
+   *  run-wide channel list (see `ProtocolResponse`'s role-label metadata) —
+   *  do not treat an empty array as "no channels were read". */
+  read_channels: string[];
 };
 
 export type UnifiedData = {
@@ -650,7 +660,7 @@ export type AmplificationResponse = RoleLabelMetadata & {
   curves: AmplificationCurve[];
 };
 
-export type ProtocolResponse = {
+export type ProtocolResponse = RoleLabelMetadata & {
   steps: ProtocolStep[];
 };
 

@@ -6,7 +6,7 @@ import { useSessionStore } from '@/stores/session-store';
 import { useLanguageStore } from '@/stores/language-store';
 import en from '@/locales/en';
 vi.mock('@/lib/api', () => ({ getProtocol: vi.fn(), updateProtocol: vi.fn() }));
-const step = { step: 1, label: 'Synthetic step', temperature: 60, duration_sec: 30, cycles: 1, phase: '', goto_label: '' };
+const step = { step: 1, label: 'Synthetic step', temperature: 60, duration_sec: 30, cycles: 1, phase: '', goto_label: '', plate_read: false, temp_increment: null, read_channels: [] };
 beforeEach(() => { vi.clearAllMocks(); useLanguageStore.getState().setLanguage('en'); useSessionStore.setState({ sessionId: 'protocol-a' }); });
 it('announces lookup separately from saving and labels each editable step', async () => {
   let resolve!: (value: Awaited<ReturnType<typeof getProtocol>>) => void;
@@ -125,4 +125,91 @@ it('renders the pre-refactor phase colors unchanged (P0-T0.2 value lock)', async
     expect(labelDiv).not.toBeNull();
     expect((labelDiv as HTMLElement).style.color).toBe(phases[i].label);
   }
+});
+
+// P2-S1-T1: the read marker must track the `plate_read` field, never the
+// free-text `label` a user can rename at will.
+it('keeps the read marker keyed to plate_read after the label is edited to text with no "read" keywords', async () => {
+  vi.mocked(getProtocol).mockResolvedValue({
+    steps: [
+      { ...step, step: 1, label: 'Pre-Read', plate_read: true },
+      { ...step, step: 2, label: 'Data Collection', plate_read: false },
+    ],
+  });
+  render(<ProtocolTab />);
+  await screen.findByDisplayValue('Pre-Read');
+  // Sanity: step 2's label alone would have tripped the old label-substring
+  // heuristic ("data collection"), yet plate_read is false for it.
+  expect(screen.getByTestId('protocol-read-marker-1')).toBeInTheDocument();
+  expect(screen.queryByTestId('protocol-read-marker-2')).not.toBeInTheDocument();
+
+  fireEvent.change(screen.getByDisplayValue('Pre-Read'), { target: { value: 'Annealing/Extension' } });
+  expect(screen.getByTestId('protocol-read-marker-1')).toBeInTheDocument();
+
+  fireEvent.change(screen.getByDisplayValue('Data Collection'), { target: { value: 'Pre-Read' } });
+  expect(screen.queryByTestId('protocol-read-marker-2')).not.toBeInTheDocument();
+});
+
+it('preserves plate_read and temp_increment through save, unmodified by editing an unrelated field', async () => {
+  vi.mocked(getProtocol).mockResolvedValue({
+    steps: [{ ...step, step: 1, plate_read: true, temp_increment: -0.6, cycles: 10 }],
+  });
+  vi.mocked(updateProtocol).mockResolvedValue({ status: 'ok' });
+  render(<ProtocolTab />);
+  const input = await screen.findByDisplayValue(step.label);
+  fireEvent.change(input, { target: { value: 'Renamed' } });
+  fireEvent.click(screen.getByText(en.saveProtocol));
+  await screen.findByText(en.protocolSaved);
+  expect(updateProtocol).toHaveBeenCalledWith('protocol-a', [
+    expect.objectContaining({ plate_read: true, temp_increment: -0.6 }),
+  ]);
+});
+
+it('gives a newly added step explicit read/touchdown/channel defaults, not undefined', async () => {
+  vi.mocked(getProtocol).mockResolvedValue({ steps: [] });
+  vi.mocked(updateProtocol).mockResolvedValue({ status: 'ok' });
+  render(<ProtocolTab />);
+  await screen.findByText(en.protocolEmpty);
+  fireEvent.click(screen.getByText(en.addStep));
+  fireEvent.click(screen.getByText(en.saveProtocol));
+  await screen.findByText(en.protocolSaved);
+  expect(updateProtocol).toHaveBeenCalledWith('protocol-a', [
+    expect.objectContaining({ plate_read: false, temp_increment: null, read_channels: [] }),
+  ]);
+});
+
+it('shows a read-channel chip per role reported by the protocol response contract', async () => {
+  vi.mocked(getProtocol).mockResolvedValue({
+    steps: [step],
+    role_channels: { WT: 'FAM', MT1: 'HEX', normalization: 'ROX' },
+  });
+  render(<ProtocolTab />);
+  await screen.findByDisplayValue(step.label);
+  expect(screen.getByTestId('protocol-channel-chip-WT')).toHaveTextContent('FAM');
+  expect(screen.getByTestId('protocol-channel-chip-MT1')).toHaveTextContent('HEX');
+  expect(screen.getByTestId('protocol-channel-chip-normalization')).toHaveTextContent('ROX');
+});
+
+it('shows no channel chips or card when the response carries no channel metadata', async () => {
+  vi.mocked(getProtocol).mockResolvedValue({ steps: [step] });
+  render(<ProtocolTab />);
+  await screen.findByDisplayValue(step.label);
+  expect(screen.queryByTestId('protocol-channel-card')).not.toBeInTheDocument();
+});
+
+it('renders the thermal profile diagram with one segment per step, reactive to table edits', async () => {
+  vi.mocked(getProtocol).mockResolvedValue({
+    steps: [
+      { ...step, step: 1, label: 'A' },
+      { ...step, step: 2, label: 'B' },
+      { ...step, step: 3, label: 'C' },
+    ],
+  });
+  render(<ProtocolTab />);
+  await screen.findByDisplayValue('A');
+  expect(screen.getByTestId('protocol-step-1')).toBeInTheDocument();
+  expect(screen.getByTestId('protocol-step-2')).toBeInTheDocument();
+  expect(screen.getByTestId('protocol-step-3')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: `${en.delete} 3` }));
+  expect(screen.queryByTestId('protocol-step-3')).not.toBeInTheDocument();
 });

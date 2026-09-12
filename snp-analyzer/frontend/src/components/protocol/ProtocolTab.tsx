@@ -4,10 +4,12 @@
 import { Fragment } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useProtocolEditor } from './use-protocol-editor';
+import { ProtocolThermalProfile } from './ProtocolThermalProfile';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useI18n } from '@/hooks/use-i18n';
-import type { ProtocolStep } from '@/types/api';
+import type { ProtocolStep, RoleLabelMetadata } from '@/types/api';
+import type { Translations } from '@/locales/en';
 import { PROTOCOL_PHASE_COLORS, PROTOCOL_AMP_COLORS, PROTOCOL_PHASE_FALLBACK } from '@/lib/constants';
 
 function getPhaseColor(phase: string) {
@@ -15,11 +17,6 @@ function getPhaseColor(phase: string) {
   const m = phase.match(/Amplification\s+(\d+)/);
   if (m) return PROTOCOL_AMP_COLORS[(parseInt(m[1]) - 1) % PROTOCOL_AMP_COLORS.length];
   return PROTOCOL_PHASE_FALLBACK;
-}
-
-function isReadingStep(label: string): boolean {
-  const lower = label.toLowerCase();
-  return lower.includes('data collection') || lower.includes('pre-read') || lower.includes('post-read');
 }
 
 export function ProtocolTab() {
@@ -33,7 +30,7 @@ export function ProtocolTab() {
 
 function ProtocolEditor({ sessionId }: { sessionId: string }) {
   const { t } = useI18n();
-  const { steps, setSteps, phase, save: handleSave, cancel, retry } = useProtocolEditor(sessionId);
+  const { steps, setSteps, channels, phase, save: handleSave, cancel, retry } = useProtocolEditor(sessionId);
   const loading = phase === 'loading' || phase === 'saving';
 
   const handleStepChange = <K extends keyof ProtocolStep,>(index: number, field: K, value: ProtocolStep[K]) => {
@@ -59,12 +56,17 @@ function ProtocolEditor({ sessionId }: { sessionId: string }) {
         cycles: 1,
         phase: '',
         goto_label: '',
+        // Explicit, not left to fall through as undefined: a new step reads
+        // nothing and has no touchdown until the user says otherwise.
+        plate_read: false,
+        temp_increment: null,
+        read_channels: [],
       },
     ]);
   };
 
   return (
-    <form onSubmit={event => { event.preventDefault(); void handleSave(); }} className="protocol-editor p-4 sm:px-6 max-w-[800px]" aria-busy={loading}>
+    <form onSubmit={event => { event.preventDefault(); void handleSave(); }} className="protocol-editor p-4 sm:px-6" aria-busy={loading}>
       <div className="panel" style={{ borderRadius: '8px', padding: '20px' }}>
         <h3 className="text-lg font-semibold text-text" style={{ margin: '0 0 16px 0' }}>
           {t.pcrProtocolSteps}
@@ -73,6 +75,8 @@ function ProtocolEditor({ sessionId }: { sessionId: string }) {
         <ProtocolFeedback phase={phase} retry={retry} />
 
         <ProtocolStatus phase={phase} empty={steps.length === 0} />
+        <ProtocolChannelCard channels={channels} t={t} />
+        <ProtocolThermalProfile steps={steps} />
         <fieldset disabled={loading || phase === 'load-error'} className="min-w-0">
         <div role="region" aria-label={t.pcrProtocolSteps} tabIndex={0} style={{ overflow: 'auto', maxHeight: '500px', marginBottom: '16px' }}>
           <table id="protocol-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
@@ -111,7 +115,7 @@ function ProtocolEditor({ sessionId }: { sessionId: string }) {
                           className="border border-border rounded bg-surface text-text"
                           style={{ width: '100%', padding: '4px 8px', fontSize: '13px' }}
                         />
-                        {isReadingStep(step.label) && (
+                        {step.plate_read && (
                           <span style={{ marginLeft: '6px', fontSize: '14px' }} title={t.dataCollection}>{'\uD83D\uDCF7'}</span>
                         )}
                       </td>
@@ -233,6 +237,37 @@ function ProtocolStatus({ phase, empty }: { phase: string; empty: boolean }) {
   const messages: Record<string, string> = { loading: t.loading, saving: t.saving, saved: t.protocolSaved };
   const message = messages[phase] ?? (phase === 'ready' && empty ? t.protocolEmpty : '');
   return <p role="status" aria-live="polite" className="text-sm text-text-muted mb-2">{message}</p>;
+}
+
+/** Reads channel/role metadata straight from the protocol response contract
+ *  (see use-protocol-editor.ts), never from data-store's cache -- that cache
+ *  can be stale relative to whichever session this tab currently shows.
+ *  Shows nothing (not an empty/guessed chip) when the run carries no
+ *  channel metadata at all. */
+function ProtocolChannelCard({ channels, t }: { channels: RoleLabelMetadata | null; t: Translations }) {
+  const entries = Object.entries(channels?.role_channels ?? {}).filter(([, channel]) => !!channel);
+  if (entries.length === 0) return null;
+  return (
+    <div data-testid="protocol-channel-card" className="mb-3 flex flex-wrap items-center gap-2 text-text" style={{ fontSize: '13px' }}>
+      <span className="font-semibold">{t.protocolReadChannels}</span>
+      {entries.map(([role, channelName]) => (
+        <span
+          key={role}
+          data-testid={`protocol-channel-chip-${role}`}
+          className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5"
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              display: 'inline-block', width: '8px', height: '8px', borderRadius: '9999px',
+              background: role === 'WT' ? 'var(--color-fam)' : role === 'MT1' ? 'var(--color-allele2)' : 'var(--color-text-muted)',
+            }}
+          />
+          {channelName} → {role === 'normalization' ? t.normalization : role}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function ProtocolFeedback({ phase, retry }: { phase: string; retry: () => void }) {

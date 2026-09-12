@@ -538,6 +538,10 @@ const ko: Translations = {
   durationS: '시간 (초)',
   addStep: '단계 추가',
   saveProtocol: '프로토콜 저장',
+  protocolThermalProfile: '열 순환 프로파일',
+  protocolThermalProfileSummary: (steps: number, reads: number, minTemp: number, maxTemp: number) =>
+    `${steps}단계, 판독 ${reads}회, ${minTemp}~${maxTemp}°C. 실제 시간이 아니라 단계 순서입니다.`,
+  protocolReadChannels: '판독 채널',
   saving: '저장 중...',
 
   // Keyboard Help
