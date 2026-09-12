@@ -330,9 +330,7 @@ const ko: Translations = {
   group: '그룹:',
   allWells: (n: number) => `전체 웰 (${n})`,
   showEmpty: '빈 웰 표시',
-  plusGroup: '+ 그룹',
   manageGroups: '그룹 관리',
-  createWellGroups: '웰 그룹 생성',
 
   // Cycle Control
   cycle: '사이클:',

@@ -330,9 +330,7 @@ const en = {
   group: 'Group:',
   allWells: (n: number) => `All Wells (${n})`,
   showEmpty: 'Show Empty',
-  plusGroup: '+ Group',
   manageGroups: 'Manage groups',
-  createWellGroups: 'Create well groups',
 
   // Cycle Control
   cycle: 'Cycle:',

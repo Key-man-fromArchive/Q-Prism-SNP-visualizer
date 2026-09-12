@@ -33,8 +33,6 @@ export function AnalysisTab() {
   const wellGroups = useSessionStore((s) => s.wellGroups);
   const setWellGroups = useSessionStore((s) => s.setWellGroups);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
-  const selectedGroup = useSelectionStore((s) => s.selectedGroup);
-  const setGroup = useSelectionStore((s) => s.setGroup);
   const selectedWells = useSelectionStore((s) => s.selectedWells);
   const showEmptyWells = useSettingsStore((s) => s.showEmptyWells);
   const setShowEmptyWells = useSettingsStore((s) => s.setShowEmptyWells);
@@ -260,57 +258,6 @@ export function AnalysisTab() {
       </div>
       </div>{/* end sticky analysis toolbar */}
 
-      {/* Group Filter Bar */}
-      {(groupNames.length > 0 || hasEmptyWells) && (
-        <div
-          className="flex items-center gap-3 px-6 py-2 border-b border-border"
-        >
-          {groupNames.length > 0 && (
-            <>
-              <label className="text-xs text-text-muted font-medium">{t.group}</label>
-              <select
-                className="px-2 py-1 border border-border rounded text-xs bg-surface text-text"
-                value={selectedGroup || ""}
-                onChange={(e) => setGroup(e.target.value || null)}
-              >
-                <option value="">{t.allWells(totalWells)}</option>
-                {groupNames.map((name) => (
-                  <option key={name} value={name}>
-                    {name} ({wellGroups![name].length})
-                  </option>
-                ))}
-              </select>
-              <button
-                className="text-xs px-2 py-1 rounded border border-border bg-surface text-text hover:bg-bg cursor-pointer"
-                onClick={() => setShowGroupManager(true)}
-                title={t.manageGroups}
-              >
-                +
-              </button>
-            </>
-          )}
-          {!groupNames.length && (
-            <button
-              className="text-xs px-2 py-1 rounded border border-border bg-surface text-text hover:bg-bg cursor-pointer"
-              onClick={() => setShowGroupManager(true)}
-              title={t.createWellGroups}
-            >
-              {t.plusGroup}
-            </button>
-          )}
-          {hasEmptyWells && (
-            <label className="flex items-center gap-1 text-xs text-text-muted cursor-pointer ml-auto">
-              <input
-                type="checkbox"
-                checked={showEmptyWells}
-                onChange={(e) => setShowEmptyWells(e.target.checked)}
-              />
-              {t.showEmpty}
-            </label>
-          )}
-        </div>
-      )}
-
       {/* P4-S3-T1 (FB-03 §8): "blocking" warnings bear on genotype-call
           reliability and stay here, above the fold -- only "advisory" ones
           (none exist yet) are demoted below ResultsTable. */}
@@ -331,8 +278,19 @@ export function AnalysisTab() {
         </div>
       )}
 
+      {/* P4-S3-T1 followup3 (FB-03, feedback `2d1ca7ee9f444564`): this used
+          to sit in its own "Group Filter Bar" directly above
+          WellSelectionToolbar -- with no groups and no selection, that bar's
+          only content was a "+ Group" button, stacked right on top of this
+          one's "+ Add group". Both did the same thing (open a way to create
+          the first manual group), so this bar's group filter/manage button
+          and empty-wells toggle now render as part of WellSelectionToolbar's
+          single row instead of a second one. */}
       <div className="px-4 pt-4 sm:px-6">
-        <WellSelectionToolbar />
+        <WellSelectionToolbar
+          groupFilter={{ groupNames, wellGroups: wellGroups ?? {}, totalWells, onManageGroups: () => setShowGroupManager(true) }}
+          emptyWellsToggle={{ hasEmptyWells, showEmptyWells, setShowEmptyWells }}
+        />
       </div>
 
       {/* Shared responsive foundation defines the 1280px two-column breakpoint. */}

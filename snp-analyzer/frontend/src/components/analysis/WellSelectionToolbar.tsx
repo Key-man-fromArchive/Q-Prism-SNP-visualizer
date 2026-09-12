@@ -7,7 +7,33 @@ import { useSelectionStore } from "@/stores/selection-store";
 
 const DEFAULT_GROUPS = Array.from({ length: 6 }, (_, i) => `Group ${i + 1}`);
 
-export function WellSelectionToolbar() {
+export type WellSelectionToolbarProps = {
+  /** Parsed/manual group filter dropdown + "manage groups" (GroupManager)
+   *  entry point. P4-S3-T1 followup3 (FB-03, feedback `2d1ca7ee9f444564`):
+   *  this used to be AnalysisTab's own bar, stacked directly above this
+   *  one -- two bars whose only content, with no groups and no selection,
+   *  was a "create a group" button apiece ("+ Group" here, "+ Add group"
+   *  below). Folded into this single row instead; when no groups exist yet,
+   *  this prop is simply omitted (see `groupNames.length > 0` below) and
+   *  the "+ Add group" trigger further down is the one remaining way to
+   *  create the first group. Omitted entirely by MultiMarkerAnalysisPanel,
+   *  which has no group filter of its own -- its layout is unchanged. */
+  groupFilter?: {
+    groupNames: string[];
+    wellGroups: Record<string, string[]>;
+    totalWells: number;
+    onManageGroups: () => void;
+  };
+  /** Same reasoning, for the "Show empty wells" checkbox that used to live
+   *  at the end of AnalysisTab's group-filter bar. */
+  emptyWellsToggle?: {
+    hasEmptyWells: boolean;
+    showEmptyWells: boolean;
+    setShowEmptyWells: (value: boolean) => void;
+  };
+};
+
+export function WellSelectionToolbar({ groupFilter, emptyWellsToggle }: WellSelectionToolbarProps = {}) {
   const { t } = useI18n();
   const selectedWells = useSelectionStore((s) => s.selectedWells);
   const selectedGroup = useSelectionStore((s) => s.selectedGroup);
@@ -103,6 +129,36 @@ export function WellSelectionToolbar() {
       data-testid="analysis-selection-toolbar"
       className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-bg px-3 py-2"
     >
+      {groupFilter && groupFilter.groupNames.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          <label htmlFor="well-group-filter" className="text-xs text-text-muted font-medium">
+            {t.group}
+          </label>
+          <select
+            id="well-group-filter"
+            data-testid="well-group-filter"
+            className="px-2 py-1 border border-border rounded text-xs bg-surface text-text"
+            value={selectedGroup || ""}
+            onChange={(e) => setGroup(e.target.value || null)}
+          >
+            <option value="">{t.allWells(groupFilter.totalWells)}</option>
+            {groupFilter.groupNames.map((name) => (
+              <option key={name} value={name}>
+                {name} ({groupFilter.wellGroups[name].length})
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            data-testid="manage-groups-button"
+            className="text-xs px-2 py-1 rounded border border-border bg-surface text-text hover:bg-bg cursor-pointer"
+            onClick={groupFilter.onManageGroups}
+            title={t.manageGroups}
+          >
+            +
+          </button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-1.5">
         {showGroupPresets && (
           <div className="flex flex-wrap items-center gap-1.5" data-testid="manual-group-presets">
@@ -174,36 +230,51 @@ export function WellSelectionToolbar() {
         )}
       </div>
       {saveError && <span className="text-xs text-danger" role="alert">{saveError}</span>}
-      <span
-        data-testid="analysis-selection-count"
-        className="ml-auto rounded-full bg-surface px-2 py-1 text-xs font-semibold text-text"
-      >
-        {t.selectedWellCount(selectedWells.length)}
-      </span>
-      <button
-        type="button"
-        data-testid="scatter-selected-only"
-        aria-pressed={focusSelectedWells}
-        disabled={!hasSelection}
-        onClick={() => setFocusSelectedWells(!focusSelectedWells)}
-        className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
-          focusSelectedWells
-            ? "border-primary bg-primary text-white"
-            : "border-border bg-surface text-text hover:border-primary"
-        }`}
-      >
-        {focusSelectedWells ? <RotateCcw size={13} /> : <Focus size={13} />}
-        {focusSelectedWells ? t.showAllScatterWells : t.showSelectedScatterWells}
-      </button>
-      {hasSelection && (
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        {emptyWellsToggle?.hasEmptyWells && (
+          <label
+            data-testid="show-empty-wells-toggle"
+            className="flex items-center gap-1 text-xs text-text-muted cursor-pointer"
+          >
+            <input
+              type="checkbox"
+              checked={emptyWellsToggle.showEmptyWells}
+              onChange={(e) => emptyWellsToggle.setShowEmptyWells(e.target.checked)}
+            />
+            {t.showEmpty}
+          </label>
+        )}
+        <span
+          data-testid="analysis-selection-count"
+          className="rounded-full bg-surface px-2 py-1 text-xs font-semibold text-text"
+        >
+          {t.selectedWellCount(selectedWells.length)}
+        </span>
         <button
           type="button"
-          onClick={clearSelection}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-text-muted hover:bg-surface hover:text-text"
+          data-testid="scatter-selected-only"
+          aria-pressed={focusSelectedWells}
+          disabled={!hasSelection}
+          onClick={() => setFocusSelectedWells(!focusSelectedWells)}
+          className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
+            focusSelectedWells
+              ? "border-primary bg-primary text-white"
+              : "border-border bg-surface text-text hover:border-primary"
+          }`}
         >
-          <X size={13} /> {t.clearWellSelection}
+          {focusSelectedWells ? <RotateCcw size={13} /> : <Focus size={13} />}
+          {focusSelectedWells ? t.showAllScatterWells : t.showSelectedScatterWells}
         </button>
-      )}
+        {hasSelection && (
+          <button
+            type="button"
+            onClick={clearSelection}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-text-muted hover:bg-surface hover:text-text"
+          >
+            <X size={13} /> {t.clearWellSelection}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
