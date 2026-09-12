@@ -18,10 +18,12 @@ const ko: Translations = {
   chartWellAddress: '웰 주소',
   chartCall: '판정',
   referenceBasisUnknown: '증폭 곡선의 정규화 적용 기준: 미확인 (곡선 응답에 기준이 없습니다).',
-  // P11-VIEWPORT-BUDGET: en.ts 참조 -- 135px 곡선 높이에서 세로 축 제목이
-  // 잘려 표시되어("...정규화 적...") 축소. 괄호 안 내용은 정보 손실이 아님:
-  // 캡션(referenceBasisUnknown)이 바로 위에서 이미 완전한 문장으로 알려줌.
-  curveReportedSignal: '응답 신호',
+  // P12-PLOT-TOGGLE: en.ts 참조 -- P11이 줄였던 축약형("응답 신호")을 원래
+  // 문구로 복원. 그 축약은 곡선이 .detail-panel 안 135px 짜리 좁은 영역에
+  // 갇혀 있었기 때문일 뿐, 이제 곡선은 결과 화면의 큰 플롯 영역(ScatterPlot과
+  // 같은 .analysis-scatter-canvas 크기 규칙)에 그려지므로 전체 문구가 잘리지
+  // 않는다 (1440x1000/768, 라이트·다크, 두 언어 모두 실측 확인).
+  curveReportedSignal: '응답 곡선 신호 (정규화 적용 기준 미확인)',
   scatterReferenceBasis: (requested: boolean, reported: boolean, applied: boolean) => `산점도 측정값 — 참조 정규화 요청: ${requested ? '예' : '아니오'}; 실제 적용: ${reported ? applied ? '예' : '아니오 (리포터 스케일)' : '미확인'}.`,
   chartNoSample: '샘플 식별자 없음',
   chartExcluded: '표시 필터로 숨김',
@@ -619,6 +621,12 @@ const ko: Translations = {
 
   // Analysis panels & misc (localization fixes)
   alleleDiscrimination: '대립유전자 판별',
+  // P12-PLOT-TOGGLE: 결과 화면의 큰 플롯 영역은 산점도와 증폭곡선을 동시에
+  // 보여주지 않고 하나씩 전환한다(FB-12).
+  resultsPlotViewLabel: '플롯 보기',
+  resultsPlotViewScatter: '산점도',
+  resultsPlotViewCurve: '증폭곡선',
+  curveNoMultiCycleData: '이 실행에는 곡선으로 그릴 사이클별 데이터가 없습니다.',
   genotypeResults: '유전자형 결과',
   plateView: '플레이트 뷰',
   amplificationOverlay: '증폭 곡선 오버레이',

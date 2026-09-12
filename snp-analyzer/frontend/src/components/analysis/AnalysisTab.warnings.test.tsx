@@ -28,6 +28,7 @@ vi.mock('@/lib/api', async (original) => ({
 }));
 vi.mock('./CycleControl', () => ({ CycleControl: () => null }));
 vi.mock('./ScatterPlot', () => ({ ScatterPlot: () => null }));
+vi.mock('./AmplificationCurvePanel', () => ({ AmplificationCurvePanel: () => null }));
 vi.mock('./PlateView', () => ({ PlateView: () => null }));
 vi.mock('./WellDetailPanel', () => ({ WellDetailPanel: () => null }));
 vi.mock('./ResultsTable', () => ({ ResultsTable: () => null }));

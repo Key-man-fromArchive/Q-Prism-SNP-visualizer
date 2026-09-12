@@ -264,7 +264,19 @@ body.dark .panel {
   .analysis-context-summary-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; padding: .5rem 1.5rem 0; }
   .analysis-context-summary-body > section { margin: 0; padding: .5rem; font-size: .75rem; }
   .analysis-grid { align-items: start; }
-  .analysis-grid .panel { padding: 12px; }
+  /* P12-PLOT-TOGGLE: 12px -> 8px top/bottom only (horizontal unchanged).
+     ResultsPlotToggle's scatter/curve switch (FB-12) added a row above
+     ScatterViewControls that the pre-existing 1440x1000 budget
+     (tests/24-responsive.spec.ts:51) had no slack for -- same "many small
+     cuts" approach P4/P11 already used for this budget. Vertical-only:
+     .analysis-scatter-canvas's width comes from this panel's inner content
+     width, and its height is width-derived via aspect-ratio (P4-S1-T1) --
+     widening it by ALSO cutting horizontal padding would grow the canvas
+     taller through that same ratio and eat the vertical savings right
+     back. Applies to every panel in this grid (plate/detail included);
+     those two had ample slack after the curve chart moved out of
+     .detail-panel (P12-PLOT-TOGGLE), so this is not new pressure on them. */
+  .analysis-grid .panel { padding: 8px 12px; }
   [data-testid="analysis-warnings"] { max-height: 5rem; overflow: auto; }
   [data-testid="analysis-scope-selector"] { margin-top: .5rem; }
   [data-testid="analysis-result-status"] { padding: .5rem .75rem; }

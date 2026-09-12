@@ -34,7 +34,12 @@ for (const language of ['en', 'ko']) for (const dark of [false, true]) {
     await expect(page.getByTestId('normalization-state')).toHaveAttribute('data-reported', 'true');
     await page.locator('.detail-panel details > summary').click();
     await expect(page.getByTestId('scatter-reading-basis')).toContainText(language === 'en' ? 'actually applied' : '실제 적용');
-    await expect(page.locator('.detail-panel')).toContainText(language === 'en' ? 'Amplification curve normalization basis: unknown' : '증폭 곡선의 정규화 적용 기준: 미확인');
+    // P12-PLOT-TOGGLE: this caption moved with the curve chart itself, out
+    // of .detail-panel and into AmplificationCurvePanel (results screen's
+    // curve view, toggled against the scatter plot -- FB-12).
+    await page.getByTestId('plot-view-curve').click();
+    await expect(page.getByTestId('curve-reading-basis')).toContainText(language === 'en' ? 'Amplification curve normalization basis: unknown' : '증폭 곡선의 정규화 적용 기준: 미확인');
+    await page.getByTestId('plot-view-scatter').click();
     await page.screenshot({ path: test.info().outputPath('single.png'), fullPage: true });
     await page.locator('#tab-plate').click();
     await page.getByTestId('add-marker-button').click();

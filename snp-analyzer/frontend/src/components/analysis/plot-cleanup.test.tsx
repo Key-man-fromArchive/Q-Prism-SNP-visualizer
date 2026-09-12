@@ -2,7 +2,7 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import Plotly from 'plotly.js-dist-min';
 import { AmplificationOverlay } from './AmplificationOverlay';
-import { WellDetailPanel } from './WellDetailPanel';
+import { AmplificationCurvePanel } from './AmplificationCurvePanel';
 import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useDataStore } from '@/stores/data-store';
@@ -35,8 +35,10 @@ it('purges the captured overlay node after React clears its ref', () => {
   expect(Plotly.purge).toHaveBeenCalledWith(node);
 });
 
-it('purges a detail plot first mounted after selection, on deselection', async () => {
-  render(<WellDetailPanel />);
+// P12-PLOT-TOGGLE: this purge-on-deselect guarantee moved with the curve
+// chart itself, from WellDetailPanel to AmplificationCurvePanel.
+it('purges a curve plot first mounted after selection, on deselection', async () => {
+  render(<AmplificationCurvePanel active />);
   act(() => useSelectionStore.setState({ selectedWell: 'A1' }));
   await waitFor(() => expect(Plotly.react).toHaveBeenCalled());
   const node = vi.mocked(Plotly.react).mock.calls[0][0];

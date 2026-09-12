@@ -27,6 +27,7 @@ import { MARKER_PALETTE } from "@/lib/constants";
 import { dosageTrustForMarker } from "@/lib/marker-catalog";
 import { analysisWarningTexts } from "@/lib/analysis-warnings";
 import { MarkerScatterPlot } from "./MarkerScatterPlot";
+import { AmplificationCurvePanel } from "./AmplificationCurvePanel";
 import { CycleControl } from "./CycleControl";
 import { PlateView } from "./PlateView";
 import { WellSelectionToolbar } from "./WellSelectionToolbar";
@@ -34,6 +35,7 @@ import { WellDetailPanel } from "./WellDetailPanel";
 import { ResultsTable } from "./ResultsTable";
 import { AmplificationOverlay } from "./AmplificationOverlay";
 import { useIsDarkMode } from "@/hooks/use-dark-mode";
+import { usePlotViewToggle } from "@/hooks/use-plot-view-toggle";
 
 const SIDEBAR_THRESHOLD = 4; // >=4 markers -> sidebar; <=3 -> dropdown (Q8)
 
@@ -60,6 +62,10 @@ function settledAnalysisPaused(playing: boolean, unconfirmed: boolean, exporting
 export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelProps) {
   const { t } = useI18n();
   const dark = useIsDarkMode();
+  // P12-PLOT-TOGGLE (FB-12): same scatter/curve switch as the single-marker
+  // results screen (ResultsPlotToggle.tsx), sharing its state/buttons via
+  // this hook rather than duplicating them.
+  const { view: plotView, toggle: plotToggle } = usePlotViewToggle();
   const sessionId = useSessionStore((s) => s.sessionId);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const isPlaying = useSelectionStore((s) => s.isPlaying);
@@ -376,17 +382,30 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
               {loading && !selectedRegion && scatterPoints.length === 0 ? (
                 <p className="text-sm text-text-muted py-10 text-center">{t.wsAnalysisLoading}</p>
               ) : (
-                <MarkerScatterPlot
-                  sessionId={sessionId ?? ""}
-                  marker={selectedMarker}
-                  region={selectedRegion}
-                  points={scatterPoints}
-                  scatterProvenance={scatterProvenance}
-                  ratioOrigin={ratioOrigin}
-                  allele2Dye={allele2Dye}
-                  roleLabels={roleLabels}
-                  onBoundariesPersisted={runCluster}
-                />
+                <>
+                  <div style={{ display: plotView === "scatter" ? undefined : "none" }}>
+                    <MarkerScatterPlot
+                      sessionId={sessionId ?? ""}
+                      marker={selectedMarker}
+                      region={selectedRegion}
+                      points={scatterPoints}
+                      scatterProvenance={scatterProvenance}
+                      ratioOrigin={ratioOrigin}
+                      allele2Dye={allele2Dye}
+                      roleLabels={roleLabels}
+                      onBoundariesPersisted={runCluster}
+                      active={plotView === "scatter"}
+                      viewToggle={plotView === "scatter" ? plotToggle : undefined}
+                    />
+                  </div>
+                  <div style={{ display: plotView === "curve" ? undefined : "none" }}>
+                    <AmplificationCurvePanel
+                      active={plotView === "curve"}
+                      viewToggle={plotView === "curve" ? plotToggle : undefined}
+                      bare
+                    />
+                  </div>
+                </>
               )}
 
               <div

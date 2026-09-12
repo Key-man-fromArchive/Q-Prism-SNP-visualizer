@@ -204,7 +204,7 @@ export function ScatterViewControls({
   const referenceChannelName = normalizationLabel(labels);
 
   return (
-    <div className="mb-1 flex flex-col gap-1">
+    <div className="mb-0.5 flex flex-col gap-0.5">
       {/* The plot header bar: everything decided while looking at the plot
           (drag tool, normalization, axis range/aspect) lives here, always
           visible. It used to share a collapsed <details> with the NTC
@@ -222,7 +222,7 @@ export function ScatterViewControls({
           any control or its `data-testid`. */}
       <div
         data-testid="scatter-plot-header"
-        className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-bg px-3 py-1.5"
+        className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-bg px-3 py-1"
       >
         {/* The panel heading, inline rather than its own row above (see
             `title`'s doc comment). */}
@@ -424,7 +424,7 @@ export function ScatterViewControls({
             an already-long line wrap to 2 lines for no new information.
             `ScatterReferenceBasis`'s text/testid are untouched (root E2E
             tests/26-chart-semantics.spec.ts asserts on it directly). */}
-        <summary className="cursor-pointer text-xs text-text rounded border border-border p-1">
+        <summary className="cursor-pointer truncate text-xs text-text rounded border border-border p-0.5">
           {/* The NTC axis margin used to have its own clause here ("NTC
               margin (x/y): …"). Dropped for width -- it is still visible
               and editable in the expanded `ntc-axis-offsets` control just
