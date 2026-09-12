@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { useExports } from './use-exports';
+import { useExports, buildWellCycleValuesCsv } from './use-exports';
 import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useNavigationStore } from '@/stores/navigation-store';
@@ -242,4 +242,57 @@ it('RED/GREEN: rejects a held PNG when a filter render replaces its registry gen
   await expect(exporting).rejects.toThrow('active chart changed during PNG rendering');
   expect(click).not.toHaveBeenCalled();
   element.remove();
+});
+
+// @TASK P7-VALUES - client-side well x cycle values CSV (FB-06 Q-1)
+it('builds a well x cycle CSV carrying the same values as the table, honestly labeled (not "raw")', () => {
+  const csv = buildWellCycleValuesCsv({
+    curves: [
+      { well: 'A1', values: [1, 2, 3] },
+      { well: 'A2', values: [4, 5, 6] },
+    ],
+    cycles: [1, 2, 3],
+    channelLabel: 'FAM',
+    sessionId: 'synthetic',
+    normalizationApplied: false,
+    backgroundMode: 'none',
+    requestedRox: true,
+  });
+  const lines = csv.split('\n');
+  expect(lines).toContain('Session,synthetic');
+  expect(lines).toContain('Channel,FAM');
+  expect(lines).toContain('Requested reference normalization,yes');
+  expect(lines).toContain('Normalization applied,no');
+  expect(lines).toContain('Background mode,none');
+  expect(lines).toContain('Well,1,2,3');
+  expect(lines).toContain('A1,1,2,3');
+  expect(lines).toContain('A2,4,5,6');
+  expect(csv.toLowerCase()).not.toContain('raw');
+});
+
+it('reports "unreported" rather than guessing from the request when the echo is absent', () => {
+  const csv = buildWellCycleValuesCsv({
+    curves: [{ well: 'A1', values: [1] }],
+    cycles: [1],
+    channelLabel: 'FAM',
+    sessionId: 's',
+    normalizationApplied: undefined,
+    backgroundMode: undefined,
+    requestedRox: true,
+  });
+  expect(csv).toContain('Normalization applied,unreported');
+  expect(csv).toContain('Background mode,unreported');
+});
+
+it('escapes CSV-hostile characters in fields', () => {
+  const csv = buildWellCycleValuesCsv({
+    curves: [{ well: 'A,1', values: [1] }],
+    cycles: [1],
+    channelLabel: 'FAM',
+    sessionId: 's',
+    normalizationApplied: true,
+    backgroundMode: 'none',
+    requestedRox: true,
+  });
+  expect(csv).toContain('"A,1",1');
 });

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import Plotly from "plotly.js-dist-min";
 import type { Data, Layout, Shape } from "plotly.js";
 import { useSessionStore } from "@/stores/session-store";
@@ -41,6 +41,10 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   const scatterPoints = useDataStore((s) => s.scatterPoints);
   const allele2Dye = useDataStore((s) => s.allele2Dye);
   const roleLabels = useDataStore((s) => s.channelLabels);
+  // P7-VALUES (FB-06 Q-1): the SAME curve WellDetailPanel already fetches to
+  // plot (below) is now also kept in state so its full cycle series can be
+  // shown as numbers, not only as a chart. No second request is made.
+  const [curve, setCurve] = useState<AmplificationCurve | null>(null);
 
   // Find point data for selected well
   const pointData = selectedWell
@@ -66,8 +70,9 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
         const res = await getAmplification(sessionId, [selectedWell], useRox, backgroundMode);
         if (cancelled || !plotRef.current) return;
 
-        const curve: AmplificationCurve | undefined = res.curves[0];
-        if (!curve) return;
+        const fetchedCurve: AmplificationCurve | undefined = res.curves[0];
+        if (!fetchedCurve) { setCurve(null); return; }
+        setCurve(fetchedCurve);
         const labels = channelLabels(
           res.channel_labels ? res : { channel_labels: roleLabels ?? undefined },
           res.allele2_dye || allele2Dye
@@ -75,14 +80,14 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
 
         const traces: Data[] = [
           {
-            x: curve.cycles,
-            y: curve.norm_fam,
+            x: fetchedCurve.cycles,
+            y: fetchedCurve.norm_fam,
             name: labels.fam,
             line: { color: "#2563eb", width: 2 },
           },
           {
-            x: curve.cycles,
-            y: curve.norm_allele2,
+            x: fetchedCurve.cycles,
+            y: fetchedCurve.norm_allele2,
             name: labels.allele2,
             line: { color: "#dc2626", width: 2 },
           },
@@ -262,6 +267,48 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
             ref={attachPlot}
             style={{ width: "100%", height: "200px", marginTop: "12px" }}
           />
+          {/* P7-VALUES (FB-06 Q-1): the plot above shows shape; this shows
+              the SAME curve's numbers -- the current-cycle table above this
+              <details> stays untouched, this adds the rest of the series. */}
+          {/* curve.well === selectedWell guards against showing a stale
+              series from a previous well: `curve` is only ever replaced (not
+              reset) by the fetch effect above, since it must not call
+              setState synchronously in the effect body's early-return
+              branches (react-hooks/set-state-in-effect). */}
+          {curve && curve.well === selectedWell && (
+            <div style={{ marginTop: "12px" }}>
+              <p className="text-xs font-semibold text-text-muted mb-1">{t.wellTimeSeriesTitle}</p>
+              <div
+                data-testid="well-timeseries-scroll-region"
+                role="region"
+                aria-label={t.wellTimeSeriesTitle}
+                tabIndex={0}
+              >
+                <table data-testid="well-timeseries-table" className="detail-table w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th className="text-left text-text-muted pr-3 py-0.5">{t.axisCycle}</th>
+                      <th className="text-right text-text-muted px-2 py-0.5">{labels.fam}</th>
+                      <th className="text-right text-text-muted px-2 py-0.5">{labels.allele2}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {curve.cycles.map((cyc, i) => (
+                      <tr
+                        key={cyc}
+                        className={cyc === currentCycle ? "current-cycle-row" : undefined}
+                        data-current-cycle={cyc === currentCycle ? "true" : undefined}
+                      >
+                        <td className="pr-3 py-0.5">{cyc}</td>
+                        <td className="text-right px-2 py-0.5">{curve.norm_fam[i].toFixed(decimals)}</td>
+                        <td className="text-right px-2 py-0.5">{curve.norm_allele2[i].toFixed(decimals)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           </>
         )}
         </details>
