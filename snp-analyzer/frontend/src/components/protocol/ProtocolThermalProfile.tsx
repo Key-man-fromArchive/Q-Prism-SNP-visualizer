@@ -10,6 +10,7 @@ import { useId } from 'react';
 import { useI18n } from '@/hooks/use-i18n';
 import type { ProtocolStep } from '@/types/api';
 import { PROTOCOL_PHASE_COLORS, PROTOCOL_AMP_COLORS, PROTOCOL_PHASE_FALLBACK } from '@/lib/constants';
+import { fitPhaseLabel } from './protocol-thermal-label-fit';
 
 // Duplicated (not imported) from ProtocolTab.tsx: importing it back from
 // there would create a component <-> component import cycle. Both read the
@@ -110,22 +111,32 @@ export function ProtocolThermalProfile({ steps }: { steps: ProtocolStep[] }) {
           const color = getPhaseColor(band.phase);
           const x0 = xStart(band.startIndex);
           const x1 = xEnd(band.endIndex);
+          const cyclesSuffix = band.cycles > 1 ? ` ×${band.cycles}` : '';
+          const fullLabel = `${band.phase}${cyclesSuffix}`;
+          const displayLabel = fitPhaseLabel(band.phase, cyclesSuffix, x1 - x0);
           return (
             <g key={`${band.phase}-${bandIndex}`} data-testid={`protocol-phase-band-${band.phase}-${bandIndex}`}>
+              {/* Native tooltip on hover, and the SVG-spec accessible name
+                  for this group -- must be the first child to serve as
+                  either. Always the full, un-abbreviated text, so a mouse
+                  user can still read a shortened/hidden label on hover. */}
+              <title>{fullLabel}</title>
               <rect x={x0} y={MARGIN_TOP} width={x1 - x0} height={PLOT_HEIGHT} fill={color.border} fillOpacity={0.12} />
-              <text
-                x={(x0 + x1) / 2}
-                y={16}
-                textAnchor="middle"
-                fontSize={10}
-                fontWeight={600}
-                fill={color.label}
-                paintOrder="stroke"
-                stroke="var(--color-bg)"
-                strokeWidth={3}
-              >
-                {band.phase}{band.cycles > 1 ? ` ×${band.cycles}` : ''}
-              </text>
+              {displayLabel && (
+                <text
+                  x={(x0 + x1) / 2}
+                  y={16}
+                  textAnchor="middle"
+                  fontSize={10}
+                  fontWeight={600}
+                  fill={color.label}
+                  paintOrder="stroke"
+                  stroke="var(--color-bg)"
+                  strokeWidth={3}
+                >
+                  {displayLabel}
+                </text>
+              )}
             </g>
           );
         })}
@@ -177,6 +188,18 @@ export function ProtocolThermalProfile({ steps }: { steps: ProtocolStep[] }) {
           </g>
         ))}
       </svg>
+      {/* Screen-reader-only fallback for phase-band information: the
+          on-diagram label above may be abbreviated or hidden entirely for
+          a narrow band (see fitPhaseLabel), but the full phase name and
+          cycle count must never be lost, only re-routed. This list always
+          carries the complete, untruncated set, independent of what the
+          SVG happened to have room to draw. */}
+      <ul className="sr-only" aria-label={t.protocolThermalProfilePhaseLegend}>
+        {bands.map((band, bandIndex) => {
+          const cyclesSuffix = band.cycles > 1 ? ` ×${band.cycles}` : '';
+          return <li key={`legend-${band.phase}-${bandIndex}`}>{`${band.phase}${cyclesSuffix}`}</li>;
+        })}
+      </ul>
     </div>
   );
 }
