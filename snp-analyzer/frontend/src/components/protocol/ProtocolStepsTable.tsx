@@ -47,7 +47,28 @@ export function ProtocolStepsTable(
       role="region"
       aria-label={t.pcrProtocolSteps}
       tabIndex={0}
-      style={{ overflow: 'auto', maxHeight: '500px', marginBottom: '16px' }}
+      // The 500px *vertical* scroll clamp is an editing convenience (many
+      // steps + Add/Save/Cancel below, on a page that can otherwise grow
+      // unboundedly while editing) -- NOT for the read-only summary.
+      // Clamping it in read-only mode would silently clip trailing
+      // steps/groups out of view (invisible even in a fullPage screenshot,
+      // since fullPage only expands page scroll height, not a nested
+      // scrollable region) -- the opposite of "read the whole protocol at
+      // a glance" this view exists for (see
+      // evidence/P10-PROTOCOL-UI.md's row-count regression note).
+      //
+      // `overflowX: auto` is kept in BOTH modes, though, for a different
+      // reason: the read-only table's Step/Label/Temp/Duration/Cycles
+      // columns don't fit a narrow (e.g. 390px) viewport, and this is the
+      // only element meant to absorb that -- dropping horizontal
+      // containment here let table width leak into
+      // `document.documentElement.scrollWidth`, overflowing the whole
+      // page (caught by e2e/tests/25-secondary-flows.spec.ts's `bounded()`
+      // check; see this file's own tests for the jsdom-level regression
+      // guard on the style itself).
+      style={props.editable
+        ? { overflow: 'auto', maxHeight: '500px', marginBottom: '16px' }
+        : { overflowX: 'auto', marginBottom: '16px' }}
     >
       <table
         id="protocol-table"

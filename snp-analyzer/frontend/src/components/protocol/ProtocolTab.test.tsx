@@ -413,3 +413,44 @@ it('marks the edit table/rows with the responsive-card CSS hooks and gives every
     expect(button.className).toMatch(/min-h-11/);
   }
 });
+
+// Regression: the read-only region reused the editable table's 500px
+// scroll-clamp style. That box is an inner `overflow:auto` container, not
+// page-level scroll, so a fullPage screenshot does not expand it -- every
+// step row/group past ~500px worth of content (the last group, in a
+// realistic 10-step/8-phase protocol) was silently clipped out of view
+// even though it was present in the DOM the whole time (884 unit tests
+// passed regardless, since none of them checked for this style). The
+// read-only summary must never impose that clamp.
+it('does not impose the editable table\'s 500px scroll clamp on the read-only summary (regression: trailing groups clipped out of view)', async () => {
+  vi.mocked(getProtocol).mockResolvedValue({
+    steps: [
+      { ...step, step: 1, label: 'Pre-read', phase: 'Pre-read' },
+      { ...step, step: 2, label: 'Initial Denaturation', phase: 'Initial Denaturation' },
+      { ...step, step: 3, label: 'Denaturation', phase: 'Amplification 1 (Touchdown)', cycles: 12 },
+      { ...step, step: 4, label: 'Annealing/Extension', phase: 'Amplification 1 (Touchdown)', cycles: 12, goto_label: '↩ Repeat Steps 3-4 × 12 cycles' },
+      { ...step, step: 5, label: 'Denaturation 2', phase: 'Amplification 2', cycles: 12 },
+      { ...step, step: 6, label: 'Annealing/Extension 2', phase: 'Amplification 2', cycles: 12, goto_label: '↩ Repeat Steps 5-6 × 12 cycles' },
+      { ...step, step: 7, label: 'Secondary Denaturation Hold', phase: 'Secondary Denaturation Hold' },
+      { ...step, step: 8, label: 'Extension (Touchdown)', phase: 'Extension (Touchdown)', cycles: 12, goto_label: '↩ Repeat Step 8 × 12 cycles' },
+      { ...step, step: 9, label: 'Final Extension Hold', phase: 'Final Extension Hold' },
+      { ...step, step: 10, label: 'Post-read', phase: 'Post-read' },
+    ],
+  });
+  render(<ProtocolTab />);
+  await screen.findByTestId('protocol-group-header-Post-read-9');
+  const region = screen.getByRole('region', { name: en.pcrProtocolSteps });
+  expect(region.style.maxHeight).toBe('');
+  // Vertical clamp gone, but horizontal overflow containment is kept
+  // (the read-only table's columns don't fit a narrow viewport -- see
+  // ProtocolStepsTable.tsx's comment) so it never leaks into
+  // document-level horizontal scroll.
+  expect(region.style.overflow).toBe('');
+  expect(region.style.overflowX).toBe('auto');
+  // Every step row and every group header must actually be in the
+  // document, not merely reachable by scrolling an inner clamp box.
+  expect(document.querySelectorAll('#protocol-table tbody tr')).toHaveLength(10 + 8);
+  for (const label of ['Pre-read', 'Final Extension Hold', 'Post-read']) {
+    expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+  }
+});

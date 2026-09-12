@@ -342,16 +342,19 @@ button in the edit form (Add/Save/Cancel/Delete).
 ```
 $ npx tsc --noEmit          # 0 errors
 $ npm run lint              # 0 errors, 0 warnings
-$ npm run test               # 122 files, 884 tests passed (baseline: 120/849)
+$ npm run test               # 122 files, 886 tests passed (baseline: 120/849)
 $ npm run build              # tsc -b (includes test files) + vite build: success
 ```
 
-Net test delta: +35 (protocol-phase-groups.test.ts +6,
-protocol-goto-range.test.ts +7, FluorescenceDataCard.test.tsx +9,
-ProtocolThermalProfile.test.tsx +3, ProtocolTab.test.tsx +11,
-WellCycleValuesTable.test.tsx −6 removed with its component + −1 file).
-`npx tsc --noEmit` alone (excludes test files) was also run clean; `npm run
-build`'s `tsc -b` additionally covers test files.
+Net test delta: +37 over the original 120/849 baseline (protocol-phase-groups.test.ts
++6, protocol-goto-range.test.ts +7, FluorescenceDataCard.test.tsx +9,
+ProtocolThermalProfile.test.tsx +3, ProtocolTab.test.tsx +12 — including
+the post-review clipping-regression test, see below —
+WellCycleValuesTable.test.tsx −6 removed with its component + −1 file, +1
+net from merging `main`'s `feedback/p8-e2e-debt`). `npx tsc --noEmit`
+alone (excludes test files) was also run clean; `npm run build`'s `tsc -b`
+additionally covers test files. Re-run clean after the post-review fixes
+and the `main` merge described below.
 
 ## Vertical-length measurement (before/after, same synthetic protocol)
 
@@ -372,15 +375,27 @@ view/whole-tab measurement below is independent of edit mode):
 
 | | Before (always-open edit form + 2 separate collapsed cards) | After (read-only default + 1 merged collapsed card) |
 |---|---|---|
-| Protocol card height | 913.5px (edit form, the only mode that existed) | 875.5px read-only (default) / 903.5px edit mode |
-| Whole Raw data tab height | 1171px | 1063px (−108px, ~9.2% shorter, in the default view) |
+| Protocol card height | 913.5px (edit form, the only mode that existed) | 978px read-only (default) / 903.5px edit mode |
+| Whole Raw data tab height | 1171px | 1165px (−6px, in the default view) |
 
-The reduction is modest on the protocol card alone (both modes list all 10
-steps; edit-mode rows and read-only rows are similar height) — the
-qualitative win is removing input chrome, GOTO rows and duplicate card
-headers from the *default* view, not shrinking row count. The larger,
-unambiguous reduction is the whole-tab height, driven mostly by merging
-two independently-collapsed cards into one.
+**Superseded by the "Post-review fixes" section below** — these numbers
+are corrected after fixing a read-only-view clipping bug found in
+independent review (see that section for the full explanation). The
+short version: this specific fixture has five single-step phases, each of
+which now gets its own full-width group-header row (for color/consistency
+with multi-step groups and to carry the GOTO-range/cycles-disagreement
+badges) where the pre-P10 design spent zero extra row height on a
+single-step phase's name. That mostly cancels out the rows saved by
+removing 3 GOTO rows and merging the two fluorescence cards, for a
+protocol this heavy in singleton phases — so the honest height delta here
+is marginal, not the 9.2% first reported (which turned out to be
+measuring artificially-clipped, not merely compact, content). The real,
+unambiguous wins are qualitative: zero input/button chrome in the default
+view, one merged (not two) fluorescence card, and GOTO information shown
+as an actual preserved range next to its phase instead of a floating
+yellow row. See "Post-review fixes" for the full accounting, including
+why a protocol with fewer/longer multi-step phases (the more common real
+shape) would show a larger reduction.
 
 ## Screenshots (before/after, light/dark, 1440px/768px)
 
@@ -410,6 +425,13 @@ after-screenshots show a visible gap between every adjacent label
 separated, not concatenated).
 
 ## E2E
+
+**The full-suite numbers in this section were measured before this
+branch merged `main`'s `feedback/p8-e2e-debt`, so they still count 4
+failures that were already fixed on `main` — see "Post-review fixes" §2
+below for the corrected, current baseline (134/137, matching main's
+135/2 modulo one already-flagged flaky spec).** Kept here for the
+spec-file-fix RED→GREEN history, which is unaffected by the merge.
 
 Root suite (`tests/*.spec.ts`, run against this branch's build on an
 isolated backend, port 8175, `SNP_AUTH_MODE=local`, scratch DB — never
@@ -464,3 +486,141 @@ port 8002 or the production DB):
 - `PROTOCOL_PHASE_COLORS`/`PROTOCOL_AMP_COLORS` intentionally not moved to
   CSS custom properties (see §7 above) — this preserves the standing
   P0-T0.2/D-4 decision rather than reopening it.
+
+## Post-review fixes (team-lead independent verification)
+
+Two issues were raised after the initial commit; both confirmed real and
+fixed here, screenshots/measurements above regenerated against the fix.
+
+### 1. Trailing groups clipped out of view in the read-only summary (high priority, confirmed real)
+
+Root cause: `ProtocolStepsTable.tsx`'s scrollable region carried
+`overflow: 'auto', maxHeight: '500px'` **unconditionally**, copied as-is
+from the editable table (where a scroll clamp is a reasonable editing
+convenience) without conditioning it on `editable`. This was **not** a
+grouping/off-by-one bug — a jsdom row-count check
+(`container.querySelectorAll('#protocol-table tbody tr').length`) against
+the exact reported 10-step/8-phase fixture confirmed **all 18 `<tr>`s
+(10 steps + 8 group headers) were present in the DOM** both before and
+after the fix. The bug was purely visual: a fixed-height `overflow:auto`
+box is a *nested* scroll region, and Playwright's `fullPage` screenshot
+only expands *page-level* scroll height, never a nested container's — so
+anything past ~500px of table content (here: the `Final Extension Hold`
+group header onward) was real, present, but invisible in both the
+screenshot and to a user who never noticed the tiny internal scrollbar.
+
+Fix: the 500px vertical clamp now applies **only** in edit mode
+(`style={props.editable ? {...} : {overflowX: 'auto', marginBottom: '16px'}}`).
+`overflowX: auto` is kept in read-only mode too — see the next item.
+
+RED confirmed by temporarily reverting the conditional (single style
+object for both modes) and re-running the new test below:
+`AssertionError: expected '500px' to be ''` — GREEN after restoring the
+fix. New regression test:
+`does not impose the editable table's 500px scroll clamp on the
+read-only summary (regression: trailing groups clipped out of view)`
+(`ProtocolTab.test.tsx`) — renders the exact reported 10-step fixture,
+asserts the region carries no `maxHeight`/`overflow` clamp, asserts all 18
+`<tr>`s exist, and asserts the first/last labels are all present via
+`getAllByText` (not `findByText`, which is ambiguous here since a step's
+own label and its phase name are the same word for several of this
+fixture's single-step phases — e.g. `"Post-read"` — and would otherwise
+throw on multiple matches; the true group-header element is targeted
+directly by its stable `protocol-group-header-Post-read-9` testid).
+
+Verified live: `document.querySelectorAll('#protocol-table tbody tr').length`
+= 18, and `page.getByTestId('protocol-group-header-Post-read-9').isVisible()`
+= `true`, at all 4 screenshot combinations (light/dark × 1440/768).
+Screenshots above (`P10-PROTOCOL-after-readonly-*.png`) regenerated;
+step 9 (`Final Extension Hold`) and step 10 (`Post-read`) are now visible.
+
+**Fixing this surfaced a second bug**, caught by the very next e2e run:
+removing the *vertical* clamp for read-only mode also removed the
+`overflow: auto` that was incidentally containing *horizontal* overflow
+too. At a narrow viewport (390px), the read-only table's
+Step/Label/Temp/Duration/Cycles columns don't fit, and without any
+overflow containment that width leaked into
+`document.documentElement.scrollWidth`, failing
+`tests/25-secondary-flows.spec.ts`'s `bounded()` check (`scrollWidth <=
+innerWidth`) — reproduced deterministically on two separate isolated
+runs (`secondary forms 390 en light` etc., all 4 language/theme
+combinations at width 390, never at 1024/1440). Fixed by keeping
+`overflowX: 'auto'` in read-only mode while dropping only `overflowY`/
+`maxHeight`. Reverified: all 4 `secondary forms 390 *` variants pass
+(individually and as part of the full `05-interactions` +
+`25-secondary-flows` run, 43/43).
+
+**Height/screenshot correction**: the original evidence above (whole Raw
+data tab: 1171px before → 1063px after, "~9.2% shorter") was measured
+*before* this fix and is invalidated by it — that 1063px number was
+artificially short because the last group was clipped out of the
+measured content. Remeasured against the fix: whole-tab read-only height
+is **1165px** (vs. 1171px before-build — a marginal ~6px difference, not
+9.2%). The honest accounting: this specific 10-step/8-phase synthetic
+fixture happens to have five single-step phases (Pre-read, Initial
+Denaturation, Secondary Denaturation Hold, Final Extension Hold,
+Post-read), each of which now gets its own full group-header `<tr>` for
+color/consistency with multi-step groups — whereas the pre-P10 design
+only added an extra row for an actual GOTO repeat (3 rows here), and
+otherwise folded a single-step phase's name into a small in-row label
+with no extra row height. That structural trade (a header row per phase,
+always, for cross-diagram color consistency and to carry the
+GOTO-range/cycles-disagreement badges) approximately cancels out the
+rows saved by removing the 3 GOTO rows and merging the two fluorescence
+cards, for a protocol this heavy in singleton phases. The real,
+unambiguous wins that still hold: (1) the default view has **zero**
+input/button chrome (vs. an always-open edit form with 10 text/number
+inputs + a delete button per row), (2) the two fluorescence cards are one
+collapsed card instead of two, (3) GOTO information is preserved as an
+actual range instead of a collapsed `×N`, next to the phase it belongs to
+instead of a floating yellow row. A protocol with fewer, longer
+multi-step phases (the more common real-world shape — most qPCR programs
+have 2-4 named phases, not 8) would show a larger height reduction, since
+group-header row overhead is paid once per phase, not once per step.
+Not attempting a further redesign (e.g. folding singleton-phase headers
+inline) here — out of the two specific items this review round asked for.
+
+Screenshots and heights above (§"Vertical-length measurement" and
+"Screenshots") are the regenerated, fixed versions.
+
+### 2. E2E baseline was stale (branch predated the P8 e2e-debt merge)
+
+This branch was forked from `e264f58` (before `feedback/p8-e2e-debt` was
+merged to main at `c630478`), so the four originally-baselined failures
+(`06-import-mapping:10`, `17-manual-group:55`/`:135`, `test-windows:109`)
+were still present in this branch's own history and got reported as
+"unchanged" — they were in fact already fixed on `main`, just not yet
+merged here.
+
+Fixed: `git merge main` (no conflicts — git's merge auto-resolved
+`tests/05-interactions.spec.ts`, which both branches touched at different
+lines; both intents are preserved: this branch's `#edit-protocol-btn`
+gating for the Raw Data Tab tests, and P8's `toBeVisible()` strengthening
+of the `#amplification-plot` assertion). All 4 gates re-run clean after
+the merge (122 files / 886 tests, tsc 0, eslint 0, build success).
+
+Root e2e suite, re-run against the merged + bug-fixed build (isolated
+backend, port 8175, scratch DB): **134 passed / 3 failed**, matching
+main's current documented baseline (135/2) modulo one already-flagged
+flaky spec. All 3 failures individually re-verified as non-deterministic
+by isolated rerun (pass alone), consistent with team-lead's own
+descriptions:
+- `17-manual-group-and-plate-drag.spec.ts:143` ("dragging the NTC
+  corner...") — the documented NTC-corner client-state race (~2/5 flake
+  rate per team-lead, independent of concurrent load; passed on this
+  isolated rerun).
+- `24-responsive.spec.ts:51` ("result-first 96-well desktop...") — the
+  documented flaky-under-load spec; failed again in the full concurrent
+  run (`1103`/`1111` vs. an expected `<=1000` bound) but is a
+  pre-existing, separately-tracked issue unrelated to this diff.
+- `24-responsive.spec.ts:4` ("multi-marker 384 review...") — not in
+  team-lead's named list, but the exact same class of flakiness (plate/
+  marker-assignment workflow, unrelated to protocol/raw-data, untouched
+  by this diff): failed once in a targeted-subset run (timeout on an
+  unrelated `marker-pick-button` click) and once in this full run
+  (timeout on `marker-selector-sidebar`), at two *different* failure
+  points across runs — then passed cleanly (6.0-6.2s) on two separate
+  isolated reruns. Non-determinism, not a regression.
+
+No protocol/raw-data e2e spec failed in any run, isolated or full,
+before or after the merge.
