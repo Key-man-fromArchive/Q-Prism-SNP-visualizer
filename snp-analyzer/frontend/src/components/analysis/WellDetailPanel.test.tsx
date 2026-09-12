@@ -65,3 +65,39 @@ it('keeps compact populated fields visible and resizes the retained curve on dis
   expect(container.querySelector('#amplification-plot')).toBe(plot);
   expect(getAmplification).toHaveBeenCalledTimes(1);
 });
+
+// @TASK P7-VALUES - Well detail panel: show the FULL cycle time series, not
+// just the single currentCycle row that already existed above.
+it('shows the full cycle time series for the selected well, keeping the existing current-cycle table', async () => {
+  useLanguageStore.getState().setLanguage('en');
+  useSessionStore.setState({ sessionId: 's', sessionInfo: { session_id: 's', instrument: 'synthetic', allele2_dye: 'VIC', num_wells: 1, num_cycles: 3, has_rox: false, data_windows: null, suggested_cycle: 40, well_groups: null } });
+  useSelectionStore.setState({ selectedWell: 'A1', currentCycle: 2 });
+  useDataStore.setState({ scatterPoints: [{ well: 'A1', sample_name: 'Sample A', auto_cluster: 'Heterozygous', manual_type: null, confidence: 0.95, norm_fam: 1, norm_allele2: 1, raw_fam: 2, raw_allele2: 2, raw_rox: null }] });
+  vi.mocked(getAmplification).mockResolvedValue({ allele2_dye: 'VIC', curves: [{ well: 'A1', cycles: [1, 2, 3], norm_fam: [0.1, 0.2, 0.3], norm_allele2: [0.9, 0.8, 0.7] }] });
+  const { container } = render(<WellDetailPanel />);
+  await waitFor(() => expect(Plotly.react).toHaveBeenCalled());
+
+  const details = container.querySelector('details')!;
+  details.open = true; fireEvent(details, new Event('toggle'));
+
+  // Existing current-cycle table is untouched.
+  expect(screen.getByText('95%')).toBeVisible();
+
+  const seriesTable = screen.getByTestId('well-timeseries-table');
+  expect(seriesTable.querySelectorAll('tbody tr')).toHaveLength(3);
+  const rows = seriesTable.querySelectorAll('tbody tr');
+  expect(rows[0]).toHaveTextContent('0.1');
+  expect(rows[1]).toHaveTextContent('0.2');
+  expect(rows[2]).toHaveTextContent('0.3');
+  // currentCycle (2) row is visually flagged.
+  expect(rows[1]).toHaveAttribute('data-current-cycle', 'true');
+  expect(rows[0]).not.toHaveAttribute('data-current-cycle');
+});
+
+it('does not render a time-series table when there is no selected well or no curve data', () => {
+  useSessionStore.setState({ sessionId: null, sessionInfo: null });
+  useSelectionStore.setState({ selectedWell: null });
+  useDataStore.setState({ scatterPoints: [] });
+  const { container } = render(<WellDetailPanel />);
+  expect(container.querySelector('[data-testid="well-timeseries-table"]')).toBeNull();
+});

@@ -241,20 +241,25 @@ export function AmplificationOverlay({ ploidyOverride, idPrefix = "" }: Amplific
  *  request-asserts-the-result bug this task exists to remove. So an absent
  *  echo renders a third, explicit "not reported" state instead of guessing
  *  true or false from what was asked for. */
-function OverlayProcessingStatus({
+export function OverlayProcessingStatus({
   requestedRox,
   normalizationApplied,
   backgroundMode,
+  testId = "overlay-processing-status",
 }: {
   requestedRox: boolean;
   normalizationApplied: boolean | undefined;
   backgroundMode: BackgroundMode | undefined;
+  /** Lets a second mount (e.g. WellCycleValuesTable, which reuses this exact
+   *  honesty logic rather than re-implementing it) use a distinct testid so
+   *  both can be queried unambiguously when mounted on the same Raw data tab. */
+  testId?: string;
 }) {
   const { t } = useI18n();
   const reported = normalizationApplied !== undefined;
   return (
     <span
-      data-testid="overlay-processing-status"
+      data-testid={testId}
       data-requested={requestedRox}
       data-applied={reported ? String(normalizationApplied) : "unreported"}
       className="text-xs text-text-muted"

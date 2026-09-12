@@ -127,6 +127,15 @@ const en = {
   // reported" and "not applied" are different facts.
   overlayProcessingStatusUnreported: (requestedRox: boolean) =>
     `Reference normalization requested: ${requestedRox ? 'yes' : 'no'}; actually applied: not reported by the server.`,
+  wellCycleValuesTitle: 'Per-well fluorescence values',
+  wellCycleValuesShow: 'Show values',
+  wellCycleValuesHide: 'Hide values',
+  wellCycleValuesChannelLabel: 'Channel',
+  wellCycleValuesScrollHint: 'Well x cycle values: scroll within this area when needed.',
+  wellCycleValuesLoading: 'Loading values…',
+  wellCycleValuesEmpty: 'No amplification data available.',
+  wellCycleValuesExportCsv: 'Export CSV',
+  wellTimeSeriesTitle: 'Full cycle series (this well)',
   batchAddTo: (name: string, msg: string) => `Add to "${name}": ${msg}`,
   batchAddResult: (added: number, count: number, name: string, leftover: number) => `Added ${added}/${count} to "${name}" (${leftover} already in project or missing)`,
   batchBulkAddTo: (name: string, msg: string) => `Bulk add to "${name}": ${msg}`,
@@ -564,6 +573,7 @@ const en = {
   protocolThermalProfile: 'Thermal-cycling profile',
   protocolThermalProfileSummary: (steps: number, reads: number, minTemp: number, maxTemp: number) =>
     `${steps} steps, ${reads} plate read${reads === 1 ? '' : 's'}, ${minTemp}\u2013${maxTemp}\u00b0C. Step order, not real time.`,
+  protocolThermalProfilePhaseLegend: 'Phase legend (full names and cycle counts, independent of on-diagram label abbreviation)',
   protocolReadChannels: 'Read Channels',
 
   // Keyboard Help
