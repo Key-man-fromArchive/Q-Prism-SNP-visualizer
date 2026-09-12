@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
-import { loginRequest, uploadAndWait } from './helpers';
+import { login, loginRequest, uploadAndWait } from './helpers';
 
 const QS_MULTICOMPONENT = path.resolve(
   '/mnt/ivt-ngs1/5.work-AI/SNP-dsicrimination/Quantstudio3/ASG-PCR-NTCtest_Multicomponent Data.xls'
@@ -74,6 +74,42 @@ test.describe('Detail Panel Content', () => {
     await expect(detail).toContainText(/HEX(\/ROX)?/);
     await expect(detail).toContainText(/Genotype|유전자형/);
     await expect(detail).toContainText(/FAM (ratio|비율)/);
+
+    // Regression (P14): a fresh upload's auto-clustering never used to reach
+    // scatterPoints (only clusterAssignments/plateWells), so this Confidence
+    // row rendered as "—" forever, even once the backend had a real call and
+    // confidence cached. Assert an actual percentage, not just the row's
+    // presence -- that's the gap that let the bug through.
+    const confidenceRow = detail.locator('tr', { hasText: /Confidence|신뢰도/ });
+    await expect(confidenceRow).toContainText(/%/);
+    await expect(confidenceRow).not.toContainText('—');
+  });
+
+  // Regression (P14): the exact path a teammate reported the Confidence/
+  // genotype table coming back blank on -- a FRESH session's automatic
+  // clustering (the #example-select fixture flow, no manual boundary drag
+  // and no cycle navigation to force a scatter refetch). Before the fix,
+  // scatterPoints kept the pre-clustering (null) auto_cluster/confidence
+  // forever in this exact flow; see analysis-projection.test.ts for the
+  // store-level regression test.
+  test('example fixture: fresh auto-clustering fills in Confidence and genotype without any manual edit', async ({ page }) => {
+    await login(page);
+    const clustered = page.waitForResponse(response => response.url().includes('/api/data/')
+      && response.url().endsWith('/cluster') && response.request().method() === 'POST');
+    await page.locator('#example-select').selectOption('2');
+    await clustered;
+    await expect(page.locator('#scatter-plot')).toBeVisible();
+
+    const wellA1 = page.locator('.plate-well[data-well="A1"]');
+    await wellA1.click();
+
+    const detail = page.locator('#detail-content');
+    const confidenceRow = detail.locator('tr', { hasText: /Confidence|신뢰도/ });
+    await expect(confidenceRow).toContainText(/%/);
+    await expect(confidenceRow).not.toContainText('—');
+
+    const genotypeRow = detail.locator('tr', { hasText: /Genotype|유전자형/ });
+    await expect(genotypeRow).not.toContainText(/Undetermined|미결정/);
   });
 });
 

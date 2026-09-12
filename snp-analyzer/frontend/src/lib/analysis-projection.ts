@@ -11,7 +11,7 @@ function metadata(result: ClusteringResult | null) {
 }
 function project(result: ClusteringResult | null) {
   const data = useDataStore.getState();
-  data.setClusterAssignments(result?.assignments ?? {});
+  data.setClusterAssignments(result?.assignments ?? {}, result?.confidences ?? null);
   useDataStore.setState(metadata(result));
 }
 export function connectAnalysisProjection(): () => void {
