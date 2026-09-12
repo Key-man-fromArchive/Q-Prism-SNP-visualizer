@@ -998,8 +998,8 @@ export function ScatterPlot() {
 
   return (
     <div className="panel scatter-panel">
-      <h3 className="text-sm font-semibold mb-2 text-text">{t.alleleDiscrimination}</h3>
       <ScatterViewControls
+        title={t.alleleDiscrimination}
         dataBounds={controlBounds}
         labels={controlLabels}
         ntcCorner={ntcCorner}
@@ -1008,6 +1008,7 @@ export function ScatterPlot() {
         normalizationApplied={normalizationApplied}
         roxOutlierWells={roxOutlierWells}
         hasNormalizationChannel={hasNormalizationChannel}
+        ratioOrigin={{ note: originNote, fam: ratioOrigin.fam, allele2: ratioOrigin.allele2 }}
         dosageCeiling={{
           ploidy,
           applied: dosageMax,
@@ -1017,13 +1018,6 @@ export function ScatterPlot() {
           onApply: handleDosageMaxApply,
         }}
       />
-      {/* Where a fam-fraction of 0.5 sits on THIS plate. Named, because the
-          fallback estimate is a much weaker claim than the plate's own NTC
-          wells and the operator can replace it by marking them. */}
-      <p data-testid="ratio-origin-note" className="mt-1 mb-2 text-xs text-text-muted">
-        {originNote} — {controlLabels.fam} {ratioOrigin.fam.toFixed(normalizationApplied ? 4 : 1)},{" "}
-        {controlLabels.allele2} {ratioOrigin.allele2.toFixed(normalizationApplied ? 4 : 1)}
-      </p>
       <div className="relative analysis-scatter-canvas" style={scatterAspectVars(scatterAspect)}>
         <div
           id="scatter-plot"

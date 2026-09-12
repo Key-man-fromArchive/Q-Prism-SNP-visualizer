@@ -32,11 +32,10 @@ test('fresh entry URL, reload and back/forward preserve the saved result without
   expect(new URL(page.url()).searchParams.has('token')).toBe(false);
   let posts = 0;
   page.on('request', request => { if (request.method() === 'POST' && /\/(cluster|suggest-cycle)(\?|$)/.test(request.url())) posts++; });
-  // Settings moved into the "More" overflow (P3-S1-T1); it no longer has its
-  // own primary `#tab-settings` button.
-  await page.getByRole('button', { name: /^(More|더보기)$/ }).click();
-  await page.getByRole('menuitem', { name: /^(Settings|설정)$/ }).click();
-  const rox = page.locator('#rox-normalize-checkbox');
+  // ROX normalisation now toggles from the checkbox on the scatter plot's
+  // own header bar, not from Settings (P4-S2-T1, FB-04 §3-2/§3-3): Settings
+  // keeps only a read-only status line at #rox-normalize-status.
+  const rox = page.getByTestId('scatter-use-rox');
   await expect(rox).toBeVisible();
   await rox.uncheck();
   // Plate Setup is now a single top-level tab (`plate`) -- no more hopping
@@ -51,10 +50,7 @@ test('fresh entry URL, reload and back/forward preserve the saved result without
   await expect(page.locator('#tab-plate')).toHaveAttribute('aria-selected', 'true');
   await page.goForward();
   await expect(page.locator('#tab-results')).toHaveAttribute('aria-selected', 'true');
-  await page.getByRole('button', { name: /^(More|더보기)$/ }).click();
-  await page.getByRole('menuitem', { name: /^(Settings|설정)$/ }).click();
   await expect(rox).not.toBeChecked();
-  await page.locator('#tab-results').click();
   const saved = await (await page.request.get(`/api/data/${session}/cluster`)).json();
   expect(result.analysis_context.result_revision).toEqual(expect.any(String));
   expect(result.analysis_context.result_revision.length).toBeGreaterThan(0);

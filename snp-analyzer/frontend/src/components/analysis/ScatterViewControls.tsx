@@ -72,6 +72,18 @@ export type ScatterViewControlsProps = {
   /** Absent for a diploid marker, where the three classes ARE the ladder and
    *  there is nothing to declare. */
   dosageCeiling?: DosageCeiling | null;
+  /** The panel heading (e.g. "Allele Discrimination"). Rendered inline in
+   *  the header bar instead of as the caller's own block above it -- a
+   *  separate `<h3>` row cost ~28px of vertical chrome that a 1440x1000
+   *  desktop viewport does not have to spare (FB-04 §3-1 follow-up). Omitted
+   *  entirely by MarkerScatterPlot, which never had its own title here. */
+  title?: string;
+  /** Where a fam-fraction of 0.5 sits on this plate, and why (NTC wells vs.
+   *  an estimated floor). Shown only inside "Advanced settings" now -- it
+   *  used to be its own always-visible line under the header bar, which the
+   *  1440x1000 viewport cannot afford either. Omitted by MarkerScatterPlot,
+   *  which has no ratio origin of its own. */
+  ratioOrigin?: { note: string; fam: number; allele2: number } | null;
 };
 
 const SCATTER_ASPECTS: ScatterAspect[] = ["4:3", "1:1"];
@@ -88,6 +100,8 @@ export function ScatterViewControls({
   roxOutlierWells = [],
   hasNormalizationChannel = true,
   dosageCeiling = null,
+  title,
+  ratioOrigin = null,
 }: ScatterViewControlsProps) {
   const { t } = useI18n();
   const axisMode = useSettingsStore((s) => s.axisMode);
@@ -190,7 +204,7 @@ export function ScatterViewControls({
   const referenceChannelName = normalizationLabel(labels);
 
   return (
-    <div className="mb-2 flex flex-col gap-2">
+    <div className="mb-1 flex flex-col gap-1">
       {/* The plot header bar: everything decided while looking at the plot
           (drag tool, normalization, axis range/aspect) lives here, always
           visible. It used to share a collapsed <details> with the NTC
@@ -208,8 +222,14 @@ export function ScatterViewControls({
           any control or its `data-testid`. */}
       <div
         data-testid="scatter-plot-header"
-        className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border bg-bg px-3 py-2"
+        className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-bg px-3 py-1.5"
       >
+        {/* The panel heading, inline rather than its own row above (see
+            `title`'s doc comment). */}
+        {title && (
+          <h3 className="whitespace-nowrap text-sm font-semibold text-text">{title}</h3>
+        )}
+
         {/* What a drag does. Kept first: it is the control that decides whether
             the plot is selectable at all. */}
         <div className="flex items-center gap-1" role="group" aria-label={t.scatterToolLabel}>
@@ -404,9 +424,13 @@ export function ScatterViewControls({
             an already-long line wrap to 2 lines for no new information.
             `ScatterReferenceBasis`'s text/testid are untouched (root E2E
             tests/26-chart-semantics.spec.ts asserts on it directly). */}
-        <summary className="cursor-pointer text-xs text-text rounded border border-border p-2">
+        <summary className="cursor-pointer text-xs text-text rounded border border-border p-1">
+          {/* The NTC axis margin used to have its own clause here ("NTC
+              margin (x/y): …"). Dropped for width -- it is still visible
+              and editable in the expanded `ntc-axis-offsets` control just
+              below, and unlike the ratio origin or the NTC quadrant it is
+              rarely away from its default. */}
           {t.analysisAdvancedSettings} · {labels.fam}/{labels.allele2} · <ScatterReferenceBasis requested={useRox} applied={normalizationApplied} /> · {t.chartBackground(backgroundMode)}
-          {' · '}{t.ntcAxisOffsetLabel}: {ntcOffsets.x}, {ntcOffsets.y}
           {' · '}{t.analysisNtcMode(ntcCorner !== null)}: {labels.fam} ≤{roundBound(effectiveNtcCorner.fam)}, {labels.allele2} ≤{roundBound(effectiveNtcCorner.allele2)}
         </summary>
         <div
@@ -451,6 +475,22 @@ export function ScatterViewControls({
             </button>
           </div>
         </div>
+
+        {/* Where a fam-fraction of 0.5 sits on THIS plate. Named, because the
+            fallback estimate is a much weaker claim than the plate's own NTC
+            wells and the operator can replace it by marking them. Moved in
+            here from its own always-visible line under the header bar --
+            low-frequency, expert information that a 1440x1000 viewport does
+            not have room to spare for by default (FB-04 §3-1 follow-up). */}
+        {ratioOrigin && (
+          <div className="flex flex-col gap-1" data-testid="ratio-origin-note">
+            <span className="text-xs font-medium text-text-muted">{ratioOrigin.note}</span>
+            <span className="text-xs text-text-muted">
+              {labels.fam} {ratioOrigin.fam.toFixed(normalizationApplied ? 4 : 1)},{" "}
+              {labels.allele2} {ratioOrigin.allele2.toFixed(normalizationApplied ? 4 : 1)}
+            </span>
+          </div>
+        )}
 
         {/* NTC quadrant, by number rather than only by drag */}
         <div className="flex flex-col gap-1">
