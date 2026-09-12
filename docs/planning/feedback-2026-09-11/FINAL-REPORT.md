@@ -114,7 +114,17 @@ ASG 연동 식별자(`target_type`/`target_id`)가 번역 없이 렌더되고 �
 **컬러**: Deep Teal `#0f766e`. 이전 primary는 Tailwind 기본 blue-600이었고 **`--color-fam`과 완전히 같은 값**이라
 버튼과 FAM 데이터 점이 구분되지 않았다.
 
-**제품명**: `Q-prism® Cluster Caller`. UI·`<title>`·OG·README·PDF·푸터까지 통일.
+**제품명**: `Q-prism® Cluster Caller`. UI·`<title>`·OG·README·PDF·푸터·**FastAPI `/docs`·`/redoc`**·**레거시 정적 앱**까지 통일.
+
+> **정정 (2026-09-12)**: 이 문서 최초 작성 시 "UI·title·OG·README·PDF·푸터에서 통일"이라고 적었으나
+> **불완전했다.** `app/main.py:130`의 FastAPI `title`(`/docs`·`/redoc`에 노출)과
+> `app/static/index.html`(`USE_LEGACY=1`일 때 서빙)이 구명칭을 유지하고 있었다.
+> 담당 전문가가 자기 범위 밖에서 발견해 보고했고 `f1d76a8`로 처리했다.
+> OpenAPI `info.title`을 단언하는 회귀 테스트(`tests/test_openapi_identity.py`)를 추가해 다시 어긋나지 않게 했다.
+>
+> `app/static-react/index.html`도 구명칭이 남아 있으나 `.gitignore:37`로 무시되는 **빌드 산출물**이라 대상이 아니다.
+>
+> **완료 선언이 실제 상태보다 앞섰다.** 보고서를 먼저 쓰고 잔존 표면이 뒤에 드러났다.
 
 `P3-S1-T1 e13c349` · `P3-S2-T1 d582850` · `P6-S1-T1 a32668c` · `P6-S2-T1 998ba58`
 
@@ -155,6 +165,7 @@ ASG 연동 식별자(`target_type`/`target_id`)가 번역 없이 렌더되고 �
 | 프론트 테스트 | 100 files / 666 tests | **119 files / 828 tests** |
 | 루트 E2E | 112 passed / **24 failed** | **133 passed / 4 failed** |
 | `ruff check` 부채 | 36 errors | **34 errors** |
+| 백엔드 테스트 (최종) | — | **817 passed** (OpenAPI 회귀 테스트 추가) |
 | 산점도 캔버스 높이 (1920×911) | 300px | **638px** |
 
 E2E는 계약 시작 시점 main이 이미 24건 깨져 있었다(개발 루프에서 E2E를 돌리지 않아 아무도 몰랐다).
@@ -206,6 +217,7 @@ P6의 버튼 건은 팔레트를 바꾸지 않았으면 드러나지 않았을 �
 | P4: 위를 고치며 "그건 내 발명"이라 단정하고 계약을 수정 | **아니었다.** `24-responsive:51`이 이전 계약부터 강제하고 있었다 |
 | 기획: "Q-Prism 브랜드 팔레트·에셋이 존재하지 않는다" | **조사 부족.** `asg-saas-v2`에 가이드·CSS·로고·파비콘·히어로가 전부 있었다 |
 | 태스크 브리프에서 `npm run build`를 검증 목록에서 누락 | `tsc --noEmit`은 테스트 파일을 제외한다. 한 번 빌드가 깨진 채 넘어갈 뻔했다 |
+| 최종 보고서에 "제품명 통일 완료"를 **잔존 표면 확인 전에** 기재 | `/docs`·`/redoc`과 레거시 정적 앱이 남아 있었다. 전문가의 범위 밖 보고로 잡혔다 (`f1d76a8`) |
 
 P1과 P4의 오류는 같은 모양이다 — **반대 증거를 찾아보지 않고 결론을 내렸다.** 두 번 다 grep 한 번이면 끝났을 일이다.
 
