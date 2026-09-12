@@ -45,7 +45,13 @@ for (const language of ['en', 'ko'] as const) for (const applied of [undefined, 
     expect(screen.getByText(t.referenceBasisUnknown)).toBeVisible();
   });
 }
-it('keeps compact populated fields visible and resizes the retained curve on disclosure without another request', async () => {
+// P8-E2E-DEBT: the curve moved out of the "Detailed readings" disclosure
+// (3923909 had nested it there, alongside numeric rows it doesn't belong
+// with), so it's visible -- and its normalization-basis caption with it --
+// before the disclosure is ever opened, and toggling the disclosure (which
+// now only governs the numeric rows/time-series table) no longer needs to
+// resize a plot that lives inside it, because it doesn't anymore.
+it('keeps compact populated fields and the curve visible regardless of the numeric-details disclosure', async () => {
   useLanguageStore.getState().setLanguage('en');
   useSessionStore.setState({ sessionId: 's', sessionInfo: { session_id: 's', instrument: 'synthetic', allele2_dye: 'VIC', num_wells: 1, num_cycles: 2, has_rox: false, data_windows: null, suggested_cycle: 40, well_groups: null } });
   useSelectionStore.setState({ selectedWell: 'A1', currentCycle: 40 });
@@ -58,12 +64,32 @@ it('keeps compact populated fields visible and resizes the retained curve on dis
   const details = container.querySelector('details')!;
   expect(details.open).toBe(false);
   const plot = container.querySelector('#amplification-plot');
-  details.open = true; fireEvent(details, new Event('toggle'));
+  expect(plot).toBeVisible();
   expect(screen.getByText(en.referenceBasisUnknown)).toBeVisible();
-  expect(Plotly.relayout).toHaveBeenCalledWith(plot, { autosize: true });
+  details.open = true; fireEvent(details, new Event('toggle'));
   details.open = false; fireEvent(details, new Event('toggle'));
   expect(container.querySelector('#amplification-plot')).toBe(plot);
   expect(getAmplification).toHaveBeenCalledTimes(1);
+  expect(Plotly.relayout).not.toHaveBeenCalled();
+});
+
+// @TASK P8-E2E-DEBT - the amplification curve is the panel's primary
+// visualization and the reason a user clicks a well at all; it must not
+// require expanding the "Detailed readings" disclosure to be seen (root
+// cause: 3923909 nested it alongside the numeric detail rows it actually
+// belongs next to). Only the numeric rows/time-series table are detail.
+it('shows the amplification curve without expanding the numeric-details disclosure', async () => {
+  useLanguageStore.getState().setLanguage('en');
+  useSessionStore.setState({ sessionId: 's', sessionInfo: { session_id: 's', instrument: 'synthetic', allele2_dye: 'VIC', num_wells: 1, num_cycles: 2, has_rox: false, data_windows: null, suggested_cycle: 40, well_groups: null } });
+  useSelectionStore.setState({ selectedWell: 'A1', currentCycle: 40 });
+  useDataStore.setState({ scatterPoints: [{ well: 'A1', sample_name: 'Sample A', auto_cluster: 'Heterozygous', manual_type: null, confidence: 0.95, norm_fam: 1, norm_allele2: 1, raw_fam: 2, raw_allele2: 2, raw_rox: null }] });
+  vi.mocked(getAmplification).mockResolvedValue({ allele2_dye: 'VIC', curves: [{ well: 'A1', cycles: [20, 40], norm_fam: [0, 1], norm_allele2: [0, 1] }] });
+  const { container } = render(<WellDetailPanel />);
+  await waitFor(() => expect(Plotly.react).toHaveBeenCalled());
+
+  const details = container.querySelector('details')!;
+  expect(details.open).toBe(false);
+  expect(container.querySelector('#amplification-plot')).toBeVisible();
 });
 
 // @TASK P7-VALUES - Well detail panel: show the FULL cycle time series, not

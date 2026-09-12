@@ -162,9 +162,13 @@ test.describe('QuantStudio Multi-Cycle Features', () => {
     await well.click();
     await page.waitForTimeout(1500);
 
-    // Amplification plot should appear for multi-cycle data
+    // Amplification plot should appear for multi-cycle data. Native <details>
+    // disclosures hide their content without ever adding a "hidden" class
+    // (P8-E2E-DEBT: this assertion previously missed exactly that case, when
+    // 3923909 briefly nested the plot inside one) -- toBeVisible() is the
+    // only check that actually verifies the curve rendered on screen.
     const ampPlot = page.locator('#amplification-plot');
-    await expect(ampPlot).not.toHaveClass(/hidden/, { timeout: 5000 });
+    await expect(ampPlot).toBeVisible({ timeout: 5000 });
   });
 
   test('play button exists and toggles', async ({ page }) => {
