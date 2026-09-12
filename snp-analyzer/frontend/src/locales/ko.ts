@@ -504,7 +504,7 @@ const ko: Translations = {
   plateScrollHint: '플레이트 검토: 필요한 경우 이 영역 안에서 가로로 스크롤하세요.',
   resultsScrollHint: '유전자형 검토: 필요한 경우 이 영역 안에서 가로로 스크롤하세요.',
   analysisAdvancedSettings: '고급 설정',
-  analysisNumericDetails: '상세 측정값과 증폭 곡선',
+  analysisNumericDetails: '상세 측정값',
   analysisScopeDetails: '분석 범위와 제외 수의 산정 기준',
   analysisNtcMode: (explicit: boolean) => explicit ? '지정 NTC' : '자동 NTC',
   analysisAspectState: (locked: boolean) => locked ? '동일 축' : '독립 축',
