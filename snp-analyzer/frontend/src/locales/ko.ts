@@ -568,6 +568,7 @@ const ko: Translations = {
   protocolThermalProfile: '열 순환 프로파일',
   protocolThermalProfileSummary: (steps: number, reads: number, minTemp: number, maxTemp: number) =>
     `${steps}단계, 판독 ${reads}회, ${minTemp}~${maxTemp}°C. 실제 시간이 아니라 단계 순서입니다.`,
+  protocolThermalProfilePhaseLegend: '구간 범례 (전체 단계명과 사이클 수, 다이어그램 라벨 축약과 무관)',
   protocolReadChannels: '판독 채널',
   saving: '저장 중...',
 
