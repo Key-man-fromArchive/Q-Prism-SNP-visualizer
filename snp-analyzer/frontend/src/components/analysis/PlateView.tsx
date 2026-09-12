@@ -286,7 +286,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
     >
-      <h3 className="text-sm font-semibold mb-3 text-text">{t.plateView} ({plateRows.length}×{plateCols.length})</h3>
+      <h3 className="text-sm font-semibold mb-2 text-text">{t.plateView} ({plateRows.length}×{plateCols.length})</h3>
       <p role="status" aria-live="polite" className="sr-only">{t.selectedWellCount(selectedWells.length)}</p>
 
       {status === "loading" && <StatusState variant="loading" message={t.loading} />}
@@ -304,7 +304,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
 
       <div role="region" aria-label={t.plateScrollHint} tabIndex={0} data-testid="plate-scroll-region"
         style={{ overflowX: 'auto', display: status === "ready" && plateWells.length > 0 ? undefined : 'none' }}>
-      <p className="text-xs text-text-muted mb-2">{t.plateScrollHint}</p>
+      <p className="text-xs text-text-muted mb-1">{t.plateScrollHint}</p>
       <div
         id="plate-grid"
         role="grid"

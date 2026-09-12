@@ -18,7 +18,10 @@ const ko: Translations = {
   chartWellAddress: '웰 주소',
   chartCall: '판정',
   referenceBasisUnknown: '증폭 곡선의 정규화 적용 기준: 미확인 (곡선 응답에 기준이 없습니다).',
-  curveReportedSignal: '응답 곡선 신호 (정규화 적용 기준 미확인)',
+  // P11-VIEWPORT-BUDGET: en.ts 참조 -- 135px 곡선 높이에서 세로 축 제목이
+  // 잘려 표시되어("...정규화 적...") 축소. 괄호 안 내용은 정보 손실이 아님:
+  // 캡션(referenceBasisUnknown)이 바로 위에서 이미 완전한 문장으로 알려줌.
+  curveReportedSignal: '응답 신호',
   scatterReferenceBasis: (requested: boolean, reported: boolean, applied: boolean) => `산점도 측정값 — 참조 정규화 요청: ${requested ? '예' : '아니오'}; 실제 적용: ${reported ? applied ? '예' : '아니오 (리포터 스케일)' : '미확인'}.`,
   chartNoSample: '샘플 식별자 없음',
   chartExcluded: '표시 필터로 숨김',

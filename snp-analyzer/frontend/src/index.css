@@ -198,7 +198,7 @@ body.dark .panel {
 .protocol-editor table { min-width: 36rem; }
 .protocol-editor td { overflow-wrap: anywhere; }
 .analysis-grid > *, .panel { min-width: 0; }
-.analysis-review-stack { display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
+.analysis-review-stack { display: flex; flex-direction: column; gap: .25rem; min-width: 0; }
 /* Canvas ratio is bounded by width, not clipped by height, so
    `aspect-ratio` always holds true instead of being cut short by a
    viewport-relative max-height (P4-S1-T1, FB-04 §3-1). `--scatter-aspect-w/h`
@@ -247,7 +247,11 @@ body.dark .panel {
 @media (min-width: 1280px) {
   [data-testid="analysis-selection-toolbar"] > span:first-child { width: auto; }
   .analysis-grid { padding-top: .5rem; }
-  .analysis-review-stack .detail-panel { padding: 8px 12px; }
+  /* Ancestor-qualified so this doesn't lose the cascade to the later,
+     equally-specific `.analysis-grid .panel` rule below (both are 2
+     classes; source order alone was picking the wrong one and silencing
+     this panel's intentionally tighter vertical padding -- P11). */
+  .analysis-grid .analysis-review-stack .detail-panel { padding: 4px 12px; }
   .detail-panel #detail-content > table > tbody { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .25rem .5rem; }
   .detail-panel #detail-content > table tr { display: flex; flex-wrap: wrap; gap: .25rem; }
   .detail-panel #detail-content > table td { overflow-wrap: anywhere; }

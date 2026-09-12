@@ -110,7 +110,12 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
         const c = plotlyColors();
         const layout: Partial<Layout> = {
           xaxis: { title: { text: t.axisCycle }, gridcolor: c.gridColor },
-          yaxis: { title: { text: t.curveReportedSignal }, gridcolor: c.gridColor },
+          // automargin: a fixed-height container (P11-VIEWPORT-BUDGET) means
+          // a longer title in a future translation could still get clipped
+          // by the plot's own height rather than growing the margin --
+          // automargin asks Plotly to reserve/shrink the axis title's space
+          // to actually fit instead of overflowing silently.
+          yaxis: { title: { text: t.curveReportedSignal }, automargin: true, gridcolor: c.gridColor },
           paper_bgcolor: c.paper_bgcolor,
           plot_bgcolor: c.plot_bgcolor,
           font: { color: c.fontColor },
@@ -137,7 +142,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   if (!selectedWell) {
     return (
       <div className="panel detail-panel">
-        <h3 className="text-sm font-semibold mb-2 text-text">{t.wellDetails}</h3>
+        <h3 className="text-sm font-semibold mb-1 text-text">{t.wellDetails}</h3>
         <div id="detail-content">
           <p className="placeholder text-sm text-text-muted">
             {t.clickWellToSee}
@@ -150,7 +155,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   if (!pointData) {
     return (
       <div className="panel detail-panel">
-        <h3 className="text-sm font-semibold mb-2 text-text">{t.wellDetails}</h3>
+        <h3 className="text-sm font-semibold mb-1 text-text">{t.wellDetails}</h3>
         <div id="detail-content">
           <p className="text-sm text-text-muted">
             {t.noDataForWell(selectedWell)}
@@ -199,7 +204,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
 
   return (
     <div className="panel detail-panel">
-      <h3 className="text-sm font-semibold mb-2 text-text">{t.wellDetails}</h3>
+      <h3 className="text-sm font-semibold mb-1 text-text">{t.wellDetails}</h3>
 
       <div id="detail-content">
         <table className="detail-table w-full text-sm">
@@ -223,7 +228,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
           </tbody>
         </table>
         <details className="well-detail-expanded">
-          <summary className="cursor-pointer text-xs text-primary py-2">{t.analysisNumericDetails}</summary>
+          <summary className="cursor-pointer text-xs text-primary py-0.5">{t.analysisNumericDetails}</summary>
           <p className="text-xs text-text-muted" data-testid="scatter-reading-basis">{t.scatterReferenceBasis(useRox, normalizationReported, normalizationApplied)}</p>
           <table className="detail-table w-full text-sm"><tbody>
             {autoCluster && <tr><td className="text-text-muted pr-3 py-0.5">{t.autoCluster}</td><td>{callLabel(autoCluster, t)}</td></tr>}
@@ -309,13 +314,24 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
         {/* P8-E2E-DEBT: moved out of the disclosure above -- the curve is
             the reason a well was clicked, not a numeric detail, and must be
             visible without expanding "Detailed readings". */}
+        {/* P11-VIEWPORT-BUDGET: 200px (P8's original height) pushed this
+            panel's bottom edge 111px past the 1000px viewport budget
+            (tests/24-responsive.spec.ts:51) once the curve became
+            permanently visible -- the fix could not come from height alone
+            without shrinking the curve to illegibility, so this 135px is
+            paired with several small spacing cuts around it (panel padding,
+            title/legend margins, the review-stack gap). 135px keeps both
+            trend lines, the legend and axis ticks readable at 1440px and
+            768px (see evidence/P11-VIEWPORT-BUDGET.md screenshots) -- it is
+            not a target to keep shrinking if a future change needs more
+            room; find the room elsewhere first. */}
         {numCycles > 1 && (
           <>
           <p className="text-xs text-text-muted">{t.referenceBasisUnknown}</p>
           <div
             id="amplification-plot"
             ref={attachPlot}
-            style={{ width: "100%", height: "200px", marginTop: "12px" }}
+            style={{ width: "100%", height: "135px", marginTop: "6px" }}
           />
           </>
         )}

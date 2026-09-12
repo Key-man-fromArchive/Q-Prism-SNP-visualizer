@@ -63,7 +63,7 @@ export function PlateLegend({ wells, showManualTypes, showAutoCluster, ploidy, d
       role="list"
       aria-label={t.plateLegendAria}
       data-testid="plate-legend"
-      className="plate-legend flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs"
+      className="plate-legend flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs"
     >
       {entries.map(({ key, count, appearance }) => (
         <div

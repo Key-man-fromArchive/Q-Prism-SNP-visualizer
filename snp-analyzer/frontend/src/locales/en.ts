@@ -16,7 +16,14 @@ const en = {
   chartWellAddress: 'Well',
   chartCall: 'Call',
   referenceBasisUnknown: 'Amplification curve normalization basis: unknown (curve response does not report it).',
-  curveReportedSignal: 'Reported curve signal (normalization basis unknown)',
+  // P11-VIEWPORT-BUDGET: shortened from "Reported curve signal (normalization
+  // basis unknown)" -- that full string no longer fits Plotly's rotated
+  // y-axis title within the 135px-tall curve (it was rendering truncated,
+  // e.g. "ve signal (normalizati"). The dropped parenthetical isn't lost
+  // information: referenceBasisUnknown right above the plot already states
+  // it in full sentence form ("Amplification curve normalization basis:
+  // unknown...").
+  curveReportedSignal: 'Reported signal',
   scatterReferenceBasis: (requested: boolean, reported: boolean, applied: boolean) => `Scatter readings — reference normalization requested: ${requested ? 'yes' : 'no'}; actually applied: ${reported ? applied ? 'yes' : 'no (reporter scale)' : 'unknown'}.`,
   chartNoSample: 'No sample identifier',
   chartExcluded: 'Hidden by display filters',
