@@ -136,6 +136,7 @@ const en = {
   axisCycle: 'Cycle',
   axisNormRFU: 'Norm. RFU',
   plateGridAria: 'Plate wells (arrow keys to move, Enter to select, Shift+arrows to extend)',
+  plateLegendAria: 'Plate legend',
   wellSelectedState: 'selected',
   wellEmptyState: 'empty',
   toggleColumnAria: (c: string | number) => `Toggle column ${c}`,

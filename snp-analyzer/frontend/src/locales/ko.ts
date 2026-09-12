@@ -136,6 +136,7 @@ const ko: Translations = {
   axisCycle: '사이클',
   axisNormRFU: '정규화 RFU',
   plateGridAria: '플레이트 웰 (화살표로 이동, Enter로 선택, Shift+화살표로 범위 선택)',
+  plateLegendAria: '플레이트 범례',
   wellSelectedState: '선택됨',
   wellEmptyState: '빈 웰',
   toggleColumnAria: (c: string | number) => `${c}열 전체 토글`,

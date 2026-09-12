@@ -137,6 +137,12 @@ body.dark .panel {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
+/* PlateLegend swatches: a border keeps a black/near-black call (e.g. NTC)
+   distinguishable from the surface behind it in dark mode. */
+.plate-legend-swatch {
+  border: 1px solid var(--color-border);
+}
+
 /* Tailwind owns .hidden so responsive display variants retain their cascade. */
 
 :root { --workspace-gutter: 1rem; --workspace-gap: 1rem; }

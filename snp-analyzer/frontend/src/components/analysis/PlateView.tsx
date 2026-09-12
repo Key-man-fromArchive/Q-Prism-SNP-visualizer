@@ -11,6 +11,7 @@ import { getPlate } from '@/lib/api';
 import { WELL_TYPE_INFO } from '@/lib/constants';
 import { wellInfo, dosageOfLabel } from '@/lib/genotype';
 import { callAppearance, displayedCall, outsideDisplayScope } from '@/lib/chart-semantics';
+import { PlateLegend } from './PlateLegend';
 import { useWellFilter } from '@/hooks/use-well-filter';
 import { useWellGrid } from '@/hooks/use-well-grid';
 import { useI18n } from '@/hooks/use-i18n';
@@ -447,6 +448,16 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
         ))}
       </div>
       </div>
+
+      {status === "ready" && (
+        <PlateLegend
+          wells={plateWells}
+          showManualTypes={showManualTypes}
+          showAutoCluster={showAutoCluster}
+          ploidy={ploidy}
+          dark={dark}
+        />
+      )}
 
       {/* Drag selection rectangle */}
       <div
