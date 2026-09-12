@@ -37,8 +37,13 @@ export function estimateTextWidth(text: string): number {
   return text.length * CHAR_WIDTH_PX;
 }
 
-// 2px clearance on each side, inside the band's own rect.
-const LABEL_HORIZONTAL_PADDING_PX = 4;
+// 8px clearance on each side, inside the band's own rect (P10 follow-up:
+// the original 2px/side left adjacent full-width labels only ~4px apart --
+// no overflow, but visually touching/run-on (see
+// evidence/P9-THERMAL-LABELS-after-harsh-wide-light.png, e.g. "Ampl. 1
+// (TD…Ampl. 2 ×1…"). Exported so tests can assert against the real budget
+// instead of a magic number.
+export const LABEL_HORIZONTAL_PADDING_PX = 16;
 
 // Recognizable, order-sensitive abbreviations for the handful of long
 // words this protocol vocabulary actually uses (see

@@ -250,7 +250,7 @@ export function OverlayProcessingStatus({
   requestedRox: boolean;
   normalizationApplied: boolean | undefined;
   backgroundMode: BackgroundMode | undefined;
-  /** Lets a second mount (e.g. WellCycleValuesTable, which reuses this exact
+  /** Lets a second mount (e.g. FluorescenceDataCard, which reuses this exact
    *  honesty logic rather than re-implementing it) use a distinct testid so
    *  both can be queried unambiguously when mounted on the same Raw data tab. */
   testId?: string;

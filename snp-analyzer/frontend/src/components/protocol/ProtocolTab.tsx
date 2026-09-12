@@ -1,25 +1,17 @@
 // @TASK Protocol Tab Component
-// @SPEC Editable PCR protocol table
-
-import { Fragment } from 'react';
+// @SPEC Read-only PCR protocol summary, edit on demand
+// @SPEC docs/planning/feedback-2026-09-11/evidence/P10-PROTOCOL-UI.md
+import { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useProtocolEditor } from './use-protocol-editor';
 import { ProtocolThermalProfile } from './ProtocolThermalProfile';
-import { AmplificationOverlay } from '@/components/analysis/AmplificationOverlay';
-import { WellCycleValuesTable } from '@/components/analysis/WellCycleValuesTable';
+import { ProtocolStepsTable } from './ProtocolStepsTable';
+import { FluorescenceDataCard } from '@/components/analysis/FluorescenceDataCard';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useI18n } from '@/hooks/use-i18n';
 import type { ProtocolStep, RoleLabelMetadata } from '@/types/api';
 import type { Translations } from '@/locales/en';
-import { PROTOCOL_PHASE_COLORS, PROTOCOL_AMP_COLORS, PROTOCOL_PHASE_FALLBACK } from '@/lib/constants';
-
-function getPhaseColor(phase: string) {
-  if (PROTOCOL_PHASE_COLORS[phase]) return PROTOCOL_PHASE_COLORS[phase];
-  const m = phase.match(/Amplification\s+(\d+)/);
-  if (m) return PROTOCOL_AMP_COLORS[(parseInt(m[1]) - 1) % PROTOCOL_AMP_COLORS.length];
-  return PROTOCOL_PHASE_FALLBACK;
-}
 
 export function ProtocolTab() {
   const sessionId = useSessionStore(s => s.sessionId);
@@ -30,17 +22,11 @@ export function ProtocolTab() {
   return (
     <>
       <ProtocolEditor key={`${owner}:${entry}:${sessionId}`} sessionId={sessionId} />
-      {/* FB-06: plate-wide amplification view lives here too, outside the
-          protocol-save <form> (a bare <button> defaults to type="submit"
-          inside a form, and this toggle must not trigger a protocol save).
-          idPrefix scopes its ids against the Analysis tab's own overlay,
-          which stays mounted (merely hidden) behind this tab -- see
-          AmplificationOverlay.tsx and App.tsx. */}
+      {/* FB-06 / P10: a single merged curve+value card lives here, outside
+          the protocol-save <form> (a bare <button> defaults to type="submit"
+          inside a form) -- see FluorescenceDataCard.tsx. */}
       <div className="px-4 pb-4 sm:px-6">
-        <AmplificationOverlay idPrefix="rawdata-" />
-        {/* P7-VALUES (FB-06 Q-1): "웰마다 형광값" -- a readable/exportable
-            well x cycle value table, placed below the overlay it complements. */}
-        <WellCycleValuesTable />
+        <FluorescenceDataCard />
       </div>
     </>
   );
@@ -50,6 +36,10 @@ function ProtocolEditor({ sessionId }: { sessionId: string }) {
   const { t } = useI18n();
   const { steps, setSteps, channels, phase, save: handleSave, cancel, retry } = useProtocolEditor(sessionId);
   const loading = phase === 'loading' || phase === 'saving';
+  // Read-only summary is the default view (P10): most people open this tab
+  // to check the protocol, not to change it. Editing is opt-in, and always
+  // returns here afterwards (on a successful save, or on Cancel).
+  const [editing, setEditing] = useState(false);
 
   const handleStepChange = <K extends keyof ProtocolStep,>(index: number, field: K, value: ProtocolStep[K]) => {
     setSteps((prev) =>
@@ -83,170 +73,99 @@ function ProtocolEditor({ sessionId }: { sessionId: string }) {
     ]);
   };
 
+  const handleCancel = () => {
+    cancel();
+    setEditing(false);
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const succeeded = await handleSave();
+    if (succeeded) setEditing(false);
+  };
+
+  const canEdit = phase !== 'loading' && phase !== 'load-error';
+
   return (
-    <form onSubmit={event => { event.preventDefault(); void handleSave(); }} className="protocol-editor p-4 sm:px-6" aria-busy={loading}>
+    <div className="protocol-editor p-4 sm:px-6">
       <div className="panel" style={{ borderRadius: '8px', padding: '20px' }}>
-        <h3 className="text-lg font-semibold text-text" style={{ margin: '0 0 16px 0' }}>
-          {t.pcrProtocolSteps}
-        </h3>
+        <div className="flex items-center justify-between gap-3 flex-wrap" style={{ marginBottom: '4px' }}>
+          <h3 className="text-lg font-semibold text-text" style={{ margin: 0 }}>
+            {t.pcrProtocolSteps}
+          </h3>
+          {!editing && canEdit && (
+            <button
+              type="button"
+              id="edit-protocol-btn"
+              onClick={() => setEditing(true)}
+              className="badge cursor-pointer text-xs min-h-11"
+            >
+              {t.protocolEditButton}
+            </button>
+          )}
+        </div>
+
+        {/* Read-channel metadata folded into the card's own header line
+            (P10): a run-wide fact belongs next to the card title, not in a
+            separate boxed sub-card competing for attention with the steps
+            themselves. */}
+        <ProtocolChannelCard channels={channels} t={t} />
 
         <ProtocolFeedback phase={phase} retry={retry} />
-
         <ProtocolStatus phase={phase} empty={steps.length === 0} />
-        <ProtocolChannelCard channels={channels} t={t} />
         <ProtocolThermalProfile steps={steps} />
-        <fieldset disabled={loading || phase === 'load-error'} className="min-w-0">
-        <div role="region" aria-label={t.pcrProtocolSteps} tabIndex={0} style={{ overflow: 'auto', maxHeight: '500px', marginBottom: '16px' }}>
-          <table id="protocol-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-            <thead>
-              <tr className="border-b-2 border-border bg-bg">
-                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>{t.step}</th>
-                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>{t.label}</th>
-                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>{t.tempC}</th>
-                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>{t.durationS}</th>
-                <th className="text-left text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>{t.cycles}</th>
-                <th className="text-center text-text" style={{ padding: '10px 8px', fontWeight: '600' }}>{t.actions}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {steps.map((step, stepIndex) => {
-                const color = getPhaseColor(step.phase || '');
-                const isFirstInPhase = stepIndex === 0 || steps[stepIndex - 1]?.phase !== step.phase;
 
-                return (
-                  <Fragment key={step.step}>
-                    <tr className="border-b border-border" style={{ borderLeft: `3px solid ${color.border}` }}>
-                      <td style={{ padding: '8px' }}>
-                        {isFirstInPhase && step.phase && (
-                          <div style={{ fontSize: '10px', fontWeight: '600', color: color.label, marginBottom: '2px' }}>
-                            {step.phase} {step.cycles > 1 ? `(\u00d7${step.cycles})` : ''}
-                          </div>
-                        )}
-                        {step.step}
-                      </td>
-                      <td style={{ padding: '8px' }}>
-                        <input
-                          type="text"
-                          aria-label={`${t.label} ${step.step}`}
-                          value={step.label}
-                          onChange={(e) => handleStepChange(stepIndex, 'label', e.target.value)}
-                          className="border border-border rounded bg-surface text-text"
-                          style={{ width: '100%', padding: '4px 8px', fontSize: '13px' }}
-                        />
-                        {step.plate_read && (
-                          <span style={{ marginLeft: '6px', fontSize: '14px' }} title={t.dataCollection}>{'\uD83D\uDCF7'}</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '8px' }}>
-                        <input
-                          type="number"
-                          value={step.temperature}
-                          aria-label={`${t.tempC} ${step.step}`}
-                          onChange={(e) => handleStepChange(stepIndex, 'temperature', parseFloat(e.target.value) || 0)}
-                          className="border border-border rounded bg-surface text-text"
-                          style={{ width: '70px', padding: '4px 8px', fontSize: '13px' }}
-                        />
-                      </td>
-                      <td style={{ padding: '8px' }}>
-                        <input
-                          type="number"
-                          value={step.duration_sec}
-                          aria-label={`${t.durationS} ${step.step}`}
-                          onChange={(e) => handleStepChange(stepIndex, 'duration_sec', parseInt(e.target.value) || 0)}
-                          className="border border-border rounded bg-surface text-text"
-                          style={{ width: '70px', padding: '4px 8px', fontSize: '13px' }}
-                        />
-                      </td>
-                      <td style={{ padding: '8px' }}>
-                        <input
-                          type="number"
-                          value={step.cycles}
-                          aria-label={`${t.cycles} ${step.step}`}
-                          onChange={(e) => handleStepChange(stepIndex, 'cycles', parseInt(e.target.value) || 1)}
-                          className="border border-border rounded bg-surface text-text"
-                          style={{ width: '60px', padding: '4px 8px', fontSize: '13px' }}
-                        />
-                      </td>
-                      <td style={{ padding: '8px', textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          aria-label={`${t.delete} ${step.step}`}
-                          className="del-btn"
-                          onClick={() => handleDeleteStep(stepIndex)}
-                          style={{
-                            padding: '4px 8px',
-                            background: '#fee2e2',
-                            color: '#dc2626',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            fontWeight: '500',
-                          }}
-                        >
-                          {t.delete}
-                        </button>
-                      </td>
-                    </tr>
-
-                    {/* GOTO Row */}
-                    {step.goto_label && (
-                      <tr style={{ background: '#fefce8', borderLeft: `3px solid ${color.border}` }}>
-                        <td colSpan={6} style={{ padding: '6px 12px', fontSize: '12px', fontStyle: 'italic', color: '#854d0e' }}>
-                          {'\u2192'} GOTO: {step.goto_label}
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-          <button
-            type="button"
-            id="add-step-btn"
-            onClick={handleAddStep}
-            disabled={loading}
-            style={{
-              padding: '8px 16px',
-              background: 'var(--color-primary)',
-              color: 'var(--color-on-primary)',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              fontSize: '14px',
-              fontWeight: '500',
-              opacity: loading ? 0.6 : 1,
-            }}
-          >
-            {t.addStep}
-          </button>
-          <button
-            type="submit"
-            id="save-protocol-btn"
-            disabled={loading}
-            style={{
-              padding: '8px 16px',
-              background: '#10b981',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              fontSize: '14px',
-              fontWeight: '500',
-              opacity: loading ? 0.6 : 1,
-            }}
-          >
-            {phase === 'saving' ? t.saving : t.saveProtocol}
-          </button>
-          <button type="button" onClick={cancel} className="px-4 py-2 border border-border rounded">{t.cancel}</button>
-        </div>
-        </fieldset>
+        {editing ? (
+          <form onSubmit={event => { void handleSubmit(event); }} aria-busy={loading}>
+            <fieldset disabled={loading || phase === 'load-error'} className="min-w-0">
+              <ProtocolStepsTable steps={steps} t={t} editable onChange={handleStepChange} onDelete={handleDeleteStep} />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                <button
+                  type="button"
+                  id="add-step-btn"
+                  onClick={handleAddStep}
+                  disabled={loading}
+                  className="min-h-11"
+                  style={{
+                    padding: '8px 16px',
+                    background: 'var(--color-primary)',
+                    color: 'var(--color-on-primary)',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    opacity: loading ? 0.6 : 1,
+                  }}
+                >
+                  {t.addStep}
+                </button>
+                <button
+                  type="submit"
+                  id="save-protocol-btn"
+                  disabled={loading}
+                  className="bg-success text-on-success min-h-11"
+                  style={{
+                    padding: '8px 16px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    opacity: loading ? 0.6 : 1,
+                  }}
+                >
+                  {phase === 'saving' ? t.saving : t.saveProtocol}
+                </button>
+                <button type="button" onClick={handleCancel} className="px-4 py-2 border border-border rounded min-h-11">{t.cancel}</button>
+              </div>
+            </fieldset>
+          </form>
+        ) : (
+          steps.length > 0 && <ProtocolStepsTable steps={steps} t={t} editable={false} />
+        )}
       </div>
-    </form>
+    </div>
   );
 }
 
