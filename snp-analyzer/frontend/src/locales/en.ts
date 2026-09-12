@@ -154,6 +154,12 @@ const en = {
 
   // Header
   appTitle: 'Q-prism® Cluster Caller',
+  // Upload-screen hero (P6-S3-T1). Kept separate from appTitle: the wide
+  // logo already carries the wordmark, so the hero shows only a functional
+  // descriptor plus the brand tagline underneath it instead of repeating
+  // the product name next to its own logo.
+  heroSubtitle: 'SNP discrimination · allele-specific clustering',
+  heroTagline: 'Decode the Cue, Reveal the Spectrum',
   poweredBy: 'Powered by Invirustech',
   undo: 'Undo',
   recoveryUnauthorized: 'Your session expired. Sign in again.',

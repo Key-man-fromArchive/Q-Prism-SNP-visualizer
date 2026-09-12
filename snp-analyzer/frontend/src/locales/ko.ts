@@ -154,6 +154,8 @@ const ko: Translations = {
 
   // Header
   appTitle: 'Q-prism® Cluster Caller',
+  heroSubtitle: 'SNP 판별 · 대립유전자 클러스터링',
+  heroTagline: 'SNP의 비밀을 밝히다',
   poweredBy: 'Powered by Invirustech',
   undo: '실행취소',
   recoveryUnauthorized: '인증이 만료되었습니다. 다시 로그인하세요.',

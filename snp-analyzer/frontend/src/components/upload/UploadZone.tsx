@@ -66,6 +66,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
   const [activeTemplateTooltip, setActiveTemplateTooltip] = useState<string | null>(null);
 
   const {
+    sessionId,
     uploadState,
     uploadProgress,
     setSession,
@@ -357,6 +358,51 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
 
   return (
     <div id="upload-zone" className="max-w-[700px] mx-auto mt-4">
+      {/* Brand hero (P6-S3-T1, FB 2026-09-11: "미적으로 매우 뒤떨어지는
+          상황... Q-Prism 로고, Invirustech 로고, Q-Prism art 같은게 들어가면
+          좋겠어요"). Empty-state only -- once a session exists this screen
+          is gone (App.tsx), but UploadZone is also rendered standalone in
+          tests, so the hero re-checks `sessionId` itself rather than
+          relying only on the parent's mount/unmount. The wide logo already
+          carries the wordmark (and its rendered "Q-Prism®" capitalization
+          doesn't match this app's own "Q-prism®" text -- see brand
+          reference appendix), so no product-name text sits next to it;
+          only a functional descriptor + the brand tagline do. */}
+      {!sessionId && (
+        <div className="mb-6 flex flex-col items-center gap-5 rounded-xl border border-border bg-surface px-6 py-5 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-1 flex-col items-center gap-2 text-center sm:items-start sm:text-left">
+            <div className="inline-flex rounded-lg bg-white px-3 py-2 shadow-sm">
+              <picture>
+                <source srcSet="/brand/qprism-wide.webp" type="image/webp" />
+                <img
+                  src="/brand/qprism-wide.png"
+                  alt={t.appTitle}
+                  width={660}
+                  height={178}
+                  loading="lazy"
+                  className="h-9 w-auto sm:h-10"
+                />
+              </picture>
+            </div>
+            <p className="text-sm font-medium text-text">{t.heroSubtitle}</p>
+            <p className="text-xs italic text-text-muted">{t.heroTagline}</p>
+          </div>
+          {/* qprism-hero.jpg is a 1055x1491 portrait; shown as a bounded
+              decorative card (not full-bleed) so the upload screen stays
+              the same height it was before, and hidden below `sm` so a
+              400px-wide screen never has to make room for it. */}
+          <img
+            src="/brand/qprism-hero.jpg"
+            alt=""
+            aria-hidden="true"
+            loading="lazy"
+            width={1055}
+            height={1491}
+            className="hidden h-32 w-24 shrink-0 rounded-lg border border-border object-cover sm:block md:h-36 md:w-28"
+          />
+        </div>
+      )}
+
       <UploadJobSummary onCheckSessions={onGoToProject} />
       <div
         id="drop-area"
@@ -690,6 +736,31 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           </div>
         )}
       </div>
+
+      {/* P6-S3-T1: "Powered by Invirustech" moves here from the header
+          while there is no session; Header.tsx shows its own copy again
+          once a session is active, never both at once. */}
+      {!sessionId && (
+        <div className="mt-6 flex justify-center">
+          <a
+            href="https://www.invirustech.com"
+            target="_blank"
+            rel="noopener"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border px-2.5 py-1 text-xs text-text-muted no-underline transition-colors hover:border-primary hover:text-primary"
+          >
+            <img
+              src="/brand/invirustech.png"
+              alt=""
+              aria-hidden="true"
+              loading="lazy"
+              width={660}
+              height={175}
+              className="h-3.5 w-auto rounded bg-white px-1"
+            />
+            {t.poweredBy}
+          </a>
+        </div>
+      )}
     </div>
   );
 }
