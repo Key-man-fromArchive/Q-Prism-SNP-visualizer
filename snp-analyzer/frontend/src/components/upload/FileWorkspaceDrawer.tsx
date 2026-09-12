@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import JSZip from 'jszip';
 import {
   AlertCircle,
   CheckCircle2,
-  FileStack,
   FolderOpen,
   LoaderCircle,
   RefreshCw,
@@ -17,6 +17,8 @@ import {
 } from '@/lib/api';
 import { useI18n } from '@/hooks/use-i18n';
 import { useSessionStore } from '@/stores/session-store';
+import { useFileWorkspaceStore } from '@/stores/file-workspace-store';
+import { MAX_FILES_PER_DROP, MAX_TOTAL_MB, uploadLimitViolation } from '@/lib/upload-jobs';
 import type {
   ImportPreview,
   SessionListItem,
@@ -28,8 +30,6 @@ import { ImportMappingWizard } from './ImportMappingWizard';
 const RAW_EXTENSIONS = ['.eds', '.xls', '.xlsx', '.pcrd', '.zip'];
 const MAPPED_EXTENSIONS = ['.csv', '.tsv', '.txt', '.rdml', '.rdm'];
 const ACCEPTED_EXTENSIONS = [...RAW_EXTENSIONS, '.xml', ...MAPPED_EXTENSIONS].join(',');
-const MAX_FILES_PER_DROP = 20;
-const MAX_TOTAL_BYTES = 500 * 1024 * 1024;
 const FOCUSABLE = 'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])';
 
 type QueueStatus = 'queued' | 'packaging' | 'uploading' | 'mapping' | 'success' | 'error';
@@ -77,11 +77,16 @@ export function FileWorkspaceDrawer({ onOpenSession, onGoToProject }: FileWorksp
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
   const uploadChainRef = useRef<Promise<void>>(Promise.resolve());
   const sessionListRevisionRef = useRef(0);
-  const [open, setOpen] = useState(false);
+  // `open` (and which trigger to return focus to on close) is shared state:
+  // this panel is mounted once, permanently, at the App root, while the
+  // trigger that opens/closes it renders in one of two places depending on
+  // whether a session is active. See file-workspace-store.ts.
+  const open = useFileWorkspaceStore((s) => s.open);
+  const setOpen = useFileWorkspaceStore((s) => s.setOpen);
+  const focusVisibleTrigger = useFileWorkspaceStore((s) => s.focusVisibleTrigger);
   const [dragover, setDragover] = useState(false);
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -127,20 +132,21 @@ export function FileWorkspaceDrawer({ onOpenSession, onGoToProject }: FileWorksp
 
   useEffect(() => {
     if (!open) return;
-    const trigger = triggerRef.current;
     drawerRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false);
-        trigger?.focus();
-      }
+      if (event.key === 'Escape') setOpen(false);
     };
     window.addEventListener('keydown', handleEscape);
     return () => {
       window.removeEventListener('keydown', handleEscape);
-      trigger?.focus();
+      // Whichever trigger is on screen *now* gets focus back — not
+      // necessarily the one that opened this: a session can be created
+      // while the panel stays open, silently swapping the visible trigger
+      // from inline (near the drop zone) to the header, and back is never
+      // taken away from the operator.
+      focusVisibleTrigger();
     };
-  }, [open]);
+  }, [open, setOpen, focusVisibleTrigger]);
 
   const updateQueue = useCallback((id: string, patch: Partial<QueueItem>) => {
     setQueue((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -221,13 +227,16 @@ export function FileWorkspaceDrawer({ onOpenSession, onGoToProject }: FileWorksp
         setListError(t.noSupportedFilesDetail);
         return;
       }
-      if (supported.length > MAX_FILES_PER_DROP) {
+      // Shared with UploadZone's central drop path (P5-S2-T1): same numbers,
+      // same message, from lib/upload-jobs.ts — this drawer still keeps its
+      // own queue/state-machine implementation (D-7, not unified).
+      const violation = uploadLimitViolation(supported);
+      if (violation === 'too_many_files') {
         setListError(t.workspaceTooManyFiles(MAX_FILES_PER_DROP));
         return;
       }
-      const totalBytes = supported.reduce((total, file) => total + file.size, 0);
-      if (totalBytes > MAX_TOTAL_BYTES) {
-        setListError(t.workspaceTotalTooLarge(500));
+      if (violation === 'total_too_large') {
+        setListError(t.workspaceTotalTooLarge(MAX_TOTAL_MB));
         return;
       }
 
@@ -285,7 +294,7 @@ export function FileWorkspaceDrawer({ onOpenSession, onGoToProject }: FileWorksp
         setListError(error instanceof Error ? error.message : t.errLoadSession);
       }
     },
-    [loadSession, onOpenSession, t.errLoadSession],
+    [loadSession, onOpenSession, setOpen, t.errLoadSession],
   );
 
   const handleCloseSession = useCallback(
@@ -331,268 +340,257 @@ export function FileWorkspaceDrawer({ onOpenSession, onGoToProject }: FileWorksp
   const activeMapping = queue.find((item) => item.status === 'mapping' && item.preview);
   const busyCount = queue.filter((item) => ['queued', 'packaging', 'uploading'].includes(item.status)).length;
 
-  return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        id="file-workspace-button"
-        onClick={() => setOpen(true)}
-        className="relative inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-text hover:border-primary hover:text-primary"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-      >
-        <FileStack size={14} aria-hidden="true" />
-        {t.workspaceFiles}
-        {openSessionIds.length > 0 && (
-          <span className="rounded-full bg-primary px-1.5 text-[10px] leading-4 text-white">
-            {openSessionIds.length}
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <div className="fixed inset-0 z-[120]" role="presentation">
-          <button
-            type="button"
-            className="absolute inset-0 cursor-default bg-black/40"
-            aria-label={t.close}
-            onClick={() => setOpen(false)}
-          />
-          <aside
-            ref={drawerRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label={t.workspaceTitle}
-            className="absolute inset-y-0 right-0 flex w-full max-w-[720px] flex-col border-l border-border bg-bg shadow-2xl"
-            onKeyDown={(event) => {
-              if (event.key !== 'Tab') return;
-              const nodes = drawerRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE);
-              if (!nodes?.length) return;
-              const first = nodes[0];
-              const last = nodes[nodes.length - 1];
-              if (event.shiftKey && document.activeElement === first) {
-                event.preventDefault();
-                last.focus();
-              } else if (!event.shiftKey && document.activeElement === last) {
-                event.preventDefault();
-                first.focus();
-              }
-            }}
-          >
-            <div className="flex items-start justify-between border-b border-border bg-surface px-5 py-4">
-              <div>
-                <h2 className="text-base font-semibold text-text">{t.workspaceTitle}</h2>
-                <p className="mt-0.5 text-xs text-text-muted">{t.workspaceDescription}</p>
-              </div>
-              <button type="button" onClick={() => setOpen(false)} aria-label={t.close} className="text-text-muted hover:text-text">
-                <X size={20} />
-              </button>
+  // This panel owns the queue/session-list state and is mounted exactly
+  // once, permanently, at the App root (see App.tsx) — never conditionally,
+  // so an in-flight upload queue can never be torn down by a session
+  // appearing mid-upload and flipping which FileWorkspaceTrigger is visible.
+  // It renders nothing itself (not even a trigger button) when closed, and
+  // portals its dialog to <body> so it never depends on being mounted near
+  // whichever trigger opened it.
+  if (!open) return null;
+  return createPortal(
+    (
+      <div className="fixed inset-0 z-[120]" role="presentation">
+        <button
+          type="button"
+          className="absolute inset-0 cursor-default bg-black/40"
+          aria-label={t.close}
+          onClick={() => setOpen(false)}
+        />
+        <aside
+          ref={drawerRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t.workspaceTitle}
+          className="absolute inset-y-0 right-0 flex w-full max-w-[720px] flex-col border-l border-border bg-bg shadow-2xl"
+          onKeyDown={(event) => {
+            if (event.key !== 'Tab') return;
+            const nodes = drawerRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE);
+            if (!nodes?.length) return;
+            const first = nodes[0];
+            const last = nodes[nodes.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }}
+        >
+          <div className="flex items-start justify-between border-b border-border bg-surface px-5 py-4">
+            <div>
+              <h2 className="text-base font-semibold text-text">{t.workspaceTitle}</h2>
+              <p className="mt-0.5 text-xs text-text-muted">{t.workspaceDescription}</p>
             </div>
+            <button type="button" onClick={() => setOpen(false)} aria-label={t.close} className="text-text-muted hover:text-text">
+              <X size={20} />
+            </button>
+          </div>
 
-            <div className="flex-1 overflow-y-auto p-5">
-              <div
-                className={`rounded-lg border-2 border-dashed p-5 text-center transition-colors ${
-                  dragover ? 'border-primary bg-primary/10' : 'border-border bg-surface'
-                }`}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  setDragover(true);
-                }}
-                onDragLeave={() => setDragover(false)}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  setDragover(false);
-                  const entries = Array.from(event.dataTransfer.items ?? [])
-                    .map((item) => item.webkitGetAsEntry?.())
-                    .filter((entry): entry is FileSystemEntry => Boolean(entry));
-                  if (entries.some((entry) => entry.isDirectory)) {
-                    void readDroppedEntries(entries).then(enqueueFiles);
-                  } else {
-                    void enqueueFiles(Array.from(event.dataTransfer.files));
-                  }
-                }}
-              >
-                <Upload className="mx-auto mb-2 text-primary" size={26} aria-hidden="true" />
-                <p className="text-sm font-medium text-text">{t.workspaceDropTitle}</p>
-                <p className="mt-1 text-xs text-text-muted">{t.workspaceDropHint(MAX_FILES_PER_DROP)}</p>
-                <div className="mt-3 flex justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => inputRef.current?.click()}
-                    className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-white hover:bg-primary-hover"
-                  >
-                    {t.browseFiles}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => folderInputRef.current?.click()}
-                    className="rounded-md border border-primary px-4 py-2 text-xs font-medium text-primary hover:bg-primary/10"
-                  >
-                    {t.browseFolder}
-                  </button>
-                </div>
-                <input
-                  ref={inputRef}
-                  type="file"
-                  accept={ACCEPTED_EXTENSIONS}
-                  multiple
-                  hidden
-                  onChange={(event) => {
-                    if (event.target.files?.length) void enqueueFiles(Array.from(event.target.files));
-                    event.target.value = '';
-                  }}
-                />
-                <input
-                  ref={folderInputRef}
-                  type="file"
-                  hidden
-                  // @ts-expect-error webkitdirectory is supported by Chromium-based browsers.
-                  webkitdirectory=""
-                  onChange={(event) => {
-                    if (event.target.files?.length) void enqueueFiles(Array.from(event.target.files));
-                    event.target.value = '';
-                  }}
-                />
-              </div>
-
-              {listError && (
-                <div className="mt-3 flex items-start gap-2 rounded-md border border-danger/30 bg-danger/10 p-3 text-xs text-danger">
-                  <AlertCircle size={15} className="mt-0.5 shrink-0" />
-                  <span>{listError}</span>
-                </div>
-              )}
-
-              {queue.length > 0 && (
-                <section className="mt-5" aria-label={t.workspaceUploadQueue} aria-live="polite">
-                  <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-text">{t.workspaceUploadQueue}</h3>
-                    <button type="button" onClick={() => setQueue((items) => items.filter((item) => !['success', 'error'].includes(item.status)))} className="text-xs text-text-muted hover:text-text">
-                      {t.workspaceClearFinished}
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {queue.map((item) => (
-                      <div key={item.id} className="flex items-center gap-3 rounded-md border border-border bg-surface px-3 py-2">
-                        {item.status === 'success' ? (
-                          <CheckCircle2 size={16} className="shrink-0 text-success" />
-                        ) : item.status === 'error' ? (
-                          <AlertCircle size={16} className="shrink-0 text-danger" />
-                        ) : ['uploading', 'packaging'].includes(item.status) ? (
-                          <LoaderCircle size={16} className="shrink-0 animate-spin text-primary" />
-                        ) : (
-                          <FolderOpen size={16} className="shrink-0 text-text-muted" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-medium text-text">{item.file.name}</p>
-                          <p className={`truncate text-[11px] ${item.status === 'error' ? 'text-danger' : 'text-text-muted'}`} title={item.error}>
-                            {item.error || t.workspaceQueueStatus(item.status, formatBytes(item.file.size))}
-                          </p>
-                        </div>
-                        {item.status === 'error' && (
-                          <button type="button" onClick={() => void scheduleQueueItem(item)} className="inline-flex items-center gap-1 text-xs text-primary">
-                            <RefreshCw size={12} /> {t.retry}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {activeMapping?.preview && (
-                <ImportMappingWizard
-                  file={activeMapping.file}
-                  preview={activeMapping.preview}
-                  previewIssues={activeMapping.previewIssues ?? []}
-                  previewing={false}
-                  onPreviewAgain={async () => {
-                    await scheduleQueueItem(activeMapping);
-                  }}
-                  onCancel={async () => {
-                    updateQueue(activeMapping.id, { status: 'error', error: t.workspaceMappingCancelled });
-                  }}
-                  onImported={(info) => {
-                    registerUploadedSession(info);
-                    updateQueue(activeMapping.id, { status: 'success', sessionId: info.session_id });
-                  }}
-                />
-              )}
-
-              <section className="mt-6">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-text">{t.workspaceOpenFiles}</h3>
-                  {loadingSessions && <LoaderCircle size={14} className="animate-spin text-text-muted" />}
-                </div>
-                {openSessions.length === 0 ? (
-                  <p className="rounded-md border border-border bg-surface p-4 text-center text-xs text-text-muted">{t.workspaceNoOpenFiles}</p>
-                ) : (
-                  <div className="space-y-2">
-                    {openSessions.map((session) => (
-                      <SessionRow
-                        key={session.session_id}
-                        session={session}
-                        active={session.session_id === activeSessionId}
-                        onOpen={() => void handleOpenSession(session.session_id)}
-                        onClose={() => void handleCloseSession(session.session_id)}
-                        activeLabel={t.active}
-                        openLabel={t.workspaceOpen}
-                        closeLabel={t.workspaceCloseFile}
-                        wellsLabel={t.wells}
-                        cyclesLabel={t.cycles}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              {recentSessions.length > 0 && (
-                <section className="mt-6">
-                  <h3 className="mb-2 text-sm font-semibold text-text">{t.workspaceRecentFiles}</h3>
-                  <div className="space-y-2">
-                    {recentSessions.map((session) => (
-                      <SessionRow
-                        key={session.session_id}
-                        session={session}
-                        active={false}
-                        onOpen={() => {
-                          addOpenSession(session.session_id);
-                          void handleOpenSession(session.session_id);
-                        }}
-                        activeLabel={t.active}
-                        openLabel={t.workspaceOpen}
-                        wellsLabel={t.wells}
-                        cyclesLabel={t.cycles}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-            </div>
-
-            {busyCount > 0 && (
-              <div className="border-t border-border bg-surface px-5 py-3 text-xs text-text-muted">
-                {t.workspaceUploadingCount(busyCount)}
-              </div>
-            )}
-            {busyCount === 0 && onGoToProject && (
-              <div className="border-t border-border bg-surface px-5 py-3 text-right">
+          <div className="flex-1 overflow-y-auto p-5">
+            <div
+              className={`rounded-lg border-2 border-dashed p-5 text-center transition-colors ${
+                dragover ? 'border-primary bg-primary/10' : 'border-border bg-surface'
+              }`}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDragover(true);
+              }}
+              onDragLeave={() => setDragover(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragover(false);
+                const entries = Array.from(event.dataTransfer.items ?? [])
+                  .map((item) => item.webkitGetAsEntry?.())
+                  .filter((entry): entry is FileSystemEntry => Boolean(entry));
+                if (entries.some((entry) => entry.isDirectory)) {
+                  void readDroppedEntries(entries).then(enqueueFiles);
+                } else {
+                  void enqueueFiles(Array.from(event.dataTransfer.files));
+                }
+              }}
+            >
+              <Upload className="mx-auto mb-2 text-primary" size={26} aria-hidden="true" />
+              <p className="text-sm font-medium text-text">{t.workspaceDropTitle}</p>
+              <p className="mt-1 text-xs text-text-muted">{t.workspaceDropHint(MAX_FILES_PER_DROP)}</p>
+              <div className="mt-3 flex justify-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    onGoToProject();
-                  }}
-                  className="text-xs font-medium text-primary hover:text-primary/80"
+                  onClick={() => inputRef.current?.click()}
+                  className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-white hover:bg-primary-hover"
                 >
-                  {t.workspaceManageProjects}
+                  {t.browseFiles}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => folderInputRef.current?.click()}
+                  className="rounded-md border border-primary px-4 py-2 text-xs font-medium text-primary hover:bg-primary/10"
+                >
+                  {t.browseFolder}
                 </button>
               </div>
+              <input
+                ref={inputRef}
+                type="file"
+                accept={ACCEPTED_EXTENSIONS}
+                multiple
+                hidden
+                onChange={(event) => {
+                  if (event.target.files?.length) void enqueueFiles(Array.from(event.target.files));
+                  event.target.value = '';
+                }}
+              />
+              <input
+                ref={folderInputRef}
+                type="file"
+                hidden
+                // @ts-expect-error webkitdirectory is supported by Chromium-based browsers.
+                webkitdirectory=""
+                onChange={(event) => {
+                  if (event.target.files?.length) void enqueueFiles(Array.from(event.target.files));
+                  event.target.value = '';
+                }}
+              />
+            </div>
+
+            {listError && (
+              <div className="mt-3 flex items-start gap-2 rounded-md border border-danger/30 bg-danger/10 p-3 text-xs text-danger">
+                <AlertCircle size={15} className="mt-0.5 shrink-0" />
+                <span>{listError}</span>
+              </div>
             )}
-          </aside>
-        </div>
-      )}
-    </>
+
+            {queue.length > 0 && (
+              <section className="mt-5" aria-label={t.workspaceUploadQueue} aria-live="polite">
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-text">{t.workspaceUploadQueue}</h3>
+                  <button type="button" onClick={() => setQueue((items) => items.filter((item) => !['success', 'error'].includes(item.status)))} className="text-xs text-text-muted hover:text-text">
+                    {t.workspaceClearFinished}
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {queue.map((item) => (
+                    <div key={item.id} className="flex items-center gap-3 rounded-md border border-border bg-surface px-3 py-2">
+                      {item.status === 'success' ? (
+                        <CheckCircle2 size={16} className="shrink-0 text-success" />
+                      ) : item.status === 'error' ? (
+                        <AlertCircle size={16} className="shrink-0 text-danger" />
+                      ) : ['uploading', 'packaging'].includes(item.status) ? (
+                        <LoaderCircle size={16} className="shrink-0 animate-spin text-primary" />
+                      ) : (
+                        <FolderOpen size={16} className="shrink-0 text-text-muted" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-text">{item.file.name}</p>
+                        <p className={`truncate text-[11px] ${item.status === 'error' ? 'text-danger' : 'text-text-muted'}`} title={item.error}>
+                          {item.error || t.workspaceQueueStatus(item.status, formatBytes(item.file.size))}
+                        </p>
+                      </div>
+                      {item.status === 'error' && (
+                        <button type="button" onClick={() => void scheduleQueueItem(item)} className="inline-flex items-center gap-1 text-xs text-primary">
+                          <RefreshCw size={12} /> {t.retry}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {activeMapping?.preview && (
+              <ImportMappingWizard
+                file={activeMapping.file}
+                preview={activeMapping.preview}
+                previewIssues={activeMapping.previewIssues ?? []}
+                previewing={false}
+                onPreviewAgain={async () => {
+                  await scheduleQueueItem(activeMapping);
+                }}
+                onCancel={async () => {
+                  updateQueue(activeMapping.id, { status: 'error', error: t.workspaceMappingCancelled });
+                }}
+                onImported={(info) => {
+                  registerUploadedSession(info);
+                  updateQueue(activeMapping.id, { status: 'success', sessionId: info.session_id });
+                }}
+              />
+            )}
+
+            <section className="mt-6">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-text">{t.workspaceOpenFiles}</h3>
+                {loadingSessions && <LoaderCircle size={14} className="animate-spin text-text-muted" />}
+              </div>
+              {openSessions.length === 0 ? (
+                <p className="rounded-md border border-border bg-surface p-4 text-center text-xs text-text-muted">{t.workspaceNoOpenFiles}</p>
+              ) : (
+                <div className="space-y-2">
+                  {openSessions.map((session) => (
+                    <SessionRow
+                      key={session.session_id}
+                      session={session}
+                      active={session.session_id === activeSessionId}
+                      onOpen={() => void handleOpenSession(session.session_id)}
+                      onClose={() => void handleCloseSession(session.session_id)}
+                      activeLabel={t.active}
+                      openLabel={t.workspaceOpen}
+                      closeLabel={t.workspaceCloseFile}
+                      wellsLabel={t.wells}
+                      cyclesLabel={t.cycles}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {recentSessions.length > 0 && (
+              <section className="mt-6">
+                <h3 className="mb-2 text-sm font-semibold text-text">{t.workspaceRecentFiles}</h3>
+                <div className="space-y-2">
+                  {recentSessions.map((session) => (
+                    <SessionRow
+                      key={session.session_id}
+                      session={session}
+                      active={false}
+                      onOpen={() => {
+                        addOpenSession(session.session_id);
+                        void handleOpenSession(session.session_id);
+                      }}
+                      activeLabel={t.active}
+                      openLabel={t.workspaceOpen}
+                      wellsLabel={t.wells}
+                      cyclesLabel={t.cycles}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+
+          {busyCount > 0 && (
+            <div className="border-t border-border bg-surface px-5 py-3 text-xs text-text-muted">
+              {t.workspaceUploadingCount(busyCount)}
+            </div>
+          )}
+          {busyCount === 0 && onGoToProject && (
+            <div className="border-t border-border bg-surface px-5 py-3 text-right">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onGoToProject();
+                }}
+                className="text-xs font-medium text-primary hover:text-primary/80"
+              >
+                {t.workspaceManageProjects}
+              </button>
+            </div>
+          )}
+        </aside>
+      </div>
+    ),
+    document.body,
   );
 }
 

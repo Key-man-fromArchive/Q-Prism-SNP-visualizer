@@ -1,11 +1,12 @@
 import { useCallback, useRef, useState } from "react";
 import { useSessionStore } from "@/stores/session-store";
 import { previewImportFile, loadExample as apiLoadExample } from "@/lib/api";
-import { runUploadJobs } from '@/lib/upload-jobs';
+import { MAX_FILES_PER_DROP, MAX_TOTAL_MB, runUploadJobs, uploadLimitViolation } from '@/lib/upload-jobs';
 import { validUploadResponse } from '@/lib/upload-response';
 import { useOwnedOperation } from '@/hooks/use-owned-operation';
 import { UploadJobSummary } from './UploadJobSummary';
 import { RecentSessions } from './RecentSessions';
+import { FileWorkspaceTrigger } from './FileWorkspaceTrigger';
 import { runtimeAssetPath } from "@/lib/runtime-paths";
 import { runXmlUpload } from '@/lib/xml-upload';
 import { useI18n } from "@/hooks/use-i18n";
@@ -177,6 +178,23 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
     async (files: File[]) => {
       const ticket = operation.begin();
       const lowerName = (f: File) => f.name.toLowerCase();
+      // Shared with the file workspace drawer (P5-S2-T1): same count/size
+      // ceiling, same message, from lib/upload-jobs.ts. Only the extensions
+      // this drop zone actually recognizes count toward the limit -- an
+      // unsupported file mixed in doesn't consume the budget, matching the
+      // drawer's own "supported first, then limit" order.
+      const supportedExtensions = [...RAW_EXTENSIONS, ".xml", ...PREVIEW_IMPORT_EXTENSIONS];
+      const supported = files.filter((f) => supportedExtensions.some((ext) => lowerName(f).endsWith(ext)));
+      const violation = uploadLimitViolation(supported);
+      if (violation) {
+        const message = violation === "too_many_files"
+          ? t.workspaceTooManyFiles(MAX_FILES_PER_DROP)
+          : t.workspaceTotalTooLarge(MAX_TOTAL_MB);
+        setUploadState("error");
+        setUploadError(message);
+        setStatusMessage(message);
+        return;
+      }
       const previewImportFiles = files.filter((f) =>
         PREVIEW_IMPORT_EXTENSIONS.some((ext) => lowerName(f).endsWith(ext)),
       );
@@ -428,6 +446,14 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           hidden
           onChange={onFolderChange}
         />
+      </div>
+
+      {/* FB-02: the multi-file workspace trigger belongs near the drop zone
+          it manages, not out of view in the header -- this is the only
+          FileWorkspaceTrigger on screen while there is no active session
+          (App.tsx swaps it for the header one once a session exists). */}
+      <div className="mt-3 flex justify-center">
+        <FileWorkspaceTrigger placement="inline" />
       </div>
 
       <RecentSessions />
