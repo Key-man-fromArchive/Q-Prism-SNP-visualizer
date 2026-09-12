@@ -127,6 +127,15 @@ const ko: Translations = {
   // 대체하지 않는다 -- "보고되지 않음"과 "적용 안 됨"은 다른 사실이다.
   overlayProcessingStatusUnreported: (requestedRox: boolean) =>
     `참조 정규화 요청: ${requestedRox ? '예' : '아니오'}; 실제 적용: 서버가 보고하지 않음.`,
+  wellCycleValuesTitle: '웰별 형광값',
+  wellCycleValuesShow: '값 표시',
+  wellCycleValuesHide: '값 숨기기',
+  wellCycleValuesChannelLabel: '채널',
+  wellCycleValuesScrollHint: '웰×사이클 값: 필요한 경우 이 영역 안에서 스크롤하세요.',
+  wellCycleValuesLoading: '값을 불러오는 중...',
+  wellCycleValuesEmpty: '증폭 데이터가 없습니다.',
+  wellCycleValuesExportCsv: 'CSV 내보내기',
+  wellTimeSeriesTitle: '전체 사이클 시계열 (이 웰)',
   batchAddTo: (name: string, msg: string) => `"${name}"에 추가: ${msg}`,
   batchAddResult: (added: number, count: number, name: string, leftover: number) => `"${name}"에 ${added}/${count} 추가 (${leftover}개는 이미 있거나 없음)`,
   batchBulkAddTo: (name: string, msg: string) => `"${name}"에 일괄 추가: ${msg}`,

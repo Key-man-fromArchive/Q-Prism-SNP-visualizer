@@ -58,6 +58,67 @@ async function captionPng(dataUrl: string, caption: string): Promise<string> {
   return canvas.toDataURL('image/png');
 }
 
+// @TASK P7-VALUES - client-side well x cycle values CSV (FB-06 Q-1: "웰마다
+// 형광값"). Deliberately independent of the stored-result export machinery
+// above (conditions()/storedConditions()): those validate against
+// analysis_context/result_revision because they re-export a *committed*
+// genotype result. This CSV instead mirrors whatever the live overlay/table
+// is currently showing -- there is no "stale result" concept for it, so it
+// does not need that validation, only the values already on screen.
+function escapeCsvField(value: string | number): string {
+  const s = String(value);
+  return /["\n,]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** Builds the CSV text for the per-well x per-cycle value table. Values
+ *  passed in are ALREADY normalization/background-corrected (norm_fam /
+ *  norm_allele2 from the amplification response) -- never labeled "raw"
+ *  here. `normalizationApplied`/`backgroundMode` mirror the honest
+ *  reported/unreported handling `OverlayProcessingStatus` uses: `undefined`
+ *  means the server didn't say, which is a different fact from "not
+ *  applied" and must not be guessed from `requestedRox`. */
+export function buildWellCycleValuesCsv(params: {
+  curves: { well: string; values: number[] }[];
+  cycles: number[];
+  channelLabel: string;
+  sessionId: string;
+  normalizationApplied: boolean | undefined;
+  backgroundMode: BackgroundMode | undefined;
+  requestedRox: boolean;
+}): string {
+  const metaRows: (string | number)[][] = [
+    ['Session', params.sessionId],
+    ['Channel', params.channelLabel],
+    ['Requested reference normalization', params.requestedRox ? 'yes' : 'no'],
+    ['Normalization applied', params.normalizationApplied === undefined ? 'unreported' : params.normalizationApplied ? 'yes' : 'no'],
+    ['Background mode', params.backgroundMode ?? 'unreported'],
+  ];
+  const header = ['Well', ...params.cycles.map(String)];
+  const dataRows = params.curves.map((c) => [c.well, ...c.values.map(String)]);
+  return [...metaRows, [], header, ...dataRows]
+    .map((row) => row.map(escapeCsvField).join(','))
+    .join('\n');
+}
+
+/** Triggers a browser download of arbitrary text content. Standalone (not
+ *  reusing `saveBlob` above) because `saveBlob` is scoped inside the
+ *  `useExports()` hook closure and gated on the stored-export ownership
+ *  checks that don't apply here (see `buildWellCycleValuesCsv` above). */
+export function downloadTextFile(filename: string, content: string, mimeType = 'text/csv;charset=utf-8;'): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = window.URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } finally {
+    window.URL.revokeObjectURL(url);
+  }
+}
+
 type ExportIdentity = { sessionId: string; entry: number; ownerId: string | undefined };
 type ExportConditions = ExportIdentity & { cycle: number | undefined; useRox: boolean; backgroundMode: BackgroundMode; revision: string };
 function stillOwns(identity: ExportIdentity): boolean {

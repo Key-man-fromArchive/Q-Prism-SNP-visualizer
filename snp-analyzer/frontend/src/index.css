@@ -215,6 +215,15 @@ body.dark .panel {
 }
 .analysis-advanced-settings > div { max-height: 18rem; overflow: auto; }
 .well-detail-expanded { max-height: 22rem; overflow: auto; }
+/* P7-VALUES (FB-06 Q-1): well x cycle value table can be 96 wells x N
+   cycles regardless of viewport width (unlike ResultsTable, which is only
+   promoted out of a clipped view at >=1280px) -- always capped, both axes,
+   so a large plate/run never makes the page grow unboundedly tall. */
+[data-testid="well-cycle-values-scroll-region"] { max-height: 28rem; overflow: auto; }
+[data-testid="well-cycle-values-scroll-region"] thead th { position: sticky; top: 0; background: var(--color-surface); z-index: 1; }
+[data-testid="well-timeseries-scroll-region"] { max-height: 12rem; overflow: auto; }
+[data-testid="well-timeseries-scroll-region"] thead th { position: sticky; top: 0; background: var(--color-surface); z-index: 1; }
+.current-cycle-row { background: var(--color-bg); font-weight: 600; }
 .analysis-secondary { min-width: 0; }
 /* P4-S3-T1 (FB-03 §3-4): ResultsTable is promoted to a first-class area at
    the >=1280px breakpoint where the two-column analysis-grid also applies

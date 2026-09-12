@@ -6,6 +6,7 @@ import { AlertTriangle } from 'lucide-react';
 import { useProtocolEditor } from './use-protocol-editor';
 import { ProtocolThermalProfile } from './ProtocolThermalProfile';
 import { AmplificationOverlay } from '@/components/analysis/AmplificationOverlay';
+import { WellCycleValuesTable } from '@/components/analysis/WellCycleValuesTable';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useI18n } from '@/hooks/use-i18n';
@@ -37,6 +38,9 @@ export function ProtocolTab() {
           AmplificationOverlay.tsx and App.tsx. */}
       <div className="px-4 pb-4 sm:px-6">
         <AmplificationOverlay idPrefix="rawdata-" />
+        {/* P7-VALUES (FB-06 Q-1): "웰마다 형광값" -- a readable/exportable
+            well x cycle value table, placed below the overlay it complements. */}
+        <WellCycleValuesTable />
       </div>
     </>
   );

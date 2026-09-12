@@ -127,6 +127,15 @@ const en = {
   // reported" and "not applied" are different facts.
   overlayProcessingStatusUnreported: (requestedRox: boolean) =>
     `Reference normalization requested: ${requestedRox ? 'yes' : 'no'}; actually applied: not reported by the server.`,
+  wellCycleValuesTitle: 'Per-well fluorescence values',
+  wellCycleValuesShow: 'Show values',
+  wellCycleValuesHide: 'Hide values',
+  wellCycleValuesChannelLabel: 'Channel',
+  wellCycleValuesScrollHint: 'Well x cycle values: scroll within this area when needed.',
+  wellCycleValuesLoading: 'Loading values…',
+  wellCycleValuesEmpty: 'No amplification data available.',
+  wellCycleValuesExportCsv: 'Export CSV',
+  wellTimeSeriesTitle: 'Full cycle series (this well)',
   batchAddTo: (name: string, msg: string) => `Add to "${name}": ${msg}`,
   batchAddResult: (added: number, count: number, name: string, leftover: number) => `Added ${added}/${count} to "${name}" (${leftover} already in project or missing)`,
   batchBulkAddTo: (name: string, msg: string) => `Bulk add to "${name}": ${msg}`,
