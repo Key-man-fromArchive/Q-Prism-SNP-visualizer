@@ -63,6 +63,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   const sessionId = useSessionStore((s) => s.sessionId);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const isPlaying = useSelectionStore((s) => s.isPlaying);
+  const selectedWells = useSelectionStore((s) => s.selectedWells);
   const scatterPoints = useDataStore((s) => s.scatterPoints);
   const allele2Dye = useDataStore((s) => s.allele2Dye);
   const roleLabels = useDataStore((s) => s.channelLabels);
@@ -410,6 +411,11 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
             </div>
 
             <div className="analysis-review-stack">
+              {/* P4-S3-T1 (FB-03 §3-2): same relocation as the single-marker
+                  view -- only meaningful before anything is selected. */}
+              {selectedWells.length === 0 && (
+                <p data-testid="plate-view-hint" className="text-xs text-text-muted">{t.selectionHelp}</p>
+              )}
               <PlateView scopeWells={selectedMarker.wells} ploidyOverride={selectedMarker.ploidy} />
               <WellDetailPanel ploidyOverride={selectedMarker.ploidy} />
             </div>

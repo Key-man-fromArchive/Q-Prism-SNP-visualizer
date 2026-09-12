@@ -692,9 +692,11 @@ const en = {
   // Multi-marker workspace (P4)
   wsTabPlate: 'Plate Setup',
   wsTabAnalysis: 'Analysis',
-  wsSplitBannerText: 'Multiple markers on this plate? Split into markers to genotype each independently.',
   wsSplitBannerCta: 'Split into markers',
-  wsSplitBannerDismiss: 'Dismiss',
+  // P4-S3-T1 (FB-03 §3-3): the always-present scope selector replacing the
+  // old dismissible split-marker banner.
+  wsScopeSelectorLabel: 'Analysis scope',
+  wsScopeWholePlateOption: 'Whole plate',
   wsAddMarkerButton: '+ Add marker',
   wsMarkerFormTitleNew: 'New marker',
   wsMarkerFormTitleEdit: 'Edit marker',
@@ -867,6 +869,17 @@ const en = {
   analysisWarningLowN: 'Too few wells to fit clusters — calls are provisional.',
   analysisWarningAnchorConflict: 'Control wells disagree with the fitted dosage ladder.',
   analysisWarningsTitle: 'Analysis warnings',
+  // P4-S3-T1 (FB-03 §3-1): toolbar badge counting both severities, jumping
+  // to whichever warning block (blocking, above the fold, or advisory,
+  // demoted below ResultsTable) is currently relevant.
+  analysisWarningsBadge: (n: number) => `⚠ ${n} warning${n === 1 ? '' : 's'}`,
+  // P4-S3-T1 (FB-03 §3-1): one-line summary shown when the context summary
+  // is collapsed. `markerCount` is null while marker membership hasn't
+  // loaded/failed to load (mirrors wsMarkerScopeUnknown's caution).
+  analysisContextSummaryLine: (cycle: number, totalCycles: number, wells: number, markerCount: number | null) =>
+    `Cycle ${cycle}/${totalCycles} · ${wells} wells · ${
+      markerCount === null ? 'marker scope unknown' : markerCount > 0 ? `${markerCount} marker split` : 'no marker split'
+    }`,
 
   // The assay's dosage ceiling, declared by the operator rather than inferred.
   // A hexaploid marker commonly tops out at dosage 3, so its classes are

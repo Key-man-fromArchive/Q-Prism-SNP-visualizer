@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { AlertTriangle, Ruler, Target } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
@@ -20,7 +20,7 @@ import { WellTypePopup } from "./WellTypePopup";
 import { GroupManager } from "./GroupManager";
 import { WellSelectionToolbar } from "./WellSelectionToolbar";
 import { Callout } from "@/components/shared/ui";
-import { analysisWarningTexts } from "@/lib/analysis-warnings";
+import { gradedAnalysisWarnings } from "@/lib/analysis-warnings";
 import { parseWellType } from "@/lib/well-type-input";
 import { useWellTypeAssignments } from "@/hooks/use-well-type-assignments";
 import { useCurrentAnalysisRequest } from '@/hooks/use-current-analysis-request';
@@ -35,6 +35,7 @@ export function AnalysisTab() {
   const clearSelection = useSelectionStore((s) => s.clearSelection);
   const selectedGroup = useSelectionStore((s) => s.selectedGroup);
   const setGroup = useSelectionStore((s) => s.setGroup);
+  const selectedWells = useSelectionStore((s) => s.selectedWells);
   const showEmptyWells = useSettingsStore((s) => s.showEmptyWells);
   const setShowEmptyWells = useSettingsStore((s) => s.setShowEmptyWells);
   const wellTypeAssignments = useDataStore((s) => s.wellTypeAssignments);
@@ -59,6 +60,23 @@ export function AnalysisTab() {
   const error = useAnalysisStore(state => state.error);
   const analyzeError = error instanceof Error ? error.message : null;
   const analysisWarnings = useAnalysisStore(state => state.result?.warnings) ?? [];
+  // P4-S3-T1 (FB-03 §3-1): "blocking" warnings bear on genotype-call
+  // reliability and stay above the fold; only "advisory" ones (none exist
+  // yet -- see lib/analysis-warnings.ts) are demoted below ResultsTable. The
+  // toolbar badge counts and jumps to both together.
+  // Small, per-render arrays (a handful of warning codes at most) -- not
+  // worth memoizing against an already-unstable `?? []` reference.
+  const gradedWarnings = gradedAnalysisWarnings(analysisWarnings, t);
+  const blockingWarnings = gradedWarnings.filter((w) => w.severity === 'blocking');
+  const advisoryWarnings = gradedWarnings.filter((w) => w.severity === 'advisory');
+  const blockingWarningsRef = useRef<HTMLDivElement>(null);
+  const advisoryWarningsRef = useRef<HTMLDivElement>(null);
+  // Plain handler (not passed to a memoized child, so no useCallback needed).
+  const jumpToWarnings = () => {
+    const target = advisoryWarnings.length > 0 ? advisoryWarningsRef.current : blockingWarningsRef.current;
+    target?.focus();
+    target?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  };
 
   const [showGroupManager, setShowGroupManager] = useState(false);
 
@@ -170,6 +188,16 @@ export function AnalysisTab() {
       <div
         className="flex flex-wrap items-center justify-end gap-3 px-6 py-2"
       >
+        {gradedWarnings.length > 0 && (
+          <button
+            type="button"
+            data-testid="analysis-warnings-badge"
+            onClick={jumpToWarnings}
+            className="mr-auto inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning/10 px-2.5 py-1 text-xs font-semibold text-warning"
+          >
+            <AlertTriangle size={13} aria-hidden="true" /> {t.analysisWarningsBadge(gradedWarnings.length)}
+          </button>
+        )}
         {analyzeError && <span className="text-xs text-danger">{analyzeError}</span>}
         <label className="flex items-center gap-1.5 text-xs text-text-muted" title={t.ploidyHint}>
           {t.ploidyLabel}
@@ -283,19 +311,24 @@ export function AnalysisTab() {
         </div>
       )}
 
-      {analysisWarnings.length > 0 && (
-        <Callout
-          tone="warning"
-          className="mx-4 mt-4 sm:mx-6"
-          data-testid="analysis-warnings"
-        >
-          <b>{t.analysisWarningsTitle}:</b>
-          <ul className="mt-1 list-disc pl-4">
-            {analysisWarningTexts(analysisWarnings, t).map((text) => (
-              <li key={text}>{text}</li>
-            ))}
-          </ul>
-        </Callout>
+      {/* P4-S3-T1 (FB-03 §8): "blocking" warnings bear on genotype-call
+          reliability and stay here, above the fold -- only "advisory" ones
+          (none exist yet) are demoted below ResultsTable. */}
+      {blockingWarnings.length > 0 && (
+        <div ref={blockingWarningsRef} tabIndex={-1} aria-live="assertive">
+          <Callout
+            tone="warning"
+            className="mx-4 mt-4 sm:mx-6"
+            data-testid="analysis-warnings"
+          >
+            <b>{t.analysisWarningsTitle}:</b>
+            <ul className="mt-1 list-disc pl-4">
+              {blockingWarnings.map((w) => (
+                <li key={w.code}>{w.text}</li>
+              ))}
+            </ul>
+          </Callout>
+        </div>
       )}
 
       <div className="px-4 pt-4 sm:px-6">
@@ -308,12 +341,34 @@ export function AnalysisTab() {
         <ScatterPlot />
 
         <div className="analysis-review-stack">
+          {/* P4-S3-T1 (FB-03 §3-2): only meaningful before anything is
+              selected -- moved here from WellSelectionToolbar's always-on
+              banner, as the plate view's secondary hint. */}
+          {selectedWells.length === 0 && (
+            <p data-testid="plate-view-hint" className="text-xs text-text-muted">{t.selectionHelp}</p>
+          )}
           <PlateView />
           <WellDetailPanel />
         </div>
       </div>
 
       <div className="analysis-secondary px-4 pb-4 sm:px-6"><ResultsTable /></div>
+
+      {/* P4-S3-T1 (FB-03 §3-1): "advisory" warnings are demoted below the
+          results, not hidden -- aria-live keeps them announced as they
+          arrive even though they are no longer above the fold. */}
+      {advisoryWarnings.length > 0 && (
+        <div ref={advisoryWarningsRef} tabIndex={-1} aria-live="polite" className="px-4 pb-4 sm:px-6">
+          <Callout tone="warning" data-testid="analysis-warnings-advisory">
+            <b>{t.analysisWarningsTitle}:</b>
+            <ul className="mt-1 list-disc pl-4">
+              {advisoryWarnings.map((w) => (
+                <li key={w.code}>{w.text}</li>
+              ))}
+            </ul>
+          </Callout>
+        </div>
+      )}
       {/* FB-06: this stays the auxiliary, collapsed-by-default overlay for
           checking curves mid-analysis -- the Raw data (protocol) tab now
           also mounts a plate-wide one (ProtocolTab.tsx), and this one is

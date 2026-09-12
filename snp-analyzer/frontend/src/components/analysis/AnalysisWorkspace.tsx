@@ -3,12 +3,13 @@
 //       docs/planning/feedback-2026-09-11/FB-07-identity-and-ia.md §3-1 (top-level Plate Setup / Results tabs)
 // @TEST e2e/p4-s0-single-marker-default.spec.ts, e2e/p4-s1-plate-setup.spec.ts
 
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import type { MarkerRegion } from '@/types/api';
-import { X } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
-import { Callout, StatusState } from "@/components/shared/ui";
+import { StatusState } from "@/components/shared/ui";
 import { useSessionStore } from "@/stores/session-store";
+import { useSelectionStore } from "@/stores/selection-store";
 import { useAnalysisWorkspace } from "@/hooks/use-analysis-workspace";
 import { useNavigationStore } from "@/stores/navigation-store";
 import { AnalysisTab } from "./AnalysisTab";
@@ -40,35 +41,32 @@ function MarkerAvailability({ available, children }: { available: boolean; child
  *
  * S0: on load, the whole plate is auto-analysed as one marker (existing
  * `AnalysisTab` behavior, unchanged) and shown wrapped in
- * `single-marker-analysis-view`, with a non-blocking, dismissible
- * `split-marker-banner` inviting the user to split into markers via the
- * Plate Setup surface.
+ * `single-marker-analysis-view`, with an always-present `analysis-scope-selector`
+ * ("Whole plate" / "+ Split into markers") in place of the old dismissible
+ * split-marker banner (P4-S3-T1, FB-03 §3-3) -- once >=1 marker exists, this
+ * selector's spot is filled by MultiMarkerAnalysisPanel's own
+ * `marker-selector-sidebar`/`marker-selector-dropdown` instead.
  */
 export function AnalysisWorkspace() {
   const { t } = useI18n();
-  const sessionId = useSessionStore((s) => s.sessionId);
+  const sessionInfo = useSessionStore((s) => s.sessionInfo);
+  const currentCycle = useSelectionStore((s) => s.currentCycle);
   const activeSurface = useNavigationStore(state => state.surface);
   const setTab = useNavigationStore(state => state.setTab);
   const { ready, status, markers, markersAvailable, retry } = useAnalysisWorkspace();
-  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // The session's saved marker (assay) set decides which Results surface
   // renders: >=1 marker => the per-marker MultiMarkerAnalysisPanel (P4-S2),
-  // 0 markers => the legacy single-marker (whole-plate) view + split banner
-  // (P4-S0). Re-fetched on session change and every time this surface is
-  // updated through the markers-changed event, so merely switching surfaces
-  // does not repeat an identical API request and analysis render.
+  // 0 markers => the legacy single-marker (whole-plate) view + scope
+  // selector (P4-S0/P4-S3). Re-fetched on session change and every time this
+  // surface is updated through the markers-changed event, so merely
+  // switching surfaces does not repeat an identical API request and
+  // analysis render.
 
-  // A freshly-loaded session starts back on the Results surface with the
-  // banner re-offered (zero friction for the single-marker case, §0/Q1), and
-  // its marker list reset (the new session hasn't been fetched yet). Computed
-  // during render (React's documented "adjusting state when a prop changes"
-  // pattern) rather than in an effect.
-  const [prevSessionId, setPrevSessionId] = useState(sessionId);
-  if (sessionId !== prevSessionId) {
-    setPrevSessionId(sessionId);
-    setBannerDismissed(false);
-  }
+  const summaryLine = t.analysisContextSummaryLine(
+    currentCycle, sessionInfo?.num_cycles ?? 0, sessionInfo?.num_wells ?? 0,
+    markersAvailable ? markers.length : null,
+  );
 
   return (
     <div>
@@ -85,44 +83,49 @@ export function AnalysisWorkspace() {
         id="main-panel-results" role="tabpanel" aria-labelledby="tab-results"
         className={panelClass(activeSurface, 'analysis')}
       >
-        {ready && <div className="analysis-context-summary">
-          <AnalysisResultStatus markers={availableScope(markers, markersAvailable)} />
-          <PlateScopeSummary markers={availableScope(markers, markersAvailable)} />
-        </div>}
+        {/* P4-S3-T1 (FB-03 §3-1): collapsed by default -- only the one-line
+            summary is on by default; the full status/scope detail is a
+            disclosure, not a permanent block above the results. */}
+        {ready && <details className="analysis-context-summary" data-testid="analysis-context-summary">
+          <summary data-testid="analysis-context-summary-line" className="cursor-pointer select-none px-6 py-2 text-xs text-text-muted">
+            {summaryLine}
+          </summary>
+          <div className="analysis-context-summary-body">
+            <AnalysisResultStatus markers={availableScope(markers, markersAvailable)} />
+            <PlateScopeSummary markers={availableScope(markers, markersAvailable)} />
+          </div>
+        </details>}
         {!ready ? <StatusState variant={status === 'error' ? 'error' : 'loading'} message={status === 'error' ? t.analysisLoadFailed : t.loading} action={status === 'error' ? { label: t.retry, onClick: retry } : undefined} /> : <MarkerAvailability available={markersAvailable}>{markers.length > 0 ? (
           <MultiMarkerAnalysisPanel markers={markers} />
         ) : (
           <div data-testid="single-marker-analysis-view">
-            {!bannerDismissed && (
-              <Callout
-                tone="warning"
-                className="mx-6 mt-4"
-                data-testid="split-marker-banner"
-                actions={
-                  <>
-                    <button
-                      type="button"
-                      data-testid="split-marker-cta"
-                      onClick={() => setTab("plate")}
-                      className="px-3 py-1 rounded-md text-sm font-semibold text-primary hover:bg-bg cursor-pointer"
-                    >
-                      {t.wsSplitBannerCta}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="split-marker-dismiss"
-                      aria-label={t.wsSplitBannerDismiss}
-                      onClick={() => setBannerDismissed(true)}
-                      className="px-2 py-1 rounded-md text-text-muted hover:text-text cursor-pointer inline-flex items-center"
-                    >
-                      <X size={16} aria-hidden="true" />
-                    </button>
-                  </>
-                }
+            {/* P4-S3-T1 (FB-03 §3-3): always-present scope selector, in the
+                spot the dismissible split-marker banner used to occupy.
+                Once markers exist, MultiMarkerAnalysisPanel's own
+                marker-selector-sidebar/-dropdown fills this same role. */}
+            <div
+              data-testid="analysis-scope-selector"
+              role="group"
+              aria-label={t.wsScopeSelectorLabel}
+              className="flex flex-wrap items-center gap-2 px-6 pt-4"
+            >
+              <button
+                type="button"
+                data-testid="scope-whole-plate"
+                aria-pressed={true}
+                className="inline-flex items-center gap-1.5 rounded-md border border-primary bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary"
               >
-                {t.wsSplitBannerText}
-              </Callout>
-            )}
+                {t.wsScopeWholePlateOption}
+              </button>
+              <button
+                type="button"
+                data-testid="scope-split-marker-cta"
+                onClick={() => setTab("plate")}
+                className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border px-3 py-1.5 text-sm text-text-muted hover:border-primary hover:text-primary cursor-pointer"
+              >
+                <Plus size={14} aria-hidden="true" /> {t.wsSplitBannerCta}
+              </button>
+            </div>
             <AnalysisTab />
           </div>
         )}</MarkerAvailability>}

@@ -28,6 +28,12 @@ export function WellSelectionToolbar() {
     () => [...DEFAULT_GROUPS, ...manualNames.filter((name) => !DEFAULT_GROUPS.includes(name))],
     [manualNames]
   );
+  // P4-S3-T1 (FB-03 §3-2): these 6 slots are "save current selection as group
+  // N" presets, not existing groups. With nothing selected and no manual
+  // group saved yet, every one of them is a dead button (assignPreset just
+  // raises manualGroupSelectFirst) -- render only "+ Add group" instead of
+  // 6 meaningless placeholders.
+  const showGroupPresets = hasSelection || manualNames.length > 0;
 
   useEffect(() => {
     if (!sessionId) {
@@ -97,38 +103,41 @@ export function WellSelectionToolbar() {
       data-testid="analysis-selection-toolbar"
       className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-bg px-3 py-2"
     >
-      <span className="w-full text-xs text-text-muted">{t.selectionHelp}</span>
-      <div className="flex flex-wrap items-center gap-1.5" data-testid="manual-group-presets">
-        {presetNames.map((name, index) => {
-          const active = selectedGroup === name;
-          // Parsed instrument groups are deliberately not presets. A generic
-          // imported "Group 1" must not make this manual button look saved or
-          // reactivate the unwanted parser grouping the user is replacing.
-          const exists = manualNames.includes(name);
-          const defaultIndex = DEFAULT_GROUPS.indexOf(name);
-          const label = defaultIndex >= 0 ? t.manualGroupLabel(defaultIndex + 1) : name;
-          return (
-            <button
-              key={name}
-              type="button"
-              data-testid={`manual-group-${index + 1}`}
-              aria-pressed={active}
-              title={!hasSelection && !exists ? t.manualGroupSelectFirst : undefined}
-              onClick={() => void assignPreset(name)}
-              className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
-                active
-                  ? "border-amber-500 bg-amber-500 text-black shadow-sm"
-                  : exists
-                  ? "border-amber-500/60 bg-amber-500/10 text-text hover:bg-amber-500/20"
-                  : "border-border bg-surface text-text-muted hover:border-amber-500"
-              }`}
-            >
-              {active && <Check size={12} aria-hidden="true" />}
-              {label}
-              {savingName === name && <span aria-hidden="true">…</span>}
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {showGroupPresets && (
+          <div className="flex flex-wrap items-center gap-1.5" data-testid="manual-group-presets">
+            {presetNames.map((name, index) => {
+              const active = selectedGroup === name;
+              // Parsed instrument groups are deliberately not presets. A generic
+              // imported "Group 1" must not make this manual button look saved or
+              // reactivate the unwanted parser grouping the user is replacing.
+              const exists = manualNames.includes(name);
+              const defaultIndex = DEFAULT_GROUPS.indexOf(name);
+              const label = defaultIndex >= 0 ? t.manualGroupLabel(defaultIndex + 1) : name;
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  data-testid={`manual-group-${index + 1}`}
+                  aria-pressed={active}
+                  title={!hasSelection && !exists ? t.manualGroupSelectFirst : undefined}
+                  onClick={() => void assignPreset(name)}
+                  className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    active
+                      ? "border-amber-500 bg-amber-500 text-black shadow-sm"
+                      : exists
+                      ? "border-amber-500/60 bg-amber-500/10 text-text hover:bg-amber-500/20"
+                      : "border-border bg-surface text-text-muted hover:border-amber-500"
+                  }`}
+                >
+                  {active && <Check size={12} aria-hidden="true" />}
+                  {label}
+                  {savingName === name && <span aria-hidden="true">…</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
         {adding ? (
           <form
             className="flex items-center gap-1"

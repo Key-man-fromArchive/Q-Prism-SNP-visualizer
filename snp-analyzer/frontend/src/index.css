@@ -182,7 +182,13 @@ body.dark .panel {
 .analysis-advanced-settings > div { max-height: 18rem; overflow: auto; }
 .well-detail-expanded { max-height: 22rem; overflow: auto; }
 .analysis-secondary { min-width: 0; }
-[data-testid="results-scroll-region"] { max-height: 24rem; overflow-y: auto; }
+/* P4-S3-T1 (FB-03 §3-4): ResultsTable is promoted to a first-class area at
+   the >=1280px breakpoint where the two-column analysis-grid also applies
+   (no more 24rem clip hiding genotype calls below the fold). Below that,
+   the plate is narrow enough that internal scrolling is still worth it. */
+@media (max-width: 1279px) {
+  [data-testid="results-scroll-region"] { max-height: 24rem; overflow-y: auto; }
+}
 @media (min-width: 1280px) {
   [data-testid="analysis-selection-toolbar"] > span:first-child { width: auto; }
   .analysis-grid { padding-top: .5rem; }
@@ -196,12 +202,12 @@ body.dark .panel {
   .analysis-primary-toolbar > * { flex: 1; min-width: 0; }
   .analysis-primary-toolbar #cycle-control { flex: .8; }
   .analysis-review-stack [data-testid="plate-scroll-region"] { max-height: none; overflow-x: auto; overflow-y: hidden; }
-  .analysis-context-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; padding: .5rem 1.5rem 0; }
-  .analysis-context-summary > section { margin: 0; padding: .5rem; font-size: .75rem; }
+  .analysis-context-summary-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; padding: .5rem 1.5rem 0; }
+  .analysis-context-summary-body > section { margin: 0; padding: .5rem; font-size: .75rem; }
   .analysis-grid { align-items: start; }
   .analysis-grid .panel { padding: 12px; }
   [data-testid="analysis-warnings"] { max-height: 5rem; overflow: auto; }
-  [data-testid="split-marker-banner"] { margin-top: .5rem; }
+  [data-testid="analysis-scope-selector"] { margin-top: .5rem; }
   [data-testid="analysis-result-status"] { padding: .5rem .75rem; }
 }
 @media (min-width: 768px) { :root { --workspace-gutter: 1.5rem; } }

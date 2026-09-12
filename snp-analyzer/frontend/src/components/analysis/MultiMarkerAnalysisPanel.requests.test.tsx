@@ -102,3 +102,16 @@ it('keeps scatter rendering live, consumes the restored cycle, and only analyses
   useNavigationStore.getState().beginRestore('replacement');
   expect(useNavigationStore.getState().exportRestoring).toBe(false);
 });
+
+// P4-S3-T1 (FB-03 §3-2): the "pick wells or drag on the scatter" hint moved
+// out of WellSelectionToolbar (mocked away above) to sit beside PlateView,
+// and only while nothing is selected yet.
+it('shows the plate-view selection hint only until wells are selected', async () => {
+  useSelectionStore.setState({ selectedWells: [] });
+  const view = render(<MultiMarkerAnalysisPanel markers={markers} />);
+  await screen.findByTestId('marker-ploidy-badge');
+  expect(screen.getByTestId('plate-view-hint')).toBeInTheDocument();
+  act(() => useSelectionStore.setState({ selectedWells: ['A1'] }));
+  view.rerender(<MultiMarkerAnalysisPanel markers={markers} />);
+  expect(screen.queryByTestId('plate-view-hint')).not.toBeInTheDocument();
+});

@@ -692,9 +692,9 @@ const ko: Translations = {
   // Multi-marker workspace (P4)
   wsTabPlate: '플레이트 설정',
   wsTabAnalysis: '분석',
-  wsSplitBannerText: '이 플레이트에 마커가 여러 개인가요? 마커로 분할하면 각각 독립적으로 판정합니다.',
   wsSplitBannerCta: '마커로 분할',
-  wsSplitBannerDismiss: '닫기',
+  wsScopeSelectorLabel: '분석 범위',
+  wsScopeWholePlateOption: '전체 플레이트',
   wsAddMarkerButton: '+ 마커 추가',
   wsMarkerFormTitleNew: '새 마커',
   wsMarkerFormTitleEdit: '마커 편집',
@@ -865,6 +865,11 @@ const ko: Translations = {
   analysisWarningLowN: '클러스터를 적합할 웰이 부족합니다 — 판정은 잠정적입니다.',
   analysisWarningAnchorConflict: '대조군 웰이 적합된 dosage 사다리와 어긋납니다.',
   analysisWarningsTitle: '분석 경고',
+  analysisWarningsBadge: (n: number) => `⚠ 경고 ${n}건`,
+  analysisContextSummaryLine: (cycle: number, totalCycles: number, wells: number, markerCount: number | null) =>
+    `사이클 ${cycle}/${totalCycles} · ${wells}웰 · ${
+      markerCount === null ? '마커 분할 여부 확인 불가' : markerCount > 0 ? `마커 ${markerCount}개 분할` : '마커 분할 없음'
+    }`,
 
   // assay가 낼 수 있는 최대 dosage — 추정이 아니라 사용자가 선언.
   // 6배체 마커가 dosage 3까지만 나오는 건 플레이트가 아니라 assay의 성질입니다.
