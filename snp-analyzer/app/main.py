@@ -127,7 +127,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="ASG-PCR SNP Discrimination Analyzer",
+    title="Q-prism® Cluster Caller",
     lifespan=lifespan,
     root_path=SNP_ROOT_PATH,
 )
