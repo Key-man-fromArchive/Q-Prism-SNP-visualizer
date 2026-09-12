@@ -35,7 +35,10 @@ function ntcCornerAt(plot: Locator) {
         yaxis?: { _offset: number; _length: number; range: [number, number] };
       };
     };
-    const trace = gd.data?.find((item) => item.name === 'NTC threshold');
+    // Trace name was a hardcoded "NTC threshold" when this test was written;
+    // 846b5c2 (P4-S3-T1) localized and pluralized it to t.chartNtcThreshold
+    // ("NTC thresholds" in English, which this spec pins itself to).
+    const trace = gd.data?.find((item) => item.name === 'NTC thresholds');
     const xa = gd._fullLayout?.xaxis;
     const ya = gd._fullLayout?.yaxis;
     if (!trace?.x?.length || !trace.y?.length || !xa || !ya) return null;
@@ -88,10 +91,15 @@ test('dragging from plate whitespace selects visible wells and assigns Group 1',
   );
   await page.mouse.up();
 
-  const selected = page.locator('.plate-well[aria-pressed="true"]');
+  // P2-S4's keyboard-grid contract (287ad3f) moved role="gridcell" wells from
+  // aria-pressed to the ARIA-correct aria-selected; P4-S3-T1 (846b5c2) then
+  // added a genotype-glyph span alongside the pre-existing checkmark badge
+  // span, so "the one span in a selected well" is no longer a safe locator --
+  // target the checkmark badge by its text instead.
+  const selected = page.locator('.plate-well[aria-selected="true"]');
   expect(await selected.count()).toBeGreaterThan(1);
   await expect(selected.first()).toHaveClass(/ring-amber-400/);
-  await expect(selected.first().locator('span')).toHaveText('✓');
+  await expect(selected.first().locator('span', { hasText: '✓' })).toBeVisible();
 
   const groupOne = page.getByTestId('manual-group-1');
   const savedGroup = page.waitForResponse(
@@ -146,6 +154,12 @@ test('dragging the NTC corner saves a two-channel threshold without freezing gen
   const uploadBody = await (await uploaded).json();
   await expect(page.locator('#analysis-panel')).not.toHaveClass(/hidden/);
 
+  // PlateView fetches well data through its own effect (getPlate), a second
+  // round trip after /api/upload -- #analysis-panel unhides as soon as the
+  // session exists, before that fetch resolves, so every .plate-well starts
+  // out carrying the empty placeholder class. Wait for it to clear instead
+  // of reading the grid on the same tick the panel appears.
+  await expect(page.locator('.plate-well:not(.empty)').first()).toBeVisible({ timeout: 15000 });
   const wells = await page.locator('.plate-well:not(.empty)').evaluateAll((nodes) =>
     nodes.map((node) => (node as HTMLElement).dataset.well).filter(Boolean)
   );
