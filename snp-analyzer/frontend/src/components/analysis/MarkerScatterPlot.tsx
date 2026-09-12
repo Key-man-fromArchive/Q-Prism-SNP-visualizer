@@ -569,8 +569,7 @@ export function MarkerScatterPlot({
   // than relying on its own responsive observer picking up the change.
   useEffect(() => {
     if (!initialized.current || !plotRef.current) return;
-    const resize = (Plotly as unknown as { Plots?: { resize?: (el: HTMLElement) => void } }).Plots?.resize;
-    resize?.(plotRef.current);
+    Plotly.Plots.resize(plotRef.current);
   }, [scatterAspect]);
 
   // Drag a radial boundary line; persists to the marker's threshold_config on

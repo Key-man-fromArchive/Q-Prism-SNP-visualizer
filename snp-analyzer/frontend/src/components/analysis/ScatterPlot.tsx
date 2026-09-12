@@ -614,8 +614,7 @@ export function ScatterPlot() {
   // test, where no layout engine ever fires it on its own.
   useEffect(() => {
     if (!initialized.current || !plotRef.current) return;
-    const resize = (Plotly as unknown as { Plots?: { resize?: (el: HTMLElement) => void } }).Plots?.resize;
-    resize?.(plotRef.current);
+    Plotly.Plots.resize(plotRef.current);
   }, [scatterAspect]);
 
   // Declaring the assay's dosage ceiling. Re-clusters in AUTO mode with the
