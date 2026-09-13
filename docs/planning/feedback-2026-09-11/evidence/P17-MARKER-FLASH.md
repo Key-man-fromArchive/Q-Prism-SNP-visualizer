@@ -212,3 +212,121 @@ npm run build      -> tsc -b + vite build succeeded
   therefore full `Plotly.newPlot` instead of a cheaper in-place update) is unchanged. This fix removes
   the blank-screen symptom of that swap but not the swap itself, which is a rendering-cost concern
   documented separately in `P13-NTC-RACE.md`.
+
+## Follow-up (post-merge): a real regression found by the integration gate, root-caused and fixed
+
+Reported by the orchestrator after merging this fix (at `40c2809`/`99c7ba1`) into `main`:
+`tests/24-responsive.spec.ts:21` (`marker-selector-sidebar` not visible after creating 4 markers and
+switching to Results) failed reproducibly in full-suite context (`--workers=1` and `--workers=2`),
+but passed standalone and file-scoped. Investigated on `feedback/p17-followup` after fast-forwarding
+onto `main` (`69ea4d9`, which also carries P16 and P18 -- neither touches this code path; confirmed
+P18 is a comment-only change to `api.ts`'s existing 401 handling).
+
+### Reproducing before touching anything
+
+Standalone and `24-responsive.spec.ts`-only runs: 23/23, matching the reporter's own account -- not a
+runner/config issue. Found a **cheap, reliable reproduction** instead of running the full 140-test
+suite each time: `tests/17..23` followed by `24-responsive.spec.ts`, `--workers=1`. First attempt at
+this range reproduced the failure exactly once (1/1), as:
+
+```
+Error: locator.click: Test timeout of 60000ms exceeded.
+waiting for getByTestId('selection-bar').getByTestId('marker-pick-button').filter({ hasText: 'Marker D' })
+  - element is not stable / element was detached from the DOM, retrying
+```
+
+-- i.e. failing even earlier than the reporter's line 21, inside the marker-creation loop itself
+(`marker-pick-button` never stabilizes long enough to click), not merely at the sidebar-visibility
+assertion. Same underlying cause, different observable symptom depending on exact scheduling.
+
+### Root cause: this fix made backgrounded marker edits pay for real, repeated clustering work
+
+`AnalysisWorkspace`'s two panels (`workspace-panel-plate`/`workspace-panel-analysis`) are **both
+always mounted**, one just CSS-`hidden` -- a pre-existing, untouched design (instant tab switch, no
+per-switch fetch). The reporting test creates 4 markers from the Plate Setup tab (`assign-button` and
+`marker-form-save` each call `persist()`, which dispatches `markers-changed` -- 8 dispatches total
+across the loop, per `PlateSetupTab.tsx`), never visiting Results until the very end.
+
+Before this fix: each `markers-changed` nulled `markerEntry`, and `MarkerAvailability` rendered `null`
+while unavailable -- so **whichever intermediate marker-count states arrived while a fetch was still
+in flight were fully discarded**, and if fetches kept getting superseded faster than they resolved
+(exactly what a tight loop of 8 dispatches does), only the *final* settled state ever actually
+mounted/rendered anything, once, at the end. This was a side effect of the bug, not a deliberate
+optimization, but it had one: `MultiMarkerAnalysisPanel`'s own `useSettledAnalysis`-driven
+auto-clustering debounce (220ms, `MultiMarkerAnalysisPanel.tsx`) could never accumulate a stable
+baseline across all that unmount/remount churn, so it effectively never fired mid-loop either.
+
+This fix keeps the panel mounted continuously with the live, last-known-good `markers` array (that's
+the point of the fix -- no more blank flash while the surface is *actually being viewed*). But
+because both panels are always mounted regardless of which tab is active, the **same live updates
+now also reach the panel while it's backgrounded** (CSS-hidden, tab not visited) -- and
+`MultiMarkerAnalysisPanel`'s pre-existing 220ms settled-analysis debounce, no longer starved by
+constant remounts, now actually fires for real, whenever two marker edits are >=220ms apart. In this
+test, they reliably are (each edit round-trips through a real POST + `markers-changed` re-fetch).
+
+Measured directly (`page.on('request')` counts, isolated server, standalone run -- not just the CPU
+contention effect), same 4-marker-creation loop, in-app UI clicks (not synthetic dispatches):
+
+| Build | `/cluster` requests during the loop | `/scatter`+`/plate` requests during the loop |
+|---|---|---|
+| pre-P17 (`e308521`) | flat at 2 (baseline) | **grow 1-for-1 with marker count** (2->3->4) -- full remount-per-marker cost, the P13-flagged 0-1 swap cost, paid repeatedly |
+| P17 fix alone (`40c2809`) | **grows 2->3->4** -- new, real, wasted `POST /cluster` clustering calls for intermediate marker sets, discarded before ever being shown | flat at 2 (no remounts) |
+| P17 fix + this follow-up | flat at 2 during the loop; **exactly one** additional `POST /cluster` fires ~220-300ms after the surface actually becomes active, reflecting the true final (4-marker) state | flat at 2 |
+
+So neither version was "free" while backgrounded -- pre-fix paid in repeated full remounts +
+scatter/plate refetches (the cost P13-NTC-RACE.md already flagged), this fix's first cut paid in
+repeated real clustering computation instead, which is worse (server-side compute, not just a cached
+JSON refetch) and, under load, apparently slow/contentious enough on this shared host to also destabilize
+an unrelated element's click target on the *foreground* tab (the `locator.click` timeout above) --
+confirmed by the fact that suppressing it (below) makes both the E2E failure and the wasted requests
+disappear together, not just correlate.
+
+**Yes, this is user-reachable, not merely a test artifact**: any real session where an operator adds
+or edits several markers from Plate Setup without immediately switching to Results would, under the
+first-cut fix, run a full clustering pass for every such edit in the background, wasted the moment
+the next edit lands -- extra server load and client CPU for work nobody will ever see, on every
+multi-marker workflow, not just this test's.
+
+### Fix
+
+`MultiMarkerAnalysisPanel.tsx`: `settledAnalysisPaused(...)` gained a `backgrounded` parameter
+(`useNavigationStore(state => state.surface) !== 'analysis'`), OR'd in with the existing pause
+reasons (playback, unconfirmed revision, export restore, quality navigation). `useSettledAnalysis`
+already goes stale-but-inert while `paused` (see `use-settled-analysis.ts`: paused skips scheduling
+without updating the stored baseline unless `consumePausedInput`), so this doesn't need new state --
+returning to the Results surface with a changed baseline schedules exactly one 220ms-debounced
+analyze for whatever the input has become by then, same one-shot behavior the bug accidentally had.
+Confirmed via the same request-count measurement (table above, third row) and a new unit test.
+
+`fetchScatter` was not touched -- it isn't keyed on `markers` at all (only cycle/rox/background/
+session), so it was never re-firing per marker edit in the first place (flat at 2 in both
+before/after fix rows above); nothing to pause there.
+
+### Verification
+
+- New unit test `MultiMarkerAnalysisPanel.requests.test.tsx`: `does not auto-analyze intermediate
+  marker edits while backgrounded, but does analyze once on return` -- confirmed RED against the
+  code without this follow-up (`git stash`, by SHA, not `pop`, per this shared worktree's constraint)
+  before restoring the fix: without it, 2 clustering calls fire for 2 backgrounded edits; with it, 0
+  fire while backgrounded and exactly 1 fires once the surface becomes active.
+- `MultiMarkerAnalysisPanel.requests.test.tsx`'s existing tests needed `surface: 'analysis'` added to
+  the shared `beforeEach` -- they exercise this same debounce directly and, like a real user actively
+  looking at this screen, need the surface marked active for that debounce to run at all. No
+  assertion in any pre-existing test was weakened or removed.
+- Frontend: `npx tsc --noEmit` clean, `npm run lint` clean, `npm run test` -> 125 files / 919 tests
+  (baseline after the main merge was 918; +1 new test), `npm run build` succeeded.
+- Backend: `pytest` (shared venv, unmodified backend) -> 819 passed + 2 subtests, matching baseline
+  exactly (no backend files touched).
+- E2E, isolated server `127.0.0.1:8210`, `/tmp/p17b.db` (removed after use):
+  - Cheap reproduction context (`tests/17..23` + `24-responsive.spec.ts`, `--workers=1`): **3/3
+    consecutive full-context runs, 42/42 tests each**, including the `marker-selector-sidebar`
+    assertion at line 21 and the `y + height <= 1000` budget assertions this task must not touch.
+  - Full suite (`--workers=1`, all 29 spec files): **140/140 passed**, including
+    `tests/26-asg-compatibility.spec.ts:271`.
+
+### Files touched (this follow-up)
+
+- `snp-analyzer/frontend/src/components/analysis/MultiMarkerAnalysisPanel.tsx` -- the `backgrounded`
+  pause condition.
+- `snp-analyzer/frontend/src/components/analysis/MultiMarkerAnalysisPanel.requests.test.tsx` --
+  `surface: 'analysis'` added to `beforeEach`; one new test for the pause/resume behavior.

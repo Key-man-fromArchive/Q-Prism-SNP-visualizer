@@ -23,7 +23,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   useSessionStore.setState({ sessionId: 'multi', initialAnalysisAvailable: false });
   useAnalysisStore.getState().setSession('multi', 'u');
-  useNavigationStore.setState({ status: 'ready' });
+  // P17-MARKER-FLASH follow-up: this panel now pauses its settled-analysis
+  // debounce while the Results surface isn't active (AnalysisWorkspace.tsx
+  // keeps it mounted, but backgrounded, while the user is on Plate Setup --
+  // see MultiMarkerAnalysisPanel.tsx's `backgrounded` check). These tests
+  // exercise that debounce directly, so they need the surface active, same
+  // as a real user actually looking at this screen.
+  useNavigationStore.setState({ status: 'ready', surface: 'analysis' });
   useSelectionStore.getState().setCycle(20);
 });
 afterEach(() => vi.useRealTimers());
@@ -101,6 +107,30 @@ it('keeps scatter rendering live, consumes the restored cycle, and only analyses
   useNavigationStore.getState().setExportRestoring(true);
   useNavigationStore.getState().beginRestore('replacement');
   expect(useNavigationStore.getState().exportRestoring).toBe(false);
+});
+
+// P17-MARKER-FLASH follow-up: this panel now stays mounted (backgrounded,
+// not unmounted) while the user is on the Plate Setup surface, editing
+// markers -- see AnalysisWorkspace.tsx. Without pausing the settled-analysis
+// debounce while backgrounded, every intermediate marker edit made there
+// would fire a real (immediately-superseded) clustering request, not just
+// the one the user actually lands on.
+it('does not auto-analyze intermediate marker edits while backgrounded, but does analyze once on return', async () => {
+  vi.useFakeTimers();
+  useNavigationStore.setState({ surface: 'plate' });
+  const oneMarker = markers;
+  const twoMarkers: MarkerRegion[] = [...markers, { id: 'm2', name: 'Second', wells: ['A2'], ploidy: 2, color: '#111111' }];
+  const threeMarkers: MarkerRegion[] = [...twoMarkers, { id: 'm3', name: 'Third', wells: ['A3'], ploidy: 2, color: '#222222' }];
+  const view = render(<MultiMarkerAnalysisPanel markers={oneMarker} />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  view.rerender(<MultiMarkerAnalysisPanel markers={twoMarkers} />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  view.rerender(<MultiMarkerAnalysisPanel markers={threeMarkers} />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  expect(runClustering).not.toHaveBeenCalled();
+  act(() => useNavigationStore.setState({ surface: 'analysis' }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  expect(runClustering).toHaveBeenCalledTimes(1);
 });
 
 // P4-S3-T1 (FB-03 §3-2): the "pick wells or drag on the scatter" hint moved

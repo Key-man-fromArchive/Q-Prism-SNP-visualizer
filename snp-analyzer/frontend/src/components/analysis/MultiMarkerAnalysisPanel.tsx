@@ -55,8 +55,19 @@ function countKeyToLabel(key: string, ploidy: number): string {
 type MultiMarkerAnalysisPanelProps = {
   markers: MarkerRegion[];
 };
-function settledAnalysisPaused(playing: boolean, unconfirmed: boolean, exporting: boolean, navigating: boolean) {
-  return playing || unconfirmed || exporting || navigating;
+// P17-MARKER-FLASH follow-up: `backgrounded` (the Results surface isn't the
+// active tab) is also a pause reason. This panel now stays mounted and keeps
+// its `markers` prop live the whole time the surface is backgrounded (see
+// AnalysisWorkspace.tsx), instead of being unmounted/remounted per
+// markers-changed event. Without this, every marker add/edit made from the
+// Plate Setup tab -- while nobody is looking at Results -- settles this
+// debounce and fires a real (immediately-superseded) clustering request for
+// each intermediate marker set, not just the final one the user actually
+// lands on. `previous.current` in useSettledAnalysis simply goes stale while
+// paused, so returning to the surface schedules exactly one analyze for
+// whatever the input has become by then -- same one-shot behavior as before.
+function settledAnalysisPaused(playing: boolean, unconfirmed: boolean, exporting: boolean, navigating: boolean, backgrounded: boolean) {
+  return playing || unconfirmed || exporting || navigating || backgrounded;
 }
 
 export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelProps) {
@@ -90,6 +101,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   const exportRestoring = useNavigationStore(state => state.exportRestoring);
   const qualityNavigating = useNavigationStore(state => state.qualityNavigating);
   const qualityEpoch = useNavigationStore(state => state.qualityEpoch);
+  const backgrounded = useNavigationStore(state => state.surface) !== 'analysis';
   const entry = useSessionStore(state => state.entryGeneration);
   const scatterRequestRef = useRef(0);
   const skipAutoClusterCycleRef = useRef<number | null>(null);
@@ -123,7 +135,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     void analyzeCurrent(request);
   }, [request, currentCycle]);
   useSettledAnalysis(
-    `${sessionId}:${entry}:${qualityEpoch}`, inputKey, settledAnalysisPaused(isPlaying, revisionUnconfirmed, exportRestoring, qualityNavigating),
+    `${sessionId}:${entry}:${qualityEpoch}`, inputKey, settledAnalysisPaused(isPlaying, revisionUnconfirmed, exportRestoring, qualityNavigating, backgrounded),
     runCluster, restoreStatus === 'ready', exportRestoring,
   );
 
