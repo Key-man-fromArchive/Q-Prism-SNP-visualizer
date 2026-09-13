@@ -34,6 +34,8 @@ import { useDataStore } from "@/stores/data-store";
 import { getAmplification } from "@/lib/api";
 import { channelLabels } from "@/lib/channel-labels";
 import { plotlyColors } from "@/lib/plotly-theme";
+import { useRequestStatus } from "@/hooks/use-request-status";
+import { StatusState } from "@/components/shared/ui";
 import type { AmplificationCurve } from "@/types/api";
 
 type AmplificationCurvePanelProps = {
@@ -86,16 +88,41 @@ export function AmplificationCurvePanel({ active, viewToggle, bare = false }: Am
   const numCycles = sessionInfo?.num_cycles ?? 1;
   const hasMultiCycleData = numCycles > 1;
 
+  // P20-STALE-DATA: identifies WHICH well/condition the plot should be
+  // showing -- deliberately NOT including `currentCycle` (that only moves
+  // the vertical marker line below; the curve itself is the same series
+  // regardless of cycle). Whenever this changes, the previous identity's
+  // status/error must not be shown against the new one -- see
+  // useRequestStatus. `sessionId` is included so a session switch cannot
+  // read as "same well" by coincidence.
+  const fetchKey = JSON.stringify([sessionId, selectedWell, useRox, backgroundMode]);
+  const { status, setStatus, error, setError } = useRequestStatus(fetchKey);
+  const identityRef = useRef<string | null>(null);
+
   // Fetch and plot the amplification curve when the selected well changes.
   // Runs regardless of `active` -- switching to the curve view should show
   // the already-current well immediately, not trigger a fresh fetch.
   useEffect(() => {
+    const identityChanged = identityRef.current !== fetchKey;
+    identityRef.current = fetchKey;
+
     if (!selectedWell || !sessionId || !hasMultiCycleData || !plotRef.current) {
       if (plotRef.current && plotInitRef.current) {
         Plotly.purge(plotRef.current);
         plotInitRef.current = false;
       }
       return;
+    }
+
+    // A new well/condition is being fetched: purge whatever the PREVIOUS
+    // one drew. Without this, a failed (or still in-flight) request for the
+    // new identity leaves the OLD well's curve on screen with nothing
+    // marking it as stale -- exactly what a covering loading/error overlay
+    // (below) already hides visually, but purging removes the wrong data
+    // from the chart itself too, not just from view.
+    if (identityChanged && plotInitRef.current) {
+      Plotly.purge(plotRef.current);
+      plotInitRef.current = false;
     }
 
     let cancelled = false;
@@ -106,7 +133,10 @@ export function AmplificationCurvePanel({ active, viewToggle, bare = false }: Am
         if (cancelled || !plotRef.current) return;
 
         const fetchedCurve: AmplificationCurve | undefined = res.curves[0];
-        if (!fetchedCurve) return;
+        if (!fetchedCurve) {
+          setStatus('empty');
+          return;
+        }
         const labels = channelLabels(
           res.channel_labels ? res : { channel_labels: roleLabels ?? undefined },
           res.allele2_dye || allele2Dye
@@ -161,15 +191,22 @@ export function AmplificationCurvePanel({ active, viewToggle, bare = false }: Am
           displayModeBar: false,
         });
         plotInitRef.current = true;
+        setStatus('ready');
       } catch (err) {
+        if (cancelled) return;
+        // P20-STALE-DATA: this used to be console-only, leaving the
+        // PREVIOUS well's curve on screen with no indication anything went
+        // wrong for the well/condition now selected.
         console.error("Failed to fetch amplification:", err);
+        setError(err instanceof Error ? err.message : String(err));
+        setStatus('error');
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [selectedWell, sessionId, useRox, backgroundMode, currentCycle, allele2Dye, roleLabels, hasMultiCycleData, t.axisCycle, t.curveReportedSignal]);
+  }, [selectedWell, sessionId, useRox, backgroundMode, currentCycle, allele2Dye, roleLabels, hasMultiCycleData, fetchKey, setStatus, setError, t.axisCycle, t.curveReportedSignal]);
 
   // See the `active` prop's doc comment: recover from a first draw that
   // happened while this view was hidden.
@@ -201,14 +238,34 @@ export function AmplificationCurvePanel({ active, viewToggle, bare = false }: Am
       </div>
     );
   } else {
+    // P20-STALE-DATA: an overlay covers the (always-mounted) Plotly
+    // container while loading, on error, or when the well has no curve to
+    // show -- same pattern ScatterPlot.tsx already uses for its own scatter
+    // fetch -- so a previous well/condition's plot is never left visible
+    // looking like it belongs to the one now selected.
+    const overlay =
+      status === "loading" ? (
+        <StatusState variant="loading" message={t.loading} />
+      ) : status === "error" ? (
+        <StatusState variant="error" message={t.statusLoadFailed} detail={error ?? undefined} />
+      ) : status === "empty" ? (
+        <StatusState variant="empty" message={t.noDataForWell(selectedWell)} />
+      ) : null;
     body = (
       <div className="relative analysis-scatter-canvas flex flex-col">
         <p className="text-xs text-text-muted mb-1" data-testid="curve-reading-basis">{t.referenceBasisUnknown}</p>
-        <div
-          id="amplification-plot"
-          ref={attachPlot}
-          style={{ width: "100%", flex: "1 1 auto", minHeight: 0 }}
-        />
+        <div className="relative" style={{ flex: "1 1 auto", minHeight: 0 }}>
+          <div
+            id="amplification-plot"
+            ref={attachPlot}
+            style={{ width: "100%", height: "100%" }}
+          />
+          {overlay && (
+            <div className="absolute inset-0 flex items-center justify-center bg-surface">
+              {overlay}
+            </div>
+          )}
+        </div>
       </div>
     );
   }

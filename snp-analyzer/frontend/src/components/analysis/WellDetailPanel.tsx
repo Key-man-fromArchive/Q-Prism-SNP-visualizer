@@ -7,6 +7,7 @@ import { useDataStore } from "@/stores/data-store";
 import { getAmplification } from "@/lib/api";
 import { channelLabels, normalizationLabel } from "@/lib/channel-labels";
 import { callLabel } from "@/lib/chart-semantics";
+import { useRequestStatus } from "@/hooks/use-request-status";
 import type { AmplificationCurve } from "@/types/api";
 
 type WellDetailPanelProps = { ploidyOverride?: number };
@@ -40,7 +41,14 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   // than reading that component's response) so this table keeps working
   // wherever WellDetailPanel is mounted, including without
   // AmplificationCurvePanel alongside it. See that file's doc comment.
-  const [curve, setCurve] = useState<AmplificationCurve | null>(null);
+  //
+  // P20-STALE-DATA: `curve` carries the fetchKey it was fetched FOR
+  // alongside the data, so a stale response (or a stale leftover curve from
+  // before a failed re-fetch) can be told apart from one that matches the
+  // CURRENT well/condition -- `curve.data.well === selectedWell` alone
+  // caught a well change but not a normalization/background change on the
+  // same well.
+  const [curve, setCurve] = useState<{ data: AmplificationCurve; key: string } | null>(null);
 
   // Find point data for selected well
   const pointData = selectedWell
@@ -48,6 +56,8 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
     : null;
 
   const numCycles = sessionInfo?.num_cycles ?? 1;
+  const fetchKey = JSON.stringify([sessionId, selectedWell, useRox, backgroundMode]);
+  const { status, setStatus, error, setError } = useRequestStatus(fetchKey);
 
   // Fetch the amplification curve (for the numeric time-series table only)
   // when the selected well changes.
@@ -60,16 +70,26 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
       try {
         const res = await getAmplification(sessionId, [selectedWell], useRox, backgroundMode);
         if (cancelled) return;
-        setCurve(res.curves[0] ?? null);
+        const fetchedCurve = res.curves[0];
+        if (!fetchedCurve) { setStatus('empty'); return; }
+        setCurve({ data: fetchedCurve, key: fetchKey });
+        setStatus('ready');
       } catch (err) {
+        if (cancelled) return;
+        // P20-STALE-DATA: this used to be console-only, leaving whatever
+        // `curve` already held on screen with no indication it might now
+        // belong to a DIFFERENT normalization/background than what is
+        // selected.
         console.error("Failed to fetch amplification:", err);
+        setError(err instanceof Error ? err.message : String(err));
+        setStatus('error');
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [selectedWell, sessionId, useRox, backgroundMode, numCycles]);
+  }, [selectedWell, sessionId, useRox, backgroundMode, numCycles, fetchKey, setStatus, setError]);
 
   if (!selectedWell) {
     return (
@@ -202,44 +222,61 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
               stays inside the numeric-details disclosure with the rest of
               the detail rows, since it IS a numeric detail (the chart,
               elsewhere, is the primary visualization). */}
-          {/* curve.well === selectedWell guards against showing a stale
-              series from a previous well: `curve` is only ever replaced (not
-              reset) by the fetch effect above, since it must not call
-              setState synchronously in the effect body's early-return
-              branches (react-hooks/set-state-in-effect). */}
-          {numCycles > 1 && curve && curve.well === selectedWell && (
-            <div style={{ marginTop: "12px" }}>
-              <p className="text-xs font-semibold text-text-muted mb-1">{t.wellTimeSeriesTitle}</p>
-              <div
-                data-testid="well-timeseries-scroll-region"
-                role="region"
-                aria-label={t.wellTimeSeriesTitle}
-                tabIndex={0}
-              >
-                <table data-testid="well-timeseries-table" className="detail-table w-full text-sm">
-                  <thead>
-                    <tr>
-                      <th className="text-left text-text-muted pr-3 py-0.5">{t.axisCycle}</th>
-                      <th className="text-right text-text-muted px-2 py-0.5">{labels.fam}</th>
-                      <th className="text-right text-text-muted px-2 py-0.5">{labels.allele2}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {curve.cycles.map((cyc, i) => (
-                      <tr
-                        key={cyc}
-                        className={cyc === currentCycle ? "current-cycle-row" : undefined}
-                        data-current-cycle={cyc === currentCycle ? "true" : undefined}
-                      >
-                        <td className="pr-3 py-0.5">{cyc}</td>
-                        <td className="text-right px-2 py-0.5">{curve.norm_fam[i].toFixed(decimals)}</td>
-                        <td className="text-right px-2 py-0.5">{curve.norm_allele2[i].toFixed(decimals)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {/* P20-STALE-DATA: `curve.key === fetchKey` (well + useRox +
+              backgroundMode + sessionId) replaces the old `curve.well ===
+              selectedWell`-only check, which caught a well change but not a
+              normalization/background change on the SAME well -- a failed
+              re-fetch after either used to leave the table showing the
+              PREVIOUS condition's numbers with nothing marking them stale.
+              A fetch failure now shows a visible error instead (role=alert,
+              not console-only), and `curve` itself is never displayed
+              against a `fetchKey` it was not fetched for. */}
+          {numCycles > 1 && (
+            status === "error" ? (
+              <div style={{ marginTop: "12px" }} role="alert">
+                <p className="text-xs text-danger">
+                  {t.statusLoadFailed}
+                  {error ? `: ${error}` : ""}
+                </p>
               </div>
-            </div>
+            ) : status === "empty" ? (
+              <div style={{ marginTop: "12px" }}>
+                <p className="text-xs text-text-muted">{t.noDataForWell(selectedWell)}</p>
+              </div>
+            ) : curve && curve.key === fetchKey && (
+              <div style={{ marginTop: "12px" }}>
+                <p className="text-xs font-semibold text-text-muted mb-1">{t.wellTimeSeriesTitle}</p>
+                <div
+                  data-testid="well-timeseries-scroll-region"
+                  role="region"
+                  aria-label={t.wellTimeSeriesTitle}
+                  tabIndex={0}
+                >
+                  <table data-testid="well-timeseries-table" className="detail-table w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th className="text-left text-text-muted pr-3 py-0.5">{t.axisCycle}</th>
+                        <th className="text-right text-text-muted px-2 py-0.5">{labels.fam}</th>
+                        <th className="text-right text-text-muted px-2 py-0.5">{labels.allele2}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {curve.data.cycles.map((cyc, i) => (
+                        <tr
+                          key={cyc}
+                          className={cyc === currentCycle ? "current-cycle-row" : undefined}
+                          data-current-cycle={cyc === currentCycle ? "true" : undefined}
+                        >
+                          <td className="pr-3 py-0.5">{cyc}</td>
+                          <td className="text-right px-2 py-0.5">{curve.data.norm_fam[i].toFixed(decimals)}</td>
+                          <td className="text-right px-2 py-0.5">{curve.data.norm_allele2[i].toFixed(decimals)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
           )}
         </details>
       </div>

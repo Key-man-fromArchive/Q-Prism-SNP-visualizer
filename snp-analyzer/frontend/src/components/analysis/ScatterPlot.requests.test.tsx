@@ -103,6 +103,28 @@ it('ignores a late response from the previous session', async () => {
   expect(useDataStore.getState()).toMatchObject({ normalizationApplied: false, normalizationReported: true });
 });
 
+// @TASK P20-STALE-DATA - a /scatter request started before the current
+// clustering result was merged must not overwrite that merge with its own
+// (now stale) auto_cluster/confidence fields once it finally resolves.
+it('does not let a scatter response in flight during a cluster merge overwrite the merge', async () => {
+  const pending = deferred<ScatterResponse>();
+  vi.mocked(getScatter).mockReturnValueOnce(pending.promise);
+  useDataStore.setState({ scatterPoints: [{ well: 'A1', sample_name: null, raw_fam: 1, raw_allele2: 2, raw_rox: null,
+    norm_fam: 1, norm_allele2: 2, auto_cluster: null, manual_type: null, confidence: null }] });
+  render(<ScatterPlot />);
+  await waitFor(() => expect(getScatter).toHaveBeenCalled());
+
+  // Analysis completes WHILE the scatter request above is still in flight.
+  act(() => useDataStore.getState().setClusterAssignments({ A1: 'Heterozygous' }, { A1: 0.87 }));
+  expect(useDataStore.getState().scatterPoints[0]).toMatchObject({ auto_cluster: 'Heterozygous', confidence: 0.87 });
+
+  // The scatter request settles with the backend's pre-merge (null) fields.
+  await act(async () => pending.resolve({ ...response('VIC'), points: [{ well: 'A1', sample_name: null, raw_fam: 1,
+    raw_allele2: 2, raw_rox: null, norm_fam: 1, norm_allele2: 2, auto_cluster: null, manual_type: null, confidence: null }] }));
+
+  expect(useDataStore.getState().scatterPoints[0]).toMatchObject({ auto_cluster: 'Heterozygous', confidence: 0.87 });
+});
+
 it('does not publish a response after unmount', async () => {
   const pending = deferred<ScatterResponse>();
   vi.mocked(getScatter).mockReturnValueOnce(pending.promise);
