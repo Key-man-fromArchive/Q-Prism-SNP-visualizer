@@ -1,0 +1,10 @@
+Session,05d706c8cde4
+Channel,FAM
+Requested reference normalization,yes
+Normalization applied,yes
+Background mode,none
+
+Well,1,2,3,4,5
+A1,0.1,0.4,0.9,1.6,2.2
+A2,0.08,0.3,,1.3,
+A3,0,0.5,1.1,1.7,2.4

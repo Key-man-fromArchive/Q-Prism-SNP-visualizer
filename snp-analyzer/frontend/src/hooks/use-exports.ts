@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { ApiError, exportCsv, exportPdf, exportXlsx } from '@/lib/api';
 import Plotly from 'plotly.js-dist-min';
 import { getActiveChart, type ActiveChart } from '@/lib/chart-export-registry';
+import { cycleValueMap, unionCycles, type WellCycleCurve } from '@/lib/well-cycle-alignment';
 import type { BackgroundMode } from '@/types/api';
 
 // The legacy fallback: exactly what shipped before per-chart sizing existed,
@@ -76,10 +77,17 @@ function escapeCsvField(value: string | number): string {
  *  here. `normalizationApplied`/`backgroundMode` mirror the honest
  *  reported/unreported handling `OverlayProcessingStatus` uses: `undefined`
  *  means the server didn't say, which is a different fact from "not
- *  applied" and must not be guessed from `requestedRox`. */
+ *  applied" and must not be guessed from `requestedRox`.
+ *
+ *  Each curve carries its OWN `cycles` array -- wells are not guaranteed to
+ *  share one (see well-cycle-alignment.ts). Columns are the UNION of every
+ *  well's cycle numbers, and each well's values are looked up by cycle
+ *  NUMBER, not array index, so a well missing a cycle never shifts its
+ *  later readings into an earlier well's column. A (well, cycle) with no
+ *  reading is written as an EMPTY field, never "0" -- a real 0 reading and
+ *  a missing reading must stay distinguishable in the exported CSV. */
 export function buildWellCycleValuesCsv(params: {
-  curves: { well: string; values: number[] }[];
-  cycles: number[];
+  curves: WellCycleCurve[];
   channelLabel: string;
   sessionId: string;
   normalizationApplied: boolean | undefined;
@@ -93,8 +101,15 @@ export function buildWellCycleValuesCsv(params: {
     ['Normalization applied', params.normalizationApplied === undefined ? 'unreported' : params.normalizationApplied ? 'yes' : 'no'],
     ['Background mode', params.backgroundMode ?? 'unreported'],
   ];
-  const header = ['Well', ...params.cycles.map(String)];
-  const dataRows = params.curves.map((c) => [c.well, ...c.values.map(String)]);
+  const cycles = unionCycles(params.curves);
+  const header = ['Well', ...cycles.map(String)];
+  const dataRows = params.curves.map((curve) => {
+    const values = cycleValueMap(curve);
+    return [curve.well, ...cycles.map((cycle) => {
+      const value = values.get(cycle);
+      return value === undefined ? '' : String(value);
+    })];
+  });
   return [...metaRows, [], header, ...dataRows]
     .map((row) => row.map(escapeCsvField).join(','))
     .join('\n');

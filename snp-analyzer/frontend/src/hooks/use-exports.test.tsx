@@ -248,10 +248,9 @@ it('RED/GREEN: rejects a held PNG when a filter render replaces its registry gen
 it('builds a well x cycle CSV carrying the same values as the table, honestly labeled (not "raw")', () => {
   const csv = buildWellCycleValuesCsv({
     curves: [
-      { well: 'A1', values: [1, 2, 3] },
-      { well: 'A2', values: [4, 5, 6] },
+      { well: 'A1', cycles: [1, 2, 3], values: [1, 2, 3] },
+      { well: 'A2', cycles: [1, 2, 3], values: [4, 5, 6] },
     ],
-    cycles: [1, 2, 3],
     channelLabel: 'FAM',
     sessionId: 'synthetic',
     normalizationApplied: false,
@@ -272,8 +271,7 @@ it('builds a well x cycle CSV carrying the same values as the table, honestly la
 
 it('reports "unreported" rather than guessing from the request when the echo is absent', () => {
   const csv = buildWellCycleValuesCsv({
-    curves: [{ well: 'A1', values: [1] }],
-    cycles: [1],
+    curves: [{ well: 'A1', cycles: [1], values: [1] }],
     channelLabel: 'FAM',
     sessionId: 's',
     normalizationApplied: undefined,
@@ -286,8 +284,7 @@ it('reports "unreported" rather than guessing from the request when the echo is 
 
 it('escapes CSV-hostile characters in fields', () => {
   const csv = buildWellCycleValuesCsv({
-    curves: [{ well: 'A,1', values: [1] }],
-    cycles: [1],
+    curves: [{ well: 'A,1', cycles: [1], values: [1] }],
     channelLabel: 'FAM',
     sessionId: 's',
     normalizationApplied: true,
@@ -295,4 +292,48 @@ it('escapes CSV-hostile characters in fields', () => {
     requestedRox: true,
   });
   expect(csv).toContain('"A,1",1');
+});
+
+// @TASK P19-CYCLE-ALIGN - a well's values must land under its own cycle
+// numbers, not under whichever column its array index happens to fall on.
+it('aligns each well\'s values by cycle NUMBER, not array index, when wells have different cycle sets', () => {
+  const csv = buildWellCycleValuesCsv({
+    curves: [
+      { well: 'A1', cycles: [1, 2, 3], values: [10, 20, 30] },
+      // A2 has no cycle-2 reading at all -- its cycle-3 reading must NOT
+      // shift left into the "2" column.
+      { well: 'A2', cycles: [1, 3], values: [40, 60] },
+    ],
+    channelLabel: 'FAM',
+    sessionId: 's',
+    normalizationApplied: false,
+    backgroundMode: 'none',
+    requestedRox: true,
+  });
+  const lines = csv.split('\n');
+  expect(lines).toContain('Well,1,2,3');
+  expect(lines).toContain('A1,10,20,30');
+  // Empty field for the missing cycle-2 reading, not a shifted "60".
+  expect(lines).toContain('A2,40,,60');
+  expect(lines).not.toContain('A2,40,60');
+});
+
+it('never writes a missing (well, cycle) reading as "0" in the CSV', () => {
+  const csv = buildWellCycleValuesCsv({
+    curves: [
+      { well: 'A1', cycles: [1, 2], values: [0, 5] },
+      { well: 'A2', cycles: [2], values: [7] },
+    ],
+    channelLabel: 'FAM',
+    sessionId: 's',
+    normalizationApplied: false,
+    backgroundMode: 'none',
+    requestedRox: true,
+  });
+  const lines = csv.split('\n');
+  // A1's real cycle-1 reading of 0 is written as "0" ...
+  expect(lines).toContain('A1,0,5');
+  // ... but A2's MISSING cycle-1 reading is blank, not indistinguishable "0".
+  expect(lines).toContain('A2,,7');
+  expect(lines).not.toContain('A2,0,7');
 });
