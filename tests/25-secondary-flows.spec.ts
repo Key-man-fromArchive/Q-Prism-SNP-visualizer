@@ -227,6 +227,8 @@ test('keyboard curve jump temporarily reveals a group-hidden well and Return res
   await openExample(page);
   const first = page.locator('#plate-grid [data-well="A1"]');
   await first.focus(); await page.keyboard.press('Enter');
+  // P15-GROUP-MENU: open the collapsed trigger before picking Group 1.
+  await page.getByTestId('manual-group-trigger').click();
   await page.getByTestId('manual-group-1').click();
   await page.getByTestId('scatter-selected-only').click();
   await expect(page.getByTestId('scatter-selected-only')).toHaveAttribute('aria-pressed', 'true');
@@ -239,7 +241,12 @@ test('keyboard curve jump temporarily reveals a group-hidden well and Return res
   await expect(page.locator('#plate-grid [data-well="A2"]')).toBeFocused();
   await expect(page.locator('.detail-panel')).toContainText('A2');
   await expect(page.getByTestId('scatter-selected-only')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByTestId('manual-group-1')).toHaveAttribute('aria-pressed', 'true');
+  // Selecting a group closes the menu, so `manual-group-1` (a menuitem) is no
+  // longer mounted. The still-attached, always-visible-when-relevant trigger
+  // is the equivalent persistent surface for "which group is active" here --
+  // the workspace pane (and this toolbar) stays mounted under the Quality
+  // tab's `hidden` class, so its text is still readable across the tab switch.
+  await expect(page.getByTestId('manual-group-trigger')).toContainText(/Group 1|그룹 1/);
   let analyses = 0;
   page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/cluster')) analyses++; });
   await page.getByRole('button', { name: 'Clear temporary reveal and return' }).click();

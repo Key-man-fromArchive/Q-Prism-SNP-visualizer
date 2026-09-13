@@ -127,16 +127,27 @@ test('dragging from plate whitespace selects visible wells and assigns Group 1',
   await expect(selected.first()).toHaveClass(/ring-amber-400/);
   await expect(selected.first().locator('span', { hasText: '✓' })).toBeVisible();
 
+  // P15-GROUP-MENU: the 6 preset buttons collapsed into a trigger + menu --
+  // open it before picking "Group 1", instead of clicking a standing button.
+  const groupTrigger = page.getByTestId('manual-group-trigger');
+  await groupTrigger.click();
   const groupOne = page.getByTestId('manual-group-1');
   const savedGroup = page.waitForResponse(
     (response) => response.url().endsWith('/groups') && response.request().method() === 'POST'
   );
   await groupOne.click();
   const savedPayload = await (await savedGroup).json();
-  await expect(groupOne).toHaveAttribute('aria-pressed', 'true');
-  await expect(groupOne).toContainText(/Group 1|그룹 1/);
   expect(savedPayload.name).toBe('Group 1');
   expect(savedPayload.wells.length).toBeGreaterThan(1);
+  // Selecting a group closes the menu, so the per-item aria-pressed check
+  // that used to run against the standing button now runs against the
+  // collapsed trigger (equivalent guarantee: the current group is displayed).
+  // The per-item aria-pressed/active-check itself is exercised in
+  // WellSelectionToolbar.test.tsx ("marks the currently selected group active
+  // with aria-pressed and a check mark") -- re-opening the menu here too,
+  // right before the NTC-corner drag's fragile Plotly-layout measurement
+  // (`whenSettled`/`ntcCornerAt`), destabilized that measurement under load.
+  await expect(groupTrigger).toContainText(/Group 1|그룹 1/);
 
   // Moving the NTC corner is now an explicit mode. A drag used to mean BOTH
   // "select wells" and "move the nearest threshold" at once, and the threshold
