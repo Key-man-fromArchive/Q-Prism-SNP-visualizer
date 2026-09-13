@@ -1,6 +1,6 @@
 // @TASK P12-TOGGLE - Amplification curve view, extracted from WellDetailPanel
 // @SPEC docs/planning/feedback-2026-09-11/evidence/P12-PLOT-TOGGLE.md
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import Plotly from 'plotly.js-dist-min';
 import { AmplificationCurvePanel } from './AmplificationCurvePanel';
@@ -71,4 +71,58 @@ it('shows a placeholder instead of an empty plot for a single-cycle run', () => 
   expect(screen.getByText(en.curveNoMultiCycleData)).toBeVisible();
   expect(container.querySelector('#amplification-plot')).toBeNull();
   expect(getAmplification).not.toHaveBeenCalled();
+});
+
+// @TASK P20-STALE-DATA - a well switch whose request fails must not leave
+// the PREVIOUS well's curve on screen looking like it belongs to the well
+// now selected; the failure must be visible, not just console.error'd.
+// @SPEC docs/planning/feedback-2026-09-11/evidence/P20-STALE-DATA.md
+it('shows a visible error instead of the previous well\'s curve when a well switch fetch fails', async () => {
+  useSessionStore.setState({ sessionId: 's', sessionInfo: { session_id: 's', instrument: 'synthetic', allele2_dye: 'VIC', num_wells: 2, num_cycles: 2, has_rox: false, data_windows: null, suggested_cycle: 40, well_groups: null } });
+  useSelectionStore.setState({ selectedWell: 'A1', currentCycle: 40 });
+  useDataStore.setState({ allele2Dye: 'VIC' });
+  vi.mocked(getAmplification).mockResolvedValueOnce({ allele2_dye: 'VIC', curves: [{ well: 'A1', cycles: [20, 40], norm_fam: [0, 1], norm_allele2: [0, 1] }] });
+  render(<AmplificationCurvePanel active />);
+  await waitFor(() => expect(Plotly.react).toHaveBeenCalledTimes(1));
+
+  vi.mocked(getAmplification).mockRejectedValueOnce(new Error('Synthetic network failure'));
+  act(() => useSelectionStore.setState({ selectedWell: 'A2' }));
+
+  await screen.findByRole('alert');
+  expect(screen.getByRole('alert')).toHaveTextContent(en.statusLoadFailed);
+  // The A2 fetch failed -- Plotly must never have been told to draw A2's
+  // (nonexistent) data, and the A1 curve it drew earlier must be purged so
+  // it is not left on screen looking like it belongs to A2.
+  expect(Plotly.react).toHaveBeenCalledTimes(1);
+  expect(Plotly.purge).toHaveBeenCalled();
+});
+
+it('shows a visible error for a well with no curve data (not a silent no-op)', async () => {
+  useSessionStore.setState({ sessionId: 's', sessionInfo: { session_id: 's', instrument: 'synthetic', allele2_dye: 'VIC', num_wells: 1, num_cycles: 2, has_rox: false, data_windows: null, suggested_cycle: 40, well_groups: null } });
+  useSelectionStore.setState({ selectedWell: 'A1', currentCycle: 40 });
+  useDataStore.setState({ allele2Dye: 'VIC' });
+  vi.mocked(getAmplification).mockResolvedValue({ allele2_dye: 'VIC', curves: [] });
+  render(<AmplificationCurvePanel active />);
+  await screen.findByText(en.noDataForWell('A1'));
+  expect(Plotly.react).not.toHaveBeenCalled();
+});
+
+it('clears a previous well\'s curve immediately when a new well is selected, before the new fetch resolves', async () => {
+  useSessionStore.setState({ sessionId: 's', sessionInfo: { session_id: 's', instrument: 'synthetic', allele2_dye: 'VIC', num_wells: 2, num_cycles: 2, has_rox: false, data_windows: null, suggested_cycle: 40, well_groups: null } });
+  useSelectionStore.setState({ selectedWell: 'A1', currentCycle: 40 });
+  useDataStore.setState({ allele2Dye: 'VIC' });
+  vi.mocked(getAmplification).mockResolvedValueOnce({ allele2_dye: 'VIC', curves: [{ well: 'A1', cycles: [20, 40], norm_fam: [0, 1], norm_allele2: [0, 1] }] });
+  render(<AmplificationCurvePanel active />);
+  await waitFor(() => expect(Plotly.react).toHaveBeenCalledTimes(1));
+
+  let resolve!: (value: Awaited<ReturnType<typeof getAmplification>>) => void;
+  vi.mocked(getAmplification).mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+  act(() => useSelectionStore.setState({ selectedWell: 'A2' }));
+
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(en.loading));
+  expect(Plotly.react).toHaveBeenCalledTimes(1);
+  expect(Plotly.purge).toHaveBeenCalled();
+
+  await act(async () => resolve({ allele2_dye: 'VIC', curves: [{ well: 'A2', cycles: [20, 40], norm_fam: [0.2, 0.4], norm_allele2: [0.1, 0.2] }] }));
+  await waitFor(() => expect(Plotly.react).toHaveBeenCalledTimes(2));
 });

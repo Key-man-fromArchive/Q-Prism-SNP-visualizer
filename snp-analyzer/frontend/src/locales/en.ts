@@ -143,6 +143,8 @@ const en = {
   wellCycleValuesLoading: 'Loading values…',
   wellCycleValuesEmpty: 'No amplification data available.',
   wellCycleValuesExportCsv: 'Export CSV',
+  wellCycleValuesNoReading: 'No reading for this cycle',
+  wellCycleValuesCycleMismatchNotice: 'Some wells have a different number of cycles. Blank cells mean no reading, not "0".',
   wellTimeSeriesTitle: 'Full cycle series (this well)',
   batchAddTo: (name: string, msg: string) => `Add to "${name}": ${msg}`,
   batchAddResult: (added: number, count: number, name: string, leftover: number) => `Added ${added}/${count} to "${name}" (${leftover} already in project or missing)`,
@@ -676,6 +678,14 @@ const en = {
   stageAmplification: 'Amplification',
   stagePostRead: 'Post-read',
   confidence: 'Confidence',
+  // @TASK P24-DETAIL-CALL - `confidence` mixes several different kinds of
+  // number under one backend field (mixture-model posterior, manual-boundary
+  // distance score, an NTC-gap score, and two fixed sentinels: 0.0 "no
+  // signal/no basis" and 0.9 "small-region ceiling, not a fitted
+  // probability"). There is no per-well field distinguishing which kind a
+  // given value is, so this only covers the two exact sentinel constants.
+  confidenceNoBasisHint: 'No confidence value: this well had no signal to score.',
+  confidenceCeilingHint: 'Capped estimate for a very small marker region (too few wells to fit a model), not a measured probability.',
   qcWarnings: (n: number) => `${n} warning${n === 1 ? '' : 's'}`,
   flagNoisyBaseline: 'Noisy baseline',
   flagWeakAmplification: 'Weak signal',

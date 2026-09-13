@@ -7,6 +7,7 @@ import { useDataStore } from "@/stores/data-store";
 import { getAmplification } from "@/lib/api";
 import { channelLabels, normalizationLabel } from "@/lib/channel-labels";
 import { callLabel } from "@/lib/chart-semantics";
+import { useRequestStatus } from "@/hooks/use-request-status";
 import type { AmplificationCurve } from "@/types/api";
 
 type WellDetailPanelProps = { ploidyOverride?: number };
@@ -20,6 +21,12 @@ type WellDetailPanelProps = { ploidyOverride?: number };
 // for the trade-off this makes (one duplicate GET per well selection when
 // both are mounted).
 export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
+  // `ploidyOverride` is kept in the props type for MultiMarkerAnalysisPanel's
+  // existing call site (it passes the selected marker's own ploidy), but it
+  // is intentionally not read below: it only ever fed the raw-ratio genotype
+  // guess removed as part of this fix (@TASK P24-DETAIL-CALL), and nothing
+  // else in this panel is ploidy-dependent.
+  void ploidyOverride;
   const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
@@ -27,8 +34,6 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   const normalizationApplied = useDataStore((s) => s.normalizationApplied);
   const normalizationReported = useDataStore((s) => s.normalizationReported);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
-  const storedPloidy = useSettingsStore((s) => s.ploidy);
-  const ploidy = ploidyOverride ?? storedPloidy;
   const selectedWell = useSelectionStore((s) => s.selectedWell);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const scatterPoints = useDataStore((s) => s.scatterPoints);
@@ -40,7 +45,14 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   // than reading that component's response) so this table keeps working
   // wherever WellDetailPanel is mounted, including without
   // AmplificationCurvePanel alongside it. See that file's doc comment.
-  const [curve, setCurve] = useState<AmplificationCurve | null>(null);
+  //
+  // P20-STALE-DATA: `curve` carries the fetchKey it was fetched FOR
+  // alongside the data, so a stale response (or a stale leftover curve from
+  // before a failed re-fetch) can be told apart from one that matches the
+  // CURRENT well/condition -- `curve.data.well === selectedWell` alone
+  // caught a well change but not a normalization/background change on the
+  // same well.
+  const [curve, setCurve] = useState<{ data: AmplificationCurve; key: string } | null>(null);
 
   // Find point data for selected well
   const pointData = selectedWell
@@ -48,6 +60,8 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
     : null;
 
   const numCycles = sessionInfo?.num_cycles ?? 1;
+  const fetchKey = JSON.stringify([sessionId, selectedWell, useRox, backgroundMode]);
+  const { status, setStatus, error, setError } = useRequestStatus(fetchKey);
 
   // Fetch the amplification curve (for the numeric time-series table only)
   // when the selected well changes.
@@ -60,16 +74,26 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
       try {
         const res = await getAmplification(sessionId, [selectedWell], useRox, backgroundMode);
         if (cancelled) return;
-        setCurve(res.curves[0] ?? null);
+        const fetchedCurve = res.curves[0];
+        if (!fetchedCurve) { setStatus('empty'); return; }
+        setCurve({ data: fetchedCurve, key: fetchKey });
+        setStatus('ready');
       } catch (err) {
+        if (cancelled) return;
+        // P20-STALE-DATA: this used to be console-only, leaving whatever
+        // `curve` already held on screen with no indication it might now
+        // belong to a DIFFERENT normalization/background than what is
+        // selected.
         console.error("Failed to fetch amplification:", err);
+        setError(err instanceof Error ? err.message : String(err));
+        setStatus('error');
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [selectedWell, sessionId, useRox, backgroundMode, numCycles]);
+  }, [selectedWell, sessionId, useRox, backgroundMode, numCycles, fetchKey, setStatus, setError]);
 
   if (!selectedWell) {
     return (
@@ -113,22 +137,43 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   const total = normFam + normAllele2;
   const ratio = total > 0 ? (normFam / total * 100).toFixed(1) : "N/A";
 
-  // Prefer the actual (ploidy-aware) genotype call; the manual/auto assignment
-  // already encodes dosage for any ploidy. Only fall back to a raw ratio split
-  // when there is no call, and only for diploid (the 0.6/0.4 cut is biallelic).
+  // Show the actual (ploidy-aware) genotype call; the manual/auto assignment
+  // already encodes dosage for any ploidy. There is deliberately NO fallback
+  // that guesses a genotype from the raw ratio when there is no call: this
+  // panel used to slice the ratio into Allele 1 / Allele 2 / Heterozygous on
+  // its own whenever manual_type and auto_cluster were both absent, which let
+  // it show a genotype that ResultsTable and the export snapshot (neither of
+  // which does any ratio-based inference) both left uncalled for the SAME
+  // well. An uncalled well now reads '—' here too, matching that "no call"
+  // convention (see the sample/confidence cells below, which already use it).
+  // @TASK P24-DETAIL-CALL
+  // @SPEC docs/planning/feedback-2026-09-11/evidence/P22-CALL-LOGIC.md (finding 3)
   const effectiveCall = manualType ?? autoCluster ?? null;
-  let genotype = t.genotypeUndetermined;
+  let genotype = '—';
   if (effectiveCall) {
     if (effectiveCall === "Allele 1 Homo") genotype = t.genotypeAllele1;
     else if (effectiveCall === "Allele 2 Homo") genotype = t.genotypeAllele2(allele2Dye ?? "Allele2");
     else if (effectiveCall === "Heterozygous") genotype = t.genotypeHeterozygous;
     else genotype = callLabel(effectiveCall, t);
-  } else if (ploidy === 2 && total > 0) {
-    const r = normFam / total;
-    if (r > 0.6) genotype = t.genotypeAllele1;
-    else if (r < 0.4) genotype = t.genotypeAllele2(allele2Dye ?? "Allele2");
-    else genotype = t.genotypeHeterozygous;
   }
+
+  // @TASK P24-DETAIL-CALL - `confidence` conflates several different kinds of
+  // number (see the locale comment on confidenceCeilingHint/NoBasisHint), and
+  // there is no per-well field saying which kind a given value is. The two
+  // EXACT sentinel constants the backend uses (0.0 for "no basis at all",
+  // 0.9 for the small-region confidence ceiling) are distinguishable by exact
+  // value, so at minimum those stop reading like a plain measured
+  // probability. Every other value (including anything that only ROUNDS to
+  // 90%) is left as a plain percentage -- this is a known, documented
+  // limitation, not a claim that every confidence kind is told apart.
+  const confidenceDisplay =
+    confidence == null
+      ? { text: '—', hint: undefined }
+      : confidence === 0
+        ? { text: '—', hint: t.confidenceNoBasisHint }
+        : confidence === 0.9
+          ? { text: `≥${Math.round(confidence * 100)}%`, hint: t.confidenceCeilingHint }
+          : { text: `${Math.round(confidence * 100)}%`, hint: undefined };
 
   const decimals = normalizationApplied ? 4 : 1;
   const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
@@ -155,7 +200,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
             </tr>
               <tr>
                 <td className="text-text-muted pr-3 py-0.5">{t.confidence}</td>
-                <td>{confidence == null ? '—' : `${Math.round(confidence * 100)}%`}</td>
+                <td title={confidenceDisplay.hint}>{confidenceDisplay.text}</td>
               </tr>
           </tbody>
         </table>
@@ -202,44 +247,61 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
               stays inside the numeric-details disclosure with the rest of
               the detail rows, since it IS a numeric detail (the chart,
               elsewhere, is the primary visualization). */}
-          {/* curve.well === selectedWell guards against showing a stale
-              series from a previous well: `curve` is only ever replaced (not
-              reset) by the fetch effect above, since it must not call
-              setState synchronously in the effect body's early-return
-              branches (react-hooks/set-state-in-effect). */}
-          {numCycles > 1 && curve && curve.well === selectedWell && (
-            <div style={{ marginTop: "12px" }}>
-              <p className="text-xs font-semibold text-text-muted mb-1">{t.wellTimeSeriesTitle}</p>
-              <div
-                data-testid="well-timeseries-scroll-region"
-                role="region"
-                aria-label={t.wellTimeSeriesTitle}
-                tabIndex={0}
-              >
-                <table data-testid="well-timeseries-table" className="detail-table w-full text-sm">
-                  <thead>
-                    <tr>
-                      <th className="text-left text-text-muted pr-3 py-0.5">{t.axisCycle}</th>
-                      <th className="text-right text-text-muted px-2 py-0.5">{labels.fam}</th>
-                      <th className="text-right text-text-muted px-2 py-0.5">{labels.allele2}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {curve.cycles.map((cyc, i) => (
-                      <tr
-                        key={cyc}
-                        className={cyc === currentCycle ? "current-cycle-row" : undefined}
-                        data-current-cycle={cyc === currentCycle ? "true" : undefined}
-                      >
-                        <td className="pr-3 py-0.5">{cyc}</td>
-                        <td className="text-right px-2 py-0.5">{curve.norm_fam[i].toFixed(decimals)}</td>
-                        <td className="text-right px-2 py-0.5">{curve.norm_allele2[i].toFixed(decimals)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {/* P20-STALE-DATA: `curve.key === fetchKey` (well + useRox +
+              backgroundMode + sessionId) replaces the old `curve.well ===
+              selectedWell`-only check, which caught a well change but not a
+              normalization/background change on the SAME well -- a failed
+              re-fetch after either used to leave the table showing the
+              PREVIOUS condition's numbers with nothing marking them stale.
+              A fetch failure now shows a visible error instead (role=alert,
+              not console-only), and `curve` itself is never displayed
+              against a `fetchKey` it was not fetched for. */}
+          {numCycles > 1 && (
+            status === "error" ? (
+              <div style={{ marginTop: "12px" }} role="alert">
+                <p className="text-xs text-danger">
+                  {t.statusLoadFailed}
+                  {error ? `: ${error}` : ""}
+                </p>
               </div>
-            </div>
+            ) : status === "empty" ? (
+              <div style={{ marginTop: "12px" }}>
+                <p className="text-xs text-text-muted">{t.noDataForWell(selectedWell)}</p>
+              </div>
+            ) : curve && curve.key === fetchKey && (
+              <div style={{ marginTop: "12px" }}>
+                <p className="text-xs font-semibold text-text-muted mb-1">{t.wellTimeSeriesTitle}</p>
+                <div
+                  data-testid="well-timeseries-scroll-region"
+                  role="region"
+                  aria-label={t.wellTimeSeriesTitle}
+                  tabIndex={0}
+                >
+                  <table data-testid="well-timeseries-table" className="detail-table w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th className="text-left text-text-muted pr-3 py-0.5">{t.axisCycle}</th>
+                        <th className="text-right text-text-muted px-2 py-0.5">{labels.fam}</th>
+                        <th className="text-right text-text-muted px-2 py-0.5">{labels.allele2}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {curve.data.cycles.map((cyc, i) => (
+                        <tr
+                          key={cyc}
+                          className={cyc === currentCycle ? "current-cycle-row" : undefined}
+                          data-current-cycle={cyc === currentCycle ? "true" : undefined}
+                        >
+                          <td className="pr-3 py-0.5">{cyc}</td>
+                          <td className="text-right px-2 py-0.5">{curve.data.norm_fam[i].toFixed(decimals)}</td>
+                          <td className="text-right px-2 py-0.5">{curve.data.norm_allele2[i].toFixed(decimals)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
           )}
         </details>
       </div>

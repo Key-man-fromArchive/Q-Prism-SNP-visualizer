@@ -278,6 +278,13 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
   const fetchData = useCallback(() => {
     const revision = ++fetchRevision.current;
     if (!sessionId) return;
+    // Captured before the request goes out: if a cluster-assignment merge
+    // (setClusterAssignments) lands while this request is in flight, this
+    // request's own response is now stale FOR auto_cluster/confidence
+    // specifically, even though it is the freshest scatter response this
+    // component has seen (see data-store.ts's setScatterData/
+    // P20-STALE-DATA).
+    const startedAtGeneration = useDataStore.getState().dataGeneration;
     return getScatter(sessionId, currentCycle, useRox, backgroundMode).then((res) => {
       if (revision !== fetchRevision.current) return;
       settledFetchKey.current = fetchKey;
@@ -285,7 +292,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       setScatterData(res.points, res.allele2_dye, res.channel_labels, res.ratio_origin, {
         applied: res.normalization_applied,
         roxOutlierWells: res.rox_outlier_wells,
-      });
+      }, startedAtGeneration);
       setStatus("ready");
     }).catch((err: unknown) => {
       if (revision !== fetchRevision.current) return;
