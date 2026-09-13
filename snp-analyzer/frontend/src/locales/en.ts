@@ -143,6 +143,8 @@ const en = {
   wellCycleValuesLoading: 'Loading values…',
   wellCycleValuesEmpty: 'No amplification data available.',
   wellCycleValuesExportCsv: 'Export CSV',
+  wellCycleValuesNoReading: 'No reading for this cycle',
+  wellCycleValuesCycleMismatchNotice: 'Some wells have a different number of cycles. Blank cells mean no reading, not "0".',
   wellTimeSeriesTitle: 'Full cycle series (this well)',
   batchAddTo: (name: string, msg: string) => `Add to "${name}": ${msg}`,
   batchAddResult: (added: number, count: number, name: string, leftover: number) => `Added ${added}/${count} to "${name}" (${leftover} already in project or missing)`,

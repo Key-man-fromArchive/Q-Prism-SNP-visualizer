@@ -34,6 +34,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useDataStore } from "@/stores/data-store";
 import { getAllAmplification } from "@/lib/api";
 import { buildWellCycleValuesCsv, downloadTextFile } from "@/hooks/use-exports";
+import { cycleSetsDiffer, cycleValueMap, unionCycles } from "@/lib/well-cycle-alignment";
 import { channelLabels } from "@/lib/channel-labels";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { wellInfo } from "@/lib/genotype";
@@ -167,13 +168,17 @@ export function FluorescenceDataCard() {
   );
   const channelLabel = channel === "fam" ? labels.fam : labels.allele2;
   const curves = response?.curves ?? [];
-  const cycles = curves[0]?.cycles ?? [];
+  // Each curve carries its own cycles array -- wells are not guaranteed to
+  // share one (see well-cycle-alignment.ts). The column set is the UNION
+  // of every well's cycles, not just curves[0]'s, so no well's readings
+  // are ever misaligned into another well's column.
+  const cycles = unionCycles(curves);
+  const cyclesDiffer = cycleSetsDiffer(curves);
 
   const handleExport = () => {
     if (!sessionId || curves.length === 0) return;
     const csv = buildWellCycleValuesCsv({
-      curves: curves.map((c) => ({ well: c.well, values: channel === "fam" ? c.norm_fam : c.norm_allele2 })),
-      cycles,
+      curves: curves.map((c) => ({ well: c.well, cycles: c.cycles, values: channel === "fam" ? c.norm_fam : c.norm_allele2 })),
       channelLabel,
       sessionId,
       normalizationApplied: response?.normalization_applied,
@@ -286,6 +291,9 @@ export function FluorescenceDataCard() {
                 tabIndex={0}
               >
                 <p className="text-xs text-text-muted mb-2">{t.wellCycleValuesScrollHint}</p>
+                {cyclesDiffer && (
+                  <p className="text-xs text-warning mb-2">{t.wellCycleValuesCycleMismatchNotice}</p>
+                )}
                 <table data-testid="fluorescence-values-table" className="detail-table text-sm">
                   <thead>
                     <tr>
@@ -297,13 +305,24 @@ export function FluorescenceDataCard() {
                   </thead>
                   <tbody>
                     {curves.map((curve) => {
-                      const values = channel === "fam" ? curve.norm_fam : curve.norm_allele2;
+                      const values = cycleValueMap({
+                        well: curve.well,
+                        cycles: curve.cycles,
+                        values: channel === "fam" ? curve.norm_fam : curve.norm_allele2,
+                      });
                       return (
                         <tr key={curve.well}>
                           <td className="font-medium pr-3 py-0.5">{curve.well}</td>
-                          {values.map((value, i) => (
-                            <td key={cycles[i]} className="text-right px-2 py-0.5">{value.toFixed(3)}</td>
-                          ))}
+                          {cycles.map((cycle) => {
+                            const value = values.get(cycle);
+                            return (
+                              <td key={cycle} className="text-right px-2 py-0.5">
+                                {value === undefined
+                                  ? <span title={t.wellCycleValuesNoReading} aria-label={t.wellCycleValuesNoReading}>&#8212;</span>
+                                  : value.toFixed(3)}
+                              </td>
+                            );
+                          })}
                         </tr>
                       );
                     })}

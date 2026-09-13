@@ -140,6 +140,8 @@ const ko: Translations = {
   wellCycleValuesLoading: '값을 불러오는 중...',
   wellCycleValuesEmpty: '증폭 데이터가 없습니다.',
   wellCycleValuesExportCsv: 'CSV 내보내기',
+  wellCycleValuesNoReading: '이 사이클에 대한 판독값 없음',
+  wellCycleValuesCycleMismatchNotice: '일부 웰은 사이클 수가 다릅니다. 값이 없는 칸은 "0"이 아니라 판독값 없음을 뜻합니다.',
   wellTimeSeriesTitle: '전체 사이클 시계열 (이 웰)',
   batchAddTo: (name: string, msg: string) => `"${name}"에 추가: ${msg}`,
   batchAddResult: (added: number, count: number, name: string, leftover: number) => `"${name}"에 ${added}/${count} 추가 (${leftover}개는 이미 있거나 없음)`,
