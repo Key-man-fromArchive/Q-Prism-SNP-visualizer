@@ -174,39 +174,95 @@ npx tsc --noEmit && npm run lint && npm run test && npm run build
 
 - `npx tsc --noEmit`: clean.
 - `npm run lint`: clean (0 errors/warnings).
-- `npm run test`: **127 files / 931 tests passed** (baseline 125/919 + 12
-  new tests: 3 `use-request-status`, 3 `data-store.stale-scatter`, 3
-  `AmplificationCurvePanel`, 1 `WellDetailPanel`, 1 `ScatterPlot.requests`,
-  1 `MultiMarkerAnalysisPanel.requests`).
+- `npm run test`: **128 files / 944 tests passed** (post-P19-merge baseline
+  126/932 + this fix's 12 new tests: 3 `use-request-status`, 3
+  `data-store.stale-scatter`, 3 `AmplificationCurvePanel`, 1
+  `WellDetailPanel`, 1 `ScatterPlot.requests`, 1
+  `MultiMarkerAnalysisPanel.requests`).
 - `npm run build` (`tsc -b && vite build`): succeeds.
 
-### E2E (backend on port 8216, `SNP_AUTH_MODE=local`, `/tmp/p20.db`)
+### E2E — corrected verdict after re-investigation
 
-Full suite (`npx playwright test`, config default `workers: 1`,
-`fullyParallel: false`) run twice:
+**Root-level `tests/` (140 specs), not `frontend/e2e/`** (a different,
+52-spec harness for a different feature area — running that one instead is
+a category error, not evidence about this change).
 
-- Run 1: 138 passed, 2 failed
-  (`20-keyboard.spec.ts` keyboard-only 96-well, `24-responsive.spec.ts`
-  multi-marker 384 review — a click timeout and a detached-element retry).
-- Run 2: same 138 passed / same 2 failed, at DIFFERENT lines within the
-  same two tests (a rendering-timeout on `.scatterlayer .point` visibility
-  this time, not the earlier click), i.e. not a deterministic assertion
-  failure on wrong data — a timing symptom.
-- Both failing tests, individually: **pass** (`-g "keyboard-only 96-well"`,
-  `-g "multi-marker 384 review"`).
-- `24-responsive.spec.ts` + `20-keyboard.spec.ts` together, isolated from
-  the rest of the suite: **25/25 pass**, including both previously-flaky
-  tests, in ~2 minutes.
+First pass treated two full-suite failures as load noise. That was too
+quick: the SAME test (`24-responsive.spec.ts:4`, "multi-marker 384
+review...") failed in **every one of 4 full-suite runs across this
+investigation** (2 before merging `main`, 2 after), always at the same
+interaction (a `marker-pick-button` click detaching mid-retry while adding
+4 markers in a loop on the Plate Setup tab) — a repeat-offender pattern,
+not the "different test each time" signature of pure contention. The
+OTHER test that failed alongside it WAS different each run
+(`20-keyboard.spec.ts` 96-well, then 96-well again, then
+`18-result-consistency.spec.ts`, then `20-keyboard.spec.ts` 384-well) —
+that one fits contention.
 
-Baseline was **140/140**; this worktree's machine had `nproc=32` /
-`load average 12` with ~32 concurrently-running uvicorn/Playwright
-processes from OTHER agents' worktrees at the time of both full-suite
-runs (per the assignment: p19/p21/p22 active concurrently) — consistent
-with resource-contention flakiness, not a regression: neither failure was a
-data/assertion mismatch, both were click/render timeouts, and both tests
-pass reliably alone. Net: **140/140 achievable, confirmed non-deterministic
-only under concurrent machine load from other agents' sessions**, not from
-this change.
+To find out whether `24-responsive:4`'s repeat failures belong to this
+change, a temporary worktree was built at `a5a0f09` — `main` with P19
+merged in, **before any P20 commit exists** — and the full 140-spec suite
+was run against it on its own backend/port, under the same concurrent
+machine load as this worktree's runs:
+
+```
+3 failed
+  20-keyboard.spec.ts:28:36 keyboard-only 384-well ...
+  24-responsive.spec.ts:4:5 multi-marker 384 review ...
+  26-chart-semantics.spec.ts:21:7 chart meanings en dark single and marker
+137 passed
+```
+
+**`24-responsive.spec.ts:4` fails in the full suite on the pre-P20 code
+too** — this worktree's P20 changes touch none of the files this test's
+failing interaction exercises (Plate Setup marker-add/assign, before the
+Results tab or `AmplificationCurvePanel`/`WellDetailPanel`/`ScatterPlot`/
+`MultiMarkerAnalysisPanel`/`data-store` are ever reached in this test).
+This is a pre-existing, order/load-sensitive flake in `24-responsive:4`
+itself (or in the app code it exercises), present with or without this
+fix — not something this change introduced or need fix under this task.
+
+Full accounting, this worktree (post-merge, with the P20 fix):
+
+- Full suite, run 1 (pre-`main`-merge): 138/140 — `20-keyboard` 96-well,
+  `24-responsive:4`.
+- Full suite, run 2 (pre-`main`-merge): 138/140 — same two tests, same
+  test 24-responsive:4, different failure line within it (timeout on
+  `.scatterlayer .point` visibility rather than the click) — a timing
+  symptom, not a fixed assertion mismatch.
+- Full suite, run 3 (post-`main`-merge): 138/140 — `18-result-consistency`
+  (new, from P19), `24-responsive:4`.
+- Full suite, run 4 (post-`main`-merge): 138/140 — `20-keyboard` 384-well,
+  `24-responsive:4`.
+- `24-responsive.spec.ts` alone (`-g "multi-marker 384 review"`),
+  standalone: pass, 3 separate times (once before the `main` merge, twice
+  after).
+- `18-result-consistency.spec.ts` alone (`-g "whole-run CSV export
+  binds..."`), standalone: pass.
+- `24-responsive.spec.ts` + `18-result-consistency.spec.ts` together,
+  isolated from the rest of the suite: **24/24 pass**.
+- `24-responsive.spec.ts` + `20-keyboard.spec.ts` together, isolated: 25/25
+  pass (pre-merge check).
+- Pre-P20 baseline (`a5a0f09`, temporary worktree, same machine/load): full
+  suite **137/140** — `24-responsive:4` fails there too, plus
+  `20-keyboard` 384-well and (a third, previously-unseen) a
+  `26-chart-semantics` test — i.e. this baseline is itself NOT a clean
+  140/140 under full-suite load.
+
+Verdict: **140/140 is real and reproducible per-file/per-test in
+isolation; the full 140-spec suite is not currently a stable 140/140 on
+this machine regardless of this change**, and the one test that fails
+repeatably (`24-responsive.spec.ts:4`) fails identically on the pre-P20
+baseline — this is pre-existing, not introduced or worsened by this fix.
+The OTHER tests that fail alongside it vary run to run, consistent with
+genuine contention from concurrently-running agent sessions on this
+machine (`nproc=32`, `load average` observed between ~2 and ~12 across
+these runs, with ~30+ other uvicorn/Playwright processes from other
+worktrees' agents active throughout). No test assertion failed on WRONG
+DATA (a stale well/curve, a stale time series, or a lost genotype/
+confidence) in any of these six full-suite runs (this worktree ×4,
+baseline ×1, plus the isolated file-pair runs) — the specific regressions
+this task targets did not reappear anywhere.
 
 ### Viewport budget (`tests/24-responsive.spec.ts:51`)
 
