@@ -212,6 +212,19 @@ def _run_migrations(conn: sqlite3.Connection):
         ):
             conn.execute(index_sql)
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (8)")
+
+    if current < 9:
+        # Migration 9 (P22 C5): record which clustering algorithm revision
+        # produced a stored result (see
+        # app.processing.clustering.CLUSTERING_ALGORITHM_VERSION), so a later
+        # reproducibility question -- "was this row computed before or after
+        # fix X?" -- can be answered by reading the row instead of
+        # re-deriving it. Nullable, no back-fill: existing rows predate the
+        # concept and there is no knowable version to assign them.
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(clustering_results)").fetchall()]
+        if "algorithm_version" not in cols:
+            conn.execute("ALTER TABLE clustering_results ADD COLUMN algorithm_version TEXT")
+        conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (9)")
     conn.commit()
 
 
@@ -302,12 +315,13 @@ def save_clustering(session_id: str, result: ClusteringResult) -> None:
         session_id, json.dumps(result.assignments), result.algorithm, result.cycle,
         json.dumps(result.confidences) if result.confidences is not None else None,
         result.model_dump_json(),
+        result.algorithm_version,
     )
     try:
         conn.execute(
             "INSERT OR REPLACE INTO clustering_results "
-            "(session_id, labels_json, method, cycle, confidences_json, result_json) "
-            "VALUES (?, ?, ?, ?, ?, ?)", values,
+            "(session_id, labels_json, method, cycle, confidences_json, result_json, algorithm_version) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)", values,
         )
         conn.commit()
     except Exception:
@@ -732,10 +746,12 @@ def load_all_sessions():
                 # have; polyploid fields fall back to defaults (unavoidable for
                 # pre-fix data).
                 conf_json = cr["confidences_json"] if "confidences_json" in cr.keys() else None
+                algorithm_version = cr["algorithm_version"] if "algorithm_version" in cr.keys() else None
                 clustering = ClusteringResult(
                     algorithm=cr["method"], cycle=cr["cycle"],
                     assignments=json.loads(cr["labels_json"]),
                     confidences=json.loads(conf_json) if conf_json else None,
+                    algorithm_version=algorithm_version,
                 )
 
         # Load manual welltypes

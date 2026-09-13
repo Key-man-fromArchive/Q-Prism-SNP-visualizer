@@ -48,6 +48,11 @@ CREATE TABLE IF NOT EXISTS clustering_results (
     cycle INTEGER NOT NULL,
     confidences_json TEXT,
     result_json TEXT,
+    -- P22 (C5): which cluster_auto/cluster_threshold revision produced this
+    -- row (see app.processing.clustering.CLUSTERING_ALGORITHM_VERSION).
+    -- NULL for rows written before this column existed -- there is no
+    -- knowable version to back-fill.
+    algorithm_version TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 );

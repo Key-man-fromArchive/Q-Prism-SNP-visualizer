@@ -24,6 +24,7 @@ from app.models import (
     WellType,
 )
 from app.processing.clustering import (
+    CLUSTERING_ALGORITHM_VERSION,
     boundary_confidences,
     cluster_auto,
     cluster_kmeans,
@@ -371,6 +372,7 @@ def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringR
         confidences=merged_conf or None,
         ploidy=getattr(unified, "ploidy", 2),
         regions=region_results,
+        algorithm_version=CLUSTERING_ALGORITHM_VERSION,
     )
 
 
@@ -451,7 +453,8 @@ def _single_result(snapshot: CalculationSnapshot, points, controls) -> Clusterin
         points, controls, req.algorithm, req.threshold_config, req.n_clusters, ploidy)
     return ClusteringResult(
         algorithm=req.algorithm.value, cycle=snapshot.cycle, assignments=assignments,
-        confidences=confidences or None, ploidy=ploidy, warnings=warnings, **window)
+        confidences=confidences or None, ploidy=ploidy, warnings=warnings,
+        algorithm_version=CLUSTERING_ALGORITHM_VERSION, **window)
 
 
 def _actual_algorithm(requested: ClusteringAlgorithm, config: ThresholdConfig, *, region: bool) -> ClusteringAlgorithm:
