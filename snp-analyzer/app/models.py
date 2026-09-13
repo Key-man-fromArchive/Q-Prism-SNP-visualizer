@@ -348,15 +348,23 @@ WarningSeverity = Literal["blocking", "advisory"]
 #     dosage 0 and dosage `ploidy` sit on the ratio axis -- i.e. the origin
 #     genotype calls are measured against -- so a discarded anchor scale is
 #     "blocking".
+#   "no_signal" (P22 C5, clustering.py) -- every well in this call (a whole
+#     marker region, or the whole plate with no regions) had total <= 0
+#     signal, so the relative-NTC detector's own reference (median_total)
+#     collapsed to 0 and could never flag anything; the wells are called
+#     Undetermined instead of falling through to a real genotype. This is
+#     the plainest possible "the reported label is not what a naive read
+#     would have given" case, so "blocking".
 #
-# All three known codes are "blocking" as of this task. No warning is
-# demoted here -- demoting any of these would be a QC policy decision for the
+# All known codes are "blocking" as of this task. No warning is demoted
+# here -- demoting any of these would be a QC policy decision for the
 # product owner to make explicitly, not something to infer from this
 # refactor.
 WARNING_SEVERITY: dict[str, WarningSeverity] = {
     "relative_ntc": "blocking",
     "low_n": "blocking",
     "anchor_conflict": "blocking",
+    "no_signal": "blocking",
 }
 # An unrecognised diagnostic code (e.g. one added by a future change without
 # updating this map) defaults to "blocking": showing an unfamiliar diagnostic
@@ -515,6 +523,16 @@ class ClusteringResult(BaseModel):
     @property
     def warning_details(self) -> list[WarningDetail] | None:
         return _graded_warnings(self.warnings)
+
+    # P22 (C5): which cluster_auto/cluster_threshold/boundary_confidences
+    # revision produced this result -- see
+    # app.processing.clustering.CLUSTERING_ALGORITHM_VERSION for the format
+    # and the bump rule. None for any result computed before this field
+    # existed (legacy persisted rows, or a caller that builds a
+    # ClusteringResult directly without going through the router) -- additive
+    # and backward-compatible, so existing consumers that don't read it are
+    # unaffected.
+    algorithm_version: str | None = None
 
 
 class ManualWellTypeUpdate(BaseModel):

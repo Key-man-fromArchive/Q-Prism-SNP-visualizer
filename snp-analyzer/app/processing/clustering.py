@@ -88,6 +88,54 @@ _NTC_MAX_PLATE_FRACTION = 0.15
 # fraction test is skipped and the gap alone decides.
 _NTC_MIN_WELLS_FOR_FRACTION = 24
 
+# P22 (C5): the relative-NTC detector above (_NTC_SIGNAL_FRAC) judges each well
+# against ``median_total`` -- the median total signal of every OTHER well in
+# THIS SAME cluster_auto call (a whole marker region, when regions are used --
+# see app.routers.clustering._run_regions -- or the whole plate otherwise;
+# ``median_total`` is computed only from wells with total > 0). When every
+# well handed to this call has total <= 0 (region-wide or plate-wide
+# amplification failure, or every reading sits at/under the plate's own
+# background floor after app.processing.ratio_origin.shift_to_origin clamps
+# it there), that median collapses to 0.0 and the detector is neutralized:
+# ``total < 0.2 * 0`` can never be true, so every well fell through to a real
+# genotype call built on the ``ratio = 0.5`` placeholder used for total <= 0
+# (see the ``ratio = np.where(...)`` line below) -- a no-call reported as a
+# confident Heterozygous (see docs/planning/feedback-2026-09-11/evidence/
+# P22-CALL-LOGIC.md for the investigation this fixes).
+#
+# The product owner asked for this to be anchored to whatever the app already
+# treats as an NTC/no-signal reference, rather than a new invented constant.
+# That anchor turns out to need no new number at all: every value reaching
+# this function is already clamped to >= 0 (individually, before the sum) by
+# shift_to_origin, and no NTC/control designation this module recognises
+# (manual quadrant, or an operator-typed NTC/allele-control well) can ever
+# read a NEGATIVE total either -- so once EVERY well in scope is at or below
+# the universal floor of 0, there is no non-degenerate reference level left to
+# compare against, and no anchor could ever conclude anything OTHER than
+# "no signal here": the floor itself already IS the strictest possible
+# no-signal reference. This is therefore a structural fix (see the
+# ``median_total == 0.0`` branch in cluster_auto), not a new magic-number
+# threshold -- it fires only in the fully-degenerate case the relative
+# detector was never designed to judge, and never touches the case where
+# SOME wells in scope still have positive signal (that case keeps using the
+# existing, separately-tested relative/absolute NTC policy unchanged -- see
+# tests/test_c4_relative_ntc.py).
+_NO_SIGNAL_WARNING = "no_signal"
+
+# Bump whenever a change to cluster_auto / cluster_threshold /
+# boundary_confidences could change the assignment or confidence already
+# returned for some previously-supported input (NOT for a provably
+# output-identical refactor, and not for a change that only adds a new
+# warning code without touching any assignment/confidence). Stored alongside
+# every persisted ClusteringResult (see app.db.save_clustering) so a later
+# question -- "was this stored call made before or after fix X?" -- can be
+# answered by reading the row instead of re-deriving it. Follows this
+# module's own informal "C<n>" fix numbering used throughout its comments and
+# tests (C1 allele-control anchors, C2 narrow-marker cluster merge, C3
+# small-region confidence cap, C4 relative-NTC no-call, C5 this fix); the
+# NEXT behavior-changing fix should bump this to "c6".
+CLUSTERING_ALGORITHM_VERSION = "c5"
+
 
 def _manual_ntc_mask(points: list[dict], fam_max: float, allele2_max: float):
     """Return the explicit lower-left quadrant mask in plotted coordinates.
@@ -249,8 +297,8 @@ def cluster_auto(
     detector. ``ntc_threshold`` remains accepted for API compatibility.
 
     ``warnings``, if given a list, is appended to IN PLACE with non-fatal
-    diagnostic codes ("low_n", "relative_ntc", "anchor_conflict" -- see the
-    constants above); the return contract is always the ``(assignments,
+    diagnostic codes ("low_n", "relative_ntc", "anchor_conflict", "no_signal"
+    -- see the constants above); the return contract is always the ``(assignments,
     confidences)`` 2-tuple regardless of whether ``warnings`` is passed, so
     existing callers are unaffected.
 
@@ -332,6 +380,30 @@ def cluster_auto(
     positive = total[total > 0]
     median_total = float(np.median(positive)) if positive.size else 0.0
     manual_ntc = ntc_fam_max is not None and ntc_allele2_max is not None
+
+    # P22 (C5): median_total == 0.0 means NO well in this call has any positive
+    # signal in either channel -- the relative detector below would divide by
+    # (i.e. compare against) zero and can never flag anything. Without this,
+    # every well here fell through into a real genotype call using the
+    # ratio == 0.5 placeholder (see ``ratio = np.where(...)`` above) instead
+    # of being recognised as having no signal to call a ratio FROM at all. See
+    # the constant's own comment (above, near _NO_SIGNAL_WARNING) for why this
+    # needs no new threshold: with every total already clamped to >= 0, a
+    # fully-degenerate (all <= 0) scope has no non-trivial reference left to
+    # anchor against, so it is unconditionally a no-call. This does NOT apply
+    # when a manual NTC quadrant is configured (that boundary already handles
+    # a (0, 0) well correctly on its own), and it does not change anything
+    # when at least one well in scope still has positive signal -- that case
+    # keeps using the existing, separately-tested relative/absolute NTC path
+    # below unchanged.
+    if not manual_ntc and median_total == 0.0:
+        if warnings is not None:
+            warnings.append(_NO_SIGNAL_WARNING)
+        for w in wells:
+            assignments[w] = WellType.UNDETERMINED.value
+            confidences[w] = 0.0
+        return assignments, confidences
+
     if manual_ntc:
         ntc_mask = _manual_ntc_mask(work, ntc_fam_max, ntc_allele2_max)
     else:

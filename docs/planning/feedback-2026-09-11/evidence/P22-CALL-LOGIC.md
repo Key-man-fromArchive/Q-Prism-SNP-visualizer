@@ -1,11 +1,14 @@
 # P22 — 판정 로직 조사: 무신호 웰 no-call, 정규화 척도 불일치, 화면 간 판정 불일치
 
 Contract: feedback/p22, branch `feedback/p22` (main `008eb7b`에서 분기).
-이 문서는 조사 결과이며, `app/processing/`·`app/routers/`의 계산 코드는 변경하지 않았다.
-특성화 테스트만 `snp-analyzer/tests/test_p22_no_signal_characterization.py`에 추가했다 (기존 테스트 단언은 수정하지 않음).
 
-백엔드 기준선 재확인: `pytest -q` → **819 passed, 2 subtests passed** (기존 명시 기준선과 일치, venv:
-`/mnt/docker/Q-Prism-SNP-visualizer/worktree/feedback-p0/snp-analyzer/venv/bin/python`).
+이 문서는 두 단계로 이루어진다: 아래 "조사" 절은 최초 조사 결과이며 당시 계산 코드는 변경하지
+않았다. 맨 아래 "구현" 절은 제품 소유자 승인 후 **발견 1(무신호 → no-call)과 알고리즘 버전
+필드만** 구현한 기록이다. 발견 2·3은 다른 에이전트(`worktree/feedback-p19`/`p20`/`p21`)가 같은
+파일을 건드리고 있어 이번 구현 범위에서 제외했다 — 아래 "구현" 절 참고.
+
+백엔드 기준선 재확인 (조사 시점): `pytest -q` → **819 passed, 2 subtests passed** (기존 명시
+기준선과 일치, venv: `/mnt/docker/Q-Prism-SNP-visualizer/worktree/feedback-p0/snp-analyzer/venv/bin/python`).
 
 ---
 
@@ -323,3 +326,152 @@ Maestro, TaqMan Genotyper 등 상용 계기 소프트웨어)는 일반적으로 
 - 발견 2에서 제안한 "웰별 `normalized` 플래그"가 프론트 전반(차트 축 라벨, 범례 등)에 미치는
   파급 범위는 프론트 코드 전체를 조사하지 않았으므로 완전하지 않다 (이번 조사는 프론트 수정이
   금지돼 있어 읽기 확인만 함).
+
+---
+
+## 구현 (제품 소유자 승인 후, 발견 1 + 버전 필드만)
+
+범위: `cluster_auto`의 무신호-웰 no-call 수정, `ClusteringResult.algorithm_version` +
+`clustering_results.algorithm_version` DB 컬럼 추가. **발견 2·3은 이번 구현에서 제외**
+(다른 에이전트가 `data-store.ts`, `WellDetailPanel.tsx`, `FluorescenceDataCard.tsx` 등을 동시에
+수정 중이라 파일 충돌 위험). 프론트 코드는 이번 구현에서 손대지 않았다.
+
+### 무신호 기준을 NTC 지정 값에서 어떻게 유도했는가
+
+제품 소유자 지시: "NTC로 지정된 값들이 있습니다. 그와 비슷하게 임계값을 맞추면되죠" — 즉 임의의
+새 절대 상수를 만들지 말고 기존 NTC 취급 기준에 앵커하라는 것.
+
+실제로 구현에 들어가 보니 **새 임계값 자체가 필요 없다는 결론**에 도달했다:
+
+- `cluster_auto`가 판정하는 `total = norm_fam + norm_allele2`는 라우터 경로를 거치면
+  `shift_to_origin`(`app/processing/ratio_origin.py:145`)이 각 채널을 개별적으로
+  `max(value - origin, 0.0)`으로 clamp하기 때문에 **항상 0 이상**이다. 즉 이 코드베이스가
+  인식하는 어떤 NTC 지정 수단(수동 NTC 사각 구역, 웰 타입 NTC, allele 컨트롤 앵커)도 **음수
+  기준값을 만들어낼 수 없다.**
+- 상대-NTC 감지기의 기준값인 `median_total`이 정확히 `0.0`이 되는 경우는 (음수가 나올 수 없는
+  구조상) **그 호출에 들어온 웰 전부가 `total <= 0`일 때뿐**이다 — 즉 스코프 전체가 이미
+  "무신호"의 가장 엄격한 정의(원점 이동 후 두 채널 모두 0)를 만족하는 축퇴 상황이다.
+- 이런 축퇴 상황에서는 어떤 NTC 앵커 값을 골라도(웰 타입 NTC의 신호 수준이든, 수동 사각
+  구역의 경계든) 그 앵커가 음수일 수 없으므로, "그 앵커보다 낮은가"라는 질문의 답은 이미
+  자명하게 "그렇다"이다 — 판정이 앵커의 구체적 수치에 의존하지 않는다.
+
+그래서 구현은 새 임계 상수를 도입하지 않고, **구조적 규칙**으로 처리했다: `manual_ntc`(수동
+NTC 사각 구역)가 설정되지 않은 상태에서 `median_total == 0.0`이면(=그 호출의 모든 웰이
+`total <= 0`), 상대-NTC 감지기·small-region 폴백·혼합모형 분기 전부를 건너뛰고 **그 호출의 모든
+(비-컨트롤) 웰을 즉시 `Undetermined`로, 신규 경고 `"no_signal"`과 함께** 반환한다
+(`app/processing/clustering.py`의 `cluster_auto`, `median_total == 0.0` 분기 — 주석에 전체
+근거를 기록해 두었다).
+
+### `median_total == 0`일 때의 규칙 (요약)
+
+```
+if not manual_ntc and median_total == 0.0:
+    모든 웰 -> Undetermined, confidence=0.0, warnings += ["no_signal"]
+    (small-n 폴백/혼합모형 분기로는 아예 진입하지 않음)
+```
+
+- **수동 NTC 사각 구역이 설정된 경우 이 규칙은 적용되지 않는다** — 사각 구역은 `(0,0)`을 이미
+  올바르게 처리하므로 (경계값이 0 이상이면 `(0,0)`은 항상 사각 구역 안에 든다) 건드릴 필요가
+  없고, 실제로 손대지 않았다.
+- **스코프 안에 `total>0`인 웰이 하나라도 있으면**(즉 `median_total>0`) 이 규칙은 전혀
+  발동하지 않고, 기존의 상대-NTC/절대-격차 정책(C4)이 그대로 적용된다 — "명확한 격차의
+  근-제로 웰은 NTC로 유지"하는 기존 테스트 고정 동작이 회귀 없이 유지됨을 확인했다
+  (`tests/test_c4_relative_ntc.py`, 아래 검증 참고).
+
+### 왜 "low_n"과 별개의 새 경고인가
+
+`low_n`은 "표본이 적어 통계적 근거가 약하다"는 의미이고, 이 축퇴 상황은 "표본 개수와 무관하게
+신호 자체가 전혀 없다"는 의미이므로 의미가 다르다. 새 경고 `"no_signal"`을
+`WARNING_SEVERITY`(`app/models.py`)에 `"blocking"`으로 등록했다(다른 세 코드와 동일한 등급 —
+판정 신뢰성에 영향을 주므로 화면에서 아래로 내려서는 안 됨).
+
+### 알고리즘 버전 필드
+
+- 형식: 이 모듈이 기존에 코멘트/테스트에서 써 온 비공식 "C\<n\>" 수정 번호 체계를 그대로
+  이어받아 `"c5"`. 상수 `CLUSTERING_ALGORITHM_VERSION`(`app/processing/clustering.py`)에
+  정의하고, 그 옆 주석에 **"다음 수정은 c6"**이라고 명시해 두었다.
+- **올리는 규칙**: `cluster_auto`/`cluster_threshold`/`boundary_confidences`를 바꿔서 **이미
+  지원되던 어떤 입력에 대해서든 assignment 또는 confidence가 달라질 수 있는 변경**일 때만
+  올린다. assignment/confidence를 건드리지 않는, 결과가 동일함이 증명되는 리팩터링이나
+  경고 코드만 추가하는 변경은 올리지 않는다. (규칙 자체를 상수 주석에 그대로 적어 두었다 —
+  "규칙이 없으면 다음 사람이 안 올린다"는 지시를 반영.)
+- `ClusteringResult.algorithm_version: str | None = None`(`app/models.py`)을 추가하고,
+  `_run_regions`/`_single_result`(`app/routers/clustering.py`) 양쪽 `ClusteringResult(...)`
+  생성 지점에서 `algorithm_version=CLUSTERING_ALGORITHM_VERSION`을 채운다.
+- `clustering_results` 테이블에 `algorithm_version TEXT`(nullable) 컬럼을 추가했다:
+  - `app/db_schema.sql`의 `CREATE TABLE IF NOT EXISTS clustering_results` 자체에 컬럼을
+    추가 (신규 DB는 처음부터 이 컬럼을 가짐).
+  - `app/db.py`에 **마이그레이션 9**를 추가: 기존 DB에는 `ALTER TABLE ... ADD COLUMN
+    algorithm_version TEXT`로 nullable 추가, 기존 행은 백필하지 않음(값 `NULL`).
+  - `save_clustering`이 `result.algorithm_version`을 새 컬럼과 `result_json`(전체
+    `ClusteringResult` JSON) 양쪽에 함께 저장하도록 갱신.
+  - 레거시 행(마이그레이션 3 이전, `result_json` 없음) 로드 경로도 `algorithm_version` 컬럼을
+    읽어 재구성하도록 갱신 — 컬럼이 없던 아주 오래된 행은 자연스럽게 `None`.
+- **화면 노출은 이번 범위에 넣지 않았다** — 백엔드 기록만으로 추적 목적은 충족되고, 화면
+  노출은 발견 2·3과 마찬가지로 프론트 변경이 필요해 이번 파일-충돌 회피 범위와 맞지 않는다고
+  판단했다. 필요하면 나중에 "이 판정은 이전 알고리즘(`c4` 이하)으로 계산됨" 수준의 사실 표시만
+  추가하는 별도 작업으로 처리하는 편을 권한다.
+
+### 마이그레이션 검증 (운영 DB 미사용, 임시 사본)
+
+`/tmp`의 임시 SQLite 파일에 **마이그레이션 9 적용 전 상태**(스키마 버전 8, `clustering_results`에
+`algorithm_version` 컬럼 없음, 기존 결과 행 1개 포함)를 손으로 만든 뒤 `app.db.init_db()`를
+그 위에서 실행해 확인했다(운영 DB `/app/data/snp_analyzer.db`는 전혀 열지 않았다):
+
+- 마이그레이션 후 `clustering_results`에 `algorithm_version` 컬럼이 생겼고, **기존 행은
+  손실 없이 그대로 남았으며 그 행의 `algorithm_version`은 `NULL`**.
+- `schema_version` 최댓값이 9로 올라감.
+- 그 기존 행을 레거시 재구성 경로로 읽으면 `ClusteringResult.algorithm_version is None`.
+- 새 결과를 `save_clustering`으로 저장하면 컬럼과 `result_json` 양쪽에 `"c5"`가 정확히
+  왕복 저장됨.
+
+### 회귀 방지 테스트가 지키는 것
+
+`snp-analyzer/tests/test_p22_no_signal_characterization.py`에 특성화 테스트로 추가해 두었던
+3개 중 2개는 **수정 후 기대값으로 갱신**했고(각 테스트 docstring에 수정 전/후 값을 모두
+기록), 1개(대조군: 무신호 웰 + 실신호 웰 혼재 → 기존대로 NTC)는 **변경 없이 그대로 통과**함을
+재확인해 회귀가 없음을 증명한다. 추가로 원점 이동 전/후 (0,0)의 동등 취급을 직접 증명하는
+테스트 1개(`test_origin_shifted_zero_and_originally_zero_are_treated_identically`)를 새로
+추가했다 — `cluster_auto`는 원점 이동 후 값만 보므로 두 경우를 구조적으로 구분하지 않으며,
+그것이 이번에 채택한 무신호 정의(원점 이동 후 `(0,0)`)와 일치함을 실행으로 보였다.
+
+또한 기존 `tests/test_c3_small_region.py`(양의 신호 입력만 다룸)와
+`tests/test_c4_relative_ntc.py`(근-제로지만 명확한 격차의 웰은 NTC로 유지하는 기존 정책)는
+**단언을 전혀 바꾸지 않고** 그대로 통과함을 확인했다 — 이번 수정이 두 기존 정책과 충돌하지
+않음을 보여준다.
+
+### RED/GREEN 증거
+
+수정 전(RED, 기존 버그 상태): 특성화 테스트 최초 버전이 다음을 통과시켰다(버그 재현) —
+3웰 전부 `(0,0)` → `Heterozygous` conf 0.9 + `low_n`; 6웰 전부 `(0,0)` → `Heterozygous` conf
+**1.0**, 경고 없음.
+
+수정 후(GREEN): 같은 두 입력이 `Undetermined` conf 0.0 + `warnings == ["no_signal"]`로 바뀌고,
+대조군(무신호+실신호 혼재)과 원점-이동-동등성 테스트, 그리고 `test_c3_small_region.py`/
+`test_c4_relative_ntc.py`의 기존 단언은 전부 그대로 통과함을 확인했다.
+
+### 검증 결과
+
+- `pytest -q` (전체): **823 passed, 2 subtests passed** (기존 819 + 신규 특성화 테스트 4개;
+  기존 단언 변경 없음, 회귀 없음).
+- `ruff check`: 변경한 5개 `.py` 파일(`app/processing/clustering.py`, `app/models.py`,
+  `app/routers/clustering.py`, `app/db.py`, `tests/test_p22_no_signal_characterization.py`)
+  전부 통과.
+- `ruff format --check`: 이번 구현에서 새로 만든 파일은 없음(특성화 테스트 파일은 조사
+  단계에서 이미 생성돼 있었음) — 다만 해당 파일에 `ruff format`을 적용해 스타일을
+  맞춰 두었다.
+- 마이그레이션: 위 "마이그레이션 검증" 절 참고 — 임시 사본에서 기존 행 보존 확인, 운영 DB
+  미접근.
+- `mypy`: 변경 파일에서 **새로 도입된** 타입 오류 없음(기존에도 있던, 이번 변경과 무관한
+  오류들이 같은 파일들에 다수 존재하는 것은 별개 사전 존재 이슈로 확인 — 예:
+  `_manual_ntc_mask` 호출부의 `float | None` 관련 경고는 내가 추가한 코드보다 앞줄에서부터
+  이미 있던 것).
+- 프론트: 변경 없음(`git status`로 확인) — 4종 게이트는 실행하지 않았다.
+- E2E: **실행하지 않았다.** 이유를 명시한다 — (1) 이번 변경은 백엔드 전용이고 UI 코드는
+  전혀 건드리지 않았다, (2) `frontend/e2e/` 픽스처를 검색한 결과 완전-무신호(전 채널 0)
+  마커 리전을 사용하는 스펙을 찾지 못했다 — 즉 이번 수정이 발동하는 축퇴 조건과 겹치는
+  기존 E2E 시나리오가 보이지 않는다, (3) E2E 실행에는 백엔드+프런트 개발 서버를 새로 띄워야
+  하고(`playwright.config.ts` 기본 백엔드 타깃이 포트 **8002** — 반드시 8218로 덮어써야 함),
+  동시에 다른 에이전트들이 8215-8217을 쓰고 있어 리소스/포트 충돌 위험이 있었다. 이 판단이
+  틀렸다고 보시면 8218로 백엔드를 띄우고 `VITE_DEV_API_TARGET=http://localhost:8218`로
+  재실행하겠다.
