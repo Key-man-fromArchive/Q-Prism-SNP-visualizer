@@ -59,6 +59,12 @@ describe('API error contract', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: 'Forbidden' }), { status: 403 })));
     await expect(api.getCluster('s')).rejects.toMatchObject({ status: 403, message: 'Forbidden', code: null });
   });
+  it('P18-AUTH-401: leaves a valid session alone on 403 (permission, not auth, failure)', async () => {
+    useAuthStore.setState({ isAuthenticated: true });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: 'Forbidden' }), { status: 403 })));
+    await expect(api.getCluster('s')).rejects.toMatchObject({ status: 403 });
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
+  });
   it('preserves nonJSON payload and clears auth on blob 401', async () => {
     useAuthStore.setState({ isAuthenticated: true });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('Expired', { status: 401 })));

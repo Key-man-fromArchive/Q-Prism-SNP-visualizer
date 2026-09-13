@@ -162,6 +162,47 @@ class ASGLaunchAuthTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
 
+    def test_asg_launch_cookie_still_requires_cookie_in_asg_launch_mode(self):
+        """Regression lock (P18-AUTH-401): in the mode this endpoint is for,
+        a missing launch cookie must still be reported as 401 -- the fix
+        below only changes what happens when the mode is wrong, not when
+        the mode is right but the cookie is absent."""
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        with TestClient(app) as client:
+            response = client.post("/api/auth/asg-launch-cookie")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["detail"], "ASG launch cookie is missing")
+
+    def test_asg_launch_cookie_is_disabled_not_unauthenticated_outside_asg_launch_mode(self):
+        """P18-AUTH-401: this route doesn't exist outside asg_launch mode.
+        Every other asg_launch-only surface reports that as 404 when the
+        mode is wrong (see test_local_auth_surfaces_are_disabled_in_asg_launch_mode
+        and _complete_asg_launch's own is_asg_launch_mode() guard) -- this
+        endpoint used to check for the cookie before checking the mode, so
+        it answered 401 instead. A 401 here told an already-authenticated
+        caller that its own session was invalid, when the real problem was
+        that the route itself is off in this mode."""
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        env = {
+            "SNP_AUTH_MODE": "local",
+            # A fresh DB triggers admin bootstrap on startup in local mode;
+            # give it a password that passes strength validation so the
+            # unrelated bootstrap doesn't fail the app's lifespan.
+            "ADMIN_PASSWORD": "Strong-Bootstrap-Password-987!",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            with TestClient(app) as client:
+                response = client.post("/api/auth/asg-launch-cookie")
+
+        self.assertEqual(response.status_code, 404)
+
     def test_asg_project_cannot_attach_another_users_session(self):
         from fastapi.testclient import TestClient
 

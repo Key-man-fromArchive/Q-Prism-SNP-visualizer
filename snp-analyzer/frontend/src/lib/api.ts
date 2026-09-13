@@ -156,6 +156,15 @@ async function readErrorPayload(res: Response): Promise<unknown> {
   try { return JSON.parse(text); } catch { return text; }
 }
 
+/* P18-AUTH-401: 401 here always means "this session is no longer valid" --
+ * never "valid session, wrong permissions". The backend reserves 401 for
+ * get_current_user failures (missing/invalid/expired token, disabled
+ * account); everything that's an authenticated-but-not-permitted case
+ * (non-admin, non-owner) is 403 (see app/auth.py: require_admin,
+ * check_session_access, check_project_access). So clearing auth on every
+ * 401 regardless of which endpoint sent it is correct under that contract,
+ * not a missing scope check -- see docs/planning/feedback-2026-09-11/
+ * evidence/P18-AUTH-401.md for the investigation that confirmed this. */
 function responseError(res: Response, payload: unknown): ApiError {
   if (res.status === 401) useAuthStore.getState().clearAuth();
   return new ApiError(errorMessage(objectDetail(payload), `HTTP ${res.status}: ${res.statusText}`), res.status, payload);
