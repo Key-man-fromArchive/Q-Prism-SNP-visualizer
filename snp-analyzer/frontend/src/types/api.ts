@@ -23,6 +23,11 @@ export type NormalizedPoint = {
   raw_fam: number;
   raw_allele2: number;
   raw_rox: number | null;
+  /** Whether THIS reading was actually divided by its passive reference --
+   *  not the response-wide `normalization_applied`. A well whose ROX read 0
+   *  falls back to raw while a neighbour on the same response divides
+   *  normally; see P23-NORM-SCALE.md. */
+  normalized?: boolean;
 };
 
 export type DataWindow = {
@@ -231,6 +236,8 @@ export type ScatterPoint = {
   raw_fam: number;
   raw_allele2: number;
   raw_rox: number | null;
+  /** See NormalizedPoint.normalized -- this well's own actual state. */
+  normalized?: boolean;
   sample_name: string | null;
   auto_cluster: string | null;
   manual_type: string | null;
@@ -244,6 +251,7 @@ export type PlateWell = {
   norm_fam: number;
   norm_allele2: number;
   ratio: number | null;
+  normalized?: boolean;
   sample_name: string | null;
   auto_cluster: string | null;
   manual_type: string | null;
@@ -256,6 +264,11 @@ export type AmplificationCurve = {
   cycles: number[];
   norm_fam: number[];
   norm_allele2: number[];
+  /** Per-cycle, aligned with `cycles` -- see NormalizedPoint.normalized.
+   *  Only present on `/amplification/all` (the four-endpoint reporting
+   *  contract this belongs to); the single-well `/amplification` endpoint
+   *  does not echo it. */
+  normalized?: boolean[];
 };
 
 export type ChannelLabels = {
@@ -389,6 +402,10 @@ export type AnalysisContext = {
   cycle: number;
   use_rox: boolean;
   normalization_applied: boolean;
+  /** True when some of this cycle's wells actually divided by their passive
+   *  reference and others fell back to raw (e.g. one well's ROX read 0).
+   *  Absent on results computed before P23. */
+  normalization_mixed?: boolean;
   background: BackgroundMode;
   algorithm: ClusteringAlgorithm | 'mixed';
   parameters: Record<string, JsonValue>;
@@ -652,6 +669,9 @@ export type ScatterResponse = RoleLabelMetadata & {
    *  same as the `use_rox` request: a run with no reference comes back raw
    *  either way, and an axis titled "FAM / ROX" over raw RFU is misleading. */
   normalization_applied?: boolean;
+  /** True when some points above actually divided and others fell back to
+   *  raw -- the response mixes two scales of the same channel. */
+  normalization_mixed?: boolean;
   /** Wells whose passive reference is too far from the plate median to divide
    *  by; excluded from the ratio-origin estimate. */
   rox_outlier_wells?: string[];
@@ -664,6 +684,7 @@ export type PlateResponse = RoleLabelMetadata & {
   ratio_origin?: RatioOrigin;
   background_mode?: BackgroundMode;
   normalization_applied?: boolean;
+  normalization_mixed?: boolean;
   rox_outlier_wells?: string[];
   wells: PlateWell[];
 };
@@ -671,11 +692,12 @@ export type PlateResponse = RoleLabelMetadata & {
 export type AmplificationResponse = RoleLabelMetadata & {
   allele2_dye: string;
   background_mode?: BackgroundMode;
-  /** What the curves below actually are (see `normalization_applies()` in
+  /** What the curves below actually are (see `normalization_summary()` in
    *  app/processing/normalize.py), NOT what the `use_rox` request asked
    *  for -- a run with no passive reference stays raw regardless of the
    *  request, same distinction ScatterResponse/PlateResponse already make. */
   normalization_applied?: boolean;
+  normalization_mixed?: boolean;
   curves: AmplificationCurve[];
 };
 
@@ -703,6 +725,7 @@ export type QcResponse = {
     cycle: number;
     use_rox: boolean;
     normalization_applied: boolean;
+    normalization_mixed?: boolean;
     background: BackgroundMode;
   };
   cluster_separation: number | null;

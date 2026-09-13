@@ -17,6 +17,7 @@ See docs/planning/feedback-2026-09-11/evidence/P22-CALL-LOGIC.md (finding 2)
 for the prior reproduction this file re-verifies, and
 docs/planning/feedback-2026-09-11/evidence/P23-NORM-SCALE.md for the fix.
 """
+
 from __future__ import annotations
 
 import os
@@ -62,7 +63,9 @@ def data_client(tmp_path):
     clustering.welltype_store.clear()
 
     with TestClient(app) as client:
-        yield SimpleNamespace(client=client, upload=upload, clustering=clustering, db=db)
+        yield SimpleNamespace(
+            client=client, upload=upload, clustering=clustering, db=db
+        )
 
     app.dependency_overrides.pop(get_current_user, None)
     upload.sessions.clear()
@@ -94,10 +97,16 @@ def _mixed_rox_plate() -> UnifiedData:
     data = []
     for well, rox in [("A1", 1000.0), ("A2", 0.0)]:
         for cycle in [1, 2]:
-            data.append(WellCycleData(well=well, cycle=cycle, fam=900.0, allele2=100.0, rox=rox))
+            data.append(
+                WellCycleData(well=well, cycle=cycle, fam=900.0, allele2=100.0, rox=rox)
+            )
     return UnifiedData(
-        instrument="QuantStudio 3", allele2_dye="VIC", wells=["A1", "A2"],
-        cycles=[1, 2], data=data, has_rox=True,
+        instrument="QuantStudio 3",
+        allele2_dye="VIC",
+        wells=["A1", "A2"],
+        cycles=[1, 2],
+        data=data,
+        has_rox=True,
     )
 
 
@@ -108,10 +117,16 @@ def _all_zero_rox_plate() -> UnifiedData:
     data = []
     for well in ["A1", "A2", "A3", "A4"]:
         for cycle in [1, 2]:
-            data.append(WellCycleData(well=well, cycle=cycle, fam=900.0, allele2=100.0, rox=0.0))
+            data.append(
+                WellCycleData(well=well, cycle=cycle, fam=900.0, allele2=100.0, rox=0.0)
+            )
     return UnifiedData(
-        instrument="QuantStudio 3", allele2_dye="VIC", wells=["A1", "A2", "A3", "A4"],
-        cycles=[1, 2], data=data, has_rox=True,
+        instrument="QuantStudio 3",
+        allele2_dye="VIC",
+        wells=["A1", "A2", "A3", "A4"],
+        cycles=[1, 2],
+        data=data,
+        has_rox=True,
     )
 
 
@@ -122,16 +137,25 @@ def _all_normal_rox_plate() -> UnifiedData:
     data = []
     for well in ["A1", "A2", "A3", "A4"]:
         for cycle in [1, 2]:
-            data.append(WellCycleData(well=well, cycle=cycle, fam=900.0, allele2=100.0, rox=1000.0))
+            data.append(
+                WellCycleData(
+                    well=well, cycle=cycle, fam=900.0, allele2=100.0, rox=1000.0
+                )
+            )
     return UnifiedData(
-        instrument="QuantStudio 3", allele2_dye="VIC", wells=["A1", "A2", "A3", "A4"],
-        cycles=[1, 2], data=data, has_rox=True,
+        instrument="QuantStudio 3",
+        allele2_dye="VIC",
+        wells=["A1", "A2", "A3", "A4"],
+        cycles=[1, 2],
+        data=data,
+        has_rox=True,
     )
 
 
 # ---------------------------------------------------------------------------
 # 1. Well-level reporting: one response, two scales, has to say so per well
 # ---------------------------------------------------------------------------
+
 
 def test_scatter_reports_normalization_per_well_not_just_per_response(data_client):
     data_client.upload.sessions["mixed"] = _mixed_rox_plate()
@@ -181,6 +205,7 @@ def test_amplification_all_reports_normalization_per_well_per_cycle(data_client)
 # 2. Four endpoints, one definition
 # ---------------------------------------------------------------------------
 
+
 def test_all_zero_rox_reports_not_applied_consistently_across_endpoints(data_client):
     """The reproduced bug: every well's ROX reads 0, so nothing on the plate
     was actually divided -- ``/analyze`` already said so; the other three
@@ -189,7 +214,9 @@ def test_all_zero_rox_reports_not_applied_consistently_across_endpoints(data_cli
 
     scatter = data_client.client.get("/api/data/s1/scatter?cycle=1&use_rox=true").json()
     plate = data_client.client.get("/api/data/s1/plate?cycle=1&use_rox=true").json()
-    amp_all = data_client.client.get("/api/data/s1/amplification/all?use_rox=true").json()
+    amp_all = data_client.client.get(
+        "/api/data/s1/amplification/all?use_rox=true"
+    ).json()
     cluster = data_client.client.post(
         "/api/data/s1/cluster", json={"cycle": 1, "use_rox": True}
     ).json()
@@ -216,13 +243,21 @@ def test_all_zero_rox_reports_not_applied_consistently_across_endpoints(data_cli
 def test_mixed_rox_cluster_context_reports_the_same_mixed_verdict(data_client):
     _register(data_client, "mixed", _mixed_rox_plate())
 
-    scatter = data_client.client.get("/api/data/mixed/scatter?cycle=1&use_rox=true").json()
+    scatter = data_client.client.get(
+        "/api/data/mixed/scatter?cycle=1&use_rox=true"
+    ).json()
     cluster = data_client.client.post(
         "/api/data/mixed/cluster", json={"cycle": 1, "use_rox": True}
     ).json()
 
-    assert cluster["analysis_context"]["normalization_applied"] == scatter["normalization_applied"]
-    assert cluster["analysis_context"]["normalization_mixed"] == scatter["normalization_mixed"]
+    assert (
+        cluster["analysis_context"]["normalization_applied"]
+        == scatter["normalization_applied"]
+    )
+    assert (
+        cluster["analysis_context"]["normalization_mixed"]
+        == scatter["normalization_mixed"]
+    )
     assert cluster["analysis_context"]["normalization_applied"] is True
     assert cluster["analysis_context"]["normalization_mixed"] is True
 
@@ -230,6 +265,7 @@ def test_mixed_rox_cluster_context_reports_the_same_mixed_verdict(data_client):
 # ---------------------------------------------------------------------------
 # 3. ratio_origin.py:107 -- ROX==0 must not be silently dropped
 # ---------------------------------------------------------------------------
+
 
 def test_zero_rox_well_is_not_silently_excluded_from_reference_outliers():
     """``rox_outlier_wells`` used to filter on ``if p.raw_rox`` -- truthiness,
@@ -242,13 +278,21 @@ def test_zero_rox_well_is_not_silently_excluded_from_reference_outliers():
 
     data = []
     for i in range(9):
-        data.append(WellCycleData(well=f"A{i + 1}", cycle=1, fam=900.0, allele2=100.0, rox=1000.0))
+        data.append(
+            WellCycleData(
+                well=f"A{i + 1}", cycle=1, fam=900.0, allele2=100.0, rox=1000.0
+            )
+        )
     # The 10th well's reference reads exactly 0 -- a real value, and a wildly
     # abnormal one next to nine wells reading ~1000.
     data.append(WellCycleData(well="A10", cycle=1, fam=900.0, allele2=100.0, rox=0.0))
     unified = UnifiedData(
-        instrument="QuantStudio 3", allele2_dye="VIC",
-        wells=[d.well for d in data], cycles=[1], data=data, has_rox=True,
+        instrument="QuantStudio 3",
+        allele2_dye="VIC",
+        wells=[d.well for d in data],
+        cycles=[1],
+        data=data,
+        has_rox=True,
     )
 
     points = normalize_for_cycle(unified, 1, use_rox=True)
@@ -274,8 +318,15 @@ def test_zero_rox_wells_count_toward_the_plate_reference_median():
     from app.models import NormalizedPoint
 
     points = [
-        NormalizedPoint(well=f"A{i}", cycle=1, norm_fam=1.0, norm_allele2=1.0,
-                        raw_fam=900.0, raw_allele2=100.0, raw_rox=1000.0 if i < 5 else 0.0)
+        NormalizedPoint(
+            well=f"A{i}",
+            cycle=1,
+            norm_fam=1.0,
+            norm_allele2=1.0,
+            raw_fam=900.0,
+            raw_allele2=100.0,
+            raw_rox=1000.0 if i < 5 else 0.0,
+        )
         for i in range(10)
     ]
     assert rox_outlier_wells(points) == {f"A{i}" for i in range(10)}
@@ -285,12 +336,15 @@ def test_zero_rox_wells_count_toward_the_plate_reference_median():
 # 4. Regression: an all-normal-ROX plate keeps its existing behavior
 # ---------------------------------------------------------------------------
 
+
 def test_all_normal_rox_plate_is_fully_normalized_and_never_mixed(data_client):
     _register(data_client, "s1", _all_normal_rox_plate())
 
     scatter = data_client.client.get("/api/data/s1/scatter?cycle=1&use_rox=true").json()
     plate = data_client.client.get("/api/data/s1/plate?cycle=1&use_rox=true").json()
-    amp_all = data_client.client.get("/api/data/s1/amplification/all?use_rox=true").json()
+    amp_all = data_client.client.get(
+        "/api/data/s1/amplification/all?use_rox=true"
+    ).json()
     cluster = data_client.client.post(
         "/api/data/s1/cluster", json={"cycle": 1, "use_rox": True}
     ).json()
