@@ -9,6 +9,10 @@ Contract: feedback/p23, branch `feedback/p23` (main `b2efb9c`에서 분기).
 백엔드 기준선(작업 시작 시점): `pytest -q` → **823 passed, 2 subtests passed**
 (venv: `/mnt/docker/Q-Prism-SNP-visualizer/worktree/feedback-p0/snp-analyzer/venv/bin/python`).
 
+구현 커밋(`387809d`) 이후, 작업 도중 `main`이 P24(`WellDetailPanel.tsx`의 임의 유전형 추론 제거)와
+P25(문서만)까지 진행돼 `git merge main`(`cc4de91`, 충돌 없음)으로 반영했다 — 아래 4절/5절의
+프론트/E2E 결과는 병합 후 기준으로 재확인한 수치다.
+
 ---
 
 ## 1. 재현 — P22의 재현을 다시 실행으로 확인
@@ -235,10 +239,49 @@ AmplificationOverlay.tsx` — `AmplificationOverlay.tsx`와 `FluorescenceDataCar
 금지 목록에 있고 나머지는 이번 "최소한으로" 지시 범위를 넘어선다고 판단해 **보류**했다 — 필요시
 후속 작업으로 보고한다.
 
-- `npm test -- --run`: **128 files / 946 tests passed** (기준선 128/944 + 신규 2건).
-- `npx tsc --noEmit`: 0 errors.
-- `npx eslint .`: 0 errors.
-- `npm run build`: 성공 (기존에도 있던 청크 크기 경고 외 신규 오류 없음).
+- `npm test -- --run`: 병합 전 **128 files / 946 tests passed** (기준선 128/944 + 신규 2건).
+  이후 main에 P24(`WellDetailPanel.tsx` 임의 유전형 추론 제거)/P25(문서만)가 들어가 기준선이
+  **129 files / 951 tests**로 올라 `main`을 병합(`git merge main`, 충돌 없음, `en.ts`/`ko.ts`만
+  자동 병합)한 뒤 재확인: **129 files / 953 tests passed**(새 기준선 + 신규 2건).
+- `npx tsc --noEmit`: 0 errors (병합 전/후 모두).
+- `npx eslint .`: 0 errors (병합 전/후 모두).
+- `npm run build`: 성공 (병합 전/후 모두; 기존에도 있던 청크 크기 경고 외 신규 오류 없음).
+
+### 백엔드 (main 병합 후 재확인)
+- `pytest -q` (전체): **831 passed + 2 subtests** 그대로 (main에 들어간 P24/P25는 프론트/문서만이라
+  백엔드 기준선에 영향 없음).
+
+### E2E (루트 `tests/`, 140개, 포트 8230, `E2E_BASE_URL` 명시)
+
+격리 서버: `DB_PATH=/tmp/p23_e2e.db`, 포트 127.0.0.1:8230. PID로 직접 기동/종료했고 운영 DB
+(`/app/data/snp_analyzer.db`)는 전혀 건드리지 않았다. 종료 시 `.db`/`.db-shm`/`.db-wal`를 함께
+정리했다.
+
+이 머신은 이 작업 동안 다른 에이전트의 프로세스가 **27~30개** 동시에 돌고 있었다(팀장 확인).
+전체 스위트를 두 번 돌렸다:
+
+```
+1회차(병합 전): 136 passed, 4 failed
+  - 20-keyboard.spec.ts:28 (384-well 변형)
+  - 24-responsive.spec.ts:4 (multi-marker 384) -- 팀장이 사전에 "부하에 민감한 기존 건"으로 지목
+  - 25-secondary-flows.spec.ts:321
+  - 26-chart-semantics.spec.ts:21
+
+2회차(main 병합 후): 139 passed, 1 failed
+  - 20-keyboard.spec.ts:28 (이번엔 96-well 변형, "Keyboard cannot reach #username" -- 로그인
+    페이지 로드 타이밍 문제로 보인다)
+```
+**실패한 스펙과 개수가 매번 다르다** — 같은 테스트가 반복 실패하는 회귀 패턴이 아니라 부하 패턴이다.
+확인을 위해 1회차에서 실패했던 4건을 **단독/파일 단위**로 각각 재실행했다:
+```
+tests/26-chart-semantics.spec.ts (전체 5건)              5 passed
+tests/20-keyboard.spec.ts + tests/25-secondary-flows.spec.ts (전체 29건)  29 passed
+tests/24-responsive.spec.ts (전체 23건)                   23 passed
+```
+**4건 전부 단독/파일 단위로는 통과.** P23이 건드린 코드(정규화 보고 로직, 원점 이상치 필터,
+프론트 타입/배지)는 로그인 화면, 키보드 포커스 순서, 반응형 레이아웃, 탭 전환과는 무관한
+영역이다 — 실패는 이 시점 머신 부하에 의한 것으로 판단하며, **P23으로 인한 회귀는 확인되지
+않았다.**
 
 ---
 
