@@ -144,6 +144,11 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     const requestId = ++scatterRequestRef.current;
     const ownership = useAnalysisStore.getState();
     const sessionEntry = useSessionStore.getState().entryGeneration;
+    // Captured before the request goes out -- see ScatterPlot.tsx's fetchData
+    // for why (P20-STALE-DATA: a cluster merge that lands while this request
+    // is in flight must survive this response's own stale auto_cluster/
+    // confidence fields).
+    const startedAtGeneration = useDataStore.getState().dataGeneration;
     try {
       const res = await getScatter(sessionId, currentCycle, useRox, backgroundMode);
       if (requestId !== scatterRequestRef.current) return;
@@ -157,7 +162,8 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
         res.ratio_origin ?? ZERO_ORIGIN,
         // Whether the reporters really were divided by the passive reference.
         // The plot titles its axes off this, not off the `use_rox` request.
-        { applied: res.normalization_applied, roxOutlierWells: res.rox_outlier_wells }
+        { applied: res.normalization_applied, roxOutlierWells: res.rox_outlier_wells },
+        startedAtGeneration
       );
       setScatterProvenance({ cycle: res.cycle, useRox, backgroundMode: res.background_mode ?? backgroundMode });
     } catch (err) {

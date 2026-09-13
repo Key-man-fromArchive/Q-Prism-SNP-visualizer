@@ -62,6 +62,27 @@ it('a QC jump and Return establish baselines without automatic analysis, while l
   await act(async () => { await vi.advanceTimersByTimeAsync(250); });
   expect(runClustering).toHaveBeenCalledTimes(1);
 });
+// @TASK P20-STALE-DATA - same guarantee as ScatterPlot.requests.test.tsx's
+// equivalent test, for this panel's own independent scatter fetch.
+it('does not let a scatter response in flight during a cluster merge overwrite the merge', async () => {
+  let resolve!: (value: Awaited<ReturnType<typeof getScatter>>) => void;
+  vi.mocked(getScatter).mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+  useDataStore.setState({ scatterPoints: [{ well: 'A1', sample_name: null, raw_fam: 1, raw_allele2: 2, raw_rox: null,
+    norm_fam: 1, norm_allele2: 2, auto_cluster: null, manual_type: null, confidence: null }] });
+  render(<MultiMarkerAnalysisPanel markers={markers} />);
+  await waitFor(() => expect(getScatter).toHaveBeenCalled());
+
+  // Analysis completes WHILE the scatter request above is still in flight.
+  act(() => useDataStore.getState().setClusterAssignments({ A1: 'Heterozygous' }, { A1: 0.87 }));
+  expect(useDataStore.getState().scatterPoints[0]).toMatchObject({ auto_cluster: 'Heterozygous', confidence: 0.87 });
+
+  // The scatter request settles with the backend's pre-merge (null) fields.
+  await act(async () => resolve({ points: [{ well: 'A1', sample_name: null, raw_fam: 1, raw_allele2: 2, raw_rox: null,
+    norm_fam: 1, norm_allele2: 2, auto_cluster: null, manual_type: null, confidence: null }], allele2_dye: 'VIC', cycle: 20 }));
+
+  expect(useDataStore.getState().scatterPoints[0]).toMatchObject({ auto_cluster: 'Heterozygous', confidence: 0.87 });
+});
+
 it('does not publish detached scatter points after unmount and session replacement', async () => {
   let resolve!: (value: Awaited<ReturnType<typeof getScatter>>) => void;
   vi.mocked(getScatter).mockReturnValueOnce(new Promise(done => { resolve = done; }));

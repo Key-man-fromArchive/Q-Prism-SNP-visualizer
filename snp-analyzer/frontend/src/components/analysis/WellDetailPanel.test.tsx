@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { WellDetailPanel } from './WellDetailPanel';
 import { useSessionStore } from '@/stores/session-store';
@@ -93,6 +93,31 @@ it('shows the full cycle time series for the selected well, keeping the existing
   // currentCycle (2) row is visually flagged.
   expect(rows[1]).toHaveAttribute('data-current-cycle', 'true');
   expect(rows[0]).not.toHaveAttribute('data-current-cycle');
+});
+
+// @TASK P20-STALE-DATA - `curve.well === selectedWell` alone does not catch
+// a normalization/background change on the SAME well: a failed re-fetch
+// after such a change used to leave the OLD condition's time series
+// displayed as if it belonged to the new one, with no visible error.
+// @SPEC docs/planning/feedback-2026-09-11/evidence/P20-STALE-DATA.md
+it('does not show a stale time series after a same-well condition change whose fetch fails, and shows the error', async () => {
+  useLanguageStore.getState().setLanguage('en');
+  useSessionStore.setState({ sessionId: 's', sessionInfo: { session_id: 's', instrument: 'synthetic', allele2_dye: 'VIC', num_wells: 1, num_cycles: 3, has_rox: false, data_windows: null, suggested_cycle: 40, well_groups: null } });
+  useSelectionStore.setState({ selectedWell: 'A1', currentCycle: 2 });
+  useSettingsStore.setState({ useRox: true, backgroundMode: 'none' });
+  useDataStore.setState({ scatterPoints: [{ well: 'A1', sample_name: 'Sample A', auto_cluster: 'Heterozygous', manual_type: null, confidence: 0.95, norm_fam: 1, norm_allele2: 1, raw_fam: 2, raw_allele2: 2, raw_rox: null }] });
+  vi.mocked(getAmplification).mockResolvedValueOnce({ allele2_dye: 'VIC', curves: [{ well: 'A1', cycles: [1, 2, 3], norm_fam: [0.1, 0.2, 0.3], norm_allele2: [0.9, 0.8, 0.7] }] });
+  const { container } = render(<WellDetailPanel />);
+  await screen.findByTestId('well-timeseries-table');
+  const details = container.querySelector('details')!;
+  act(() => { details.open = true; fireEvent(details, new Event('toggle')); });
+  expect(screen.getByTestId('well-timeseries-table')).toBeVisible();
+
+  vi.mocked(getAmplification).mockRejectedValueOnce(new Error('Synthetic failure'));
+  act(() => useSettingsStore.setState({ backgroundMode: 'channel_min' }));
+
+  await screen.findByRole('alert');
+  expect(container.querySelector('[data-testid="well-timeseries-table"]')).toBeNull();
 });
 
 it('does not render a time-series table when there is no selected well or no curve data', () => {

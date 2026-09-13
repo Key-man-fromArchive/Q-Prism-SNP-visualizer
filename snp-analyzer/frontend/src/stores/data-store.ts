@@ -22,6 +22,19 @@ interface DataState {
    *  excluded from the ratio-origin estimate by the backend. */
   roxOutlierWells: string[];
   clusterAssignments: Record<string, string>;
+  /** Confidences from the last-accepted clustering result, keyed the same
+   *  way as `clusterAssignments`. Kept alongside it (not just baked into
+   *  `scatterPoints`) so a scatter re-fetch that resolves AFTER this merge
+   *  can re-apply it instead of overwriting it -- see `dataGeneration`. */
+  clusterConfidences: Record<string, number>;
+  /** Bumped on every setScatterData/setClusterAssignments call. A scatter
+   *  fetch captures this value before it starts a request; if the value has
+   *  moved on by the time the response arrives, a cluster merge happened
+   *  while the request was in flight, and the (now-stale) auto_cluster/
+   *  confidence fields the response itself carries must not overwrite that
+   *  merge (P20-STALE-DATA: a late scatter response otherwise silently
+   *  erases the genotype call and confidence a user is already looking at). */
+  dataGeneration: number;
   wellTypeAssignments: Record<string, string>;
   boundaries: number[] | null; // K-1 internal radial-line positions (descending fam-fraction)
   offset: number;              // dosage of the lowest observed class (window position in 0..ploidy)
@@ -39,7 +52,11 @@ interface DataState {
     allele2Dye: string,
     channelLabels?: ChannelLabels | null,
     ratioOrigin?: RatioOrigin | null,
-    normalization?: { applied?: boolean; roxOutlierWells?: string[] }
+    normalization?: { applied?: boolean; roxOutlierWells?: string[] },
+    /** `dataGeneration` captured by the caller right before it started the
+     *  request that produced `points`. Omit it (existing callers/tests that
+     *  don't track it) to always apply `points` as-is, unchanged. */
+    startedAtGeneration?: number
   ) => void;
   setPlateData: (wells: PlateWell[]) => void;
   setClusterAssignments: (
@@ -66,6 +83,8 @@ export const useDataStore = create<DataState>((set) => ({
   normalizationReported: false,
   roxOutlierWells: [],
   clusterAssignments: {},
+  clusterConfidences: {},
+  dataGeneration: 0,
   wellTypeAssignments: {},
   boundaries: null,
   offset: 0,
@@ -74,20 +93,38 @@ export const useDataStore = create<DataState>((set) => ({
   lowSeparation: false,
   ntcCorner: null,
 
-  setScatterData: (points, allele2Dye, channelLabels, ratioOrigin, normalization) =>
-    set({
-      scatterPoints: points,
-      allele2Dye,
-      channelLabels: channelLabels ?? null,
-      ratioOrigin: ratioOrigin ?? ZERO_ORIGIN,
-      normalizationApplied: normalization?.applied ?? false,
-      normalizationReported: typeof normalization?.applied === 'boolean',
-      roxOutlierWells: normalization?.roxOutlierWells ?? [],
+  setScatterData: (points, allele2Dye, channelLabels, ratioOrigin, normalization, startedAtGeneration) =>
+    set((state) => {
+      // A cluster merge (setClusterAssignments) landed AFTER this fetch
+      // started but BEFORE its response arrived: the response's own
+      // auto_cluster/confidence fields reflect the moment the request was
+      // made, which now predates that merge. Re-apply the merge on top
+      // instead of letting this late response erase it (P20-STALE-DATA).
+      const staleAgainstMerge = startedAtGeneration !== undefined && startedAtGeneration < state.dataGeneration;
+      const nextPoints = staleAgainstMerge
+        ? points.map((p) => ({
+            ...p,
+            auto_cluster: state.clusterAssignments[p.well] ?? null,
+            confidence: state.clusterConfidences[p.well] ?? null,
+          }))
+        : points;
+      return {
+        scatterPoints: nextPoints,
+        allele2Dye,
+        channelLabels: channelLabels ?? null,
+        ratioOrigin: ratioOrigin ?? ZERO_ORIGIN,
+        normalizationApplied: normalization?.applied ?? false,
+        normalizationReported: typeof normalization?.applied === 'boolean',
+        roxOutlierWells: normalization?.roxOutlierWells ?? [],
+        dataGeneration: state.dataGeneration + 1,
+      };
     }),
   setPlateData: (wells) => set({ plateWells: wells }),
   setClusterAssignments: (assignments, confidences) =>
     set((state) => ({
       clusterAssignments: assignments,
+      clusterConfidences: confidences ?? {},
+      dataGeneration: state.dataGeneration + 1,
       // Keep the already-loaded plate AND scatter points in sync without
       // another /plate or /scatter request. Cycle changes still fetch fresh
       // RFU values; clustering only changes the call (and its confidence)
@@ -127,6 +164,7 @@ export const useDataStore = create<DataState>((set) => ({
       normalizationReported: false,
       roxOutlierWells: [],
       clusterAssignments: {},
+      clusterConfidences: {},
       wellTypeAssignments: {},
       boundaries: null,
       offset: 0,
