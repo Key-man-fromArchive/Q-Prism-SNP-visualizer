@@ -8,19 +8,28 @@ import { login, uploadAndWait } from './helpers';
 const TALL_VIEWPORT = { width: 1600, height: 1200 };
 
 /** Read `measure` until it returns the same result twice in a row, so a
- *  still-reflowing layout cannot hand back a stale position. */
+ *  still-reflowing layout cannot hand back a stale position.
+ *
+ *  P13: `null` means "not rendered/measurable yet" (e.g. the NTC corner's
+ *  Plotly trace hasn't been drawn by the async `Plotly.newPlot`/`react` call
+ *  that follows a marker-scoped remount), not a real, stable value. Two
+ *  consecutive `null` reads used to satisfy the "same twice in a row" check
+ *  and return early -- a false "settled" signal that raced the mount/draw
+ *  window documented in docs/planning/feedback-2026-09-11/evidence/P13-NTC-RACE.md.
+ *  Only a non-null value may ever count as settled; `null` always keeps
+ *  polling until `attempts` is exhausted. */
 async function whenSettled<T>(
   page: Page,
   measure: () => Promise<T>,
-  attempts = 12
+  attempts = 20
 ): Promise<T> {
-  let previous = JSON.stringify(await measure());
+  let previous: string | null = null;
   for (let i = 0; i < attempts; i++) {
-    await page.waitForTimeout(250);
     const current = await measure();
     const key = JSON.stringify(current);
-    if (key === previous) return current;
+    if (current !== null && key === previous) return current;
     previous = key;
+    await page.waitForTimeout(250);
   }
   return measure();
 }
@@ -55,11 +64,28 @@ const CFX_AMPLIFICATION = path.resolve(
   'admin_2026-02-16 11-12-20_783BR20183 -  Quantification Amplification Results.xlsx'
 );
 
+/** The login page's language toggle always shows exactly one of these two
+ *  labels ("switch to X"), so waiting for either to appear -- rather than a
+ *  single no-retry `isVisible()` read taken the instant `page.goto` resolves
+ *  -- can't silently miss the switch if the app's async auth check is still
+ *  deciding whether to render the login page at all.
+ *
+ *  P13: language-store.ts defaults to `'ko'`; a missed switch here doesn't
+ *  just leave a few labels untranslated, it makes every `t.chartNtcThreshold`
+ *  string this file pins itself to ("NTC thresholds") permanently unmatched
+ *  for the rest of that test -- indistinguishable, without checking the
+ *  actual trace names, from the async-mount race this file's `whenSettled`
+ *  polls for. See docs/planning/feedback-2026-09-11/evidence/P13-NTC-RACE.md. */
+async function ensureEnglish(page: Page) {
+  const toggle = page.getByRole('button', { name: /^(English|한국어)$/ });
+  await toggle.waitFor({ state: 'visible' });
+  if ((await toggle.textContent())?.trim() === 'English') await toggle.click();
+}
+
 test('dragging from plate whitespace selects visible wells and assigns Group 1', async ({ page }) => {
   await page.setViewportSize(TALL_VIEWPORT);
   await page.goto('/');
-  const english = page.getByRole('button', { name: 'English' });
-  if (await english.isVisible()) await english.click();
+  await ensureEnglish(page);
   await uploadAndWait(page, CFX_AMPLIFICATION);
 
   const panel = page.locator('.plate-panel');
@@ -154,8 +180,7 @@ test('dragging from plate whitespace selects visible wells and assigns Group 1',
 test('dragging the NTC corner saves a two-channel threshold without freezing genotype rays', async ({ page }) => {
   await page.setViewportSize(TALL_VIEWPORT);
   await page.goto('/');
-  const english = page.getByRole('button', { name: 'English' });
-  if (await english.isVisible()) await english.click();
+  await ensureEnglish(page);
   await login(page);
 
   const uploaded = page.waitForResponse(

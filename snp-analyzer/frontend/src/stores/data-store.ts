@@ -42,7 +42,10 @@ interface DataState {
     normalization?: { applied?: boolean; roxOutlierWells?: string[] }
   ) => void;
   setPlateData: (wells: PlateWell[]) => void;
-  setClusterAssignments: (assignments: Record<string, string>) => void;
+  setClusterAssignments: (
+    assignments: Record<string, string>,
+    confidences?: Record<string, number> | null
+  ) => void;
   setWellTypeAssignments: (assignments: Record<string, string>) => void;
   setBoundaries: (boundaries: number[] | null) => void;
   setOffset: (offset: number) => void;
@@ -82,15 +85,27 @@ export const useDataStore = create<DataState>((set) => ({
       roxOutlierWells: normalization?.roxOutlierWells ?? [],
     }),
   setPlateData: (wells) => set({ plateWells: wells }),
-  setClusterAssignments: (assignments) =>
+  setClusterAssignments: (assignments, confidences) =>
     set((state) => ({
       clusterAssignments: assignments,
-      // Keep the already-loaded plate in sync without another /plate request.
-      // Cycle changes still fetch fresh RFU values; clustering only changes the
-      // call displayed on each existing well.
+      // Keep the already-loaded plate AND scatter points in sync without
+      // another /plate or /scatter request. Cycle changes still fetch fresh
+      // RFU values; clustering only changes the call (and its confidence)
+      // shown on each existing well.
+      // Regression: WellDetailPanel/ResultsTable read auto_cluster and
+      // confidence off `scatterPoints`, not off `clusterAssignments` or
+      // `plateWells`. A fresh session's auto-cluster-on-load never triggers
+      // a scatter refetch, so without this the Confidence/genotype columns
+      // stayed blank forever even after a real clustering result arrived.
       plateWells: state.plateWells.map((well) => ({
         ...well,
         auto_cluster: assignments[well.well] ?? null,
+        confidence: confidences?.[well.well] ?? null,
+      })),
+      scatterPoints: state.scatterPoints.map((point) => ({
+        ...point,
+        auto_cluster: assignments[point.well] ?? null,
+        confidence: confidences?.[point.well] ?? null,
       })),
     })),
   setWellTypeAssignments: (assignments) =>
