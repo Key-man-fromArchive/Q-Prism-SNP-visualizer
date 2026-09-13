@@ -261,6 +261,36 @@ Backend on port 8197 (`DB_PATH=/tmp/p15.db`, isolated from prod
   removed, per the "preserved behavior" note above.)
 - Target restated by the task: "136/1 유지 이상" — met.
 
+## Post-merge update (main → this branch)
+
+While this task was in progress, P13 fixed the underlying cause of the
+NTC-corner race documented above (a `whenSettled` bug that let two
+consecutive `null` reads count as "settled", plus a login-page language
+toggle read with no retry) and merged to `main`; P14 separately fixed a
+confidence-projection bug in `analysis-projection.ts`/`data-store.ts`.
+Merged `main` into this branch (merge commit — see `git log`; no conflicts:
+git's auto-merge combined P13's `whenSettled`/`ensureEnglish` rewrite in
+`tests/17-manual-group-and-plate-drag.spec.ts` with this task's
+trigger-then-row selector changes in the same file cleanly, since they
+touched different lines). Re-ran all four checks and the full E2E suite
+afterward:
+
+```
+npx tsc --noEmit   # 0 errors
+npm run lint       # 0 errors, 0 warnings
+npm run test       # 125 files / 917 tests passed (new post-merge baseline
+                   # 125/908 + this task's net +8/+9)
+npm run build      # succeeds
+```
+
+E2E, same port-8197 setup, `--workers=2`, run twice for determinism:
+**138/138 passed** both times — the previously-documented NTC-corner race
+is gone (P13's fix), and this task's own three updated specs (17, 18, 25)
+are part of both clean runs. The "136/1" investigation above is left
+as-is since it's the record of what was verified against the pre-merge
+baseline at the time; it is superseded by this section, not contradicted
+by it (same root cause, since fixed upstream).
+
 ## Not done / explicitly out of scope
 
 - `worktree/feedback-p13`, `worktree/feedback-p14`: untouched.
