@@ -141,13 +141,19 @@ test('dragging from plate whitespace selects visible wells and assigns Group 1',
   expect(savedPayload.wells.length).toBeGreaterThan(1);
   // Selecting a group closes the menu, so the per-item aria-pressed check
   // that used to run against the standing button now runs against the
-  // collapsed trigger (equivalent guarantee: the current group is displayed).
-  // The per-item aria-pressed/active-check itself is exercised in
-  // WellSelectionToolbar.test.tsx ("marks the currently selected group active
-  // with aria-pressed and a check mark") -- re-opening the menu here too,
-  // right before the NTC-corner drag's fragile Plotly-layout measurement
-  // (`whenSettled`/`ntcCornerAt`), destabilized that measurement under load.
+  // collapsed trigger first (equivalent guarantee: the current group is
+  // displayed even with the menu closed).
   await expect(groupTrigger).toContainText(/Group 1|그룹 1/);
+  // Re-open to confirm the row itself still carries the active state --
+  // P13 (docs/planning/feedback-2026-09-11/evidence/P13-NTC-RACE.md) fixed
+  // the actual cause of this test's old flakiness (whenSettled treating two
+  // consecutive nulls as "settled", and a no-retry language-toggle read); an
+  // earlier draft of this test attributed the flake to this extra
+  // open/close pair instead and dropped it. With the real cause fixed, kept.
+  await groupTrigger.click();
+  await expect(groupOne).toHaveAttribute('aria-pressed', 'true');
+  await expect(groupOne).toContainText(/Group 1|그룹 1/);
+  await page.keyboard.press('Escape');
 
   // Moving the NTC corner is now an explicit mode. A drag used to mean BOTH
   // "select wells" and "move the nearest threshold" at once, and the threshold
