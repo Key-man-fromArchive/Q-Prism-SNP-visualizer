@@ -668,6 +668,8 @@ const ko: Translations = {
   stageAmplification: '증폭(Amplification)',
   stagePostRead: '포스트리드(Post-read)',
   confidence: '신뢰도',
+  confidenceNoBasisHint: '신뢰도 값 없음: 이 웰에는 판정 근거가 될 신호가 없었습니다.',
+  confidenceCeilingHint: '웰 수가 매우 적은 마커 영역(모델을 적합할 수 없음)에 대한 상한값이며, 실측 확률이 아닙니다.',
   qcWarnings: (n: number) => `경고 ${n}건`,
   flagNoisyBaseline: '베이스라인 노이즈',
   flagWeakAmplification: '신호 약함',
