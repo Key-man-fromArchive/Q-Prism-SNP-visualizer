@@ -769,6 +769,8 @@ const ko: Translations = {
   wsWholePlate: '마커 분할 없이 전체 플레이트를 하나의 마커로 분석합니다.',
   wsInventoryUnknown: '입력 웰 목록을 확인할 수 없어 분석 대상 수를 추정하지 않습니다.',
   wsMarkerScopeUnknown: '마커 배정 정보를 아직 확인할 수 없습니다. 분석 범위와 대상 수를 추정하지 않습니다.',
+  wsMarkerRefreshing: '마커 범위를 새로고침하는 중…',
+  wsMarkerRefreshFailed: '마커 범위를 새로고침하지 못했습니다. 마지막으로 확인된 내용을 표시합니다.',
   wsScopeCounts: (total: number, eligible: number, empty: number, omit: number) => `입력 웰: ${total} · 마커/유형 기준 대상: ${eligible} · Empty: ${empty} · Omit: ${omit}`,
   wsScopeIndependent: '마커 배정과 Empty/Omit은 서로 독립적이며 겹칠 수 있습니다. 보기 필터는 집계에 영향을 주지 않으며 해당 사이클의 결측은 그대로 유지됩니다. Omit 웰은 선택 후 유형을 변경하여 복구할 수 있습니다.',
   wsInspectorEmptyNote: '플레이트에서 웰을 선택한 뒤 마커·웰 유형을 지정하세요.',

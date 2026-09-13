@@ -3,13 +3,13 @@
 //       docs/planning/feedback-2026-09-11/FB-07-identity-and-ia.md §3-1 (top-level Plate Setup / Results tabs)
 // @TEST e2e/p4-s0-single-marker-default.spec.ts, e2e/p4-s1-plate-setup.spec.ts
 
-import { type ReactNode } from "react";
 import type { MarkerRegion } from '@/types/api';
-import { Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { StatusState } from "@/components/shared/ui";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
+import { useAnalysisStore } from "@/stores/analysis-store";
 import { useAnalysisWorkspace } from "@/hooks/use-analysis-workspace";
 import { useNavigationStore } from "@/stores/navigation-store";
 import { AnalysisTab } from "./AnalysisTab";
@@ -20,9 +20,6 @@ import { PlateScopeSummary } from './PlateScopeSummary';
 
 function panelClass(active: string, surface: string): string { return active === surface ? '' : 'hidden'; }
 function availableScope(markers: MarkerRegion[], available: boolean) { return available ? markers : null; }
-function MarkerAvailability({ available, children }: { available: boolean; children: ReactNode }) {
-  return available ? children : null;
-}
 
 /**
  * Always-present 2-surface workspace (Plate Setup + Results), mounted once a
@@ -46,6 +43,20 @@ function MarkerAvailability({ available, children }: { available: boolean; child
  * split-marker banner (P4-S3-T1, FB-03 §3-3) -- once >=1 marker exists, this
  * selector's spot is filled by MultiMarkerAnalysisPanel's own
  * `marker-selector-sidebar`/`marker-selector-dropdown` instead.
+ *
+ * P17-MARKER-FLASH: the results panel below (Multi- or single-marker view)
+ * is gated on `ready` only, never on `markersAvailable`. `markersAvailable`
+ * still gates the collapsed context-summary's marker-dependent status text
+ * (`AnalysisResultStatus`/`PlateScopeSummary` go to their "unavailable"
+ * copy while a markers-changed/welltypes-changed refetch is in flight or has
+ * failed -- see use-analysis-workspace.ts), but the main panel keeps
+ * rendering the last-known-good `markers` the whole time, with a small
+ * non-blocking `marker-refresh-indicator`/`marker-refresh-error` badge
+ * overlaid on top (absolutely positioned -- adds no layout height). This
+ * used to unmount the entire panel for the duration of the refetch (a blank
+ * flash with no loading state, worse on a 0<->1 marker transition since it
+ * also swapped which component was mounted); see
+ * docs/planning/feedback-2026-09-11/evidence/P17-MARKER-FLASH.md.
  */
 export function AnalysisWorkspace() {
   const { t } = useI18n();
@@ -54,6 +65,8 @@ export function AnalysisWorkspace() {
   const activeSurface = useNavigationStore(state => state.surface);
   const setTab = useNavigationStore(state => state.setTab);
   const { ready, status, markers, markersAvailable, retry } = useAnalysisWorkspace();
+  const markersRefreshing = useAnalysisStore(state => state.inputRevisionRefreshing);
+  const markersRefreshError = useAnalysisStore(state => state.inputRevisionError);
 
   // The session's saved marker (assay) set decides which Results surface
   // renders: >=1 marker => the per-marker MultiMarkerAnalysisPanel (P4-S2),
@@ -95,40 +108,65 @@ export function AnalysisWorkspace() {
             <PlateScopeSummary markers={availableScope(markers, markersAvailable)} />
           </div>
         </details>}
-        {!ready ? <StatusState variant={status === 'error' ? 'error' : 'loading'} message={status === 'error' ? t.analysisLoadFailed : t.loading} action={status === 'error' ? { label: t.retry, onClick: retry } : undefined} /> : <MarkerAvailability available={markersAvailable}>{markers.length > 0 ? (
-          <MultiMarkerAnalysisPanel markers={markers} />
-        ) : (
-          <div data-testid="single-marker-analysis-view">
-            {/* P4-S3-T1 (FB-03 §3-3): always-present scope selector, in the
-                spot the dismissible split-marker banner used to occupy.
-                Once markers exist, MultiMarkerAnalysisPanel's own
-                marker-selector-sidebar/-dropdown fills this same role. */}
-            <div
-              data-testid="analysis-scope-selector"
-              role="group"
-              aria-label={t.wsScopeSelectorLabel}
-              className="flex flex-wrap items-center gap-2 px-6 pt-4"
-            >
-              <button
-                type="button"
-                data-testid="scope-whole-plate"
-                aria-pressed={true}
-                className="inline-flex items-center gap-1.5 rounded-md border border-primary bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary"
+        {!ready ? <StatusState variant={status === 'error' ? 'error' : 'loading'} message={status === 'error' ? t.analysisLoadFailed : t.loading} action={status === 'error' ? { label: t.retry, onClick: retry } : undefined} /> : (
+          <div className="relative" aria-busy={markersRefreshing}>
+            {/* P17-MARKER-FLASH: a markers-changed/welltypes-changed refetch
+                no longer unmounts the panel below -- it keeps showing the
+                last-known-good `markers` with this small badge overlaid on
+                top (absolutely positioned, so it never changes the panel's
+                layout height). */}
+            {markersRefreshing ? (
+              <div
+                role="status" aria-live="polite" data-testid="marker-refresh-indicator"
+                className="pointer-events-none absolute right-4 top-2 z-10 flex items-center gap-1.5 rounded-full border border-border bg-bg-secondary/95 px-2.5 py-1 text-xs text-text-muted shadow-sm"
               >
-                {t.wsScopeWholePlateOption}
-              </button>
-              <button
-                type="button"
-                data-testid="scope-split-marker-cta"
-                onClick={() => setTab("plate")}
-                className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border px-3 py-1.5 text-sm text-text-muted hover:border-primary hover:text-primary cursor-pointer"
+                <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                {t.wsMarkerRefreshing}
+              </div>
+            ) : markersRefreshError !== null && (
+              <div
+                role="alert" data-testid="marker-refresh-error"
+                className="pointer-events-none absolute right-4 top-2 z-10 rounded-full border border-danger/40 bg-bg-secondary/95 px-2.5 py-1 text-xs text-danger shadow-sm"
               >
-                <Plus size={14} aria-hidden="true" /> {t.wsSplitBannerCta}
-              </button>
-            </div>
-            <AnalysisTab />
+                {t.wsMarkerRefreshFailed}
+              </div>
+            )}
+            {markers.length > 0 ? (
+              <MultiMarkerAnalysisPanel markers={markers} />
+            ) : (
+              <div data-testid="single-marker-analysis-view">
+                {/* P4-S3-T1 (FB-03 §3-3): always-present scope selector, in the
+                    spot the dismissible split-marker banner used to occupy.
+                    Once markers exist, MultiMarkerAnalysisPanel's own
+                    marker-selector-sidebar/-dropdown fills this same role. */}
+                <div
+                  data-testid="analysis-scope-selector"
+                  role="group"
+                  aria-label={t.wsScopeSelectorLabel}
+                  className="flex flex-wrap items-center gap-2 px-6 pt-4"
+                >
+                  <button
+                    type="button"
+                    data-testid="scope-whole-plate"
+                    aria-pressed={true}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-primary bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary"
+                  >
+                    {t.wsScopeWholePlateOption}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="scope-split-marker-cta"
+                    onClick={() => setTab("plate")}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border px-3 py-1.5 text-sm text-text-muted hover:border-primary hover:text-primary cursor-pointer"
+                  >
+                    <Plus size={14} aria-hidden="true" /> {t.wsSplitBannerCta}
+                  </button>
+                </div>
+                <AnalysisTab />
+              </div>
+            )}
           </div>
-        )}</MarkerAvailability>}
+        )}
       </div>
     </div>
   );

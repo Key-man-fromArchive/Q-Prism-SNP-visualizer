@@ -781,6 +781,12 @@ const en = {
   wsWholePlate: 'Analyze the whole plate as one marker (no marker partition).',
   wsInventoryUnknown: 'Input well inventory unavailable; analysis target counts are not estimated.',
   wsMarkerScopeUnknown: 'Marker membership is not yet available. Analysis scope and counts are not estimated.',
+  // P17-MARKER-FLASH: previous results/plate stay mounted during a
+  // markers-changed/welltypes-changed refetch (see AnalysisWorkspace.tsx) --
+  // this is the non-blocking badge overlaid on top of them, not a
+  // full-screen loading state.
+  wsMarkerRefreshing: 'Refreshing marker scope…',
+  wsMarkerRefreshFailed: "Couldn't refresh marker scope. Showing the last known data.",
   wsScopeCounts: (total: number, eligible: number, empty: number, omit: number) => `Input wells: ${total} · Eligible by marker/type: ${eligible} · Empty: ${empty} · Omit: ${omit}`,
   wsScopeIndependent: 'Marker membership and Empty/Omit are separate, potentially overlapping states. Counts ignore view filters; a missing cycle reading remains unavailable. Omit wells can be selected and reassigned to restore them.',
   wsInspectorEmptyNote: 'Select wells on the plate, then assign a marker/well type.',

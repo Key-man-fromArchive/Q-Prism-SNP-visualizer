@@ -123,7 +123,12 @@ it('settles malformed mutation metadata as a separate revision error', async () 
   expect(useAnalysisStore.getState().status).toBe('completed');
 });
 
-it.each([false, true])('withdraws old marker scope and consumers during an external transition (initial marker: %s)', async initialMarker => {
+// P17-MARKER-FLASH: a markers-changed refetch used to unmount the whole
+// results panel (no loading state) for its duration -- worse on a 0<->1
+// marker transition since that also swapped which component was mounted.
+// The panel now keeps showing the previous (still-correct, just momentarily
+// stale) content with a small aria-busy badge overlaid on top instead.
+it.each([false, true])('keeps the previous results panel mounted, with an aria-busy refresh badge, while an external marker reload is held (initial marker: %s)', async initialMarker => {
   const marker = { id: 'm', name: 'Synthetic', wells: ['A1'], ploidy: 2, color: '#000' };
   vi.mocked(getMarkers).mockResolvedValue({ markers: initialMarker ? [marker] : [] });
   vi.mocked(getCluster).mockResolvedValue({ algorithm: 'auto', cycle: 20, assignments: { A1: 'NTC' }, input_revision: 0 });
@@ -132,16 +137,28 @@ it.each([false, true])('withdraws old marker scope and consumers during an exter
   let resolve!: (value: { markers: typeof marker[] }) => void;
   vi.mocked(getMarkers).mockReturnValue(new Promise(done => { resolve = done; }));
   act(() => window.dispatchEvent(new CustomEvent('markers-changed')));
+  // The collapsed context-summary's marker-dependent copy still goes
+  // "unavailable" while the refetch is in flight (unchanged) --
   expect(screen.getByTestId('marker-scope-unavailable')).toBeInTheDocument();
-  expect(screen.queryByText('single-ready')).not.toBeInTheDocument();
-  expect(screen.queryByText('multi-ready')).not.toBeInTheDocument();
+  // -- but the actual results panel the user is looking at does not disappear.
+  expect(screen.getByText(initialMarker ? 'multi-ready' : 'single-ready')).toBeInTheDocument();
+  const indicator = screen.getByTestId('marker-refresh-indicator');
+  expect(indicator).toHaveAttribute('role', 'status');
+  expect(indicator).toHaveAttribute('aria-live', 'polite');
+  expect(indicator.parentElement).toHaveAttribute('aria-busy', 'true');
   expect(useAnalysisStore.getState().result?.assignments).toEqual({ A1: 'NTC' });
   await act(async () => resolve({ markers: initialMarker ? [] : [marker] }));
   await screen.findByText(initialMarker ? 'single-ready' : 'multi-ready');
+  expect(screen.queryByTestId('marker-refresh-indicator')).not.toBeInTheDocument();
   expect(runClustering).not.toHaveBeenCalled();
 });
 
-it('keeps failed marker refresh unavailable while preserving the saved result', async () => {
+// P17-MARKER-FLASH: a failed refetch used to leave the panel unmounted
+// forever (silent, permanent blank), because `markerEntry` was nulled
+// up front and never restored on failure. The panel is no longer gated by
+// that flag at all, so it keeps showing the last-known-good content with an
+// inline, non-blocking error badge instead of going silently blank.
+it('keeps the previous results panel visible and surfaces an inline error when a marker refresh fails', async () => {
   vi.mocked(getCluster).mockResolvedValue({ algorithm: 'auto', cycle: 20, assignments: { A1: 'NTC' }, input_revision: 0 });
   render(<AnalysisWorkspace />);
   await screen.findByText('single-ready');
@@ -149,7 +166,10 @@ it('keeps failed marker refresh unavailable while preserving the saved result', 
   act(() => window.dispatchEvent(new CustomEvent('markers-changed')));
   await waitFor(() => expect(useAnalysisStore.getState().inputRevisionError).toBeInstanceOf(Error));
   expect(screen.getByTestId('marker-scope-unavailable')).toBeInTheDocument();
-  expect(screen.queryByText('single-ready')).not.toBeInTheDocument();
+  expect(screen.getByText('single-ready')).toBeInTheDocument();
+  const errorBadge = screen.getByTestId('marker-refresh-error');
+  expect(errorBadge).toHaveAttribute('role', 'alert');
+  expect(screen.queryByTestId('marker-refresh-indicator')).not.toBeInTheDocument();
   expect(useAnalysisStore.getState().result?.assignments).toEqual({ A1: 'NTC' });
   expect(runClustering).not.toHaveBeenCalled();
 });
