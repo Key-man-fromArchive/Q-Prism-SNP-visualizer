@@ -145,3 +145,94 @@ it('does not crash and does not fetch when there is no active session', () => {
   expect(container.querySelector('table')).toBeNull();
   expect(getAllAmplificationMock).not.toHaveBeenCalled();
 });
+
+// @TASK P19-CYCLE-ALIGN - a well's values must land in the column matching
+// its own cycle number, not whichever column its array index happens to
+// fall in. A2 here has no cycle-2 reading at all, so its cycle-3 reading
+// must not shift left into the "2" column (the pre-fix bug: the table used
+// curves[0].cycles as every row's column keys).
+it('aligns each well\'s cells to the correct cycle-number column when wells have different cycle sets', async () => {
+  getAllAmplificationMock.mockResolvedValue({
+    allele2_dye: 'HEX',
+    normalization_applied: false,
+    background_mode: 'none',
+    curves: [
+      { well: 'A1', cycles: [1, 2, 3], norm_fam: [10, 20, 30], norm_allele2: [1, 1, 1], effective_type: 'Allele 1 Homo' },
+      { well: 'A2', cycles: [1, 3], norm_fam: [40, 60], norm_allele2: [2, 2], effective_type: 'Allele 2 Homo' },
+    ],
+  });
+  render(<FluorescenceDataCard />);
+  fireEvent.click(screen.getByText(ko.fluorescenceShow));
+  fireEvent.click(screen.getByTestId('fluorescence-view-values-tab'));
+  const table = await screen.findByTestId('fluorescence-values-table');
+
+  const headerCells = Array.from(table.querySelectorAll('thead th')).map((th) => th.textContent);
+  expect(headerCells).toEqual([ko.well, '1', '2', '3']);
+
+  const rows = table.querySelectorAll('tbody tr');
+  const a2Cells = Array.from(rows[1].querySelectorAll('td')).map((td) => td.textContent);
+  expect(a2Cells[0]).toBe('A2');
+  expect(a2Cells[1]).toBe('40.000'); // A2's cycle 1
+  expect(a2Cells[3]).toBe('60.000'); // A2's cycle 3, its true column
+  expect(a2Cells[3]).not.toBe(a2Cells[2]); // cycle 3's value must not also land in cycle 2's column
+});
+
+// @TASK P19-CYCLE-ALIGN - a missing (well, cycle) reading must never render
+// (or export) as indistinguishable from a real 0 reading.
+it('renders a missing (well, cycle) cell distinctly from a real 0 reading, and exports the same distinction', async () => {
+  getAllAmplificationMock.mockResolvedValue({
+    allele2_dye: 'HEX',
+    normalization_applied: false,
+    background_mode: 'none',
+    curves: [
+      { well: 'A1', cycles: [1, 2], norm_fam: [0, 5], norm_allele2: [0, 0], effective_type: 'Allele 1 Homo' },
+      { well: 'A2', cycles: [2], norm_fam: [7], norm_allele2: [1], effective_type: 'Allele 2 Homo' },
+    ],
+  });
+  render(<FluorescenceDataCard />);
+  fireEvent.click(screen.getByText(ko.fluorescenceShow));
+  fireEvent.click(screen.getByTestId('fluorescence-view-values-tab'));
+  const table = await screen.findByTestId('fluorescence-values-table');
+
+  const rows = table.querySelectorAll('tbody tr');
+  const a1Cells = Array.from(rows[0].querySelectorAll('td')).map((td) => td.textContent);
+  const a2Cells = Array.from(rows[1].querySelectorAll('td')).map((td) => td.textContent);
+  expect(a1Cells[1]).toBe('0.000'); // A1's real cycle-1 reading of 0
+  expect(a2Cells[1]).not.toBe('0.000'); // A2 has NO cycle-1 reading at all
+  expect(a2Cells[1]).not.toBe('');
+  expect(a2Cells[2]).toBe('7.000');
+
+  fireEvent.click(screen.getByText(ko.wellCycleValuesExportCsv));
+  const [, csv] = downloadTextFileMock.mock.calls[0];
+  const lines = (csv as string).split('\n');
+  expect(lines).toContain('A1,0,5');
+  expect(lines).toContain('A2,,7');
+  expect(lines).not.toContain('A2,0,7');
+});
+
+// @TASK P19-CYCLE-ALIGN - users must be told when wells don't share a
+// cycle set, since the blanks that follow otherwise have no visible cause.
+it('shows a notice when wells have different cycle sets, and no notice when they match', async () => {
+  getAllAmplificationMock.mockResolvedValueOnce({
+    allele2_dye: 'HEX',
+    normalization_applied: false,
+    background_mode: 'none',
+    curves: [
+      { well: 'A1', cycles: [1, 2, 3], norm_fam: [10, 20, 30], norm_allele2: [1, 1, 1], effective_type: 'Allele 1 Homo' },
+      { well: 'A2', cycles: [1, 3], norm_fam: [40, 60], norm_allele2: [2, 2], effective_type: 'Allele 2 Homo' },
+    ],
+  });
+  const { unmount } = render(<FluorescenceDataCard />);
+  fireEvent.click(screen.getByText(ko.fluorescenceShow));
+  fireEvent.click(screen.getByTestId('fluorescence-view-values-tab'));
+  await screen.findByTestId('fluorescence-values-table');
+  expect(screen.getByText(ko.wellCycleValuesCycleMismatchNotice)).toBeVisible();
+  unmount();
+
+  // Default beforeEach fixture: A1 and A2 both have cycles [1, 2, 3].
+  render(<FluorescenceDataCard />);
+  fireEvent.click(screen.getByText(ko.fluorescenceShow));
+  fireEvent.click(screen.getByTestId('fluorescence-view-values-tab'));
+  await screen.findByTestId('fluorescence-values-table');
+  expect(screen.queryByText(ko.wellCycleValuesCycleMismatchNotice)).not.toBeInTheDocument();
+});
