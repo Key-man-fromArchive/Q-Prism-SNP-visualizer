@@ -21,6 +21,12 @@ type WellDetailPanelProps = { ploidyOverride?: number };
 // for the trade-off this makes (one duplicate GET per well selection when
 // both are mounted).
 export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
+  // `ploidyOverride` is kept in the props type for MultiMarkerAnalysisPanel's
+  // existing call site (it passes the selected marker's own ploidy), but it
+  // is intentionally not read below: it only ever fed the raw-ratio genotype
+  // guess removed as part of this fix (@TASK P24-DETAIL-CALL), and nothing
+  // else in this panel is ploidy-dependent.
+  void ploidyOverride;
   const { t } = useI18n();
   const sessionId = useSessionStore((s) => s.sessionId);
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
@@ -28,8 +34,6 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   const normalizationApplied = useDataStore((s) => s.normalizationApplied);
   const normalizationReported = useDataStore((s) => s.normalizationReported);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
-  const storedPloidy = useSettingsStore((s) => s.ploidy);
-  const ploidy = ploidyOverride ?? storedPloidy;
   const selectedWell = useSelectionStore((s) => s.selectedWell);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const scatterPoints = useDataStore((s) => s.scatterPoints);
@@ -133,22 +137,43 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   const total = normFam + normAllele2;
   const ratio = total > 0 ? (normFam / total * 100).toFixed(1) : "N/A";
 
-  // Prefer the actual (ploidy-aware) genotype call; the manual/auto assignment
-  // already encodes dosage for any ploidy. Only fall back to a raw ratio split
-  // when there is no call, and only for diploid (the 0.6/0.4 cut is biallelic).
+  // Show the actual (ploidy-aware) genotype call; the manual/auto assignment
+  // already encodes dosage for any ploidy. There is deliberately NO fallback
+  // that guesses a genotype from the raw ratio when there is no call: this
+  // panel used to slice the ratio into Allele 1 / Allele 2 / Heterozygous on
+  // its own whenever manual_type and auto_cluster were both absent, which let
+  // it show a genotype that ResultsTable and the export snapshot (neither of
+  // which does any ratio-based inference) both left uncalled for the SAME
+  // well. An uncalled well now reads '—' here too, matching that "no call"
+  // convention (see the sample/confidence cells below, which already use it).
+  // @TASK P24-DETAIL-CALL
+  // @SPEC docs/planning/feedback-2026-09-11/evidence/P22-CALL-LOGIC.md (finding 3)
   const effectiveCall = manualType ?? autoCluster ?? null;
-  let genotype = t.genotypeUndetermined;
+  let genotype = '—';
   if (effectiveCall) {
     if (effectiveCall === "Allele 1 Homo") genotype = t.genotypeAllele1;
     else if (effectiveCall === "Allele 2 Homo") genotype = t.genotypeAllele2(allele2Dye ?? "Allele2");
     else if (effectiveCall === "Heterozygous") genotype = t.genotypeHeterozygous;
     else genotype = callLabel(effectiveCall, t);
-  } else if (ploidy === 2 && total > 0) {
-    const r = normFam / total;
-    if (r > 0.6) genotype = t.genotypeAllele1;
-    else if (r < 0.4) genotype = t.genotypeAllele2(allele2Dye ?? "Allele2");
-    else genotype = t.genotypeHeterozygous;
   }
+
+  // @TASK P24-DETAIL-CALL - `confidence` conflates several different kinds of
+  // number (see the locale comment on confidenceCeilingHint/NoBasisHint), and
+  // there is no per-well field saying which kind a given value is. The two
+  // EXACT sentinel constants the backend uses (0.0 for "no basis at all",
+  // 0.9 for the small-region confidence ceiling) are distinguishable by exact
+  // value, so at minimum those stop reading like a plain measured
+  // probability. Every other value (including anything that only ROUNDS to
+  // 90%) is left as a plain percentage -- this is a known, documented
+  // limitation, not a claim that every confidence kind is told apart.
+  const confidenceDisplay =
+    confidence == null
+      ? { text: '—', hint: undefined }
+      : confidence === 0
+        ? { text: '—', hint: t.confidenceNoBasisHint }
+        : confidence === 0.9
+          ? { text: `≥${Math.round(confidence * 100)}%`, hint: t.confidenceCeilingHint }
+          : { text: `${Math.round(confidence * 100)}%`, hint: undefined };
 
   const decimals = normalizationApplied ? 4 : 1;
   const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
@@ -175,7 +200,7 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
             </tr>
               <tr>
                 <td className="text-text-muted pr-3 py-0.5">{t.confidence}</td>
-                <td>{confidence == null ? '—' : `${Math.round(confidence * 100)}%`}</td>
+                <td title={confidenceDisplay.hint}>{confidenceDisplay.text}</td>
               </tr>
           </tbody>
         </table>
