@@ -23,6 +23,14 @@ class NormalizedPoint(BaseModel):
     raw_fam: float
     raw_allele2: float
     raw_rox: float | None = None
+    # Whether THIS reading was actually divided by its passive reference, as
+    # opposed to normalization_applies()'s run-wide "would apply if the
+    # reference were usable" verdict. A run can ask for normalization and
+    # have it, well by well: one well's reference reads 0 (or is missing) and
+    # falls back to raw while its neighbour divides normally -- see
+    # app/processing/normalize.py:normalize() and
+    # docs/planning/feedback-2026-09-11/evidence/P23-NORM-SCALE.md.
+    normalized: bool = False
 
 
 class DataWindow(BaseModel):
@@ -129,6 +137,10 @@ class ScatterPoint(BaseModel):
     raw_fam: float
     raw_allele2: float
     raw_rox: float | None = None
+    # See NormalizedPoint.normalized -- carried through per well so a mixed
+    # response (some wells divided, some raw) is visible on the point itself,
+    # not just as one response-wide flag.
+    normalized: bool = False
     sample_name: str | None = None
     auto_cluster: str | None = None
     manual_type: str | None = None
@@ -142,6 +154,7 @@ class PlateWell(BaseModel):
     norm_fam: float
     norm_allele2: float
     ratio: float | None = None
+    normalized: bool = False
     sample_name: str | None = None
     auto_cluster: str | None = None
     manual_type: str | None = None
@@ -469,6 +482,11 @@ class AnalysisContext(BaseModel):
     cycle: int = Field(ge=0)
     use_rox: bool
     normalization_applied: bool
+    # True when some of this cycle's wells were actually divided by their
+    # passive reference and others were not (e.g. one well's ROX read 0 and
+    # fell back to raw while its neighbours divided normally). Defaults to
+    # False so historical persisted contexts (pre-P23) still deserialize.
+    normalization_mixed: bool = False
     background: Literal["none", "pre_read", "channel_min"]
     algorithm: ClusteringAlgorithm | Literal["mixed"]
     parameters: dict[str, JsonValue]

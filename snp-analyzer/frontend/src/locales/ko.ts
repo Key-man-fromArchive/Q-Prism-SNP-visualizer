@@ -132,6 +132,11 @@ const ko: Translations = {
   // 대체하지 않는다 -- "보고되지 않음"과 "적용 안 됨"은 다른 사실이다.
   overlayProcessingStatusUnreported: (requestedRox: boolean) =>
     `참조 정규화 요청: ${requestedRox ? '예' : '아니오'}; 실제 적용: 서버가 보고하지 않음.`,
+  // P23: 일부 웰은 참조값(ROX)이 0이거나 없어 나누지 않고 원값 그대로 남는다 --
+  // 응답 위의 "실제 적용" 값이 참이어도 웰마다 다른 척도가 섞여 있을 수 있음을
+  // 알린다. 웰별 값은 각 포인트의 normalized 필드로 확인 가능하다.
+  overlayProcessingStatusMixed:
+    '(일부 웰만 실제로 정규화됨 -- 나머지는 참조값이 0이거나 없어 원값 그대로입니다.)',
   wellCycleValuesTitle: '웰별 형광값',
   wellCycleValuesShow: '값 표시',
   wellCycleValuesHide: '값 숨기기',

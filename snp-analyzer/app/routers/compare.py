@@ -61,6 +61,7 @@ def _build_scatter_points(
             raw_fam=p.raw_fam,
             raw_allele2=p.raw_allele2,
             raw_rox=p.raw_rox,
+            normalized=p.normalized,
             sample_name=(unified.sample_names or {}).get(p.well),
             auto_cluster=cluster_assignments.get(p.well),
             manual_type=manual_assignments.get(p.well),

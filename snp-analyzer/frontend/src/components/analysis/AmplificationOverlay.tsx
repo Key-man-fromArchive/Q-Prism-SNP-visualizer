@@ -207,6 +207,7 @@ export function AmplificationOverlay({ ploidyOverride, idPrefix = "" }: Amplific
           <OverlayProcessingStatus
             requestedRox={useRox}
             normalizationApplied={response.normalization_applied}
+            normalizationMixed={response.normalization_mixed}
             backgroundMode={response.background_mode}
           />
         )}
@@ -244,11 +245,19 @@ export function AmplificationOverlay({ ploidyOverride, idPrefix = "" }: Amplific
 export function OverlayProcessingStatus({
   requestedRox,
   normalizationApplied,
+  normalizationMixed,
   backgroundMode,
   testId = "overlay-processing-status",
 }: {
   requestedRox: boolean;
   normalizationApplied: boolean | undefined;
+  /** P23: true when some wells in this response actually divided by their
+   *  passive reference and others fell back to raw (e.g. one well's ROX
+   *  read 0) -- two different scales of the same channel in one response.
+   *  Optional/undefined on an older backend that predates this echo; renders
+   *  nothing extra in that case, same as an absent `normalizationApplied`
+   *  renders "not reported" rather than guessing. */
+  normalizationMixed?: boolean;
   backgroundMode: BackgroundMode | undefined;
   /** Lets a second mount (e.g. FluorescenceDataCard, which reuses this exact
    *  honesty logic rather than re-implementing it) use a distinct testid so
@@ -262,6 +271,7 @@ export function OverlayProcessingStatus({
       data-testid={testId}
       data-requested={requestedRox}
       data-applied={reported ? String(normalizationApplied) : "unreported"}
+      data-mixed={normalizationMixed ?? false}
       className="text-xs text-text-muted"
     >
       {reported
@@ -271,6 +281,7 @@ export function OverlayProcessingStatus({
           any mode it doesn't recognize, including undefined -- reused as-is
           rather than inventing a second "not reported" string for it. */}
       {t.chartBackground(backgroundMode ?? "")}
+      {normalizationMixed && <> {t.overlayProcessingStatusMixed}</>}
     </span>
   );
 }

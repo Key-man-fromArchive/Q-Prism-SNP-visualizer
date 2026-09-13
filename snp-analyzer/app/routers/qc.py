@@ -18,7 +18,7 @@ from app.models import (
 )
 from app.processing.background import BackgroundMode
 from app.processing.genotype_vocab import label_by_ratio
-from app.processing.normalize import normalize_for_cycle, normalization_applies
+from app.processing.normalize import normalize_for_cycle, normalization_summary
 from app.processing.ratio_origin import shift_points_to_origin
 from app.routers.upload import sessions
 from app.routers.clustering import cluster_store, effective_well_types_for
@@ -57,6 +57,7 @@ class NtcCheck(BaseModel):
     cycle: int
     use_rox: bool
     normalization_applied: bool
+    normalization_mixed: bool = False
     background: str
 
 
@@ -291,16 +292,6 @@ def _ntc_status(
     return "ok" if wells else "no_ntc"
 
 
-def _normalization_used(unified: UnifiedData, cycle: int, use_rox: bool) -> bool:
-    if not normalization_applies(unified, use_rox=use_rox):
-        return False
-    return any(
-        (d.normalization_value if d.normalization_value is not None else d.rox or 0) > 0
-        for d in unified.data
-        if d.cycle == cycle
-    )
-
-
 def _plate_check(
     snapshot: QcSnapshot,
     points: list[NormalizedPoint],
@@ -316,6 +307,11 @@ def _plate_check(
         if kind == "NTC"
     ]
     status = _ntc_status(wells)
+    # Same definition /scatter, /plate, /amplification/all and /analyze use
+    # (see normalization_summary() in app/processing/normalize.py), read off
+    # the SAME points this check already scoped to plate wells -- not a
+    # second, separately-derived check of the raw UnifiedData.
+    applied, mixed = normalization_summary(points)
     return NtcCheck(
         ok=status != "warning",
         wells=wells,
@@ -323,7 +319,8 @@ def _plate_check(
         cycle=cycle,
         use_rox=use_rox,
         background=background,
-        normalization_applied=_normalization_used(snapshot.unified, cycle, use_rox),
+        normalization_applied=applied,
+        normalization_mixed=mixed,
     )
 
 

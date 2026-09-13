@@ -61,6 +61,43 @@ it('shows the response-echoed processing status, not the requested settings valu
   expect(status!.textContent).toContain(ko.overlayProcessingStatus(true, false));
 });
 
+it('shows a mixed-scale badge when the response says some wells fell back to raw and others did not', async () => {
+  // P23: a run can have normalization switched on and still divide only
+  // SOME wells (a well whose ROX read 0 falls back to raw). The
+  // response-wide `normalization_applied` alone cannot say this; the badge
+  // needs the separate `normalization_mixed` echo.
+  getAllAmplificationMock.mockResolvedValue({
+    allele2_dye: 'HEX',
+    normalization_applied: true,
+    normalization_mixed: true,
+    background_mode: 'none',
+    curves: [
+      { well: 'A1', cycles: [1, 2], norm_fam: [1, 2], norm_allele2: [2, 3], effective_type: 'Allele 1 Homo', normalized: [true, true] },
+      { well: 'A2', cycles: [1, 2], norm_fam: [900, 950], norm_allele2: [100, 110], effective_type: 'Allele 2 Homo', normalized: [false, false] },
+    ],
+  });
+
+  const view = render(<AmplificationOverlay />);
+  fireEvent.click(view.container.querySelector('#toggle-overlay-btn')!);
+  await waitFor(() => expect(Plotly.react).toHaveBeenCalled());
+
+  const status = view.container.querySelector('[data-testid="overlay-processing-status"]');
+  expect(status).not.toBeNull();
+  expect(status).toHaveAttribute('data-applied', 'true');
+  expect(status).toHaveAttribute('data-mixed', 'true');
+  expect(status!.textContent).toContain(ko.overlayProcessingStatusMixed);
+});
+
+it('does not show the mixed-scale badge when the response says nothing was mixed', async () => {
+  const view = render(<AmplificationOverlay />);
+  fireEvent.click(view.container.querySelector('#toggle-overlay-btn')!);
+  await waitFor(() => expect(Plotly.react).toHaveBeenCalled());
+
+  const status = view.container.querySelector('[data-testid="overlay-processing-status"]');
+  expect(status).toHaveAttribute('data-mixed', 'false');
+  expect(status!.textContent).not.toContain(ko.overlayProcessingStatusMixed);
+});
+
 it('does not assert "applied" from the request when the response omits the echo', async () => {
   // Older/hypothetical response shape: normalization_applied is entirely
   // absent, not `false`. useRox (the request) is true. The old

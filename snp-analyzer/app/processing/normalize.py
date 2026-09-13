@@ -27,7 +27,8 @@ def normalize(
     results = []
     for d in readings:
         reference_value = _normalization_value(d)
-        if apply_normalization and reference_value and reference_value > 0:
+        divided = apply_normalization and reference_value is not None and reference_value > 0
+        if divided:
             norm_fam = d.fam / reference_value
             norm_allele2 = d.allele2 / reference_value
         else:
@@ -41,6 +42,7 @@ def normalize(
             raw_fam=round(d.fam, 4),
             raw_allele2=round(d.allele2, 4),
             raw_rox=round(reference_value, 4) if reference_value is not None else None,
+            normalized=divided,
         ))
     return results
 
@@ -61,6 +63,36 @@ def normalization_applies(
     """
     _, applied = _normalization_context(data, has_rox, use_rox)
     return applied
+
+
+def normalization_summary(points: list[NormalizedPoint]) -> tuple[bool, bool]:
+    """``(applied, mixed)`` from what ``normalize()`` actually did, well by well.
+
+    ``normalization_applies()`` answers one question at run scope: would
+    normalization apply AT ALL, given the run's mode/reference-channel and
+    the request. It says nothing about individual wells. A run can pass that
+    check and still have some wells fall back to raw -- a well whose passive
+    reference reads 0 (or is missing) divides by nothing and returns raw
+    values regardless (see ``normalize()`` above) -- and every one of
+    ``/analyze``, ``/scatter``, ``/plate`` and ``/amplification/all`` used to
+    derive its own "applied" verdict from ``normalization_applies()`` alone,
+    so a plate with a single zero-reference well was reported as fully
+    normalized by three of the four and correctly caught by the fourth
+    (``/analyze``, which already checked for at least one positive reference
+    at the cycle). This is the one definition all four now share, read
+    straight off ``NormalizedPoint.normalized`` -- the same field the
+    response points/wells/curves carry, so a view is never told something the
+    data itself does not show.
+
+    ``applied`` is True when at least one reading here was actually divided.
+    ``mixed`` is True when some readings here were divided and others were
+    not -- the exact situation that puts two different scales of the same
+    channel into one response.
+    """
+    if not points:
+        return False, False
+    flags = {p.normalized for p in points}
+    return (True in flags), (len(flags) > 1)
 
 
 def normalize_for_cycle(
