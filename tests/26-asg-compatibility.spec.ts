@@ -283,6 +283,22 @@ test.describe('P5 ASG mounted-path compatibility', () => {
       }
     });
 
+    // The synthetic auth route above fakes the exchange without the real
+    // backend ever minting the resulting cookie, so the project tab's own
+    // session/project list fetches would otherwise reach the real backend
+    // with a cookie it never issued and get a real 401 -- which the app's
+    // shared apiFetch error path treats as "log the user out" no matter
+    // which endpoint reported it (see src/lib/api.ts's responseError). Stub
+    // both restored-tab reads so this test verifies the launch exchange
+    // itself, not that unrelated backend state happens to accept a
+    // synthetic cookie.
+    await page.route(mountedApiUrl('/api/sessions'), async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+    });
+    await page.route(mountedApiUrl('/api/projects'), async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ projects: [] }) });
+    });
+
     await page.goto(mountedUrl(`/?token=${encodeURIComponent(LAUNCH_TOKEN)}&tab=project#anchor`));
     await expect(page.locator('header')).toBeVisible();
     const restored = new URL(page.url());
