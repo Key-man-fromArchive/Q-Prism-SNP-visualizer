@@ -151,6 +151,15 @@ async def asg_launch(body: ASGLaunchRequest, response: Response):
 
 @router.post("/asg-launch-cookie")
 async def asg_launch_cookie(request: Request, response: Response):
+    # P18-AUTH-401: check the mode before the cookie. This route doesn't
+    # exist outside asg_launch mode -- every other asg_launch-only surface
+    # (login, change-password, _complete_asg_launch itself) reports that as
+    # 404. Checking the cookie first meant a caller in the wrong mode saw
+    # 401 "cookie is missing" instead, which is indistinguishable from "your
+    # session is invalid" to anything that treats 401 as a logout signal.
+    if not is_asg_launch_mode():
+        raise HTTPException(status_code=404, detail="ASG launch is disabled")
+
     raw_token = request.cookies.get(ASG_LAUNCH_COOKIE_NAME, "")
     if not raw_token:
         raise HTTPException(status_code=401, detail="ASG launch cookie is missing")
