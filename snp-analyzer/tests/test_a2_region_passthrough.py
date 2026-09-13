@@ -214,8 +214,8 @@ def _capture_csv_golden_context(client, sid):
         for r in result.regions or []
     ] or None)
     ticket, snapshot = client.clustering._capture_analysis(sid, request)
-    _, origin, excluded = client.clustering._snapshot_points(snapshot)
-    client.clustering._attach_context(snapshot, result, origin, excluded)
+    _, origin, excluded, points = client.clustering._snapshot_points(snapshot)
+    client.clustering._attach_context(snapshot, result, origin, excluded, points)
     fail_analysis(ticket)
 
 
@@ -327,8 +327,8 @@ def test_qc_multi_marker_reports_per_marker_cluster_separation(client):
         for r in result.regions
     ])
     ticket, snapshot = client.clustering._capture_analysis("s2", request)
-    _, origin, excluded = client.clustering._snapshot_points(snapshot)
-    client.clustering._attach_context(snapshot, result, origin, excluded)
+    _, origin, excluded, points = client.clustering._snapshot_points(snapshot)
+    client.clustering._attach_context(snapshot, result, origin, excluded, points)
     from app.processing.analysis_state import fail_analysis
     fail_analysis(ticket)
 
