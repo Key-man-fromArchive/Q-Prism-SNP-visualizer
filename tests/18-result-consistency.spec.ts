@@ -62,6 +62,8 @@ test('whole-run CSV export binds the visible result revision and explicit cycle 
   await expect(page.getByTestId('analysis-selection-count')).not.toContainText('0');
   const grouped = page.waitForResponse(response => response.url().endsWith('/groups')
     && response.request().method() === 'POST');
+  // P15-GROUP-MENU: open the collapsed trigger before picking Group 1.
+  await page.getByTestId('manual-group-trigger').click();
   await page.getByTestId('manual-group-1').click();
   await grouped;
   await page.getByTestId('scatter-selected-only').click();

@@ -161,6 +161,7 @@ const ko: Translations = {
   showAllScatterWells: '전체 웰 보기',
   clearWellSelection: '선택 해제',
   manualGroupLabel: (n: number) => `그룹 ${n}`,
+  assignToGroup: '그룹에 배정',
   manualGroupAdd: '그룹 추가',
   manualGroupNamePlaceholder: '그룹 이름',
   manualGroupSelectFirst: '먼저 웰을 선택하세요',

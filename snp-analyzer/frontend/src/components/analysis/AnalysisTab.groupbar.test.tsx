@@ -60,17 +60,18 @@ it('merges into a single row with one "create a group" entry point when there ar
   expect(toolbars).toHaveLength(1);
   expect(screen.queryByTestId('well-group-filter')).not.toBeInTheDocument();
   expect(screen.queryByTestId('manage-groups-button')).not.toBeInTheDocument();
-  expect(screen.queryByTestId('manual-group-presets')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('manual-group-trigger')).not.toBeInTheDocument();
   expect(screen.queryByTestId('show-empty-wells-toggle')).not.toBeInTheDocument();
   // Exactly one way left to create the first group.
   expect(screen.getByRole('button', { name: /Add group/i })).toBeInTheDocument();
 });
 
 // State (b): a selection exists.
-it('shows the group presets and an accurate selection count once wells are selected', () => {
+it('shows the group-assign trigger and an accurate selection count once wells are selected', () => {
   useSelectionStore.setState({ selectedWells: ['A1', 'A2'] });
   render(<AnalysisTab />);
-  expect(screen.getByTestId('manual-group-presets')).toBeInTheDocument();
+  // P15-GROUP-MENU: the 6 preset buttons collapsed into one trigger + menu.
+  expect(screen.getByTestId('manual-group-trigger')).toBeInTheDocument();
   expect(screen.getByTestId('analysis-selection-count')).toHaveTextContent('2');
   expect(screen.getByTestId('scatter-selected-only')).not.toBeDisabled();
 });

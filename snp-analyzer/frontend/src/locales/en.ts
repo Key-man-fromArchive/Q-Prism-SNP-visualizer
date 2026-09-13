@@ -164,6 +164,9 @@ const en = {
   showAllScatterWells: 'Show all wells',
   clearWellSelection: 'Clear',
   manualGroupLabel: (n: number) => `Group ${n}`,
+  // P15-GROUP-MENU: fixed accessible name (and unselected label) for the
+  // trigger that collapses the 6 preset buttons into a menu.
+  assignToGroup: 'Assign to group',
   manualGroupAdd: 'Add group',
   manualGroupNamePlaceholder: 'Group name',
   manualGroupSelectFirst: 'Select wells first',
