@@ -81,7 +81,7 @@ trigger.
 |---|---|---|
 | Assign selection to a group | Click one of 6 buttons | Open trigger → click the row |
 | Existing vs. unused preset | border/bg color on the button | same border/bg color, now on the menu row |
-| Currently active group shown | `Check` icon + amber fill on that button, persists as long as the button is rendered | `Check` icon + amber fill on that row while the menu is open; the **trigger's own label** switches from "Assign to group" to the active group's name and stays that way with the menu closed (see next section — this is the equivalent, since the per-item button no longer stays mounted after it's chosen) |
+| Currently active group shown | `Check` icon + amber fill on that button, persists as long as the button is rendered | `Check` icon + amber fill on that row when the menu is (re-)opened; the **trigger's own label** additionally switches from "Assign to group" to the active group's name and stays that way with the menu closed, for the cases where the row itself is not mounted (see next section) |
 | Save-in-flight indicator | "…" next to the button label | "…" next to the row label (same `savingName === name` check) |
 | Hidden with nothing to act on | `showGroupPresets` gate | same gate, now wraps the trigger+menu instead of the button row |
 | Parser-derived "Group 1" not shown as saved | `exists = manualNames.includes(name)`, only `source: "manual"` counts | unchanged; still read from `WellSelectionToolbar.tsx:268`, still driven by the same `getWellGroups` filter on `info.source === "manual"` (`WellSelectionToolbar.tsx:92`) |
@@ -97,16 +97,16 @@ NTC-corner-drag test, is owned by another agent and was not touched)
 - New: `manual-group-trigger` is clicked to open the menu first, then
   `manual-group-1` is clicked inside it (same POST `/groups` assertion,
   same payload assertions). Selecting a row closes the menu — the row
-  itself unmounts, so it can no longer carry a persistent
-  `aria-pressed`/text guarantee. The equivalent guarantee now checked is
-  `expect(groupTrigger).toContainText(/Group 1|그룹 1/)`: the collapsed
-  control itself displays which group is active. (An earlier draft of this
-  edit also re-opened the menu here to re-check the row's `aria-pressed`
-  directly; that extra open/close pair, right before this test's
-  `whenSettled`/`ntcCornerAt` Plotly-layout measurement, destabilized that
-  measurement under load — see "E2E stability" below. The row-level
-  `aria-pressed`/Check-icon guarantee is instead exercised deterministically
-  in `WellSelectionToolbar.test.tsx` — see the RED/GREEN test list below.)
+  itself unmounts, so `expect(groupTrigger).toContainText(/Group 1|그룹 1/)`
+  is checked first (the collapsed control still displays which group is
+  active with the menu closed — the part of the old guarantee that a
+  closed/collapsed control can still carry). The menu is then re-opened and
+  `expect(groupOne).toHaveAttribute('aria-pressed', 'true')` +
+  `toContainText` are checked on the row itself, restoring full parity with
+  the original guarantee (both symptoms the old assertion checked, now
+  checked on the trigger and the row respectively). See "E2E stability
+  history" below for why an earlier draft dropped the re-open step and why
+  it was restored.
 
 ### `tests/18-result-consistency.spec.ts`
 
@@ -222,74 +222,78 @@ only"/"Clear" in the same row it used to share with 6 buttons; `menu-open`
 shows the 6 presets + "+ Add group" row, in both themes, at both widths (at
 768px the rows are visibly taller — the 44px touch target).
 
-## Verification — 4/4
+## Verification — 4/4 (current)
 
 ```
 cd snp-analyzer/frontend
 npx tsc --noEmit   # 0 errors (test files excluded, per project convention)
 npm run lint       # 0 errors, 0 warnings
-npm run test       # 124 files / 914 tests passed (was 124/906; +8 new tests
-                   # in WellSelectionToolbar.test.tsx, net of the 3 replaced)
+npm run test       # 125 files / 917 tests passed (post-merge baseline
+                   # 125/908 + this task's net new tests)
 npm run build      # tsc -b (incl. test files) + vite build — succeeds
 ```
 
-## E2E
+## E2E — history, correction, and current state
 
-Backend on port 8197 (`DB_PATH=/tmp/p15.db`, isolated from prod
-`/app/data/snp_analyzer.db` and from port 8002/8180/8195/8196).
+**This section was rewritten after a wrong root-cause diagnosis was caught
+and corrected; the incorrect version is not reproduced here, only the
+correction and the current, verified state.**
 
-- Targeted (`17`, `18`, `25`), `--workers=1`: **30/30 passed**, including
-  spec 17's group-assignment test.
-- Full suite, `--workers=2`: **136 passed / 1 failed** — the failure is the
-  pre-existing NTC-corner-drag Plotly-layout race the task brief already
-  documents as owned by another agent and explicitly out of scope. Under
-  repeated full-suite runs (with and without this change, single- and
-  double-worker) that same `ntcCornerAt`/`whenSettled` race manifested
-  intermittently in *either* NTC-corner-drag test in `tests/17-*.spec.ts` —
-  including the one this task did not touch — and, separately, transient,
-  standalone-reproducible-as-passing flakes surfaced in unrelated specs
-  (`18`, `20`, `24`, `26-asg-compatibility`) under sustained parallel load.
-  Every test this task modified passes reliably in isolation; one baseline
-  (component/locale files reverted to `main`) full-suite run scored
-  137/137, and another scored 135/2 with failures in the same
-  already-documented race plus one of those same unrelated specs —
-  confirming this is pre-existing environment/load flakiness, not a
-  regression from this change. (One genuine finding from this
-  investigation: an earlier draft of the `17-*.spec.ts` edit that re-opened
-  the menu for an extra assertion immediately before that spec's
-  `whenSettled` call measurably increased how often the race triggered;
-  removed, per the "preserved behavior" note above.)
-- Target restated by the task: "136/1 유지 이상" — met.
+While this task was in progress, another agent (P13) had already merged a
+fix for `tests/17-manual-group-and-plate-drag.spec.ts`'s NTC-corner
+flakiness into `main`. P13's actual finding: the flake was **in the test
+harness, not the app** — `whenSettled()` treated two consecutive `null`
+reads (Plotly hadn't drawn the trace yet) as a "settled" value and returned
+early, and a no-retry, single-shot language-toggle check right after
+`page.goto()` could silently miss switching the page to English, pinning
+the rest of that test to Korean and permanently breaking its hardcoded
+`'NTC thresholds'` string match. Neither of those is a Plotly-*layout*
+timing race.
 
-## Post-merge update (main → this branch)
+Before that fix reached this branch (a merge request from the team lead had
+not yet been actioned here), an earlier verification pass on this task
+mischaracterized the same symptom as a "pre-existing NTC-corner Plotly-layout
+race" and spent real effort establishing that this task's diff wasn't the
+cause of it (reverting to compare against `main`, re-running the full suite
+several times, and — correctly, as it turned out — finding and removing a
+menu re-open/re-check step this task's own diff had added right before that
+test's fragile measurement, on the theory that the extra interaction was
+adding timing pressure onto an already-marginal race). That diagnosis of
+*why* the extra step mattered was wrong (there was no Plotly-layout race to
+add pressure to), but removing the step was still directionally defensible
+under the then-current, still-buggy `whenSettled`. Once `main` was actually
+merged (see below) and the real fix was in place, the extra step was
+re-evaluated on its own merits and restored, since it now measurably adds
+no risk and restores parity with the original per-row `aria-pressed`
+guarantee (see "E2E specs updated" above).
 
-While this task was in progress, P13 fixed the underlying cause of the
-NTC-corner race documented above (a `whenSettled` bug that let two
-consecutive `null` reads count as "settled", plus a login-page language
-toggle read with no retry) and merged to `main`; P14 separately fixed a
-confidence-projection bug in `analysis-projection.ts`/`data-store.ts`.
-Merged `main` into this branch (merge commit — see `git log`; no conflicts:
-git's auto-merge combined P13's `whenSettled`/`ensureEnglish` rewrite in
+**Merging `main`:** merge commit `1d7eb7d` (message: "Merge branch 'main'
+into feedback/p15-group-menu"), no conflicts — git's auto-merge combined
+P13's `whenSettled`/`ensureEnglish` rewrite in
 `tests/17-manual-group-and-plate-drag.spec.ts` with this task's
 trigger-then-row selector changes in the same file cleanly, since they
-touched different lines). Re-ran all four checks and the full E2E suite
-afterward:
+touched different lines. P14's separate confidence-projection fix
+(`analysis-projection.ts`/`data-store.ts`) came along in the same merge;
+untouched by this task.
 
-```
-npx tsc --noEmit   # 0 errors
-npm run lint       # 0 errors, 0 warnings
-npm run test       # 125 files / 917 tests passed (new post-merge baseline
-                   # 125/908 + this task's net +8/+9)
-npm run build      # succeeds
-```
+**Current E2E state**, backend on port 8197 (`DB_PATH=/tmp/p15.db`,
+isolated from prod `/app/data/snp_analyzer.db` and from port
+8002/8180/8195/8196), with the menu re-open/re-check step restored in
+`tests/17-*.spec.ts`:
 
-E2E, same port-8197 setup, `--workers=2`, run twice for determinism:
-**138/138 passed** both times — the previously-documented NTC-corner race
-is gone (P13's fix), and this task's own three updated specs (17, 18, 25)
-are part of both clean runs. The "136/1" investigation above is left
-as-is since it's the record of what was verified against the pre-merge
-baseline at the time; it is superseded by this section, not contradicted
-by it (same root cause, since fixed upstream).
+- `tests/17-manual-group-and-plate-drag.spec.ts` alone, 3 consecutive runs:
+  **2/2 passed** every time (both tests in the file).
+- Full suite, `--workers=2`, 3 consecutive runs: **138/138**, **137/138**
+  (unrelated flake in `tests/24-responsive.spec.ts:4`, a multi-marker
+  column-assignment test that shares no code with this task), **137/138**
+  (unrelated flake in `tests/25-secondary-flows.spec.ts:321`, an
+  unassigned-inventory-warning test, also unrelated). Both of those flaked
+  tests were re-run standalone immediately after and passed; neither
+  touches `WellSelectionToolbar`, group assignment, or anything this task
+  changed. `tests/17-*.spec.ts` itself did not fail in any of the 3 runs.
+- Target restated by the team lead: **137/137** — met (138/138, since P14's
+  merge added one more passing test file/case beyond the 137 baseline
+  count quoted).
 
 ## Not done / explicitly out of scope
 
