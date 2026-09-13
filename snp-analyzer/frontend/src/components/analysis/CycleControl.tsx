@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
-import { useNavigationStore } from '@/stores/navigation-store';
+import { useNavigationStore, isResultsSurfaceActive } from '@/stores/navigation-store';
 import { useI18n } from '@/hooks/use-i18n';
 
 export function CycleControl() {
@@ -18,6 +18,7 @@ export function CycleControl() {
   const currentCycle = useNavigationStore(state => state.cycle);
   const availableCycles = useNavigationStore(state => state.availableCycles);
   const ready = useNavigationStore(state => state.status === 'ready');
+  const resultsVisible = useNavigationStore(isResultsSurfaceActive);
   const entry = useSessionStore(state => state.entryGeneration);
   const [draft, setDraft] = useState<{ entry: number; cycle: number | null; value: number } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,14 +46,23 @@ export function CycleControl() {
       if (cycle !== undefined) chooseCycle(cycle);
     }, 150);
   };
+  // P21-BACKGROUND: this component is mounted (never unmounted) inside both
+  // Results sub-views the whole time a session is open -- `AnalysisWorkspace`/
+  // App.tsx only CSS-hide it while another surface or top-level tab is
+  // active. Without `resultsVisible`, this interval kept advancing the cycle
+  // every 500ms for a screen nobody could see, which in turn kept driving
+  // downstream per-cycle fetches (e.g. MultiMarkerAnalysisPanel's scatter
+  // fetch) for that same invisible screen. `isPlaying` itself is left
+  // untouched, so returning to Results resumes immediately from wherever the
+  // cycle was left, with no extra click needed.
   useEffect(() => {
-    if (!isPlaying || !ready || cycles.length < 2) return;
+    if (!isPlaying || !ready || !resultsVisible || cycles.length < 2) return;
     const timer = window.setInterval(() => {
       const index = cycles.indexOf(useNavigationStore.getState().cycle ?? NaN);
       setCycle(cycles[(index + 1) % cycles.length]);
     }, 500);
     return () => window.clearInterval(timer);
-  }, [isPlaying, ready, cycles, setCycle]);
+  }, [isPlaying, ready, resultsVisible, cycles, setCycle]);
   useEffect(() => {
     const handler = (event: Event) => {
       const target: unknown = (event as CustomEvent<unknown>).detail;

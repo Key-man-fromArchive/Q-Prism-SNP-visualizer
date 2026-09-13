@@ -34,6 +34,25 @@ const initial: NavigationValue = { session: null, tab: 'results', surface: 'plat
 export function isWorkspaceTab(tab: StoredTab): boolean {
   return tab === 'plate' || tab === 'results' || tab === 'analysis';
 }
+/**
+ * P21-BACKGROUND: single, reusable source of truth for "is the Results
+ * surface actually the thing on screen right now" -- `surface` alone is
+ * *not* enough, and several call sites (each guessing independently) had
+ * started to disagree about it. `setTab` only keeps `surface` in sync with
+ * the active tab while that tab is `plate`/`results`; moving to any other
+ * top-level tab (settings, quality, project, ...) leaves `surface` exactly
+ * as it was on the workspace, even though `App.tsx` CSS-hides the entire
+ * workspace (`AnalysisWorkspace`, and everything mounted inside it) the
+ * moment `tab` stops being a workspace tab. A consumer that only checks
+ * `surface !== 'analysis'` therefore reports "foregrounded" for a panel that
+ * is, in fact, invisible -- see `MultiMarkerAnalysisPanel.tsx`'s auto-cluster
+ * debounce and `CycleControl.tsx`'s playback loop, both of which used to
+ * (or, for playback, simply never checked at all) skip this and would run
+ * real network side effects for a screen nobody can see.
+ */
+export function isResultsSurfaceActive(state: Pick<NavigationValue, 'tab' | 'surface'>): boolean {
+  return isWorkspaceTab(state.tab) && state.surface === 'analysis';
+}
 /** The tab the top-level nav should actually highlight/render for a given
  *  stored (tab, surface) pair -- collapses the legacy `'analysis'` synonym
  *  into the surface-appropriate new id. Never returns `'analysis'`. */

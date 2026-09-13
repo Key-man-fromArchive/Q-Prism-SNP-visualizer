@@ -34,6 +34,27 @@ it('plays at 500ms, wraps, and stops when paused', () => {
   expect(useSelectionStore.getState().currentCycle).toBe(1);
 });
 
+// P21-BACKGROUND: playback must not keep advancing (and therefore keep
+// driving downstream per-cycle fetches, e.g. MultiMarkerAnalysisPanel's
+// scatter fetch) while the Results surface isn't the active top-level tab --
+// `AnalysisWorkspace` only CSS-hides this component, it never unmounts it,
+// so its `setInterval` would otherwise keep firing for a screen nobody can
+// see. `isPlaying` itself is left untouched so returning to the tab resumes
+// immediately, with no extra click required.
+it('pauses cycle advancement while the workspace is not the active top-level tab, and resumes on return without re-clicking play', () => {
+  render(<CycleControl />);
+  act(() => useSelectionStore.getState().setPlaying(true));
+  act(() => vi.advanceTimersByTime(500));
+  expect(useSelectionStore.getState().currentCycle).toBe(3);
+  act(() => useNavigationStore.setState({ tab: 'settings' }));
+  act(() => vi.advanceTimersByTime(2000));
+  expect(useSelectionStore.getState().currentCycle).toBe(3);
+  expect(useSelectionStore.getState().isPlaying).toBe(true);
+  act(() => useNavigationStore.setState({ tab: 'analysis' }));
+  act(() => vi.advanceTimersByTime(500));
+  expect(useSelectionStore.getState().currentCycle).toBe(1);
+});
+
 it('keeps the existing 150ms slider debounce', () => {
   const view = render(<CycleControl />);
   fireEvent.change(view.container.querySelector('input')!, { target: { value: '1' } });

@@ -17,7 +17,7 @@ import { useDataStore, ZERO_ORIGIN } from "@/stores/data-store";
 import { getScatter, listMarkerCatalog } from "@/lib/api";
 import { analyzeCurrent, analyzeRecommended } from "@/lib/analysis-actions";
 import { useAnalysisStore } from "@/stores/analysis-store";
-import { useNavigationStore } from "@/stores/navigation-store";
+import { useNavigationStore, isResultsSurfaceActive } from "@/stores/navigation-store";
 import { useSettledAnalysis } from "@/hooks/use-settled-analysis";
 import { useCurrentAnalysisRequest } from '@/hooks/use-current-analysis-request';
 import { ClusteringAlgorithm } from "@/types/api";
@@ -66,6 +66,15 @@ type MultiMarkerAnalysisPanelProps = {
 // lands on. `previous.current` in useSettledAnalysis simply goes stale while
 // paused, so returning to the surface schedules exactly one analyze for
 // whatever the input has become by then -- same one-shot behavior as before.
+//
+// P21-BACKGROUND: `backgrounded` used to be `surface !== 'analysis'` alone.
+// That misses leaving the workspace for a plain top-level tab (settings,
+// quality, project, ...): `setTab` only updates `surface` for `plate`/
+// `results`, so `surface` is left reading whatever it was on Results, even
+// though the whole workspace (this panel included) is now App.tsx CSS-hidden.
+// A settings/ROX change made from that other tab was therefore treated as
+// "still on Results" and fired a real, wasted clustering request for a panel
+// nobody could see -- see navigation-store.ts's `isResultsSurfaceActive`.
 function settledAnalysisPaused(playing: boolean, unconfirmed: boolean, exporting: boolean, navigating: boolean, backgrounded: boolean) {
   return playing || unconfirmed || exporting || navigating || backgrounded;
 }
@@ -101,7 +110,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   const exportRestoring = useNavigationStore(state => state.exportRestoring);
   const qualityNavigating = useNavigationStore(state => state.qualityNavigating);
   const qualityEpoch = useNavigationStore(state => state.qualityEpoch);
-  const backgrounded = useNavigationStore(state => state.surface) !== 'analysis';
+  const backgrounded = !useNavigationStore(isResultsSurfaceActive);
   const entry = useSessionStore(state => state.entryGeneration);
   const scatterRequestRef = useRef(0);
   const skipAutoClusterCycleRef = useRef<number | null>(null);
@@ -168,10 +177,18 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   // Scatter follows the cycle immediately. Clustering is deferred until the
   // input settles, and is paused during playback, avoiding three heavy server
   // requests on every animation frame.
+  //
+  // P21-BACKGROUND: also skipped entirely while `backgrounded` -- unlike
+  // clustering this isn't debounced, so a settings/cycle change made while
+  // nobody can see this panel used to fire a real `/scatter` request right
+  // away. `backgrounded` flipping back to false re-runs this effect (nothing
+  // else needs to change) for exactly one catch-up fetch reflecting whatever
+  // the input became while backgrounded.
   useEffect(() => {
+    if (backgrounded) return;
     void fetchScatter();
     return () => { scatterRequestRef.current += 1; };
-  }, [fetchScatter]);
+  }, [fetchScatter, backgrounded]);
 
   const handleAnalyze = () => analyzeCurrent(request);
   const handleRecommended = () => analyzeRecommended(request, cycle => {

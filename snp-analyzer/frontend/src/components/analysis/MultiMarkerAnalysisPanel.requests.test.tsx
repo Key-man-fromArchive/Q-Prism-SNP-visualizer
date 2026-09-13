@@ -7,6 +7,7 @@ import { useNavigationStore } from '@/stores/navigation-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
+import { useSettingsStore } from '@/stores/settings-store';
 import type { MarkerRegion } from '@/types/api';
 vi.mock('@/lib/api', () => ({ runClustering: vi.fn(), suggestCycle: vi.fn(),
   getScatter: vi.fn().mockResolvedValue({ points: [], allele2_dye: 'VIC' }),
@@ -129,6 +130,49 @@ it('does not auto-analyze intermediate marker edits while backgrounded, but does
   await act(async () => { await vi.advanceTimersByTimeAsync(300); });
   expect(runClustering).not.toHaveBeenCalled();
   act(() => useNavigationStore.setState({ surface: 'analysis' }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  expect(runClustering).toHaveBeenCalledTimes(1);
+});
+
+// P21-BACKGROUND: `fetchScatter` (unlike clustering) isn't debounced -- it
+// fires on every settings/cycle change while visible, by design ("scatter
+// follows the cycle immediately"). But nothing gated it on visibility either,
+// so the same Results->Settings-tab ROX/background change that must not
+// trigger clustering must also not trigger a wasted `/scatter` request; one
+// catch-up fetch once the panel is actually visible again is correct.
+it('does not re-fetch scatter for a settings change made after leaving the workspace for a plain top-level tab, but does once back on Results', async () => {
+  useSettingsStore.setState({ backgroundMode: 'none' });
+  act(() => useNavigationStore.getState().setTab('results'));
+  render(<MultiMarkerAnalysisPanel markers={markers} />);
+  await waitFor(() => expect(getScatter).toHaveBeenCalledTimes(1));
+  act(() => useNavigationStore.getState().setTab('settings'));
+  act(() => useSettingsStore.getState().setBackgroundMode('channel_min'));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  expect(getScatter).toHaveBeenCalledTimes(1);
+  act(() => useNavigationStore.getState().setTab('results'));
+  await waitFor(() => expect(getScatter).toHaveBeenCalledTimes(2));
+});
+
+// P21-BACKGROUND: `surface` alone survives leaving the workspace entirely.
+// `setTab` (the real navigation action a Results->Settings tab click runs)
+// only updates `surface` when the destination is `plate`/`results` -- moving
+// to a plain top-level tab like `settings` leaves `surface: 'analysis'`
+// exactly as it was on Results, so the old `surface !== 'analysis'` check
+// alone reports "foregrounded" even though `AnalysisWorkspace`'s whole
+// wrapper is now App.tsx-hidden. A settings change made from that tab (ROX/
+// background here) must not fire real clustering while nobody can see it.
+it('does not auto-analyze a settings change made after leaving the workspace for a plain top-level tab, but does once back on Results', async () => {
+  vi.useFakeTimers();
+  useSettingsStore.setState({ backgroundMode: 'none' });
+  act(() => useNavigationStore.getState().setTab('results'));
+  render(<MultiMarkerAnalysisPanel markers={markers} />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  act(() => useNavigationStore.getState().setTab('settings'));
+  expect(useNavigationStore.getState().surface).toBe('analysis');
+  act(() => useSettingsStore.getState().setBackgroundMode('channel_min'));
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  expect(runClustering).not.toHaveBeenCalled();
+  act(() => useNavigationStore.getState().setTab('results'));
   await act(async () => { await vi.advanceTimersByTimeAsync(300); });
   expect(runClustering).toHaveBeenCalledTimes(1);
 });
