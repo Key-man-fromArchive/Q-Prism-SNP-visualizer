@@ -6,7 +6,7 @@ import { useRecentSessions } from '@/hooks/use-recent-sessions';
 import { projectGenotypeCounts } from './project-summary';
 import { projectCsv, projectDownloadName } from './project-export';
 import { readProject } from './project-read';
-import { ArrowLeft, Files, X } from 'lucide-react';
+import { ArrowLeft, Clock, Download, Files, FileX, X } from 'lucide-react';
 import { useI18n } from '@/hooks/use-i18n';
 import { useConfirm } from '@/hooks/use-confirm';
 import { Modal } from '@/components/shared/ui/Modal';
@@ -20,11 +20,13 @@ import {
   bulkDeleteSessions,
   bulkAddProjectSessions,
   bulkRemoveProjectSessions,
+  downloadRawFile,
 } from '@/lib/api';
 import type {
   ProjectListResponse,
   ProjectResponse,
   ProjectSummaryResponse,
+  RawFileStatus,
 } from '@/types/api';
 import { useSessionStore } from '@/stores/session-store';
 import { useAuthStore } from '@/stores/auth-store';
@@ -38,6 +40,68 @@ type BatchTabProps = { onLoadSession?: () => void };
 function fmtSession(sid: string, filename?: string): string {
   const short = sid.substring(0, 8);
   return filename ? `${short} [${filename}]` : short;
+}
+
+const RAW_FILE_EXPIRING_SOON_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** True once an available raw file is within a week of its retention
+ *  deadline -- shown ahead of time (colour change on the download icon) so
+ *  an operator who needs the original can act before it is swept, rather
+ *  than discovering it is gone after the fact. */
+function rawFileExpiresSoon(expiresAt: string | null | undefined): boolean {
+  if (!expiresAt) return false;
+  const remaining = new Date(expiresAt).getTime() - Date.now();
+  return remaining > 0 && remaining <= RAW_FILE_EXPIRING_SOON_MS;
+}
+
+/** The one action-column cell for a session's original uploaded file.
+ *  Renders nothing for 'none' (the common case -- most sessions predate
+ *  this feature) so it never clutters a row that has nothing to say; the
+ *  other three states are all visually and textually distinct (P32). */
+function RawFileAction({
+  rawFile,
+  fallbackName,
+  onDownload,
+  t,
+}: {
+  rawFile: RawFileStatus | undefined;
+  fallbackName: string;
+  onDownload: (filename: string) => void;
+  t: ReturnType<typeof useI18n>['t'];
+}) {
+  if (!rawFile || rawFile.status === 'none') return null;
+  const name = rawFile.original_filename || fallbackName;
+
+  if (rawFile.status === 'available') {
+    const expiresOn = rawFile.expires_at ? new Date(rawFile.expires_at).toLocaleDateString() : '';
+    const label = t.rawFileDownloadedTitle(name, expiresOn);
+    return (
+      <button
+        onClick={() => onDownload(name)}
+        title={label}
+        aria-label={label}
+        className={`hover:opacity-80 ${rawFileExpiresSoon(rawFile.expires_at) ? 'text-warning' : 'text-text-muted'}`}
+      >
+        <Download size={14} />
+      </button>
+    );
+  }
+
+  if (rawFile.status === 'expired') {
+    const expiredOn = rawFile.deleted_at ? new Date(rawFile.deleted_at).toLocaleDateString() : '';
+    const label = t.rawFileExpiredTitle(expiredOn);
+    return (
+      <span title={label} aria-label={label} role="img" className="text-text-muted inline-flex">
+        <Clock size={14} />
+      </span>
+    );
+  }
+
+  return (
+    <span title={t.rawFileMissingTitle} aria-label={t.rawFileMissingTitle} role="img" className="text-danger inline-flex">
+      <FileX size={14} />
+    </span>
+  );
 }
 
 // ─── Searchable Project Picker (dropdown) ────────────────────────────────────
@@ -270,6 +334,18 @@ function ProjectWorkspace({ onLoadSession }: BatchTabProps) {
       }
     } catch { if (actionOwner.current(ticket)) setError(t.errDeleteSession); }
     finally { if (actionOwner.current(ticket)) setLoading(false); }
+  };
+
+  // ── Raw file download ──────────────────────────────────────────────────────
+  const handleDownloadRawFile = async (sid: string, filename: string) => {
+    try {
+      const blob = await downloadRawFile(sid);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch {
+      setError(t.rawFileDownloadFailed);
+    }
   };
 
   // ── Session delete (bulk) ──────────────────────────────────────────────────
@@ -524,6 +600,12 @@ function ProjectWorkspace({ onLoadSession }: BatchTabProps) {
                           />
                           <button onClick={() => handleDeleteSession(s.session_id)} disabled={loading}
                             className="text-danger hover:opacity-80 text-xs font-medium disabled:opacity-50">{t.delete}</button>
+                          <RawFileAction
+                            rawFile={s.raw_file}
+                            fallbackName={s.raw_filename || s.session_id}
+                            onDownload={(filename) => handleDownloadRawFile(s.session_id, filename)}
+                            t={t}
+                          />
                         </div>
                       </td>
                     </tr>

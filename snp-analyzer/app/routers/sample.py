@@ -1,15 +1,31 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.auth import CurrentUser, check_session_access
 from app.config import is_asg_launch_mode
 from app.processing.background import available_background_modes
 from app.routers.upload import sessions
+from app.services import raw_file_storage
 from app.services.session_restore import get_session as _get_session, restore_session, forget_session
 
 router = APIRouter()
+
+
+def _raw_file_payload(status: raw_file_storage.RawFileStatus) -> dict:
+    """JSON shape shared by the list/detail/status endpoints below -- see
+    ``raw_file_storage.RawFileStatus`` for what each ``status`` value means."""
+    return {
+        "status": status.status,
+        "original_filename": status.original_filename,
+        "size_bytes": status.size_bytes,
+        "sha256": status.sha256,
+        "stored_at": status.stored_at,
+        "expires_at": status.expires_at,
+        "deleted_at": status.deleted_at,
+    }
 
 # In-memory store for user-edited sample names (overrides parsed names)
 # session_id -> {well: name}
@@ -101,6 +117,10 @@ async def list_sessions(current_user: CurrentUser):
             "FROM sessions WHERE user_id = ? ORDER BY created_at DESC",
             (current_user.user_id,),
         ).fetchall()
+    # One bulk lookup (+ one bulk sweep of anything that just expired) for
+    # the whole page, instead of a query per row -- see
+    # raw_file_storage.bulk_raw_file_status.
+    raw_statuses = raw_file_storage.bulk_raw_file_status([row["session_id"] for row in db_rows])
     return [
         {
             "session_id": row["session_id"],
@@ -109,6 +129,7 @@ async def list_sessions(current_user: CurrentUser):
             "num_cycles": row["num_cycles"],
             "uploaded_at": row["created_at"] or "",
             "raw_filename": row["raw_filename"] or "",
+            "raw_file": _raw_file_payload(raw_statuses[row["session_id"]]),
         }
         for row in db_rows
     ]
@@ -136,6 +157,9 @@ def _delete_sessions_impl(sids_to_delete: list[str]) -> None:
         except Exception:
             conn.rollback()
             raise
+        # The DB row (and any session_raw_files row) is already gone via ON
+        # DELETE CASCADE; this removes the actual bytes on disk.
+        raw_file_storage.delete_raw_files_for_sessions(sids_to_delete)
         stores = (sessions, cluster_store, welltype_store, sample_name_store, protocol_store, group_store, marker_store)
         for sid in sids_to_delete:
             for cache in stores:
@@ -197,6 +221,7 @@ async def get_session_info(sid: str, current_user: CurrentUser):
     return {
         "session_id": sid,
         "raw_filename": (row["raw_filename"] or "") if row else "",
+        "raw_file": _raw_file_payload(raw_file_storage.get_raw_file_status(sid)),
         "input_revision": unified.input_revision,
         **analysis_status(sid),
         "instrument": unified.instrument,
@@ -222,3 +247,33 @@ async def delete_session(sid: str, current_user: CurrentUser):
     check_session_access(sid, current_user)
     _delete_sessions_impl([sid])
     return {"status": "ok"}
+
+
+@router.get("/api/sessions/{sid}/raw-file")
+async def get_raw_file_info(sid: str, current_user: CurrentUser):
+    """Report whether the ORIGINAL uploaded file is still available for this
+    session, and why not when it isn't (see raw_file_storage.RawFileStatus:
+    ``none`` / ``available`` / ``expired`` / ``missing``). Always 200 -- this
+    is a status read, not the download itself -- so the frontend can render
+    all four states without special-casing an error response.
+    """
+    check_session_access(sid, current_user)
+    return _raw_file_payload(raw_file_storage.get_raw_file_status(sid))
+
+
+@router.get("/api/sessions/{sid}/raw-file/download")
+async def download_raw_file(sid: str, current_user: CurrentUser):
+    """Stream back the exact bytes originally uploaded for this session.
+
+    Reuses check_session_access -- the same ownership rule as every other
+    per-session endpoint -- so a raw file can never be downloaded by anyone
+    but the session's owner (or an admin outside ASG launch mode).
+    """
+    check_session_access(sid, current_user)
+    result = raw_file_storage.open_raw_file_path(sid)
+    if result is None:
+        status = raw_file_storage.get_raw_file_status(sid)
+        code = 410 if status.status == raw_file_storage.STATUS_EXPIRED else 404
+        raise HTTPException(status_code=code, detail=_raw_file_payload(status))
+    path, original_filename = result
+    return FileResponse(path, filename=original_filename, media_type="application/octet-stream")

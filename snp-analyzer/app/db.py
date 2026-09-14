@@ -225,6 +225,31 @@ def _run_migrations(conn: sqlite3.Connection):
         if "algorithm_version" not in cols:
             conn.execute("ALTER TABLE clustering_results ADD COLUMN algorithm_version TEXT")
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (9)")
+
+    if current < 10:
+        # Migration 10 (P32): retain the ORIGINAL uploaded file on disk for a
+        # bounded window (see app.services.raw_file_storage). db_schema.sql
+        # already creates this table on a fresh DB; this branch covers an
+        # existing DB that ran schema versions up to 9 before this feature
+        # existed. No back-fill: sessions created before this migration had
+        # their source bytes discarded at upload time (app/routers/upload.py
+        # deleted the temp file immediately after parsing) -- there is
+        # nothing to reconstruct for them, and they correctly show as
+        # "no raw file" rather than "expired" (see get_raw_file_status).
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS session_raw_files (
+                session_id TEXT PRIMARY KEY REFERENCES sessions(session_id) ON DELETE CASCADE,
+                original_filename TEXT NOT NULL,
+                stored_path TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                sha256 TEXT NOT NULL,
+                stored_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                deleted_at TEXT,
+                delete_reason TEXT
+            )"""
+        )
+        conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (10)")
     conn.commit()
 
 
@@ -654,6 +679,71 @@ def delete_marker_catalog_entry(entry_id: str) -> None:
     conn = get_db()
     conn.execute("DELETE FROM marker_catalog WHERE id = ?", (entry_id,))
     conn.commit()
+
+
+def save_raw_file_record(
+    *,
+    session_id: str,
+    original_filename: str,
+    stored_path: str,
+    size_bytes: int,
+    sha256: str,
+    stored_at: str,
+    expires_at: str,
+) -> None:
+    """Record where one session's original uploaded bytes live on disk and
+    when they are due to be swept. Overwrites any prior row for the same
+    session (there is at most one raw file per session)."""
+    conn = get_db()
+    conn.execute(
+        """INSERT OR REPLACE INTO session_raw_files
+               (session_id, original_filename, stored_path, size_bytes, sha256,
+                stored_at, expires_at, deleted_at, delete_reason)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)""",
+        (session_id, original_filename, stored_path, size_bytes, sha256, stored_at, expires_at),
+    )
+    conn.commit()
+
+
+def get_raw_file_record(session_id: str) -> sqlite3.Row | None:
+    conn = get_db()
+    return conn.execute(
+        "SELECT * FROM session_raw_files WHERE session_id = ?", (session_id,)
+    ).fetchone()
+
+
+def get_raw_file_records(session_ids: list[str]) -> dict[str, sqlite3.Row]:
+    """Bulk lookup for list endpoints -- one query instead of N."""
+    if not session_ids:
+        return {}
+    conn = get_db()
+    placeholders = ",".join("?" * len(session_ids))
+    rows = conn.execute(
+        f"SELECT * FROM session_raw_files WHERE session_id IN ({placeholders})",
+        session_ids,
+    ).fetchall()
+    return {row["session_id"]: row for row in rows}
+
+
+def mark_raw_file_deleted(session_id: str, *, reason: str, deleted_at: str) -> None:
+    conn = get_db()
+    conn.execute(
+        "UPDATE session_raw_files SET deleted_at = ?, delete_reason = ? WHERE session_id = ?",
+        (deleted_at, reason, session_id),
+    )
+    conn.commit()
+
+
+def list_expired_raw_files(now_iso: str) -> list[sqlite3.Row]:
+    """Rows whose retention window has closed but that have not yet been
+    swept (deleted_at IS NULL). Driven by request traffic -- see
+    app.services.raw_file_storage.sweep_expired_raw_files -- there is no
+    background scheduler in this app."""
+    conn = get_db()
+    return conn.execute(
+        "SELECT * FROM session_raw_files WHERE deleted_at IS NULL AND expires_at <= ?",
+        (now_iso,),
+    ).fetchall()
 
 
 def cleanup_sessions_older_than(days: int = SESSION_RETENTION_DAYS) -> int:

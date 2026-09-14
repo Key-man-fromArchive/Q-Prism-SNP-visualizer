@@ -1,5 +1,6 @@
 import os
 import tempfile
+from pathlib import Path
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
@@ -79,14 +80,21 @@ async def upload_file(current_user: CurrentUser, file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
         raise HTTPException(400, f"Failed to parse file: {e}")
+
+    try:
+        # tmp_path must still exist on disk here -- store_raw_file() (P32,
+        # best-effort) copies it into durable storage before the `finally`
+        # below removes this temp file.
+        return create_session_from_import(
+            unified=unified,
+            filename=file.filename or "",
+            user_id=current_user.user_id,
+            session_store=sessions,
+            raw_source_path=Path(tmp_path) if tmp_path else None,
+        )
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
-
-    return create_session_from_import(
-        unified=unified,
-        filename=file.filename or "",
-        user_id=current_user.user_id,
-        session_store=sessions,
-    )

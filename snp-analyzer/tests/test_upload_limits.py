@@ -98,14 +98,21 @@ class UploadLimitTest(unittest.IsolatedAsyncioTestCase):
             well_groups=None,
         )
 
+        # This test isolates upload_file()'s own size/parse-limit behaviour;
+        # app.db.save_session is mocked out for the same reason, so raw-file
+        # storage (P32) -- a separate concern with its own dedicated tests in
+        # test_raw_file_retention.py -- must not run for real here and touch
+        # whatever app.db.DB_PATH happens to be at this point in the suite.
         with patch.object(upload, "detect_and_parse", return_value=unified):
             with patch("app.db.save_session") as save_session:
-                with patch("app.processing.ntc_detection.compute_suggested_cycle", return_value=2):
-                    response = await upload.upload_file(
-                        SimpleNamespace(user_id="u1"),
-                        FakeUploadFile([b"content"], filename="plate.xls", content_type="application/vnd.ms-excel"),
-                    )
+                with patch("app.services.raw_file_storage.store_raw_file") as store_raw_file:
+                    with patch("app.processing.ntc_detection.compute_suggested_cycle", return_value=2):
+                        response = await upload.upload_file(
+                            SimpleNamespace(user_id="u1"),
+                            FakeUploadFile([b"content"], filename="plate.xls", content_type="application/vnd.ms-excel"),
+                        )
 
         self.assertEqual(response.instrument, "QuantStudio")
         self.assertEqual(response.num_wells, 1)
         save_session.assert_called_once()
+        store_raw_file.assert_called_once()

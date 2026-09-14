@@ -24,6 +24,7 @@ import type {
   LayoutApplyResult,
   SamplesResponse,
   SessionListItem,
+  RawFileStatus,
   CompareScatterResponse,
   CompareStatsResponse,
   StatisticsResponse,
@@ -662,6 +663,18 @@ export async function deleteSession(sid: string): Promise<{ status: string }> {
   return apiFetch<{ status: string }>(`/api/sessions/${sid}`, {
     method: 'DELETE',
   });
+}
+
+export async function getRawFileStatus(sid: string): Promise<RawFileStatus> {
+  return apiFetch<RawFileStatus>(`/api/sessions/${sid}/raw-file`);
+}
+
+/** Throws ApiError(404) for 'none'/'missing' and ApiError(410) for 'expired'
+ *  -- callers should check getRawFileStatus() first and only offer this when
+ *  status is 'available'; this still exists to fail cleanly on the race
+ *  where a file expires between the two calls. */
+export async function downloadRawFile(sid: string): Promise<Blob> {
+  return blobFetch(`/api/sessions/${sid}/raw-file/download`);
 }
 
 export async function bulkDeleteSessions(sessionIds: string[]): Promise<{ status: string; deleted: number }> {
