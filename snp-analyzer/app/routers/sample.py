@@ -7,6 +7,7 @@ from app.auth import CurrentUser, check_session_access
 from app.config import is_asg_launch_mode
 from app.processing.background import available_background_modes
 from app.routers.upload import sessions
+from app.services.session_restore import get_session as _get_session, restore_session, forget_session
 
 router = APIRouter()
 
@@ -17,12 +18,6 @@ sample_name_store: dict[str, dict[str, str]] = {}
 
 class SampleNamesUpdate(BaseModel):
     samples: dict[str, str]
-
-
-def _get_session(sid: str):
-    if sid not in sessions:
-        raise HTTPException(404, "Session not found")
-    return sessions[sid]
 
 
 def _merged_samples(sid: str) -> dict[str, str]:
@@ -68,54 +63,55 @@ async def update_samples(sid: str, body: SampleNamesUpdate, current_user: Curren
 @router.delete("/api/data/{sid}/samples")
 async def delete_samples(sid: str, current_user: CurrentUser):
     """Clear all user overrides, returning to parsed names only."""
-    _get_session(sid)  # validate session exists
+    unified = _get_session(sid)  # validate session exists (and restore it if cold)
     check_session_access(sid, current_user)
     sample_name_store.pop(sid, None)
 
     from app.db import delete_sample_overrides
     delete_sample_overrides(sid)
 
-    unified = sessions[sid]
     parsed = dict(unified.sample_names) if unified.sample_names else {}
     return {"samples": parsed, "imported_samples": parsed}
 
 
 @router.get("/api/sessions")
 async def list_sessions(current_user: CurrentUser):
-    """Return a list of all active sessions with summary info."""
-    # Load raw_filename and created_at from DB for all sessions
+    """Return a list of all sessions with summary info, read straight from the DB.
+
+    Deliberately does NOT touch the in-memory ``sessions`` cache or the
+    (potentially ~100k-row) ``well_cycle_data`` table: a session that has
+    never been reopened since the process started (or that aged out of the
+    bounded cache) must still show up here, and listing must stay cheap no
+    matter how many wells x cycles a session holds (see P28 evidence).
+    ``num_wells``/``num_cycles`` are the columns app.db.save_session wrote at
+    upload time from the SAME ``len(unified.wells)``/``len(unified.cycles)``
+    values the in-memory object would report, and are never rewritten after
+    that -- there is no discrepancy to reconcile.
+    """
     from app.db import get_db
     conn = get_db()
     if current_user.role == "admin" and not is_asg_launch_mode():
         db_rows = conn.execute(
-            "SELECT session_id, raw_filename, created_at FROM sessions ORDER BY created_at DESC"
+            "SELECT session_id, instrument, num_wells, num_cycles, created_at, raw_filename "
+            "FROM sessions ORDER BY created_at DESC"
         ).fetchall()
     else:
         db_rows = conn.execute(
-            "SELECT session_id, raw_filename, created_at FROM sessions WHERE user_id = ? ORDER BY created_at DESC",
+            "SELECT session_id, instrument, num_wells, num_cycles, created_at, raw_filename "
+            "FROM sessions WHERE user_id = ? ORDER BY created_at DESC",
             (current_user.user_id,),
         ).fetchall()
-    db_info = {r["session_id"]: dict(r) for r in db_rows}
-
-    result = []
-    for sid, unified in sessions.items():
-        if sid not in db_info:
-            continue
-        info = db_info[sid]
-        result.append(
-            {
-                "session_id": sid,
-                "instrument": unified.instrument,
-                "num_wells": len(unified.wells),
-                "num_cycles": len(unified.cycles),
-                "uploaded_at": info.get("created_at") or "",
-                "raw_filename": info.get("raw_filename") or "",
-            }
-        )
-    # sessions is an insertion-ordered in-memory dict, so the SQL ordering is
-    # lost in the join above; the newest plate has to lead the workspace list.
-    result.sort(key=lambda item: item["uploaded_at"], reverse=True)
-    return result
+    return [
+        {
+            "session_id": row["session_id"],
+            "instrument": row["instrument"],
+            "num_wells": row["num_wells"],
+            "num_cycles": row["num_cycles"],
+            "uploaded_at": row["created_at"] or "",
+            "raw_filename": row["raw_filename"] or "",
+        }
+        for row in db_rows
+    ]
 
 
 class BulkDeleteRequest(BaseModel):
@@ -146,6 +142,7 @@ def _delete_sessions_impl(sids_to_delete: list[str]) -> None:
                 cache.pop(sid, None)
             forget_session_asg_launch(sid)
             forget_analysis(sid)
+            forget_session(sid)
 
 # NOTE: bulk-delete MUST be registered before {sid} to avoid path conflict
 @router.post("/api/sessions/bulk-delete")
@@ -174,11 +171,18 @@ async def bulk_delete_sessions(body: BulkDeleteRequest, current_user: CurrentUse
 
 @router.get("/api/sessions/{sid}")
 async def get_session_info(sid: str, current_user: CurrentUser):
-    """Return UploadResponse-compatible info for a session (for re-loading)."""
-    if sid not in sessions:
+    """Return UploadResponse-compatible info for a session (for re-loading).
+
+    Restores the session (and its clustering result / manual overrides /
+    markers / manual well groups) from the DB first if the process-local
+    cache does not have it -- see app.services.session_restore. This is the
+    endpoint the frontend calls to reopen a plate; it must work regardless
+    of whether the session was ever touched since the process started.
+    """
+    unified = restore_session(sid)
+    if unified is None:
         raise HTTPException(404, "Session not found")
     check_session_access(sid, current_user)
-    unified = sessions[sid]
 
     from app.processing.ntc_detection import compute_suggested_cycle
     suggested = compute_suggested_cycle(unified)

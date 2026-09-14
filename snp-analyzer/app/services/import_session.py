@@ -19,6 +19,9 @@ def create_session_from_import(
     session_id = uuid.uuid4().hex[:12]
     session_store[session_id] = unified
 
+    from app.services.session_restore import touch_session
+    touch_session(session_id)
+
     db.save_session(session_id, unified, filename=filename, user_id=user_id)
     imported_regions = _build_imported_marker_regions(unified)
     if imported_regions:

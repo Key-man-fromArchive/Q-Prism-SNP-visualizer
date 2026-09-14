@@ -30,7 +30,7 @@ from app.routers.clustering import (
     welltype_store,
 )
 from app.routers.sample import _merged_samples
-from app.routers.upload import sessions
+from app.services.session_restore import get_session as _get_session
 
 router = APIRouter()
 
@@ -52,12 +52,6 @@ class LayoutApply(BaseModel):
     # L2: required to confirm an apply that would silently change the ploidy
     # of a marker id that already exists in the target session.
     force: bool = False
-
-
-def _get_session(sid: str):
-    if sid not in sessions:
-        raise HTTPException(404, "Session not found")
-    return sessions[sid]
 
 
 def _plate_rows_cols(unified) -> dict:

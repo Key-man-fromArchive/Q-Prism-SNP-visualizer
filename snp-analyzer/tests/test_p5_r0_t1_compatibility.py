@@ -318,10 +318,16 @@ import asyncio
 import json
 from app.main import app, lifespan
 from app.routers import clustering, data, upload
+from app.services.session_restore import get_session
 async def check():
     clustering._calculate_snapshot = lambda snapshot: (_ for _ in ()).throw(AssertionError('implicit calculation'))
     async with lifespan(app):
-        plate = upload.sessions['restart-session']
+        # P28: sessions are no longer eagerly loaded by lifespan() itself --
+        # get_session() is what a real request (e.g. GET /api/sessions/{sid})
+        # does on a cold cache, restoring this session AND every dependent
+        # cache (clustering/welltypes/markers/groups/protocol) from the DB.
+        assert 'restart-session' not in upload.sessions
+        plate = get_session('restart-session')
         result = clustering.cluster_store['restart-session']
         context = result.analysis_context
         from app.db import get_session_owner

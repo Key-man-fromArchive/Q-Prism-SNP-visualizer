@@ -14,16 +14,17 @@ from app.models import ScatterPoint, UnifiedData
 from app.processing.normalize import normalize_for_cycle
 from app.role_labels import build_role_label_metadata
 from app.routers.clustering import cluster_store, welltype_store
-from app.routers.upload import sessions
 from app.auth import CurrentUser, check_session_access
+from app.services.session_restore import restore_session
 
 router = APIRouter()
 
 
 def _get_session(sid: str) -> UnifiedData:
-    if sid not in sessions:
+    unified = restore_session(sid)
+    if unified is None:
         raise HTTPException(404, f"Session not found: {sid}")
-    return sessions[sid]
+    return unified
 
 
 def _resolve_cycle(unified: UnifiedData, cycle: int) -> int:

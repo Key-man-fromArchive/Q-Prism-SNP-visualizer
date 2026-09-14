@@ -92,8 +92,21 @@ def _migrate_projects_json():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: init DB and restore sessions
-    from app.db import init_db, load_all_sessions
+    # Startup: init DB only. Sessions are deliberately NOT eagerly restored
+    # into memory here (P28) -- this process used to loop over every DB
+    # session at startup (db.load_all_sessions()) and reconstruct all of
+    # them, including every well's full cycle data, before the app would
+    # accept a request. That is unbounded startup work that grows with the
+    # workspace (production was observed with 47 sessions / ~100k readings
+    # and climbing) and a slow/killed startup left memory holding NONE of
+    # them despite the DB holding all of them -- the exact bug this restore
+    # work exists to fix. Each session is now restored lazily, one at a
+    # time, the first time something asks for it -- see
+    # app.services.session_restore.get_session/restore_session, which every
+    # router now calls instead of touching app.routers.upload.sessions
+    # directly. GET /api/sessions (the workspace list) reads session summary
+    # columns straight from the DB and never touches this cache either.
+    from app.db import init_db
 
     assert_auth_configuration()
     init_db()
@@ -101,28 +114,6 @@ async def lifespan(app: FastAPI):
         _ensure_admin()
     _migrate_projects_json()
 
-    for entry in load_all_sessions():
-        upload.sessions[entry["session_id"]] = entry["unified"]
-        if entry["clustering"]:
-            clustering.cluster_store[entry["session_id"]] = entry["clustering"]
-        if entry["welltypes"]:
-            clustering.welltype_store[entry["session_id"]] = entry["welltypes"]
-        if entry["sample_overrides"]:
-            sample.sample_name_store[entry["session_id"]] = entry["sample_overrides"]
-        if entry["protocol_override"]:
-            data.protocol_store[entry["session_id"]] = entry["protocol_override"]
-        if entry["markers"]:
-            from app.models import MarkerRegion
-            clustering.marker_store[entry["session_id"]] = [
-                MarkerRegion(**m) for m in entry["markers"]
-            ]
-
-    # Restore manual well groups from DB
-    from app.db import load_well_groups
-    for sid in list(upload.sessions.keys()):
-        manual_groups = load_well_groups(sid)
-        if manual_groups:
-            clustering.group_store[sid] = manual_groups
     yield
 
 

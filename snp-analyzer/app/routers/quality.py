@@ -1,8 +1,8 @@
 """Signal quality scoring API."""
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
-from app.routers.upload import sessions
 from app.auth import CurrentUser, check_session_access
+from app.services.session_restore import get_session
 
 router = APIRouter()
 
@@ -10,9 +10,7 @@ router = APIRouter()
 @router.get("/api/data/{sid}/quality")
 async def get_quality(sid: str, current_user: CurrentUser, use_rox: bool = Query(default=True)):
     check_session_access(sid, current_user)
-    if sid not in sessions:
-        raise HTTPException(404, "Session not found")
-    unified = sessions[sid]
+    unified = get_session(sid)
 
     if len(unified.cycles) < 3:
         return {"results": {}, "summary": {"mean_score": 0, "low_quality_count": 0, "total_wells": 0}}

@@ -669,120 +669,158 @@ def cleanup_sessions_older_than(days: int = SESSION_RETENTION_DAYS) -> int:
     return cur.rowcount
 
 
-def load_all_sessions():
-    """Load all sessions from DB for startup restore. Returns list of dicts."""
+def _well_sort_key(well: str) -> tuple[int, int, int, str]:
+    """Row-major order (row letter, numeric column) -- the SAME ordering
+    every parser in app/parsers/ already sorts ``wells`` by (each carries an
+    identical private ``_well_sort_key``). A plain lexicographic sort would
+    put 'A10' before 'A2', silently reordering ``unified.wells``/``well_ids``
+    relative to what the original upload produced. Falls back to a stable
+    string sort for anything that is not a single-letter-row well id rather
+    than raising -- a session must still restore even if some caller wrote a
+    non-standard well id."""
+    try:
+        return (0, ord(well[0].upper()) - ord("A"), int(well[1:]), well)
+    except (IndexError, ValueError):
+        return (1, 0, 0, well)
+
+
+def _session_row_to_entry(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+    """Reconstruct one session's full in-memory footprint from its DB rows.
+
+    Shared by load_all_sessions() (startup, historically eager) and
+    load_session() (P28: single-session, on-demand restore) so the two
+    callers can never drift into reconstructing a session differently.
+    """
     from app.models import UnifiedData, WellCycleData, ProtocolStep, DataWindow, ClusteringResult
 
-    conn = get_db()
-    sessions_data = []
+    sid = row["session_id"]
+    metadata = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
 
-    for row in conn.execute("SELECT * FROM sessions ORDER BY created_at").fetchall():
-        sid = row["session_id"]
-        metadata = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
+    # Load well cycle data
+    well_rows = conn.execute(
+        "SELECT well, cycle, fam, allele2, rox FROM well_cycle_data WHERE session_id = ? ORDER BY well, cycle",
+        (sid,),
+    ).fetchall()
 
-        # Load well cycle data
-        well_rows = conn.execute(
-            "SELECT well, cycle, fam, allele2, rox FROM well_cycle_data WHERE session_id = ? ORDER BY well, cycle",
-            (sid,),
-        ).fetchall()
-
-        data = [
-            WellCycleData(
-                well=r["well"],
-                cycle=r["cycle"],
-                fam=r["fam"],
-                allele2=r["allele2"],
-                rox=r["rox"],
-                normalization_value=r["rox"] if metadata.get("normalization_channel") else None,
-            )
-            for r in well_rows
-        ]
-        wells = sorted(set(d.well for d in data))
-        cycles = sorted(set(d.cycle for d in data))
-
-        sample_names = metadata.get("sample_names")
-        protocol_steps = None
-        if "protocol_steps" in metadata:
-            protocol_steps = [ProtocolStep(**s) for s in metadata["protocol_steps"]]
-        data_windows = None
-        if "data_windows" in metadata:
-            data_windows = [DataWindow(**w) for w in metadata["data_windows"]]
-
-        well_groups = metadata.get("well_groups")
-
-        unified = UnifiedData(
-            input_revision=row["input_revision"],
-            instrument=row["instrument"],
-            allele2_dye=row["allele2_dye"],
-            wells=wells,
-            cycles=cycles,
-            data=data,
-            has_rox=bool(row["has_rox"]),
-            sample_names=sample_names,
-            imported_well_types=metadata.get("imported_well_types"),
-            imported_markers=metadata.get("imported_markers"),
-            protocol_steps=protocol_steps,
-            data_windows=data_windows,
-            well_groups=well_groups,
-            normalization_mode=metadata.get("normalization_mode"),
-            normalization_channel=metadata.get("normalization_channel"),
-            normalization_dye=metadata.get("normalization_dye"),
-            role_channels=metadata.get("role_channels"),
-            ploidy=int(metadata.get("ploidy", 2)),
-            background_mode=metadata.get("background_mode"),
-            ntc_wells=metadata.get("ntc_wells"),
+    data = [
+        WellCycleData(
+            well=r["well"],
+            cycle=r["cycle"],
+            fam=r["fam"],
+            allele2=r["allele2"],
+            rox=r["rox"],
+            normalization_value=r["rox"] if metadata.get("normalization_channel") else None,
         )
+        for r in well_rows
+    ]
+    wells = sorted(set(d.well for d in data), key=_well_sort_key)
+    cycles = sorted(set(d.cycle for d in data))
 
-        # Load clustering results
-        clustering = None
-        cr = conn.execute("SELECT * FROM clustering_results WHERE session_id = ?", (sid,)).fetchone()
-        if cr:
-            result_json = cr["result_json"] if "result_json" in cr.keys() else None
-            if result_json:
-                # Full result (ploidy/boundaries/offset/regions) preserved.
-                clustering = ClusteringResult.model_validate_json(result_json)
-            else:
-                # Legacy rows written before migration 3 — reconstruct what we
-                # have; polyploid fields fall back to defaults (unavoidable for
-                # pre-fix data).
-                conf_json = cr["confidences_json"] if "confidences_json" in cr.keys() else None
-                algorithm_version = cr["algorithm_version"] if "algorithm_version" in cr.keys() else None
-                clustering = ClusteringResult(
-                    algorithm=cr["method"], cycle=cr["cycle"],
-                    assignments=json.loads(cr["labels_json"]),
-                    confidences=json.loads(conf_json) if conf_json else None,
-                    algorithm_version=algorithm_version,
-                )
+    sample_names = metadata.get("sample_names")
+    protocol_steps = None
+    if "protocol_steps" in metadata:
+        protocol_steps = [ProtocolStep(**s) for s in metadata["protocol_steps"]]
+    data_windows = None
+    if "data_windows" in metadata:
+        data_windows = [DataWindow(**w) for w in metadata["data_windows"]]
 
-        # Load manual welltypes
-        wt_rows = conn.execute("SELECT well, welltype FROM manual_welltypes WHERE session_id = ?", (sid,)).fetchall()
-        welltypes = {r["well"]: r["welltype"] for r in wt_rows}
+    well_groups = metadata.get("well_groups")
 
-        # Load sample name overrides
-        sn_rows = conn.execute("SELECT well, sample_name FROM sample_name_overrides WHERE session_id = ?", (sid,)).fetchall()
-        sample_overrides = {r["well"]: r["sample_name"] for r in sn_rows}
+    unified = UnifiedData(
+        input_revision=row["input_revision"],
+        instrument=row["instrument"],
+        allele2_dye=row["allele2_dye"],
+        wells=wells,
+        cycles=cycles,
+        data=data,
+        has_rox=bool(row["has_rox"]),
+        sample_names=sample_names,
+        imported_well_types=metadata.get("imported_well_types"),
+        imported_markers=metadata.get("imported_markers"),
+        protocol_steps=protocol_steps,
+        data_windows=data_windows,
+        well_groups=well_groups,
+        normalization_mode=metadata.get("normalization_mode"),
+        normalization_channel=metadata.get("normalization_channel"),
+        normalization_dye=metadata.get("normalization_dye"),
+        role_channels=metadata.get("role_channels"),
+        ploidy=int(metadata.get("ploidy", 2)),
+        background_mode=metadata.get("background_mode"),
+        ntc_wells=metadata.get("ntc_wells"),
+    )
 
-        # Load protocol overrides
-        po = conn.execute("SELECT protocol_json FROM protocol_overrides WHERE session_id = ?", (sid,)).fetchone()
-        protocol_override = None
-        if po:
-            protocol_override = [ProtocolStep(**s) for s in json.loads(po["protocol_json"])]
+    # Load clustering results
+    clustering = None
+    cr = conn.execute("SELECT * FROM clustering_results WHERE session_id = ?", (sid,)).fetchone()
+    if cr:
+        result_json = cr["result_json"] if "result_json" in cr.keys() else None
+        if result_json:
+            # Full result (ploidy/boundaries/offset/regions) preserved.
+            clustering = ClusteringResult.model_validate_json(result_json)
+        else:
+            # Legacy rows written before migration 3 — reconstruct what we
+            # have; polyploid fields fall back to defaults (unavoidable for
+            # pre-fix data).
+            conf_json = cr["confidences_json"] if "confidences_json" in cr.keys() else None
+            algorithm_version = cr["algorithm_version"] if "algorithm_version" in cr.keys() else None
+            clustering = ClusteringResult(
+                algorithm=cr["method"], cycle=cr["cycle"],
+                assignments=json.loads(cr["labels_json"]),
+                confidences=json.loads(conf_json) if conf_json else None,
+                algorithm_version=algorithm_version,
+            )
 
-        # Load marker (assay) definitions -- first-class resource, alongside
-        # welltypes/groups, so a reload restores a session's marker set.
-        markers = load_marker_regions(sid)
+    # Load manual welltypes
+    wt_rows = conn.execute("SELECT well, welltype FROM manual_welltypes WHERE session_id = ?", (sid,)).fetchall()
+    welltypes = {r["well"]: r["welltype"] for r in wt_rows}
 
-        sessions_data.append({
-            "session_id": sid,
-            "unified": unified,
-            "clustering": clustering,
-            "welltypes": welltypes,
-            "sample_overrides": sample_overrides,
-            "protocol_override": protocol_override,
-            "markers": markers,
-        })
+    # Load sample name overrides
+    sn_rows = conn.execute("SELECT well, sample_name FROM sample_name_overrides WHERE session_id = ?", (sid,)).fetchall()
+    sample_overrides = {r["well"]: r["sample_name"] for r in sn_rows}
 
-    return sessions_data
+    # Load protocol overrides
+    po = conn.execute("SELECT protocol_json FROM protocol_overrides WHERE session_id = ?", (sid,)).fetchone()
+    protocol_override = None
+    if po:
+        protocol_override = [ProtocolStep(**s) for s in json.loads(po["protocol_json"])]
+
+    # Load marker (assay) definitions -- first-class resource, alongside
+    # welltypes/groups, so a reload restores a session's marker set.
+    markers = load_marker_regions(sid)
+
+    return {
+        "session_id": sid,
+        "unified": unified,
+        "clustering": clustering,
+        "welltypes": welltypes,
+        "sample_overrides": sample_overrides,
+        "protocol_override": protocol_override,
+        "markers": markers,
+    }
+
+
+def load_session(session_id: str) -> dict | None:
+    """Reconstruct ONE session's full in-memory footprint from the DB.
+
+    Returns None if the session does not exist (caller must treat this as a
+    genuine 404, not silently synthesize an empty session -- see
+    app.services.session_restore). Used for on-demand restore of a session
+    the process-local caches have never seen (cold start) or have evicted.
+    """
+    conn = get_db()
+    row = conn.execute("SELECT * FROM sessions WHERE session_id = ?", (session_id,)).fetchone()
+    if row is None:
+        return None
+    return _session_row_to_entry(conn, row)
+
+
+def load_all_sessions():
+    """Load all sessions from DB for startup restore. Returns list of dicts."""
+    conn = get_db()
+    return [
+        _session_row_to_entry(conn, row)
+        for row in conn.execute("SELECT * FROM sessions ORDER BY created_at").fetchall()
+    ]
 
 
 # ---------------------------------------------------------------------------

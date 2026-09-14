@@ -34,8 +34,8 @@ from app.processing.genotype_vocab import validate_ploidy
 from app.processing.normalize import normalize_for_cycle, normalization_summary
 from app.processing.background import available_background_modes, BackgroundModeError
 from app.processing.ratio_origin import compute_ratio_origin, shift_to_origin
-from app.routers.upload import sessions
 from app.auth import CurrentUser, check_session_access
+from app.services.session_restore import get_session as _get_session
 from app.processing.analysis_state import (
     AnalysisTicket, analysis_status, begin_analysis, check_expected, fail_analysis,
     input_lock, mutate_inputs, publish_analysis,
@@ -84,12 +84,6 @@ cluster_store: dict[str, ClusteringResult] = {}
 welltype_store: dict[str, dict[str, str]] = {}
 group_store: dict[str, dict[str, list[str]]] = {}  # sid -> {group_name: [wells]}
 marker_store: dict[str, list[MarkerRegion]] = {}  # sid -> [MarkerRegion, ...]
-
-
-def _get_session(sid: str):
-    if sid not in sessions:
-        raise HTTPException(404, "Session not found")
-    return sessions[sid]
 
 
 def effective_well_types_for(sid: str, unified) -> dict[str, str]:

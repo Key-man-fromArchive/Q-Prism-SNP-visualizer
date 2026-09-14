@@ -20,10 +20,10 @@ from app.processing.background import BackgroundMode
 from app.processing.genotype_vocab import label_by_ratio
 from app.processing.normalize import normalize_for_cycle, normalization_summary
 from app.processing.ratio_origin import shift_points_to_origin
-from app.routers.upload import sessions
 from app.routers.clustering import cluster_store, effective_well_types_for
 from app.processing.analysis_state import input_lock, analysis_status
 from app.auth import CurrentUser, check_session_access
+from app.services.session_restore import get_session as _get_session
 
 router = APIRouter()
 
@@ -87,12 +87,6 @@ class MarkerQc(BaseModel):
     # "relative_ntc") so a status-badge UI can read them without re-clustering.
     # None (not []) when the marker's run was clean.
     warnings: list[str] | None = None
-
-
-def _get_session(sid: str) -> UnifiedData:
-    if sid not in sessions:
-        raise HTTPException(404, "Session not found")
-    return sessions[sid]
 
 
 def _determine_genotype(
