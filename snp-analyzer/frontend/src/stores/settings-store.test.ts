@@ -49,3 +49,66 @@ it('models persist merge of a legacy payload without scatterAspect: default surv
   const merged = { ...currentState, ...legacyPersisted };
   expect(merged.scatterAspect).toBe('4:3');
 });
+
+// P27-LOCK-DEFAULT (feedback-2026-09-11): raw RFU is routinely ~4-8x wider in
+// x than in y on an allele-specific plate (user report 4a83029e: FAM span
+// 11,185 vs allele2 span 2,748 for one real session), so locking the two
+// axes to the same data-per-pixel scale squashes the whole plot into a
+// horizontal strip along the bottom of the canvas. The lock stays available
+// from the scatter toolbar for anyone who wants literal-angle boundary rays;
+// only the unattended default changes.
+it('defaults lockAspect to false for a brand-new user', () => {
+  expect(useSettingsStore.getState().lockAspect).toBe(false);
+});
+
+// Pre-fix localStorage payloads were written with lockAspect: true (the old
+// default) and no `version` field. Flipping only the in-code default does
+// nothing for a returning user: zustand's persist `merge` overlays whatever
+// is in storage on top of the new defaults, so their canvas would stay
+// flattened until this migration runs once.
+it('migrates a pre-fix stored payload (lockAspect: true, no version) to lockAspect: false', async () => {
+  window.localStorage.setItem(
+    'snp-analyzer-settings',
+    JSON.stringify({ state: { lockAspect: true, xMin: 42, xMax: 999 } })
+  );
+  await useSettingsStore.persist.rehydrate();
+  expect(useSettingsStore.getState().lockAspect).toBe(false);
+});
+
+// The migration must not touch any other persisted setting -- an operator's
+// saved axis range, aspect choice, or color thresholds are unrelated to this
+// fix and must survive it untouched.
+it('migration leaves unrelated persisted settings untouched', async () => {
+  window.localStorage.setItem(
+    'snp-analyzer-settings',
+    JSON.stringify({
+      state: {
+        lockAspect: true,
+        xMin: 42,
+        xMax: 999,
+        scatterAspect: '1:1',
+        ntcThreshold: 0.33,
+      },
+    })
+  );
+  await useSettingsStore.persist.rehydrate();
+  const state = useSettingsStore.getState();
+  expect(state.xMin).toBe(42);
+  expect(state.xMax).toBe(999);
+  expect(state.scatterAspect).toBe('1:1');
+  expect(state.ntcThreshold).toBe(0.33);
+});
+
+// A payload already written at the current version (post-migration, or an
+// operator who re-enabled the lock after this fix shipped) must round-trip
+// exactly -- the migration is a one-time nudge, not a standing override that
+// would make the toolbar's lock button useless.
+it('does not re-force lockAspect false for a payload already at the current version', async () => {
+  const stored = JSON.parse(window.localStorage.getItem('snp-analyzer-settings') ?? '{}');
+  window.localStorage.setItem(
+    'snp-analyzer-settings',
+    JSON.stringify({ state: { lockAspect: true }, version: stored.version ?? 1 })
+  );
+  await useSettingsStore.persist.rehydrate();
+  expect(useSettingsStore.getState().lockAspect).toBe(true);
+});

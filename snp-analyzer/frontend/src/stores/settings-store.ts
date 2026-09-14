@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import type { PersistStorage } from 'zustand/middleware';
 import type { BackgroundMode } from '@/types/api';
 
 /** How the scatter plots range their axes.
@@ -39,8 +40,15 @@ interface SettingsState {
   scatterAspect: ScatterAspect;
   /** Equal data-per-pixel on both axes. A fam-fraction is an ANGLE about the
    *  ratio origin, so the radial boundary rays only look like the cuts they
-   *  are when x and y are on the same scale. Raw RFU is ~8x wider in x than
-   *  in y on an allele-specific plate, which flattens every wedge. */
+   *  are when x and y are on the same scale. But raw RFU is routinely
+   *  several times wider in x (FAM) than in y on an allele-specific plate
+   *  (feedback 2026-09-11, report 4a83029e: FAM span 11,185 vs allele2 span
+   *  2,748), so locking the scale squashes the whole plot into a strip along
+   *  the bottom of the canvas on exactly the screens that don't have the
+   *  rays turned on to benefit from the lock. Defaults to `false` for that
+   *  reason; the scatter toolbar's lock button stays available for anyone
+   *  who wants literal-angle rays. See SETTINGS_STORE_VERSION below for how
+   *  an already-persisted `true` is brought back to this default once. */
   lockAspect: boolean;
   fixAxis: boolean;
   xMin: number;
@@ -99,7 +107,9 @@ const defaults = {
   axisMode: 'zero' as AxisMode,
   scatterTool: 'select' as ScatterTool,
   scatterAspect: '4:3' as ScatterAspect,
-  lockAspect: true,
+  // See the field's own doc comment above (feedback 2026-09-11, P27):
+  // was `true`; changed to `false` at SETTINGS_STORE_VERSION 1.
+  lockAspect: false,
   // Kept for the Settings-tab control and the saved presets that carry it;
   // `axisMode: 'manual'` is the same thing reachable from the plot itself.
   fixAxis: false,
@@ -124,6 +134,48 @@ const defaults = {
   showManualTypes: true,
   showEmptyWells: false,
 };
+
+/** Bump whenever a *default's meaning* changes such that an already-stored
+ *  value would misrepresent the user's actual intent under the new
+ *  default -- not for adding a new field (the persist `merge` below already
+ *  supplies its default for legacy payloads with no such key -- see
+ *  settings-store.test.ts's "legacy payload" case) and not for a change
+ *  that only affects brand-new state. Write the one-time fix as a branch in
+ *  `migrate` below, gated on the version the payload arrived at, and leave
+ *  a comment next to it saying exactly what changes and why. Mirrors this
+ *  repo's other "bump on behavior change, not on refactor" version counter,
+ *  `CLUSTERING_ALGORITHM_VERSION` (app/processing/clustering.py).
+ *
+ *  v0 -> v1 (feedback 2026-09-11, P27): `lockAspect` default flipped
+ *  `true` -> `false` (see the field's doc comment above). Any stored `true`
+ *  from before this version is forced to `false` once, in `migrate`; the
+ *  toolbar's lock button still works normally afterward, and a value the
+ *  operator sets *after* migrating is never touched again because it is
+ *  already at the current version. */
+const SETTINGS_STORE_VERSION = 1;
+
+/** Coerces a stored payload with no `version` key at all -- every payload
+ *  written before this file introduced versioning, including the one from
+ *  the user report this migration exists for -- to version 0, so it hits
+ *  the same `migrate` branch as an explicit `version: 0`. zustand's persist
+ *  only treats a payload as needing migration when `version` is already a
+ *  number and differs from the current one; a genuinely absent key would
+ *  otherwise skip migration entirely and merge straight in. */
+function coerceMissingVersion<S>(base: PersistStorage<S> | undefined): PersistStorage<S> | undefined {
+  if (!base) return base;
+  return {
+    ...base,
+    getItem: (name) => {
+      const result = base.getItem(name);
+      if (result instanceof Promise) {
+        return result.then((value) =>
+          value && typeof value.version !== 'number' ? { ...value, version: 0 } : value
+        );
+      }
+      return result && typeof result.version !== 'number' ? { ...result, version: 0 } : result;
+    },
+  };
+}
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
@@ -168,6 +220,16 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'snp-analyzer-settings',
+      storage: coerceMissingVersion(createJSONStorage(() => window.localStorage)),
+      version: SETTINGS_STORE_VERSION,
+      migrate: (persistedState, version) => {
+        const state = { ...(persistedState as Partial<SettingsState>) };
+        if (version < 1) {
+          // v0 -> v1: see SETTINGS_STORE_VERSION above.
+          state.lockAspect = false;
+        }
+        return state as SettingsState;
+      },
     }
   )
 );
