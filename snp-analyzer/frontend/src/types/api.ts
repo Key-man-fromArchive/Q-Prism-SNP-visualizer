@@ -196,6 +196,26 @@ export type ASGSaveResultResponse = {
   target_id: string;
 };
 
+/** Where a session's ORIGINAL uploaded file stands, distinguishing three
+ *  otherwise-identical-looking "there is no file" cases (P32):
+ *  - 'none': no record at all -- predates this feature, or storing it
+ *    failed at upload time (best-effort; never blocks the upload itself).
+ *  - 'available': on disk, not yet expired.
+ *  - 'expired': the retention window closed and it was swept. Historical
+ *    metadata below is preserved so the UI can still say what it was.
+ *  - 'missing': an anomaly -- the record says it should be there (not
+ *    expired) but the bytes are gone from disk. */
+export type RawFileStatusValue = 'none' | 'available' | 'expired' | 'missing';
+export type RawFileStatus = {
+  status: RawFileStatusValue;
+  original_filename: string | null;
+  size_bytes: number | null;
+  sha256: string | null;
+  stored_at: string | null;
+  expires_at: string | null;
+  deleted_at: string | null;
+};
+
 export type SessionListItem = {
   session_id: string;
   instrument: string;
@@ -203,6 +223,7 @@ export type SessionListItem = {
   num_cycles: number;
   uploaded_at: string;
   raw_filename?: string;
+  raw_file?: RawFileStatus;
 };
 
 // ============================================================================
@@ -391,6 +412,7 @@ export type SessionInfoResponse = UploadResponse & InputRevision & {
   cycles: number[];
   analysis_status: AnalysisStatus;
   analysis_pending: boolean;
+  raw_file?: RawFileStatus;
 };
 export type MissingClusteringResult = Omit<ClusteringResult, 'algorithm'> & { algorithm: null };
 export type ClusterResponse = ClusteringResult | MissingClusteringResult;

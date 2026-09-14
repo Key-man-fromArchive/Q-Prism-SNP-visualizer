@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -44,3 +45,48 @@ def test_create_session_from_import_preserves_persistence_asg_and_response_contr
         user_id="user-1",
     )
     bind_asg.assert_called_once_with("abcdef123456", "user-1")
+
+
+def test_create_session_from_import_without_raw_source_path_skips_raw_storage():
+    """The default (no ``raw_source_path``) must behave exactly as it did
+    before P32 -- callers that don't opt in never touch raw-file storage."""
+    unified = SimpleNamespace(
+        instrument="QuantStudio", allele2_dye="VIC", wells=["A1"], cycles=[1],
+        has_rox=True, data_windows=None, well_groups=None,
+    )
+    with patch("app.db.save_session"):
+        with patch("app.asg_session.bind_session_to_current_asg_launch"):
+            with patch("app.processing.ntc_detection.compute_suggested_cycle", return_value=None):
+                with patch("app.services.raw_file_storage.store_raw_file") as store_raw_file:
+                    create_session_from_import(
+                        unified=unified,
+                        filename="plate.xls",
+                        user_id="user-1",
+                        session_store={},
+                    )
+
+    store_raw_file.assert_not_called()
+
+
+def test_create_session_from_import_with_raw_source_path_stores_it_under_the_new_session_id():
+    unified = SimpleNamespace(
+        instrument="QuantStudio", allele2_dye="VIC", wells=["A1"], cycles=[1],
+        has_rox=True, data_windows=None, well_groups=None,
+    )
+    source_path = Path("/tmp/does-not-need-to-exist-for-this-mock.xls")
+
+    with patch("app.services.import_session.uuid.uuid4") as uuid4:
+        uuid4.return_value.hex = "abcdef1234567890"
+        with patch("app.db.save_session"):
+            with patch("app.asg_session.bind_session_to_current_asg_launch"):
+                with patch("app.processing.ntc_detection.compute_suggested_cycle", return_value=None):
+                    with patch("app.services.raw_file_storage.store_raw_file") as store_raw_file:
+                        create_session_from_import(
+                            unified=unified,
+                            filename="plate.xls",
+                            user_id="user-1",
+                            session_store={},
+                            raw_source_path=source_path,
+                        )
+
+    store_raw_file.assert_called_once_with("abcdef123456", source_path, "plate.xls")

@@ -121,6 +121,9 @@ async def import_parse(current_user: CurrentUser, request: ImportParseRequest) -
         filename=record.filename,
         user_id=current_user.user_id,
         session_store=upload.sessions,
+        # record.file_path still exists on disk -- _delete_preview() below
+        # removes it right after (P32 raw-file storage copies it first).
+        raw_source_path=record.file_path,
     )
     _delete_preview(record.preview_id)
     return response

@@ -167,6 +167,40 @@ CREATE TABLE IF NOT EXISTS project_sessions (
 );
 
 -- ---------------------------------------------------------------------------
+-- Raw uploaded file retention (P32).
+--
+-- Upload has always kept only the PARSED readings (well_cycle_data etc.) and
+-- discarded the original instrument file. This table is the durable record
+-- of one session's original bytes on disk (under app.services
+-- .raw_file_storage's per-session directory, itself inside the same
+-- volume/parent directory as this SQLite file so both persist together).
+--
+-- A session row can have NO matching row here for two entirely different
+-- reasons that a user must be able to tell apart: it predates this feature
+-- (deleted_at is meaningless because it was never written), or its file
+-- already expired and was swept (deleted_at/delete_reason set below). See
+-- app.services.raw_file_storage.get_raw_file_status for the three-way
+-- distinction (none / expired / missing-anomaly) surfaced to the API.
+--
+-- ON DELETE CASCADE removes this ROW when its session is deleted, but NOT
+-- the file on disk -- app.routers.sample._delete_sessions_impl calls
+-- raw_file_storage.delete_raw_files_for_sessions() for that.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS session_raw_files (
+    session_id TEXT PRIMARY KEY REFERENCES sessions(session_id) ON DELETE CASCADE,
+    original_filename TEXT NOT NULL,
+    -- Path relative to raw_file_storage's storage root, NOT an absolute path
+    -- -- keeps the DB portable if RAW_FILE_DIR is ever relocated.
+    stored_path TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    stored_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    deleted_at TEXT,
+    delete_reason TEXT
+);
+
+-- ---------------------------------------------------------------------------
 -- In-app user feedback (bug reports / feature requests / questions).
 --
 -- Scope: like saved_layouts and marker_catalog, a feedback item is owned by

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import MutableMapping
+from pathlib import Path
 import uuid
 
 from app import asg_session, db
@@ -15,7 +16,16 @@ def create_session_from_import(
     filename: str,
     user_id: str,
     session_store: MutableMapping[str, UnifiedData],
+    raw_source_path: Path | None = None,
 ) -> UploadResponse:
+    """``raw_source_path``, when given, still points at the just-uploaded
+    file on disk (the caller has not cleaned it up yet) and is copied into
+    durable per-session raw-file storage (P32) after the session itself is
+    fully persisted below. Optional and best-effort: callers that don't pass
+    it (or a storage failure inside it) leave the session's analysis exactly
+    as it was before this feature existed -- see
+    app.services.raw_file_storage.store_raw_file.
+    """
     session_id = uuid.uuid4().hex[:12]
     session_store[session_id] = unified
 
@@ -23,6 +33,10 @@ def create_session_from_import(
     touch_session(session_id)
 
     db.save_session(session_id, unified, filename=filename, user_id=user_id)
+
+    if raw_source_path is not None:
+        from app.services.raw_file_storage import store_raw_file
+        store_raw_file(session_id, raw_source_path, filename)
     imported_regions = _build_imported_marker_regions(unified)
     if imported_regions:
         db.save_marker_regions(session_id, imported_regions)

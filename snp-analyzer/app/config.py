@@ -15,6 +15,13 @@ SUPPORTED_AUTH_MODES = {AUTH_MODE_LOCAL, AUTH_MODE_ASG_LAUNCH}
 SESSION_EXPIRY_MINUTES = _int_env("SESSION_EXPIRY_MINUTES", 60)
 ASG_SESSION_EXPIRY_MINUTES = _int_env("ASG_SESSION_EXPIRY_MINUTES", 60)
 SESSION_RETENTION_DAYS = _int_env("SESSION_RETENTION_DAYS", 30)
+# How long the ORIGINAL uploaded instrument file stays on disk after an
+# upload (see app.services.raw_file_storage). Deliberately independent from
+# SESSION_RETENTION_DAYS above: that one deletes the whole session (readings
+# + calls); this one only ever removes the source bytes the session was
+# parsed from -- the readings/calls it already produced are untouched when
+# this window closes (P32).
+RAW_FILE_RETENTION_DAYS = _int_env("RAW_FILE_RETENTION_DAYS", 90)
 # Cap on sessions restored from the DB and held warm in memory at once (LRU).
 # A session already published (has a pending analysis in flight) is never
 # evicted regardless of recency -- see app.services.session_restore. 200 is a
