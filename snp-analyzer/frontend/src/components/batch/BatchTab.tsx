@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useState } from 'react';
 import { UploadJobSummary } from '@/components/upload/UploadJobSummary';
 import { SessionEmptyState, SessionRecoveryFeedback } from '@/components/upload/SessionRecoveryFeedback';
+import { SessionCalendar } from './SessionCalendar';
 import { useRecentSessions } from '@/hooks/use-recent-sessions';
 import { projectGenotypeCounts } from './project-summary';
 import { projectCsv, projectDownloadName } from './project-export';
@@ -123,6 +124,9 @@ function ProjectWorkspace({ onLoadSession }: BatchTabProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // P29-CALENDAR: table stays the default view; calendar is an alternate lens
+  // over the same `sessions` list/actions, not a replacement.
+  const [sessionView, setSessionView] = useState<'table' | 'calendar'>('table');
   // Bulk selection state (sessions list)
   const [checkedSessions, setCheckedSessions] = useState<Set<string>>(new Set());
   // Bulk selection state (project detail view)
@@ -426,8 +430,20 @@ function ProjectWorkspace({ onLoadSession }: BatchTabProps) {
 
         {/* ── Sessions ── */}
         <div className="panel">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-text">{t.sessions}</h2>
+          <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-semibold text-text">{t.sessions}</h2>
+              <div role="group" aria-label={t.sessionViewToggleLabel} className="flex items-center rounded-md border border-border overflow-hidden text-xs">
+                <button type="button" aria-pressed={sessionView === 'table'} onClick={() => setSessionView('table')}
+                  className={`px-2.5 py-1 cursor-pointer ${sessionView === 'table' ? 'bg-primary text-on-primary' : 'bg-surface text-text-muted hover:text-text'}`}>
+                  {t.sessionViewTable}
+                </button>
+                <button type="button" aria-pressed={sessionView === 'calendar'} onClick={() => setSessionView('calendar')}
+                  className={`px-2.5 py-1 cursor-pointer border-l border-border ${sessionView === 'calendar' ? 'bg-primary text-on-primary' : 'bg-surface text-text-muted hover:text-text'}`}>
+                  {t.sessionViewCalendar}
+                </button>
+              </div>
+            </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-text-muted">{t.nSessions(sessions.length)}</span>
               {checkedSessions.size > 0 && (
@@ -450,7 +466,11 @@ function ProjectWorkspace({ onLoadSession }: BatchTabProps) {
             </div>
           </div>
 
-          {sessions.length > 0 ? (
+          {sessions.length === 0 ? (
+            <SessionEmptyState status={recovery.status} />
+          ) : sessionView === 'calendar' ? (
+            <SessionCalendar sessions={sessions} onOpen={handleLoadSession} activeSessionId={activeSessionId} />
+          ) : (
             <div role="region" aria-label={t.sessions} tabIndex={0} className="max-w-full overflow-x-auto"><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
@@ -508,8 +528,6 @@ function ProjectWorkspace({ onLoadSession }: BatchTabProps) {
                 })}
               </tbody>
             </table></div>
-          ) : (
-            <SessionEmptyState status={recovery.status} />
           )}
         </div>
       </div>
