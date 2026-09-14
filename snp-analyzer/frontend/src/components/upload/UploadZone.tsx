@@ -373,9 +373,9 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           <div className="flex min-w-0 flex-1 flex-col items-center gap-2 text-center sm:items-start sm:text-left">
             <div className="inline-flex rounded-lg bg-white px-3 py-2 shadow-sm">
               <picture>
-                <source srcSet="/brand/qprism-wide.webp" type="image/webp" />
+                <source srcSet={runtimeAssetPath("/brand/qprism-wide.webp")} type="image/webp" />
                 <img
-                  src="/brand/qprism-wide.png"
+                  src={runtimeAssetPath("/brand/qprism-wide.png")}
                   alt={t.appTitle}
                   width={660}
                   height={178}
@@ -392,7 +392,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
               the same height it was before, and hidden below `sm` so a
               400px-wide screen never has to make room for it. */}
           <img
-            src="/brand/qprism-hero.jpg"
+            src={runtimeAssetPath("/brand/qprism-hero.jpg")}
             alt=""
             aria-hidden="true"
             loading="lazy"
@@ -749,7 +749,7 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
             className="inline-flex items-center gap-1.5 rounded-xl border border-border px-2.5 py-1 text-xs text-text-muted no-underline transition-colors hover:border-primary hover:text-primary"
           >
             <img
-              src="/brand/invirustech.png"
+              src={runtimeAssetPath("/brand/invirustech.png")}
               alt=""
               aria-hidden="true"
               loading="lazy"
