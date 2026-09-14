@@ -6,7 +6,7 @@ import { useRecentSessions } from '@/hooks/use-recent-sessions';
 import { projectGenotypeCounts } from './project-summary';
 import { projectCsv, projectDownloadName } from './project-export';
 import { readProject } from './project-read';
-import { ArrowLeft, X } from 'lucide-react';
+import { ArrowLeft, Files, X } from 'lucide-react';
 import { useI18n } from '@/hooks/use-i18n';
 import { useConfirm } from '@/hooks/use-confirm';
 import { Modal } from '@/components/shared/ui/Modal';
@@ -432,7 +432,10 @@ function ProjectWorkspace({ onLoadSession }: BatchTabProps) {
         <div className="panel">
           <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-3">
-              <h2 className="text-xl font-semibold text-text">{t.sessions}</h2>
+              <h2 className="flex items-center gap-1.5 text-xl font-semibold text-text">
+                <Files size={18} aria-hidden="true" className="text-text-muted" />
+                {t.sessions}
+              </h2>
               <div role="group" aria-label={t.sessionViewToggleLabel} className="flex items-center rounded-md border border-border overflow-hidden text-xs">
                 <button type="button" aria-pressed={sessionView === 'table'} onClick={() => setSessionView('table')}
                   className={`px-2.5 py-1 cursor-pointer ${sessionView === 'table' ? 'bg-primary text-on-primary' : 'bg-surface text-text-muted hover:text-text'}`}>
