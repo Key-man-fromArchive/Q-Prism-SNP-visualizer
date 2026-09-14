@@ -491,6 +491,23 @@ const en = {
   newProjectName: 'New project name...',
   sessions: 'Sessions',
   nSessions: (n: number) => `${n} session(s)`,
+  // P29-CALENDAR: calendar view of the session list (table stays the default view)
+  sessionViewToggleLabel: 'Session view',
+  sessionViewTable: 'Table',
+  sessionViewCalendar: 'Calendar',
+  calendarPrevMonth: 'Previous month',
+  calendarNextMonth: 'Next month',
+  calendarToday: 'Today',
+  calendarGridLabel: 'Session calendar',
+  calendarWeekdayShort: (day: number) => (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day] ?? ''),
+  calendarMonthLabel: (year: number, month: number) =>
+    `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][month] ?? ''} ${year}`,
+  calendarDateLabel: (year: number, month: number, day: number) =>
+    `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][month] ?? ''} ${day}, ${year}`,
+  calendarDayHasSessions: (n: number) => `${n} session${n === 1 ? '' : 's'}`,
+  calendarNoSessionsMonth: 'No sessions this month.',
+  calendarNoDateSelected: 'Select a date to see its sessions.',
+  calendarNoSessionsOnDate: 'No sessions on this date.',
   addSelectedToProject: (n: number) => `Add Selected (${n}) to Project`,
   deleteSelected: (n: number) => `Delete Selected (${n})`,
   session: 'Session',
