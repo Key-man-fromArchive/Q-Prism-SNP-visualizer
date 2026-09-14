@@ -1,0 +1,1136 @@
+{
+  "distribution": {
+    "2026-09-14": 2,
+    "2026-09-11": 3,
+    "2026-09-08": 1,
+    "2026-09-04": 1,
+    "2026-09-01": 2,
+    "2026-08-31": 9,
+    "2026-08-25": 5,
+    "2026-07-24": 2
+  },
+  "timezone": "Asia/Seoul",
+  "fixedToday": "2026-09-14",
+  "results": [
+    {
+      "width": 1440,
+      "theme": "light",
+      "lang": "ko",
+      "state": "default",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "light",
+      "lang": "ko",
+      "state": "selected",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "light",
+      "lang": "ko",
+      "state": "empty-day",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "light",
+      "lang": "ko",
+      "state": "dense",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "light",
+      "lang": "ko",
+      "state": "last-file-focus",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "light",
+      "lang": "ko",
+      "state": "empty",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.944789533600358,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "light",
+      "lang": "ko",
+      "state": "open-failure",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "light",
+      "lang": "en",
+      "state": "default",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "light",
+      "lang": "en",
+      "state": "selected",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "light",
+      "lang": "en",
+      "state": "empty-day",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "light",
+      "lang": "en",
+      "state": "dense",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "light",
+      "lang": "en",
+      "state": "last-file-focus",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "light",
+      "lang": "en",
+      "state": "empty",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.944789533600358,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "light",
+      "lang": "en",
+      "state": "open-failure",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "default",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "selected",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "empty-day",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "dense",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "last-file-focus",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "empty",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "open-failure",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "lang": "en",
+      "state": "default",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "lang": "en",
+      "state": "selected",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "lang": "en",
+      "state": "empty-day",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "lang": "en",
+      "state": "dense",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "lang": "en",
+      "state": "last-file-focus",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "lang": "en",
+      "state": "empty",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "lang": "en",
+      "state": "open-failure",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "light",
+      "lang": "ko",
+      "state": "default",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "light",
+      "lang": "ko",
+      "state": "selected",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "light",
+      "lang": "ko",
+      "state": "empty-day",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "light",
+      "lang": "ko",
+      "state": "dense",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "light",
+      "lang": "ko",
+      "state": "last-file-focus",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "light",
+      "lang": "ko",
+      "state": "empty",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.944789533600358,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "light",
+      "lang": "ko",
+      "state": "open-failure",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "light",
+      "lang": "en",
+      "state": "default",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "light",
+      "lang": "en",
+      "state": "selected",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "light",
+      "lang": "en",
+      "state": "empty-day",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "light",
+      "lang": "en",
+      "state": "dense",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "light",
+      "lang": "en",
+      "state": "last-file-focus",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "light",
+      "lang": "en",
+      "state": "empty",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.944789533600358,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "light",
+      "lang": "en",
+      "state": "open-failure",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "default",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "selected",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "empty-day",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "dense",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "last-file-focus",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "empty",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "open-failure",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "dark",
+      "lang": "en",
+      "state": "default",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "dark",
+      "lang": "en",
+      "state": "selected",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "dark",
+      "lang": "en",
+      "state": "empty-day",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "dark",
+      "lang": "en",
+      "state": "dense",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "dark",
+      "lang": "en",
+      "state": "last-file-focus",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "dark",
+      "lang": "en",
+      "state": "empty",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "theme": "dark",
+      "lang": "en",
+      "state": "open-failure",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "lang": "ko",
+      "state": "default",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "lang": "ko",
+      "state": "selected",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "lang": "ko",
+      "state": "empty-day",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "lang": "ko",
+      "state": "dense",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "lang": "ko",
+      "state": "last-file-focus",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "lang": "ko",
+      "state": "empty",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.944789533600358,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "lang": "ko",
+      "state": "open-failure",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "lang": "en",
+      "state": "default",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "lang": "en",
+      "state": "selected",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "lang": "en",
+      "state": "empty-day",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "lang": "en",
+      "state": "dense",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "lang": "en",
+      "state": "last-file-focus",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "lang": "en",
+      "state": "empty",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.944789533600358,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "lang": "en",
+      "state": "open-failure",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "default",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "selected",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "empty-day",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "dense",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "last-file-focus",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "empty",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "open-failure",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "lang": "en",
+      "state": "default",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "lang": "en",
+      "state": "selected",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "lang": "en",
+      "state": "empty-day",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "lang": "en",
+      "state": "dense",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "lang": "en",
+      "state": "last-file-focus",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "lang": "en",
+      "state": "empty",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "lang": "en",
+      "state": "open-failure",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "lang": "ko",
+      "state": "default",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "lang": "ko",
+      "state": "selected",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "lang": "ko",
+      "state": "empty-day",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "lang": "ko",
+      "state": "dense",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "lang": "ko",
+      "state": "last-file-focus",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "lang": "ko",
+      "state": "empty",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.944789533600358,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "lang": "ko",
+      "state": "open-failure",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "lang": "en",
+      "state": "default",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "lang": "en",
+      "state": "selected",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "lang": "en",
+      "state": "empty-day",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.608602381319984,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "lang": "en",
+      "state": "dense",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "lang": "en",
+      "state": "last-file-focus",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "lang": "en",
+      "state": "empty",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.944789533600358,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "lang": "en",
+      "state": "open-failure",
+      "minimumText": 4.944789533600358,
+      "minimumUI": 4.1306456722096785,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "default",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "selected",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "empty-day",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "dense",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "last-file-focus",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "empty",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "lang": "ko",
+      "state": "open-failure",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "lang": "en",
+      "state": "default",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "lang": "en",
+      "state": "selected",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "lang": "en",
+      "state": "empty-day",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "lang": "en",
+      "state": "dense",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "lang": "en",
+      "state": "last-file-focus",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "lang": "en",
+      "state": "empty",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 6.44935533414151,
+      "failures": [],
+      "overflow": []
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "lang": "en",
+      "state": "open-failure",
+      "minimumText": 6.44935533414151,
+      "minimumUI": 5.826405462189853,
+      "failures": [],
+      "overflow": []
+    }
+  ]
+}
