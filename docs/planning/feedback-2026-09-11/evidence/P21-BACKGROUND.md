@@ -158,34 +158,43 @@ one real wasted `/cluster` call).
 
 ## Verification (4/4, `snp-analyzer/frontend`)
 
-Baseline received: 125 files / 919 tests. `main` moved forward mid-task (P19/P20/P22/P24/P25 merged
-in); merged locally, new baseline **129 files / 951 tests**.
+Baseline received: 125 files / 919 tests. `main` moved forward mid-task in two waves --
+(1) P19/P20/P22/P24/P25 (merged locally, commit `8c6be4c`, new baseline 129 files / 951 tests) and
+(2) P23 normalization-reporting consistency (merged locally, commit `d6442cf`, no overlap with any
+file this task touches). Final baseline after both: **129 files / 956 tests**.
 
 ```
 npx tsc --noEmit   -> clean
 npm run lint       -> clean
-npm run test       -> 129 files / 954 tests passed (129/951 baseline + 3 new: 2 in
+npm run test       -> 129 files / 956 tests passed (129/951 baseline after wave 1, +5 after wave 2's
+                       own new tests, + this task's 3 new: 2 in
                        MultiMarkerAnalysisPanel.requests.test.tsx, 1 in CycleControl.test.tsx)
 npm run build      -> tsc -b + vite build succeeded
 ```
 
 One flake unrelated to this change: `CompareTab.test.tsx`'s `handles real stats wire shape with
-nullable Pearson and wrong identity=false` failed once in a full-suite run. Reproduced independently
-of this fix -- passes 3/3 standalone and file-scoped, and the *baseline* tree (this fix fully
-reverted, before the merge) shows the identical intermittent failure in full-suite runs too (2/2
-clean runs, then reproduced once more with the fix present, 2/2 clean runs after). Not touched.
+nullable Pearson and wrong identity=false` failed once in a full-suite run (observed after wave 1,
+before wave 2). Reproduced independently of this fix -- passes 3/3 standalone and file-scoped, and
+the *baseline* tree (this fix fully reverted, before the merge) shows the identical intermittent
+failure in full-suite runs too (2/2 clean runs, then reproduced once more with the fix present, 2/2
+clean runs after). Not touched.
 
 ### Backend (unaffected -- no backend files touched by this fix)
 
-`pytest` (shared venv): **823 passed + 2 subtests**, matching the post-merge baseline exactly.
+`pytest` (shared venv): **823 passed + 2 subtests** after wave 1 (matching that baseline exactly),
+**831 passed + 2 subtests** after wave 2 merged in P23's own new backend tests -- both runs pass in
+full; no backend file in this task's diff.
 
 ## E2E
 
 Isolated server `127.0.0.1:8217` (`/tmp/p21.db`, removed after use).
 
-- Full root-level suite (`tests/`, `--workers=1`, 140 tests across 22 spec files), run twice: once
-  before merging `main` (**140/140**) and once after merging `main` and rebuilding (**140/140**),
-  both against a freshly-seeded server.
+- Full root-level suite (`tests/`, `--workers=1`, 140 tests across 22 spec files), run twice against
+  a freshly-seeded server: once before merging `main` (**140/140**) and once after merging `main`'s
+  wave 1 (P19/P20/P22/P24/P25) and rebuilding (**140/140**). Not re-run after wave 2 (P23, no overlap
+  with this task's files) -- tsc/lint/vitest/build were re-verified instead (see above), per
+  direction to avoid re-running the full E2E suite for an unrelated, non-overlapping merge on a
+  shared, loaded machine.
 - The two `zz-p21-measure.spec.ts` ad-hoc scripts used for the request-count table above (not part
   of the permanent suite -- deleted after use) also passed in both the before-fix and after-fix
   configurations; they assert nothing beyond the measurement, no result depends on them staying in
@@ -204,19 +213,28 @@ Isolated server `127.0.0.1:8217` (`/tmp/p21.db`, removed after use).
   section).
 - `docs/planning/feedback-2026-09-11/evidence/P21-BACKGROUND.md` -- this document.
 
-## Main moved mid-task
+## Main moved mid-task (twice)
 
-`main` advanced past this branch's fork point while this task was in progress (P19 well x cycle
-alignment, P20 stale-scatter-response protection in `MultiMarkerAnalysisPanel.tsx` itself, P22
-no-signal clustering/`algorithm_version`, P24 well-detail-panel genotype-inference removal, P25 a
-documentation-only port correction). Merged locally (`git merge main`, commit `8c6be4c`); the only
-overlapping file was `MultiMarkerAnalysisPanel.tsx` (and its `.requests.test.tsx`), which auto-merged
-cleanly -- P20's `dataGeneration`/`startedAtGeneration` capture inside `fetchScatter` and this task's
-`backgrounded` gate around the effect that calls it are both intact and compose correctly (confirmed
-by reading the merged file and by the full verification above, run post-merge). `WellDetailPanel.tsx`
-still carries an unused `ploidyOverride` prop (kept, per P24, because `MultiMarkerAnalysisPanel.tsx`
-still passes it) -- left untouched here as an unrelated pre-existing cleanup opportunity, out of this
-task's scope.
+`main` advanced past this branch's fork point while this task was in progress, in two separate
+waves:
+
+1. P19 (well x cycle alignment), P20 (stale-scatter-response protection in
+   `MultiMarkerAnalysisPanel.tsx` itself), P22 (no-signal clustering/`algorithm_version`), P24
+   (well-detail-panel genotype-inference removal), P25 (a documentation-only port correction).
+   Merged locally (`git merge main`, commit `8c6be4c`). The only overlapping file was
+   `MultiMarkerAnalysisPanel.tsx` (and its `.requests.test.tsx`), which auto-merged cleanly -- P20's
+   `dataGeneration`/`startedAtGeneration` capture inside `fetchScatter` and this task's `backgrounded`
+   gate around the effect that calls it are both intact and compose correctly (confirmed by reading
+   the merged file and by the full verification above, run post-merge). `WellDetailPanel.tsx` still
+   carries an unused `ploidyOverride` prop (kept, per P24, because `MultiMarkerAnalysisPanel.tsx`
+   still passes it) -- left untouched here as an unrelated pre-existing cleanup opportunity, out of
+   this task's scope.
+2. P23 (one normalization-reporting definition across four endpoints, backend `models.py`/
+   `normalize.py`/`ratio_origin.py`/routers, plus `AmplificationOverlay.tsx`/`types/api.ts`/locales
+   on the frontend side). Merged locally (`git merge main`, commit `d6442cf`) -- no overlap with any
+   file this task touches, auto-merged with zero conflicts. Re-verified tsc/lint/vitest/build (see
+   above) and the backend `pytest` count (823 -> 831 passed + 2 subtests, all P23's own new backend
+   tests, none touching this task's files).
 
 ## Out of scope, left for a future task
 
