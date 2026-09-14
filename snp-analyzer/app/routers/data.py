@@ -7,7 +7,6 @@ from app.models import (
     PlateWell,
     AmplificationCurve,
     ProtocolStep,
-    UnifiedData,
 )
 from app.processing.background import BackgroundMode
 from app.processing.cycle_selection import CycleMode, resolve_cycle
@@ -18,9 +17,9 @@ from app.processing.normalize import (
 )
 from app.processing.ratio_origin import rox_outlier_wells
 from app.role_labels import build_role_label_metadata
-from app.routers.upload import sessions
 from app.routers.clustering import cluster_store, welltype_store, ratio_origin_for
 from app.auth import CurrentUser, check_session_access
+from app.services.session_restore import get_session as _get_session
 
 router = APIRouter()
 
@@ -38,12 +37,6 @@ DEFAULT_PROTOCOL = [
     ProtocolStep(step=5, temperature=55.0, duration_sec=60, cycles=25, label="Annealing"),
     ProtocolStep(step=6, temperature=37.0, duration_sec=60, cycles=1, label="Final Read", plate_read=True),
 ]
-
-
-def _get_session(sid: str) -> UnifiedData:
-    if sid not in sessions:
-        raise HTTPException(404, "Session not found")
-    return sessions[sid]
 
 
 @router.get("/api/data/{sid}/suggest-cycle")

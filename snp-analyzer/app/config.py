@@ -15,6 +15,13 @@ SUPPORTED_AUTH_MODES = {AUTH_MODE_LOCAL, AUTH_MODE_ASG_LAUNCH}
 SESSION_EXPIRY_MINUTES = _int_env("SESSION_EXPIRY_MINUTES", 60)
 ASG_SESSION_EXPIRY_MINUTES = _int_env("ASG_SESSION_EXPIRY_MINUTES", 60)
 SESSION_RETENTION_DAYS = _int_env("SESSION_RETENTION_DAYS", 30)
+# Cap on sessions restored from the DB and held warm in memory at once (LRU).
+# A session already published (has a pending analysis in flight) is never
+# evicted regardless of recency -- see app.services.session_restore. 200 is a
+# generous multiple of the 47-session/~100k-row production footprint observed
+# at the time this cap was introduced (P28); raise via env var if the
+# workspace grows well past that before a smarter policy is needed.
+SESSION_CACHE_MAX_ENTRIES = _int_env("SESSION_CACHE_MAX_ENTRIES", 200)
 MAX_UPLOAD_SIZE_MB = _int_env("MAX_UPLOAD_SIZE_MB", 50)
 MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 UPLOAD_CHUNK_SIZE = _int_env("UPLOAD_CHUNK_SIZE", 1024 * 1024)

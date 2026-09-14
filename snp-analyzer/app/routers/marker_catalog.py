@@ -26,7 +26,7 @@ from app.auth import CurrentUser, check_session_access
 from app.models import MarkerCalibration, MarkerCatalogEntry, MarkerRegion, MarkerValidation
 from app.processing.genotype_vocab import validate_ploidy
 from app.routers.clustering import _validate_marker_set, marker_store
-from app.routers.upload import sessions
+from app.services.session_restore import restore_session
 
 router = APIRouter()
 
@@ -216,7 +216,8 @@ async def attach_catalog_to_marker(
     owning user only, same as GET/PUT/DELETE) -- 404 otherwise, mirroring
     ``check_session_access``'s non-disclosure of session existence."""
     check_session_access(sid, current_user)
-    if sid not in sessions:
+    unified = restore_session(sid)
+    if unified is None:
         raise HTTPException(404, "Session not found")
 
     markers = marker_store.get(sid, [])
@@ -235,7 +236,6 @@ async def attach_catalog_to_marker(
         updated["color"] = catalog_row["color"]
     updated_marker = MarkerRegion(**updated)
 
-    unified = sessions[sid]
     others = [m for i, m in enumerate(markers) if i != idx]
     _validate_marker_set(others + [updated_marker], unified)
 

@@ -1,11 +1,11 @@
 """Statistics API router -- allele frequency and HWE."""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
-from app.routers.upload import sessions
 from app.routers.clustering import cluster_store, welltype_store
 from app.processing.genotype import get_effective_types, count_genotypes
 from app.processing.statistics import allele_frequencies, hwe_test
 from app.auth import CurrentUser, check_session_access
+from app.services.session_restore import get_session
 
 router = APIRouter()
 
@@ -48,9 +48,7 @@ def _marker_stats(region, manual_assignments: dict[str, str]) -> dict:
 @router.get("/api/data/{sid}/statistics")
 async def get_statistics(sid: str, current_user: CurrentUser):
     check_session_access(sid, current_user)
-    if sid not in sessions:
-        raise HTTPException(404, "Session not found")
-    unified = sessions[sid]
+    unified = get_session(sid)
 
     # Get effective types
     ca = cluster_store.get(sid)

@@ -212,8 +212,17 @@ def test_commit_failure_rolls_back_and_cannot_leak_into_later_commit(isolated_db
 async def test_real_lifespan_restores_saved_revision_and_context(
     isolated_db: ModuleType, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """P28: lifespan() itself no longer eagerly restores sessions (that used
+    to be unbounded startup work -- see app/main.py). What must still be true
+    across a real restart is that the FIRST thing that asks for the session
+    afterwards (get_session(), same as any router now calls) gets back the
+    exact revision/context a request made before the restart saved -- so this
+    asserts the cache is cold right after lifespan, then exercises the
+    on-demand restore path explicitly.
+    """
     import app.main as main
     from app.routers import clustering, data, sample, upload
+    from app.services.session_restore import get_session
 
     isolated_db.save_session("synthetic", make_ux_plate())
     isolated_db.save_clustering("synthetic", verified_result())
@@ -230,7 +239,8 @@ async def test_real_lifespan_restores_saved_revision_and_context(
     monkeypatch.setattr(main, "_ensure_admin", lambda: None)
     monkeypatch.setattr(main, "_migrate_projects_json", lambda: None)
     async with main.lifespan(main.app):
-        assert upload.sessions["synthetic"].input_revision == 8
+        assert "synthetic" not in upload.sessions
+        assert get_session("synthetic").input_revision == 8
         result = clustering.cluster_store["synthetic"]
         assert result.analysis_context.input_revision == 7
         assert result.context_status == "verified"

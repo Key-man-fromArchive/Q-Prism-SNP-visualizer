@@ -4,13 +4,11 @@ import csv
 import io
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 
-from app.models import UnifiedData
 from app.processing.genotype_vocab import DEFAULT_PLOIDY, label_by_ratio
 from app.processing.background import BackgroundMode
-from app.routers.upload import sessions
 from app.auth import CurrentUser
 from app.reporting.result_snapshot import (
     ExportOptions, ResultRow, ResultSnapshot, capture_result_snapshot, snapshot_rows,
@@ -22,12 +20,6 @@ router = APIRouter()
 # NTC / low-signal fallback is a fraction of the plate's own median total signal
 # (scale-invariant), never an absolute magnitude — ROX concentration varies by kit.
 _UNDETERMINED_FRAC = 0.2
-
-
-def _get_session(sid: str) -> UnifiedData:
-    if sid not in sessions:
-        raise HTTPException(404, "Session not found")
-    return sessions[sid]
 
 
 def _determine_genotype(

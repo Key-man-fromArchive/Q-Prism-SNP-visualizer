@@ -18,7 +18,7 @@ from app.db import get_db
 from app.processing.genotype import count_genotypes, get_effective_types
 from app.processing.quality import score_all_wells
 from app.routers.clustering import cluster_store, welltype_store
-from app.routers.upload import sessions
+from app.services.session_restore import restore_session
 
 router = APIRouter()
 
@@ -99,7 +99,7 @@ def _get_raw_filenames(sids_list: list[str]) -> dict[str, str]:
 
 def _validate_project_session_ids(session_ids: list[str], current_user: CurrentUser) -> None:
     for sid in session_ids:
-        if sid not in sessions:
+        if restore_session(sid) is None:
             raise HTTPException(404, "Session not found")
         check_session_access(sid, current_user)
 
@@ -173,11 +173,13 @@ async def get_project(project_id: str, current_user: CurrentUser):
     sids_list = _get_session_ids(project_id)
     db_info = _get_raw_filenames(sids_list)
 
-    # Build per-session summaries (only for sessions that still exist in memory)
+    # Build per-session summaries. restore_session() reconstructs a session
+    # the process-local cache has never seen (or evicted) from the DB; only a
+    # session actually deleted from the DB is reported "missing" now.
     session_summaries = []
     for sid in sids_list:
-        if sid in sessions:
-            unified = sessions[sid]
+        unified = restore_session(sid)
+        if unified is not None:
             session_summaries.append({
                 "session_id": sid,
                 "instrument": unified.instrument,
@@ -257,7 +259,7 @@ async def bulk_add_sessions_to_project(project_id: str, body: BulkSessionsReques
     existing = set(sids)
     added = []
     for sid in body.session_ids:
-        if sid not in sessions:
+        if restore_session(sid) is None:
             continue  # skip missing sessions silently
         check_session_access(sid, current_user)
         if sid not in existing:
@@ -287,7 +289,7 @@ async def bulk_remove_sessions_from_project(project_id: str, body: BulkSessionsR
 @router.post("/api/projects/{project_id}/sessions/{sid}")
 async def add_session_to_project(project_id: str, sid: str, current_user: CurrentUser):
     """Add a session to a project."""
-    if sid not in sessions:
+    if restore_session(sid) is None:
         raise HTTPException(404, "Session not found")
     check_session_access(sid, current_user)
 
@@ -335,7 +337,8 @@ async def project_summary(project_id: str, current_user: CurrentUser):
     well_genotypes: dict[str, list[str]] = {}
 
     for sid in sids_list:
-        if sid not in sessions:
+        unified = restore_session(sid)
+        if unified is None:
             plate_summaries.append({
                 "session_id": sid,
                 "instrument": "unknown",
@@ -348,8 +351,6 @@ async def project_summary(project_id: str, current_user: CurrentUser):
                 "missing": True,
             })
             continue
-
-        unified = sessions[sid]
 
         # Get effective genotype assignments
         cluster_assignments = {}

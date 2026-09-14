@@ -184,13 +184,13 @@ def capture_result_snapshot(
     from app.routers.clustering import cluster_store, group_store
     from app.routers.data import protocol_store
     from app.routers.sample import sample_name_store
-    from app.routers.upload import sessions
+    from app.services.session_restore import restore_session
 
     with input_lock:
         check_session_access(sid, user)
-        if sid not in sessions:
+        data = restore_session(sid)
+        if data is None:
             raise HTTPException(404, "Session not found")
-        data = sessions[sid]
         cycle = _validate_domain(data, options)
         result = cluster_store.get(sid)
         context, overrides = _validate_result(sid, data, result)
