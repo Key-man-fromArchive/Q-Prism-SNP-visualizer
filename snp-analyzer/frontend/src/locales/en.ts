@@ -135,6 +135,12 @@ const en = {
   // reported" and "not applied" are different facts.
   overlayProcessingStatusUnreported: (requestedRox: boolean) =>
     `Reference normalization requested: ${requestedRox ? 'yes' : 'no'}; actually applied: not reported by the server.`,
+  // P23: some wells' passive reference (ROX) reads 0 or is missing and stays
+  // raw instead of dividing -- "actually applied: yes" above can still be
+  // true for the plate while it is false for individual wells. Per-well
+  // truth lives on each point's `normalized` field.
+  overlayProcessingStatusMixed:
+    '(Only some wells were actually normalized -- the rest had a zero or missing reference and stayed raw.)',
   wellCycleValuesTitle: 'Per-well fluorescence values',
   wellCycleValuesShow: 'Show values',
   wellCycleValuesHide: 'Hide values',

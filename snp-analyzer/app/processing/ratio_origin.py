@@ -104,7 +104,14 @@ def rox_outlier_wells(points) -> set[str]:
     4263 (1.73x), and normalizing by it pushed that one well below every other
     well in both channels.
     """
-    refs = [(p.well, p.raw_rox) for p in points if p.raw_rox]
+    # ``is not None``, not truthiness: a passive reference that read exactly
+    # 0 is a value, not an absence of one, and a plate-median-relative
+    # abnormally-low reading of 0 is exactly the kind of well this guard
+    # exists to catch. Excluding it here silently kept a broken well out of
+    # BOTH the outlier list AND every downstream QC/exclusion that reads it,
+    # while normalize() had already fallen it back to raw for the opposite
+    # reason (nothing sane to divide by).
+    refs = [(p.well, p.raw_rox) for p in points if p.raw_rox is not None]
     if len(refs) < _MIN_WELLS_FOR_QUANTILE:
         return set()
     plate = median(value for _, value in refs)

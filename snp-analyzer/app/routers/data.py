@@ -11,7 +11,11 @@ from app.models import (
 )
 from app.processing.background import BackgroundMode
 from app.processing.cycle_selection import CycleMode, resolve_cycle
-from app.processing.normalize import normalize_for_cycle, normalize, normalization_applies
+from app.processing.normalize import (
+    normalize_for_cycle,
+    normalize,
+    normalization_summary,
+)
 from app.processing.ratio_origin import rox_outlier_wells
 from app.role_labels import build_role_label_metadata
 from app.routers.upload import sessions
@@ -86,6 +90,7 @@ async def scatter_data(
         confidences = cluster_store[sid].confidences or {}
     manual_assignments = welltype_store.get(sid, {})
 
+    applied, mixed = normalization_summary(points)
     return {
         "cycle": cycle,
         "allele2_dye": unified.allele2_dye,
@@ -94,8 +99,14 @@ async def scatter_data(
         # What the numbers below ARE, not what the request asked for: a run
         # with no passive reference comes back raw however ``use_rox`` is set,
         # and an axis labelled "FAM / ROX" over raw RFU is a lie the client
-        # cannot detect on its own.
-        "normalization_applied": normalization_applies(unified, use_rox=use_rox),
+        # cannot detect on its own. Read off the points themselves (see
+        # normalization_summary()) so this agrees with /plate, /amplification
+        # /all and /analyze, which used to derive it differently.
+        "normalization_applied": applied,
+        # True when some wells above were divided and others were not (e.g.
+        # one well's ROX read 0). The response mixes two scales of the same
+        # channel when this is True.
+        "normalization_mixed": mixed,
         # Wells whose passive reference is too far from the plate median to
         # divide by. They are excluded from the ratio-origin estimate (see
         # app/processing/ratio_origin.py) and named here so QC can show them.
@@ -109,6 +120,7 @@ async def scatter_data(
                 raw_fam=p.raw_fam,
                 raw_allele2=p.raw_allele2,
                 raw_rox=p.raw_rox,
+                normalized=p.normalized,
                 sample_name=(unified.sample_names or {}).get(p.well),
                 auto_cluster=cluster_assignments.get(p.well),
                 manual_type=manual_assignments.get(p.well),
@@ -161,6 +173,7 @@ async def plate_data(
                 norm_fam=p.norm_fam,
                 norm_allele2=p.norm_allele2,
                 ratio=round(ratio, 4),
+                normalized=p.normalized,
                 sample_name=(unified.sample_names or {}).get(p.well),
                 auto_cluster=cluster_assignments_plate.get(p.well),
                 manual_type=manual_assignments_plate.get(p.well),
@@ -168,12 +181,16 @@ async def plate_data(
             )
         )
 
+    applied, mixed = normalization_summary(points)
     return {
         "cycle": cycle,
         "allele2_dye": unified.allele2_dye,
         "background_mode": background,
         "ratio_origin": ratio_origin.model_dump(),
-        "normalization_applied": normalization_applies(unified, use_rox=use_rox),
+        # Same definition as /scatter, /amplification/all and /analyze --
+        # see normalization_summary() in app/processing/normalize.py.
+        "normalization_applied": applied,
+        "normalization_mixed": mixed,
         "rox_outlier_wells": sorted(rox_outlier_wells(points)),
         **build_role_label_metadata(unified),
         "wells": wells,
@@ -231,7 +248,7 @@ async def amplification_all(
     check_session_access(sid, current_user)
     unified = _get_session(sid)
     all_normalized = normalize(unified, use_rox=use_rox, background=background)
-    applied = normalization_applies(unified, use_rox=use_rox)
+    applied, mixed = normalization_summary(all_normalized)
 
     # Get genotype assignments
     ca = cluster_store.get(sid)
@@ -252,6 +269,10 @@ async def amplification_all(
             "cycles": [p.cycle for p in pts],
             "norm_fam": [p.norm_fam for p in pts],
             "norm_allele2": [p.norm_allele2 for p in pts],
+            # Per-cycle, aligned with "cycles" above: a well's own reference
+            # reading can be 0 at one cycle and sane at another, so this is
+            # not always uniform across a single well's curve either.
+            "normalized": [p.normalized for p in pts],
             "effective_type": effective,
         })
 
@@ -259,10 +280,12 @@ async def amplification_all(
         "allele2_dye": unified.allele2_dye,
         "background_mode": background,
         # What the curves ABOVE actually are, not what the request asked for --
-        # see normalization_applies() in app/processing/normalize.py. A run
+        # see normalization_summary() in app/processing/normalize.py, now the
+        # one definition shared with /scatter, /plate and /analyze. A run
         # with no passive reference stays raw regardless of use_rox, and the
         # overlay cannot tell "normalized" from "raw" on its own.
         "normalization_applied": applied,
+        "normalization_mixed": mixed,
         **build_role_label_metadata(unified),
         "curves": curves,
     }

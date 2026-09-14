@@ -266,6 +266,7 @@ export function FluorescenceDataCard() {
                 testId="fluorescence-processing-status"
                 requestedRox={useRox}
                 normalizationApplied={response.normalization_applied}
+                normalizationMixed={response.normalization_mixed}
                 backgroundMode={response.background_mode}
               />
             )}

@@ -31,7 +31,7 @@ from app.processing.clustering import (
     cluster_threshold,
 )
 from app.processing.genotype_vocab import validate_ploidy
-from app.processing.normalize import normalize_for_cycle, normalization_applies
+from app.processing.normalize import normalize_for_cycle, normalization_summary
 from app.processing.background import available_background_modes, BackgroundModeError
 from app.processing.ratio_origin import compute_ratio_origin, shift_to_origin
 from app.routers.upload import sessions
@@ -438,7 +438,7 @@ def _snapshot_points(snapshot: CalculationSnapshot):
          "plot_fam": p.norm_fam, "plot_allele2": p.norm_allele2}
         for p in points if p.well not in excluded
     ], origin)
-    return point_dicts, origin, excluded
+    return point_dicts, origin, excluded, points
 
 
 def _snapshot_controls(snapshot: CalculationSnapshot) -> dict[str, str]:
@@ -487,15 +487,8 @@ def _region_contexts(snapshot: CalculationSnapshot, result: ClusteringResult) ->
     return contexts
 
 
-def _normalization_was_applied(snapshot: CalculationSnapshot) -> bool:
-    if not normalization_applies(snapshot.unified, use_rox=snapshot.request.use_rox):
-        return False
-    return any((reading.normalization_value if reading.normalization_value is not None else reading.rox or 0) > 0
-               for reading in snapshot.unified.data if reading.cycle == snapshot.cycle)
-
-
 def _attach_context(snapshot: CalculationSnapshot, result: ClusteringResult, origin: RatioOrigin,
-                    excluded: set[str]) -> None:
+                    excluded: set[str], points) -> None:
     req = snapshot.request
     config = req.threshold_config or ThresholdConfig()
     actual = _actual_algorithm(req.algorithm, config, region=False)
@@ -509,23 +502,28 @@ def _attach_context(snapshot: CalculationSnapshot, result: ClusteringResult, ori
     parameters.update({"effective_well_types": dict(snapshot.welltypes),
                        "manual_well_types": dict(snapshot.manual_welltypes),
                        "ratio_origin": origin.model_dump(mode="json"), "excluded_wells": [well for well in sorted(excluded)]})
+    # Same definition /scatter, /plate and /amplification/all use (see
+    # normalization_summary() in app/processing/normalize.py), read off the
+    # SAME NormalizedPoint list this snapshot already computed -- not a
+    # second, separately-derived check of the raw UnifiedData.
+    applied, mixed = normalization_summary(points)
     result.analysis_context = AnalysisContext(
         schema_version=1, result_revision=uuid4(), analysed_at=datetime.now(timezone.utc),
         cycle=snapshot.cycle, use_rox=req.use_rox,
-        normalization_applied=_normalization_was_applied(snapshot),
+        normalization_applied=applied, normalization_mixed=mixed,
         background=req.background or "none", algorithm=aggregate if regions else actual,
         parameters=parameters, regions=regions, input_revision=snapshot.unified.input_revision)
 
 
 def _calculate_snapshot(snapshot: CalculationSnapshot) -> ClusteringResult:
     """Pure worker: no sessions/stores/DB access, scientific functions unchanged."""
-    points, origin, excluded = _snapshot_points(snapshot)
+    point_dicts, origin, excluded, points = _snapshot_points(snapshot)
     controls = _snapshot_controls(snapshot)
     if snapshot.request.regions:
-        result = _run_regions(snapshot.request, snapshot.unified, snapshot.cycle, points, controls)
+        result = _run_regions(snapshot.request, snapshot.unified, snapshot.cycle, point_dicts, controls)
     else:
-        result = _single_result(snapshot, points, controls)
-    _attach_context(snapshot, result, origin, excluded)
+        result = _single_result(snapshot, point_dicts, controls)
+    _attach_context(snapshot, result, origin, excluded, points)
     return result
 
 
