@@ -445,7 +445,7 @@ function ProjectWorkspace({ onLoadSession }: BatchTabProps) {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-text-muted">{t.nSessions(sessions.length)}</span>
+              <span className="text-xs text-text-muted">{sessionView === 'calendar' ? t.calendarAllSessions(sessions.length) : t.nSessions(sessions.length)}</span>
               {checkedSessions.size > 0 && (
                 <>
                   <ProjectPicker
