@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import os
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 
 # Optional build provenance, supplied by the image build (never guessed at
 # runtime: an empty value is honest, a fabricated commit is not).
