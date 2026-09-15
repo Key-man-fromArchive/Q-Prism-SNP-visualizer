@@ -32,6 +32,10 @@ import { clearActiveChart, setActiveChart } from "@/lib/chart-export-registry";
 type PlotlyGraphDiv = HTMLDivElement & {
   _fullLayout?: { xaxis?: PlotlyAxis; yaxis?: PlotlyAxis };
   data?: Array<Record<string, unknown>>;
+  // Persistent box/lasso selections. Not in @types/plotly.js (3.0.10), but
+  // Plotly writes them onto the graph div's layout and keeps them alive
+  // across `Plotly.react` for as long as `uirevision` is unchanged.
+  layout?: { selections?: unknown[] };
 };
 
 // P12-TOGGLE (FB-12): shrunk from 12/10/18 -- the user asked for smaller
@@ -46,6 +50,19 @@ type PlotlyGraphDiv = HTMLDivElement & {
 const MARKER_SIZE = 8;
 const MARKER_SIZE_NTC = 7;
 const MARKER_SIZE_SELECTED = 12;
+
+// P33: Plotly fades every UNSELECTED point to 20% (DESELECTDIM) as soon as a
+// box selection exists, and `uirevision` keeps that selection -- and the fade
+// -- alive across re-renders; in threshold-edit mode dragmode is "zoom", so
+// Plotly's double-click resets the axes and never clears it. Selection is
+// already carried here by marker size, outline width and the well labels, so
+// both states stay fully opaque. Spread into each trace because
+// @types/plotly.js (3.0.10) declares neither attribute, though Plotly itself
+// documents and honors both.
+const OPAQUE_IN_BOTH_SELECTION_STATES = {
+  selected: { marker: { opacity: 1 } },
+  unselected: { marker: { opacity: 1 } },
+};
 // Individual well-number labels stop being drawn past this many selected
 // wells -- past a handful, a label per point on a 96/384-well plate turns
 // into unreadable clutter (the whole reason dot size was reduced in the
@@ -251,6 +268,40 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     return () => gd.removeEventListener("mousedown", onDown);
   }, []);
 
+  // While the boundary rays are armed a double-click already means "delete
+  // this ray / add one here" (the boundary effect below owns that gesture).
+  // Everywhere else a double-click is the plain "clear the selection" gesture,
+  // which Plotly itself only offers in select dragmode -- in threshold-edit
+  // mode it autoranges the axes instead and fires no deselect (P33).
+  const boundaryGestureRef = useRef(false);
+  useEffect(() => {
+    boundaryGestureRef.current = linesActive && editing;
+  }, [linesActive, editing]);
+
+  // Drop Plotly's own record of the box that was dragged, keeping the wells
+  // themselves selected in the store. Plotly preserves both halves of that
+  // record across re-renders while `uirevision` holds -- `selectedpoints` per
+  // trace (what drives the fade) and, in persistent-selection builds, the
+  // drawn rectangle in `layout.selections` -- so without this they outlive
+  // the tool that drew them.
+  const dropSelectionOutline = useCallback(() => {
+    const gd = plotRef.current as PlotlyGraphDiv | null;
+    if (!gd || !initialized.current) return;
+    const traces = gd.data ?? [];
+    if (traces.some((trace) => Array.isArray((trace as { selectedpoints?: unknown }).selectedpoints))) {
+      void Plotly.restyle(gd, { selectedpoints: null } as unknown as Partial<Data>);
+    }
+    const selections = gd.layout?.selections;
+    if (Array.isArray(selections) && selections.length > 0) {
+      void Plotly.relayout(gd, { selections: [] } as unknown as Partial<Layout>);
+    }
+  }, []);
+
+  // Switching tools leaves the old tool's selection rectangle on the canvas.
+  useEffect(() => {
+    dropSelectionOutline();
+  }, [scatterTool, dropSelectionOutline]);
+
   // Re-fetch trigger (incremented when well types change)
   const [refetchTrigger, setRefetchTrigger] = useState(0);
 
@@ -409,6 +460,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
           opacity: info.opacity,
           line: { width: points.map(p => chartPointState(selectedWellSet.has(p.well), roxOutlierWells.includes(p.well), dark).width), color: info.stroke },
         },
+        ...OPAQUE_IN_BOTH_SELECTION_STATES,
       });
     }
 
@@ -429,6 +481,9 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
         symbol: ntcCorner ? "diamond" : "diamond-open",
         line: { width: 2, color: colors.markerLineColor },
       },
+      // The handle an operator drags in threshold-edit mode; a leftover
+      // selection used to fade it along with the data.
+      ...OPAQUE_IN_BOTH_SELECTION_STATES,
     });
 
     const xLabel = normalizationApplied
@@ -630,6 +685,15 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
           // away" -- Plotly fires deselect for both.
           if (!additiveRef.current) clearSelection();
         });
+
+        el.on("plotly_doubleclick", () => {
+          // Plotly only clears a selection on double-click while dragmode is
+          // select/lasso; in threshold-edit mode it resets the axes and the
+          // selection (and, before P33, the fade it caused) stayed put.
+          if (boundaryGestureRef.current) return;
+          clearSelection();
+          dropSelectionOutline();
+        });
       });
     } else {
       const element = plotRef.current;
@@ -675,6 +739,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     fetchKey,
     currentCycle,
     dark,
+    dropSelectionOutline,
   ]);
 
   useEffect(() => () => { if (plotRef.current) clearActiveChart(plotRef.current); }, []);
