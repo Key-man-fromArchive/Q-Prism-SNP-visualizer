@@ -48,6 +48,9 @@ type PlotlyAxis = { _length?: number; _offset?: number; range?: [number, number]
 type PlotlyGraphDiv = HTMLDivElement & {
   _fullLayout?: { xaxis?: PlotlyAxis; yaxis?: PlotlyAxis };
   data?: unknown[];
+  // Persistent box/lasso selections, which Plotly writes onto the graph div
+  // and keeps alive across re-renders for as long as `uirevision` holds.
+  layout?: { selections?: unknown[] };
 };
 
 // P12-TOGGLE (FB-12): mirrors ScatterPlot.tsx's exact values -- see that
@@ -245,6 +248,29 @@ export function MarkerScatterPlot({
     return () => gd.removeEventListener("mousedown", onDown);
   }, []);
 
+  // Drop Plotly's own record of the box that was dragged while leaving the
+  // wells selected in the store: `selectedpoints` per trace (what drives the
+  // fade) and, in persistent-selection builds, the drawn rectangle. Both
+  // otherwise outlive the tool that drew them, because `uirevision` preserves
+  // them across every re-render (P33).
+  const dropSelectionOutline = useCallback(() => {
+    const gd = plotRef.current as PlotlyGraphDiv | null;
+    if (!gd || !initialized.current) return;
+    const traces = (gd.data ?? []) as { selectedpoints?: unknown }[];
+    if (traces.some((trace) => Array.isArray(trace.selectedpoints))) {
+      void Plotly.restyle(gd, { selectedpoints: null });
+    }
+    const selections = gd.layout?.selections;
+    if (Array.isArray(selections) && selections.length > 0) {
+      void Plotly.relayout(gd, { selections: [] });
+    }
+  }, []);
+
+  // Switching tools leaves the old tool's selection rectangle on the canvas.
+  useEffect(() => {
+    dropSelectionOutline();
+  }, [editing, dropSelectionOutline]);
+
   // Writing the marker's thresholds back. Hoisted out of the drag effect
   // because the numeric NTC inputs below commit exactly the same way a drag
   // does -- the corner must not be reachable only by dragging a marker that
@@ -362,6 +388,12 @@ export function MarkerScatterPlot({
             color: info.stroke,
           },
         },
+        // P33: mirrors ScatterPlot.tsx -- Plotly fades every unselected point
+        // to 20% (DESELECTDIM) once a box selection exists and keeps that
+        // selection across re-renders, which in threshold-edit mode there was
+        // no gesture to clear. Size and outline already mark the selection.
+        selected: { marker: { opacity: 1 } },
+        unselected: { marker: { opacity: 1 } },
       });
     }
 
@@ -382,6 +414,9 @@ export function MarkerScatterPlot({
         symbol: effectiveNtc.enabled ? "diamond" : "diamond-open",
         line: { width: 2, color: colors.markerLineColor },
       },
+      // The draggable threshold handle, which used to fade with the data (P33).
+      selected: { marker: { opacity: 1 } },
+      unselected: { marker: { opacity: 1 } },
     });
 
     let ext = 1;
@@ -541,6 +576,13 @@ export function MarkerScatterPlot({
         gd.on("plotly_deselect", () => {
           if (!additiveRef.current) clearSelection();
         });
+        gd.on("plotly_doubleclick", () => {
+          // Plotly clears a selection on double-click only while dragmode is
+          // select/lasso; in threshold-edit mode it resets the axes instead
+          // and fires no deselect, so the selection outlived the tool (P33).
+          clearSelection();
+          dropSelectionOutline();
+        });
       });
     } else {
       const element = plotRef.current;
@@ -575,6 +617,7 @@ export function MarkerScatterPlot({
     dark,
     sessionId,
     scatterProvenance,
+    dropSelectionOutline,
   ]);
 
   useEffect(() => () => { if (plotRef.current) clearActiveChart(plotRef.current); }, []);
