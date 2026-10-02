@@ -53,6 +53,8 @@ test.describe('amplification check', () => {
 
   test('expert mode: a manual threshold, then switching the check off, re-analyse with the new choice', async ({ page }) => {
     await page.getByTestId('expert-mode-toggle').click();
+    await expect(page.getByTestId('amplification-qc-controls')).toHaveCount(0);
+    await page.getByTestId('qc-adjust').click();
     await expect(page.getByTestId('amplification-qc-controls')).toBeVisible();
 
     // A threshold no well can reach flags every well, and the summary says it was typed in.
