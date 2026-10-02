@@ -59,6 +59,18 @@ function readToken(name: string, fallback: string): string {
   return value || fallback;
 }
 
+/** Legend as a small translucent box inside the top-right of the plot area, so
+ *  it never takes canvas height from the scatter. */
+export function compactLegend(colors: { legendBg: string; fontColor: string }) {
+  return {
+    orientation: "h" as const,
+    x: 0.99, xanchor: "right" as const, y: 0.99, yanchor: "top" as const,
+    bgcolor: colors.legendBg,
+    font: { size: 10, color: colors.fontColor },
+    itemsizing: "constant" as const,
+  };
+}
+
 export function plotlyColors() {
   const dark = isDarkMode();
   const fallback = dark ? FALLBACK.dark : FALLBACK.light;

@@ -123,6 +123,8 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
   const currentCycle = navigationCycle ?? legacyCycle;
   const useRox = useSettingsStore((s) => s.useRox);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
+  const expertMode = useSettingsStore((s) => s.expertMode);
+  const setExpertMode = useSettingsStore((s) => s.setExpertMode);
   const resultRevision = useAnalysisStore((s) => s.result?.analysis_context?.result_revision);
   const analysisPending = useAnalysisStore((s) => s.pending);
   const { isDark, toggle: toggleDarkMode } = useDarkMode();
@@ -322,6 +324,11 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
     }
   };
 
+  const detail = sessionInfo?.instrument_detail;
+  const detailName = [detail?.vendor, detail?.model].filter(Boolean).join(' ');
+  const instrumentText = detailName ? t.instrumentChip(detailName) : sessionInfo?.instrument;
+  const instrumentTitle = [detailName || sessionInfo?.instrument, detail?.software].filter(Boolean).join(' · ');
+
   return (
     <>
     <header className="app-header bg-surface border-b border-border">
@@ -333,9 +340,8 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
 
       {sessionInfo && (
         <div id="session-info" className="flex flex-wrap gap-2 items-center min-w-0">
-          <span id="instrument-badge" className="badge" title={sessionInfo.instrument}>{sessionInfo.instrument}</span>
+          <span id="instrument-badge" className="badge" title={instrumentTitle}>{instrumentText}</span>
           <span id="wells-badge" className="badge">{sessionInfo.num_wells} {t.wells}</span>
-          <span id="cycles-badge" className="badge">{sessionInfo.num_cycles} {t.cycles}</span>
           <QcBadges />
         </div>
       )}
@@ -416,6 +422,18 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
           </div>
         )}
 
+        <button
+          type="button"
+          data-testid="expert-mode-toggle"
+          aria-pressed={expertMode}
+          title={t.expertModeTooltip}
+          onClick={() => setExpertMode(!expertMode)}
+          className={`text-xs border rounded-xl px-2.5 py-0.5 cursor-pointer transition-colors ${
+            expertMode ? "border-primary text-primary" : "border-border text-text-muted hover:text-primary hover:border-primary"
+          }`}
+        >
+          {t.expertMode}
+        </button>
         <button
           onClick={() => setLanguage(language === "en" ? "ko" : "en")}
           title={language === "en" ? "한국어로 전환" : "Switch to English"}

@@ -26,6 +26,8 @@ import { chartCategory, callAppearance } from "@/lib/chart-semantics";
 import { MARKER_PALETTE } from "@/lib/constants";
 import { dosageTrustForMarker } from "@/lib/marker-catalog";
 import { analysisWarningTexts } from "@/lib/analysis-warnings";
+import { qcConfigFromSettings, useNoAmplificationWells } from "@/lib/amplification-qc";
+import { AmplificationQcSummary } from "./AmplificationQcSummary";
 import { MarkerScatterPlot } from "./MarkerScatterPlot";
 import { AmplificationCurvePanel } from "./AmplificationCurvePanel";
 import { CycleControl } from "./CycleControl";
@@ -86,6 +88,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   // results screen (ResultsPlotToggle.tsx), sharing its state/buttons via
   // this hook rather than duplicating them.
   const { view: plotView, toggle: plotToggle } = usePlotViewToggle();
+  const expert = useSettingsStore((s) => s.expertMode);
   const sessionId = useSessionStore((s) => s.sessionId);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
   const isPlaying = useSelectionStore((s) => s.isPlaying);
@@ -134,8 +137,12 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [markers]);
 
-  const request = useMemo(() => ({ algorithm: ClusteringAlgorithm.AUTO, cycle: currentCycle,
-    n_clusters: 4, background: backgroundMode, use_rox: useRox }), [currentCycle, backgroundMode, useRox]);
+  const qcSettings = useSettingsStore((s) => s.amplificationQc);
+  const request = useMemo(() => {
+    const amplification_qc = qcConfigFromSettings(qcSettings);
+    return { algorithm: ClusteringAlgorithm.AUTO, cycle: currentCycle,
+      n_clusters: 4, background: backgroundMode, use_rox: useRox, ...(amplification_qc ? { amplification_qc } : {}) };
+  }, [currentCycle, backgroundMode, useRox, qcSettings]);
   useCurrentAnalysisRequest(request, 'analysis');
   const inputKey = JSON.stringify([request, inputRevision, markers.map(marker =>
     [marker.id, marker.wells, marker.ploidy, marker.threshold_config])]);
@@ -253,6 +260,14 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     if (!selectedRegion?.genotype_counts) return [];
     return Object.entries(selectedRegion.genotype_counts).filter(([k]) => k !== "excluded");
   }, [selectedRegion]);
+  // Flagged wells keep the backend's `Undetermined` call; they are counted in their own cell instead.
+  const noAmplification = useNoAmplificationWells();
+  const noAmplificationCount = selectedMarker
+    ? selectedMarker.wells.filter((w) => noAmplification.has(w)
+      && [null, undefined, "Undetermined"].includes(selectedRegion?.assignments?.[w])).length
+    : 0;
+  const markerNotAmplified = !!selectedMarker && selectedMarker.wells.length > 0
+    && selectedMarker.wells.every((w) => noAmplification.has(w));
   const observedClasses = countsEntries.filter(([, n]) => n > 0).length;
   const excludedCount = selectedRegion?.genotype_counts?.excluded ?? 0;
   const observedExceedsExpected = selectedMarker
@@ -272,7 +287,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
       <div className="sticky top-0 z-20 border-b border-border bg-surface">
       <CycleControl />
       <div className="flex flex-wrap items-center justify-end gap-3 px-6 py-2">
-        <button type="button" data-testid="multi-analyze-recommended" onClick={handleRecommended} disabled={loading}>{t.analyzeRecommended}</button>
+        {expert && <button type="button" data-testid="multi-analyze-recommended" onClick={handleRecommended} disabled={loading}>{t.analyzeRecommended}</button>}
         <button
           type="button"
           data-testid="multi-analyze-current"
@@ -291,7 +306,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
         }`}
       >
       {/* Marker selector */}
-      <div className={`panel ${useSidebar ? "" : "flex flex-wrap items-center gap-3"}`}>
+      <div className={`panel ${useSidebar ? "xl:sticky xl:top-28" : "flex flex-wrap items-center gap-3"}`}>
         <h3 className={`text-sm font-semibold text-text ${useSidebar ? "mb-3" : ""}`}>
           {t.wsAnalysisListTitle}
         </h3>
@@ -316,7 +331,6 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
           <div data-testid="marker-selector-sidebar" className="flex flex-col gap-2">
             {markers.map((m) => {
               const region = regionsById[m.id];
-              const wellCount = m.wells.length;
               return (
                 <button
                   key={m.id}
@@ -338,17 +352,11 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                     <span className="font-semibold text-sm text-text flex-1 truncate">
                       {m.name}
                     </span>
-                    <span className="text-xs font-bold text-primary bg-bg rounded px-1.5 py-0.5">
-                      {t.wsMarkerPloidyUnit(m.ploidy)}
-                    </span>
                     {region?.warnings && region.warnings.length > 0 && (
                       <span title={region.warnings.join(", ")} className="text-warning">
                         <AlertTriangle size={13} aria-hidden="true" />
                       </span>
                     )}
-                  </div>
-                  <div className="mt-1 text-xs text-text-muted">
-                    {t.wsAnalysisWellsCount(wellCount)}
                   </div>
                 </button>
               );
@@ -383,12 +391,12 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                 >
                   {t.wsMarkerPloidyUnit(selectedMarker.ploidy)}
                 </span>
-                <span
+                {expert && <span
                   data-testid="marker-expected-classes"
                   className="rounded-full px-3 py-1 text-xs bg-bg border border-border text-text"
                 >
                   {t.wsAnalysisExpectedClasses(expectedClasses)}
-                </span>
+                </span>}
                 <span
                   data-testid="analysis-dosage-trust"
                   data-trust={dosageTrust}
@@ -407,7 +415,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                     ? t.wsAnalysisDosageTrustValidated
                     : t.wsAnalysisDosageTrustPutative}
                 </span>
-                <span
+                {expert && <span
                   data-testid="marker-observed-classes"
                   className={`rounded-full px-3 py-1 text-xs border ${
                     observedExceedsExpected
@@ -420,11 +428,15 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                   {observedExceedsExpected ? (
                     <AlertTriangle size={12} aria-hidden="true" className="ml-1 inline" />
                   ) : null}
-                </span>
+                </span>}
                 <span className="ml-auto text-xs text-text-muted">
                   {t.wsAnalysisWellsCount(selectedMarker.wells.length)}
                 </span>
               </div>
+
+              {markerNotAmplified && (
+                <p data-testid="marker-no-amplification" className="mb-3 text-sm text-text-muted">{t.ampQcMarkerNone}</p>
+              )}
 
               <div className="mb-3">
                 <WellSelectionToolbar />
@@ -459,14 +471,14 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                 </>
               )}
 
-              <div
+              {expert && <div
                 data-testid="marker-ntc-note"
                 className="flex items-start gap-2 mt-3 px-3 py-2 rounded-md text-xs"
                 style={{ background: "var(--color-primary-soft, rgba(37,99,235,0.08))" }}
               >
                 <Info size={13} aria-hidden="true" className="mt-0.5 shrink-0" />
                 <span>{t.wsAnalysisNtcNote}</span>
-              </div>
+              </div>}
 
               {selectedRegion?.warnings && selectedRegion.warnings.length > 0 && (
                 <div
@@ -488,54 +500,62 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
               )}
               <PlateView scopeWells={selectedMarker.wells} ploidyOverride={selectedMarker.ploidy}
                 alleleLabels={selectedMarker.allele_labels} wellAlleleLabels={wellAlleleLabels} unassignedWells={unassignedWells} />
+              <div className="panel" data-testid="genotype-counts-card">
+                <h3 className="text-sm font-semibold mb-2 text-text">
+                  {t.wsAnalysisGenotypeCountsTitle}
+                </h3>
+                <div
+                  data-testid="genotype-counts"
+                  className="grid gap-2"
+                  style={{ gridTemplateColumns: "repeat(auto-fit, minmax(72px, 1fr))" }}
+                >
+                  {countsEntries.map(([key, n]) => {
+                    const label = countKeyToLabel(key, selectedMarker.ploidy);
+                    const info = chartCategory(label, selectedMarker.ploidy, dark);
+                    const short = callAppearance(label, selectedMarker.ploidy, dark, t).label;
+                    const shown = label === "Undetermined" ? Math.max(0, n - noAmplificationCount) : n;
+                    return (
+                      <div
+                        key={key}
+                        className="border border-border rounded-md p-2 text-center"
+                        style={{ background: "var(--color-bg)" }}
+                      >
+                        <div
+                          className="text-lg font-bold tabular-nums"
+                          style={{ color: info.text }}
+                        >
+                          {shown}
+                        </div>
+                        <div className="text-[10px] text-text-muted font-mono mt-0.5">{short}</div>
+                      </div>
+                    );
+                  })}
+                  {noAmplificationCount > 0 && (
+                    <div data-testid="genotype-count-no-amplification" className="border border-border rounded-md p-2 text-center">
+                      <div className="text-lg font-bold tabular-nums text-text-muted">{noAmplificationCount}</div>
+                      <div className="text-[10px] text-text-muted mt-0.5">{t.ampQcWellNone}</div>
+                    </div>
+                  )}
+                  <div className="border border-border rounded-md p-2 text-center">
+                    <div className="text-lg font-bold tabular-nums text-text-muted">
+                      {excludedCount}
+                    </div>
+                    <div className="text-[10px] text-text-muted mt-0.5">
+                      {t.wsAnalysisExcludedLabel}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <AmplificationQcSummary />
               <WellDetailPanel ploidyOverride={selectedMarker.ploidy} alleleLabels={selectedMarker.allele_labels} />
             </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="panel">
-              <h3 className="text-sm font-semibold mb-3 text-text">
-                {t.wsAnalysisGenotypeCountsTitle}
-              </h3>
-              <div
-                data-testid="genotype-counts"
-                className="grid gap-2"
-                style={{ gridTemplateColumns: "repeat(auto-fit, minmax(84px, 1fr))" }}
-              >
-                {countsEntries.map(([key, n]) => {
-                  const label = countKeyToLabel(key, selectedMarker.ploidy);
-                  const info = chartCategory(label, selectedMarker.ploidy, dark);
-                  const short = callAppearance(label, selectedMarker.ploidy, dark, t).label;
-                  return (
-                    <div
-                      key={key}
-                      className="border border-border rounded-md p-2 text-center"
-                      style={{ background: "var(--color-bg)" }}
-                    >
-                      <div
-                        className="text-lg font-bold tabular-nums"
-                        style={{ color: info.text }}
-                      >
-                        {n}
-                      </div>
-                      <div className="text-[10px] text-text-muted font-mono mt-0.5">{short}</div>
-                    </div>
-                  );
-                })}
-                <div className="border border-border rounded-md p-2 text-center">
-                  <div className="text-lg font-bold tabular-nums text-text-muted">
-                    {excludedCount}
-                  </div>
-                  <div className="text-[10px] text-text-muted mt-0.5">
-                    {t.wsAnalysisExcludedLabel}
-                  </div>
-                </div>
-              </div>
-            </div>
-            </div>
-
-            <ResultsTable ploidyOverride={selectedMarker.ploidy} alleleLabels={selectedMarker.allele_labels} />
-            <AmplificationOverlay ploidyOverride={selectedMarker.ploidy} alleleLabels={selectedMarker.allele_labels} />
+            {expert && <>
+              <ResultsTable ploidyOverride={selectedMarker.ploidy} alleleLabels={selectedMarker.allele_labels}
+                wellAlleleLabels={wellAlleleLabels} />
+              <AmplificationOverlay ploidyOverride={selectedMarker.ploidy} alleleLabels={selectedMarker.allele_labels} />
+            </>}
           </>
         )}
       </div>

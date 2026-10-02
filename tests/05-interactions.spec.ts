@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
 import { login, loginRequest, uploadAndWait } from './helpers';
+import { enableExpertMode } from './expert-mode';
+
+test.beforeEach(async ({ page }) => { await enableExpertMode(page); });
 
 const QS_MULTICOMPONENT = path.resolve(
   '/mnt/ivt-ngs1/5.work-AI/SNP-dsicrimination/Quantstudio3/ASG-PCR-NTCtest_Multicomponent Data.xls'

@@ -4,6 +4,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { createWellGroup, getWellGroups } from "@/lib/api";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
+import { useSettingsStore } from "@/stores/settings-store";
 import { moveMenuFocus } from "@/lib/menu-focus";
 
 const DEFAULT_GROUPS = Array.from({ length: 6 }, (_, i) => `Group ${i + 1}`);
@@ -36,6 +37,7 @@ export type WellSelectionToolbarProps = {
 
 export function WellSelectionToolbar({ groupFilter, emptyWellsToggle }: WellSelectionToolbarProps = {}) {
   const { t } = useI18n();
+  const expert = useSettingsStore((s) => s.expertMode);
   const selectedWells = useSelectionStore((s) => s.selectedWells);
   const selectedGroup = useSelectionStore((s) => s.selectedGroup);
   const setGroup = useSelectionStore((s) => s.setGroup);
@@ -45,6 +47,11 @@ export function WellSelectionToolbar({ groupFilter, emptyWellsToggle }: WellSele
   const sessionId = useSessionStore((s) => s.sessionId);
   const wellGroups = useSessionStore((s) => s.wellGroups);
   const setWellGroups = useSessionStore((s) => s.setWellGroups);
+  // "Selected wells only" has no control outside expert mode, so leaving
+  // expert mode must not strand the scatter in that filter.
+  useEffect(() => {
+    if (!expert && focusSelectedWells) setFocusSelectedWells(false);
+  }, [expert, focusSelectedWells, setFocusSelectedWells]);
   const [manualNames, setManualNames] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -195,6 +202,10 @@ export function WellSelectionToolbar({ groupFilter, emptyWellsToggle }: WellSele
     }
   };
 
+  // Nothing to show on the default screen until wells are selected.
+  const hasGroupFilter = Boolean(groupFilter && groupFilter.groupNames.length > 0);
+  if (!expert && !hasSelection && !hasGroupFilter && !emptyWellsToggle?.hasEmptyWells) return null;
+
   return (
     <div
       data-testid="analysis-selection-toolbar"
@@ -230,7 +241,7 @@ export function WellSelectionToolbar({ groupFilter, emptyWellsToggle }: WellSele
           </button>
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-1.5">
+      {expert && <div className="flex flex-wrap items-center gap-1.5">
         {showGroupPresets ? (
           // P15-GROUP-MENU: the 6 preset buttons + "+ Add group" used to sit
           // side by side and claim a full row the moment any well was
@@ -377,8 +388,8 @@ export function WellSelectionToolbar({ groupFilter, emptyWellsToggle }: WellSele
             <Plus size={12} /> {t.manualGroupAdd}
           </button>
         )}
-      </div>
-      {saveError && <span className="text-xs text-danger" role="alert">{saveError}</span>}
+      </div>}
+      {saveError &&<span className="text-xs text-danger" role="alert">{saveError}</span>}
       <div className="ml-auto flex flex-wrap items-center gap-2">
         {emptyWellsToggle?.hasEmptyWells && (
           <label
@@ -393,13 +404,13 @@ export function WellSelectionToolbar({ groupFilter, emptyWellsToggle }: WellSele
             {t.showEmpty}
           </label>
         )}
-        <span
+        {(expert || hasSelection) && <span
           data-testid="analysis-selection-count"
           className="rounded-full bg-surface px-2 py-1 text-xs font-semibold text-text"
         >
           {t.selectedWellCount(selectedWells.length)}
-        </span>
-        <button
+        </span>}
+        {expert && <button
           type="button"
           data-testid="scatter-selected-only"
           aria-pressed={focusSelectedWells}
@@ -413,7 +424,7 @@ export function WellSelectionToolbar({ groupFilter, emptyWellsToggle }: WellSele
         >
           {focusSelectedWells ? <RotateCcw size={13} /> : <Focus size={13} />}
           {focusSelectedWells ? t.showAllScatterWells : t.showSelectedScatterWells}
-        </button>
+        </button>}
         {hasSelection && (
           <button
             type="button"

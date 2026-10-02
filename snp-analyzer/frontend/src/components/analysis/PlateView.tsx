@@ -12,6 +12,7 @@ import { WELL_TYPE_INFO } from '@/lib/constants';
 import { wellInfo, dosageOfLabel } from '@/lib/genotype';
 import { callAppearance, displayedCall, outsideDisplayScope } from '@/lib/chart-semantics';
 import { PlateLegend } from './PlateLegend';
+import { NO_AMPLIFICATION, markNoAmplification, useNoAmplificationWells } from '@/lib/amplification-qc';
 import { useWellFilter } from '@/hooks/use-well-filter';
 import { useWellGrid } from '@/hooks/use-well-grid';
 import { useI18n } from '@/hooks/use-i18n';
@@ -59,7 +60,9 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAllele
   const selectWells = useSelectionStore((s) => s.selectWells);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
-  const plateWells = useDataStore((s) => s.plateWells);
+  const storedPlateWells = useDataStore((s) => s.plateWells);
+  const noAmplification = useNoAmplificationWells();
+  const plateWells = useMemo(() => markNoAmplification(storedPlateWells, noAmplification), [storedPlateWells, noAmplification]);
   const setPlateData = useDataStore((s) => s.setPlateData);
 
   // Drag selection state
@@ -149,7 +152,7 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAllele
     if (
       effectiveType !== null &&
       (dosageOfLabel(effectiveType, ploidy) !== null ||
-        effectiveType in WELL_TYPE_INFO)
+        effectiveType in WELL_TYPE_INFO || effectiveType === NO_AMPLIFICATION)
     ) {
       return wellInfo(effectiveType, ploidy, dark).color;
     }

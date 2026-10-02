@@ -7,6 +7,7 @@
 // (FB-12) with one implementation of the toggle state and its buttons.
 import { useState } from "react";
 import { useI18n } from "./use-i18n";
+import { useSettingsStore } from "@/stores/settings-store";
 
 export type PlotView = "scatter" | "curve";
 
@@ -54,5 +55,7 @@ export function usePlotViewToggle() {
     </div>
   );
 
-  return { view, toggle };
+  // The amplification-curve view is expert-only; the default screen is the scatter.
+  const expert = useSettingsStore((s) => s.expertMode);
+  return expert ? { view, toggle } : { view: "scatter" as PlotView, toggle: null };
 }

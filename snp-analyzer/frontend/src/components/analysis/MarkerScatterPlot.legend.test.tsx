@@ -28,6 +28,7 @@ beforeEach(() => {
   useSessionStore.setState({ sessionId: 'run-a', entryGeneration: 3 });
   useAuthStore.setState({ user: { id: 'u', username: 'u', display_name: 'U', role: 'user' } });
   useSettingsStore.getState().resetToDefaults();
+  useSettingsStore.setState({ expertMode: false });
   vi.mocked(Plotly.newPlot).mockImplementation(async (node) => { Object.assign(node, { on: vi.fn() }); });
 });
 
@@ -36,7 +37,8 @@ async function plotted() {
     points={points} scatterProvenance={{ cycle: 1, useRox: false, backgroundMode: 'none' }}
     onBoundariesPersisted={vi.fn()} />);
   await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalled());
-  const [traces, layout] = vi.mocked(Plotly.newPlot).mock.calls.at(-1)!.slice(1) as unknown as [Trace[], { shapes: Shape[]; xaxis: { range: number[] }; legend: { orientation: string } }];
+  const [traces, layout] = vi.mocked(Plotly.newPlot).mock.calls.at(-1)!.slice(1) as unknown as [Trace[], { shapes: Shape[]; xaxis: { range: number[] };
+    legend: { orientation: string; x: number; y: number; bgcolor: string }; margin: { b: number } }];
   return { traces, layout };
 }
 
@@ -64,9 +66,21 @@ it('shows the quadrant, dashed edges and the large handle while editing threshol
   expect(traces.find((t) => t.uid === 'ntc-threshold')!.marker?.size).toBe(13);
 });
 
-it('lists the call classes with counts plus the figure elements in a horizontal legend', async () => {
+it('keeps a compact legend inside the top-right of the plot and only lists the call classes', async () => {
   const { traces, layout } = await plotted();
-  expect(layout.legend.orientation).toBe('h');
+  expect(layout.legend).toMatchObject({ orientation: 'h', xanchor: 'right', yanchor: 'top' });
+  expect(layout.legend.x).toBeGreaterThan(0.5);
+  expect(layout.legend.y).toBeGreaterThan(0.5);
+  expect(layout.legend.bgcolor).toBeTruthy();
+  expect(layout.margin.b).toBeLessThan(80);
+  expect(traces.some((t) => t.name?.endsWith(' (n=2)'))).toBe(true);
+  expect(traces.find((t) => t.uid === 'ntc-threshold')!.showlegend).toBe(false);
+  expect(traces.find((t) => t.uid === 'legend-boundary')!.showlegend).toBe(false);
+});
+
+it('lists the call classes with counts plus the figure elements in expert mode', async () => {
+  useSettingsStore.getState().setExpertMode(true);
+  const { traces } = await plotted();
   expect(traces.some((t) => t.name?.endsWith(' (n=2)'))).toBe(true);
   expect(traces.find((t) => t.uid === 'ntc-threshold')!.showlegend).toBe(true);
   expect(traces.find((t) => t.uid === 'legend-boundary')!.name).toBeTruthy();

@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { login } from './helpers';
+import { enableExpertMode } from './expert-mode';
+
+test.beforeEach(async ({ page }) => { await enableExpertMode(page); });
 
 test('independent project/library tabs restore directly and through history without session data requests', async ({ page }) => {
   await login(page);

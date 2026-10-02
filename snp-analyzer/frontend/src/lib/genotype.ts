@@ -8,7 +8,7 @@
  *
  * Keep the label + palette rules in sync with the backend vocabulary.
  */
-import { WELL_TYPE_INFO, UNASSIGNED_TYPE, BRAND_HEX } from './constants';
+import { WELL_TYPE_INFO, UNASSIGNED_TYPE, NO_AMPLIFICATION, NO_AMPLIFICATION_TYPE, BRAND_HEX } from './constants';
 import type { AlleleLabels, MarkerRegion } from '@/types/api';
 
 export const MIN_PLOIDY = 2;
@@ -269,6 +269,7 @@ export function wellInfo(
   ploidy: number,
   dark?: boolean
 ): WellInfo {
+  if (key === NO_AMPLIFICATION) return NO_AMPLIFICATION_TYPE;
   if (key) {
     const d = dosageOfLabel(key, ploidy);
     if (d !== null) {

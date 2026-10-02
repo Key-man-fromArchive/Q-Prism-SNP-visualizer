@@ -52,6 +52,17 @@ const ko: Translations = {
   qcOnsetReason: (reason: string) => ({ none: '평가 완료', no_ntc: 'NTC 곡선을 식별하지 못함', missing_signal: '불완전한 NTC 신호', insufficient_points: '곡선 측정값 부족' }[reason] ?? '평가 사유 확인 불가'),
   qcOnsetRevision: (revision: number | null) => '추천 입력 버전: ' + (revision ?? '미확인'),
   qcLoading: 'QC 조회 중…', qcLoadFailed: 'QC를 확인할 수 없습니다. 다시 조회하세요.', qcRefresh: 'QC 새로고침',
+  qcStatusOk: '정상', qcStatusReview: '검토 필요', expertMode: '전문가 모드',
+  expertModeTooltip: '기술 설정과 전체 결과 표를 함께 표시합니다',
+  wellTypeNoAmplification: '증폭 없음',
+  ampQcTitle: '증폭 기준', ampQcOff: '증폭 확인 꺼짐',
+  ampQcSourceAuto: (fraction: string) => `자동, 상위 10%의 ${fraction}`,
+  ampQcSourceManual: '수동', ampQcSourceMixed: '일부 수동',
+  ampQcEnabled: '증폭 확인', ampQcFraction: '상위 10% 대비 비율',
+  ampQcThresholdInput: (channel: string) => `${channel} 기준값 (비우면 자동)`,
+  ampQcMarkerNone: '이 마커는 증폭되지 않았습니다',
+  ampQcWellNone: '증폭 없음',
+  instrumentChip: (name: string) => `분석 장비: ${name}`,
   qcJudgment: '저장 판정 QC', qcWholeRun: '전체 런', qcPlateNtc: '현재 플레이트 전체 NTC 검사',
   qcMarkerUnavailable: '선택 마커의 저장 QC가 없습니다. 다른 마커를 선택하거나 재분석하세요.',
   qcFlagged: '경고 NTC 웰', qcUnevaluable: '평가 불가 NTC 웰',
@@ -910,7 +921,7 @@ const ko: Translations = {
   wsMarkerCatalogAttachError: (msg: string) => `카탈로그 어세이 연결 실패: ${msg}`,
 
   // 마커별 판정 신뢰도 표시 (분석 화면)
-  wsAnalysisDosageTrustPutative: '잠정 판정 (미검증)',
+  wsAnalysisDosageTrustPutative: '검토 필요',
   wsAnalysisDosageTrustValidated: '검증된 판정',
   wsAnalysisDosageTrustPutativeHint:
     '이 어세이는 카탈로그에 연결되어 있지 않거나, 연결된 카탈로그 항목이 독립 근거로 검증되지 않았거나 상대증폭 검증이 완료되지 않았습니다. 절대 대립유전자 수 판정은 잠정값입니다.',

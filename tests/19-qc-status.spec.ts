@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { login } from './helpers';
+import { enableExpertMode } from './expert-mode';
+
+test.beforeEach(async ({ page }) => { await enableExpertMode(page); });
 import type { QcResponse } from '../snp-analyzer/frontend/src/types/api';
 
 // Uses authenticated synthetic data; injected QC states test presentation, not scientific thresholds.

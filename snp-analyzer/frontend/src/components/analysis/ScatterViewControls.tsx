@@ -124,6 +124,7 @@ export function ScatterViewControls({
   const setAxisMode = useSettingsStore((s) => s.setAxisMode);
   const lockAspect = useSettingsStore((s) => s.lockAspect);
   const setLockAspect = useSettingsStore((s) => s.setLockAspect);
+  const expert = useSettingsStore((s) => s.expertMode);
   const scatterTool = useSettingsStore((s) => s.scatterTool);
   const setScatterTool = useSettingsStore((s) => s.setScatterTool);
   const scatterAspect = useSettingsStore((s) => s.scatterAspect);
@@ -255,7 +256,7 @@ export function ScatterViewControls({
 
         {/* What a drag does. Kept first: it is the control that decides whether
             the plot is selectable at all. */}
-        <div className="flex items-center gap-1" role="group" aria-label={t.scatterToolLabel}>
+        {expert && <><div className="flex items-center gap-1" role="group" aria-label={t.scatterToolLabel}>
           <button
             type="button"
             data-testid="scatter-tool-select"
@@ -329,12 +330,12 @@ export function ScatterViewControls({
           )}
         </div>
 
-        <div className="h-6 w-px bg-border" aria-hidden="true" />
+        <div className="h-6 w-px bg-border" aria-hidden="true" /></>}
 
         {/* Axis range */}
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1" role="group" aria-label={t.axisRangeLabel}>
-            <select
+            {expert && <select
               data-testid="axis-mode"
               aria-label={t.axisRangeLabel}
               value={axisMode}
@@ -346,7 +347,7 @@ export function ScatterViewControls({
                   {axisModeLabel(mode)}
                 </option>
               ))}
-            </select>
+            </select>}
             <button
               type="button"
               data-testid="axis-fit-to-data"
@@ -357,7 +358,7 @@ export function ScatterViewControls({
             >
               <Maximize2 size={14} aria-hidden="true" />
             </button>
-            <button
+            {expert && <><button
               type="button"
               data-testid="axis-lock-aspect"
               aria-pressed={lockAspect}
@@ -391,9 +392,9 @@ export function ScatterViewControls({
               }`}
             >
               <SlidersHorizontal size={14} aria-hidden="true" />
-            </button>
+            </button></>}
           </div>
-          {axisPopoverVisible && (
+          {expert && axisPopoverVisible && (
             <div
               data-testid="axis-settings-popover"
               className="flex flex-wrap items-center gap-1 rounded-md border border-border bg-surface p-2 text-xs text-text-muted"
@@ -457,7 +458,7 @@ export function ScatterViewControls({
         </div>
       </div>
 
-      <details data-testid="analysis-advanced-settings" className="analysis-advanced-settings">
+      {expert && <details data-testid="analysis-advanced-settings" className="analysis-advanced-settings">
         {/* P4-S3-T1 followup: axis mode and lock-aspect are dropped from this
             summary -- both are now always visible above (axis-mode select,
             axis-lock-aspect icon toggle), so repeating them here just made
@@ -635,7 +636,7 @@ export function ScatterViewControls({
           </div>
         )}
         </div>
-      </details>
+      </details>}
     </div>
   );
 }

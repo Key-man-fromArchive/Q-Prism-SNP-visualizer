@@ -7,6 +7,7 @@ const LABEL_KEYS: Record<string, keyof Translations> = {
   'Allele 1 Homo': 'wellTypeAllele1Homo', 'Allele 2 Homo': 'wellTypeAllele2Homo',
   Heterozygous: 'wellTypeHeterozygous', Undetermined: 'wellTypeUndetermined',
   Empty: 'wellTypeEmpty', Omit: 'wellTypeOmit', Unassigned: 'wellTypeUnassigned',
+  'No Amplification': 'wellTypeNoAmplification',
 };
 
 export function callLabel(key: string, t: Readonly<Translations>): string {

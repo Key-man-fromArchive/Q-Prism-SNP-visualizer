@@ -100,11 +100,9 @@ export type UploadResponse = {
   read_labels?: Record<number, ReadLabel> | null;
   /** False for endpoint-only runs with no amplification curve to plot. */
   has_amplification_curve?: boolean;
+  /** Instrument identity declared by the file; null/absent when unknown. */
+  instrument_detail?: InstrumentDetail | null;
 };
-
-/** Instrument identity declared by the file; null/absent when unknown. Kept out
- *  of the UploadResponse block until the routers emit it (P7 wiring task). */
-export type InstrumentDetailField = { instrument_detail?: InstrumentDetail | null };
 
 /** Mirrors backend `app.models.InstrumentDetail`. */
 export type InstrumentDetail = {
@@ -463,7 +461,7 @@ export type ClusteringResult = {
 export type AnalysisStatus = 'idle' | 'computing' | 'completed' | 'failed';
 export type InputRevision = { input_revision: number };
 export type ExpectedRevision = { expected_input_revision?: number };
-export type SessionInfoResponse = UploadResponse & InstrumentDetailField & InputRevision & {
+export type SessionInfoResponse = UploadResponse & InputRevision & {
   cycles: number[];
   analysis_status: AnalysisStatus;
   analysis_pending: boolean;

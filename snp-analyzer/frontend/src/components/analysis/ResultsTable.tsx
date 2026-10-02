@@ -4,6 +4,7 @@ import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { callAppearance } from "@/lib/chart-semantics";
 import { callTexts } from "./call-text";
+import { markNoAmplification, useNoAmplificationWells } from "@/lib/amplification-qc";
 import { useWellFilter } from "@/hooks/use-well-filter";
 import { useWellGrid } from "@/hooks/use-well-grid";
 import { useI18n } from "@/hooks/use-i18n";
@@ -22,12 +23,20 @@ function effectiveType(
   return null;
 }
 
-type ResultsTableProps = { ploidyOverride?: number; alleleLabels?: AlleleLabels | null };
+type ResultsTableProps = {
+  ploidyOverride?: number;
+  alleleLabels?: AlleleLabels | null;
+  /** Per-well allele names; when given it replaces `alleleLabels`, and a well
+   *  no marker claims gets the unnamed call instead of another marker's names. */
+  wellAlleleLabels?: ReadonlyMap<string, AlleleLabels | null>;
+};
 
-export function ResultsTable({ ploidyOverride, alleleLabels }: ResultsTableProps = {}) {
+export function ResultsTable({ ploidyOverride, alleleLabels, wellAlleleLabels }: ResultsTableProps = {}) {
   const { t } = useI18n();
   const dark = useIsDarkMode();
-  const scatterPoints = useDataStore((s) => s.scatterPoints);
+  const storedPoints = useDataStore((s) => s.scatterPoints);
+  const noAmplification = useNoAmplificationWells();
+  const scatterPoints = useMemo(() => markNoAmplification(storedPoints, noAmplification), [storedPoints, noAmplification]);
   const selectedWells = useSelectionStore((s) => s.selectedWells);
   const showAutoCluster = useSettingsStore((s) => s.showAutoCluster);
   const showManualTypes = useSettingsStore((s) => s.showManualTypes);
@@ -134,7 +143,8 @@ export function ResultsTable({ ploidyOverride, alleleLabels }: ResultsTableProps
               );
               const appearance = callAppearance(type, ploidy, dark, t);
               const { bgColor, textColor } = appearance;
-              const { label, description } = callTexts(type, t, appearance, alleleLabels);
+              const { label, description } = callTexts(
+                type, t, appearance, wellAlleleLabels ? (wellAlleleLabels.get(well) ?? null) : alleleLabels);
 
               const confPct =
                 point.confidence != null ? ` · ${t.confidence} ${Math.round(point.confidence * 100)}%` : "";
