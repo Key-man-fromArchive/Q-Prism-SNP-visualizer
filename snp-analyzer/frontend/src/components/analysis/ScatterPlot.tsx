@@ -9,6 +9,7 @@ import type { ScatterAspect } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { getScatter } from "@/lib/api";
+import { useScatterFit } from "@/lib/scatter-fit";
 import { analyzeCurrent } from "@/lib/analysis-actions";
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { ownsChartResult } from '@/lib/chart-export-owner';
@@ -137,7 +138,11 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
   // the traces -- the chrome-only relayout below cannot repaint markers.
   const dark = useIsDarkMode();
   const plotRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
+  useScatterFit(canvasRef, () => {
+    if (initialized.current && plotRef.current) Plotly.Plots.resize(plotRef.current);
+  });
   const exportRender = useRef(0);
 
   const sessionId = useSessionStore((s) => s.sessionId);
@@ -1181,7 +1186,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
           onApply: handleDosageMaxApply,
         }}
       />
-      <div className="relative analysis-scatter-canvas" style={scatterAspectVars(scatterAspect)}>
+      <div ref={canvasRef} className="relative analysis-scatter-canvas" style={scatterAspectVars(scatterAspect)}>
         <div
           id="scatter-plot"
           data-visible-wells={visiblePoints.length}

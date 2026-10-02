@@ -93,7 +93,9 @@ describe('index.css brand palette (P6-S2-T1)', () => {
 
 describe("scatter canvas viewport cap (P5-E)", () => {
   it("bounds canvas height by the viewport in the two-column layout", () => {
-    expect(css).toMatch(/\.analysis-scatter-canvas\s*\{\s*--scatter-max-h:[^;]*100dvh[^;]*;/);
+    // P7-C4: height is measured at runtime (lib/scatter-fit.ts), not a fixed
+    // viewport formula.
+    expect(css).not.toMatch(/--scatter-max-h:[^;]*100dvh/);
   });
   it("derives width from the height cap to keep the aspect ratio", () => {
     expect(css).toMatch(/max-width:\s*calc\(var\(--scatter-max-h\)\s*\*\s*var\(--scatter-aspect-w\)/);
