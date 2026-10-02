@@ -645,7 +645,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
         || !ownsChartResult(entry, ownerId, revision)) return;
       setActiveChart({ element, sessionId, resultRevision: revision,
         cycle: responseIdentity.cycle, useRox: responseIdentity.useRox, backgroundMode: responseIdentity.backgroundMode, entry, ownerId,
-        caption: `whole-run; cycle ${responseIdentity.cycle}${readText ? ` (${readText})` : ''};${responseIdentity.useRox ? 'reference requested' : 'raw basis'}; background ${responseIdentity.backgroundMode}; visible wells ${visiblePoints.map(point => point.well).sort().join(',')}; revision ${revision}; analysed ${analysedAt ?? 'unknown'}`,
+        caption: `whole-run; cycle ${responseIdentity.cycle}${readText ? ` (${readText})` : ''}; ${responseIdentity.useRox ? 'reference requested' : 'raw basis'}; background ${responseIdentity.backgroundMode}; visible wells ${visiblePoints.map(point => point.well).sort().join(',')}; revision ${revision}; analysed ${analysedAt ?? 'unknown'}`,
         // A new Plotly render may alter filters, traces or layout even when the
         // underlying response has the same wells. Bind the registry record to
         // this render generation and exact visible scope so an in-flight PNG

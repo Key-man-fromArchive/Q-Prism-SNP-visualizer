@@ -68,4 +68,5 @@ it('writes marker, allele names and the cycle label into the PNG caption', async
   expect(caption).toContain('FAM · WT');
   expect(caption).toContain('VIC · MT');
   expect(caption).toContain('Amplification 1/2 · PCR 36 · 40°C');
+  expect(caption).toMatch(/\); (reference requested|raw basis); background /);
 });

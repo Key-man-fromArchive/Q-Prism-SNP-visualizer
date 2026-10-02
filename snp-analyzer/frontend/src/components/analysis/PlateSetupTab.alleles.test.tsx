@@ -93,6 +93,15 @@ it('does not save a one-sided pair', async () => {
   expect(updateMarker).not.toHaveBeenCalled();
 });
 
+it('refuses to save when both names match ignoring case and tells the user', async () => {
+  await openEditor(base);
+  fireEvent.change(screen.getByLabelText('Allele 1 name (FAM)'), { target: { value: 'wt' } });
+  fireEvent.change(screen.getByLabelText('Allele 2 name (VIC/HEX)'), { target: { value: ' WT ' } });
+  fireEvent.click(screen.getByTestId('marker-form-save'));
+  expect(await screen.findByText(/Allele 1 name \(FAM\).*Allele 2 name \(VIC\/HEX\)/)).toBeInTheDocument();
+  expect(updateMarker).not.toHaveBeenCalled();
+});
+
 it('does not call updateMarker when the names are unchanged', async () => {
   await openEditor({ ...base, allele_labels: { fam: 'WT', allele2: 'MT' } });
   fireEvent.click(screen.getByTestId('marker-form-save'));
