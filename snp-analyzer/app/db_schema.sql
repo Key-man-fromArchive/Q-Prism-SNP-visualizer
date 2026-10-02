@@ -103,6 +103,8 @@ CREATE TABLE IF NOT EXISTS marker_regions (
     -- Optional link to a durable marker_catalog entry (see below) this
     -- session marker was attached to. Nullable: most markers never link.
     catalog_id TEXT,
+    -- Operator-facing allele names as JSON {"fam": ..., "allele2": ...}; NULL = generic names.
+    allele_labels_json TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (session_id, marker_id),
     FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE

@@ -31,6 +31,7 @@ class ExportOptions:
     use_rox: bool | None = None
     background: BackgroundMode | None = None
     cycle_mode: CycleMode = "legacy_latest"
+    marker_ids: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -200,7 +201,7 @@ def capture_result_snapshot(
         metadata = get_db().execute(
             "SELECT raw_filename FROM sessions WHERE session_id=?", (sid,),
         ).fetchone()
-        return ResultSnapshot(
+        snapshot = ResultSnapshot(
             sid, data.model_copy(deep=True), completed, context.model_copy(deep=True),
             data.input_revision, overrides,
             {**(data.sample_names or {}), **sample_name_store.get(sid, {})},
@@ -211,6 +212,41 @@ def capture_result_snapshot(
             str(metadata["raw_filename"] or "") if metadata else "",
             _reference_label(data, context.cycle),
         )
+    return filter_snapshot(snapshot, options.marker_ids)
+
+
+def filter_snapshot(snapshot: ResultSnapshot, marker_ids: tuple[str, ...] | None) -> ResultSnapshot:
+    """Restrict a captured snapshot to the selected markers' wells.
+
+    ``None`` selects everything and returns the snapshot itself. Unknown ids are
+    a 400. The input is never mutated; the result holds detached copies.
+    """
+    if marker_ids is None:
+        return snapshot
+    known = {region.marker_id for region in snapshot.context.regions}
+    missing = [marker_id for marker_id in marker_ids if marker_id not in known]
+    if missing:
+        raise HTTPException(400, f"Unknown marker id: {missing[0]}")
+    selected = set(marker_ids)
+    context = snapshot.context.model_copy(deep=True)
+    context.regions = [r for r in context.regions if r.marker_id in selected]
+    wells = {well for region in context.regions for well in region.wells}
+    result = snapshot.result.model_copy(deep=True)
+    result.analysis_context = context
+    if result.regions is not None:
+        result.regions = [r for r in result.regions if r.id in selected]
+    unified = snapshot.unified.model_copy(deep=True)
+    unified.wells = [w for w in unified.wells if w in wells]
+    unified.data = [d for d in unified.data if d.well in wells]
+    groups = {name: [w for w in members if w in wells] for name, members in snapshot.groups.items()}
+    groups = {name: members for name, members in groups.items() if members}
+    return ResultSnapshot(
+        snapshot.session_id, unified, result, context, snapshot.current_input_revision,
+        {w: v for w, v in snapshot.overrides.items() if w in wells},
+        {w: v for w, v in snapshot.sample_names.items() if w in wells},
+        groups, {n: s for n, s in snapshot.group_sources.items() if n in groups},
+        deepcopy(snapshot.protocol), snapshot.raw_filename, snapshot.passive_reference_label,
+    )
 
 
 def _reference_label(data: UnifiedData, cycle: int) -> str:

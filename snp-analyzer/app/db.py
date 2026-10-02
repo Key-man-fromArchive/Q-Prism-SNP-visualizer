@@ -250,6 +250,14 @@ def _run_migrations(conn: sqlite3.Connection):
             )"""
         )
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (10)")
+
+    if current < 11:
+        # Migration 11: per-marker allele names ({"fam", "allele2"} JSON).
+        # Nullable, so existing rows keep the generic Allele 1 / Allele 2 wording.
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(marker_regions)").fetchall()]
+        if "allele_labels_json" not in cols:
+            conn.execute("ALTER TABLE marker_regions ADD COLUMN allele_labels_json TEXT")
+        conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (11)")
     conn.commit()
 
 
@@ -289,6 +297,16 @@ def save_session(session_id: str, unified: UnifiedData, filename: str = "", user
         metadata["background_mode"] = unified.background_mode
     if unified.ntc_wells:
         metadata["ntc_wells"] = unified.ntc_wells
+    if unified.default_cycle is not None:
+        metadata["default_cycle"] = unified.default_cycle
+    if not unified.has_amplification_curve:
+        metadata["has_amplification_curve"] = False
+    if unified.read_labels:
+        metadata["read_labels"] = {str(k): v.model_dump() for k, v in unified.read_labels.items()}
+    if unified.imported_marker_alleles:
+        metadata["imported_marker_alleles"] = {
+            name: labels.model_dump() for name, labels in unified.imported_marker_alleles.items()
+        }
     metadata["ploidy"] = getattr(unified, "ploidy", 2)
 
     conn.execute(
@@ -459,8 +477,8 @@ def save_marker_regions(session_id: str, regions: list[dict], *, commit: bool = 
     for reg in regions:
         conn.execute(
             "INSERT INTO marker_regions "
-            "(session_id, marker_id, name, wells_json, ploidy, color, threshold_json, catalog_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "(session_id, marker_id, name, wells_json, ploidy, color, threshold_json, catalog_id, "
+            "allele_labels_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 session_id,
                 reg["id"],
@@ -470,6 +488,7 @@ def save_marker_regions(session_id: str, regions: list[dict], *, commit: bool = 
                 reg.get("color"),
                 json.dumps(reg["threshold_config"]) if reg.get("threshold_config") else None,
                 reg.get("catalog_id"),
+                json.dumps(reg["allele_labels"]) if reg.get("allele_labels") else None,
             ),
         )
     if commit:
@@ -480,7 +499,7 @@ def load_marker_regions(session_id: str) -> list[dict]:
     """Load the session's marker (assay) definitions from DB."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT marker_id, name, wells_json, ploidy, color, threshold_json, catalog_id "
+        "SELECT marker_id, name, wells_json, ploidy, color, threshold_json, catalog_id, allele_labels_json "
         "FROM marker_regions WHERE session_id = ? ORDER BY rowid",
         (session_id,),
     ).fetchall()
@@ -493,6 +512,7 @@ def load_marker_regions(session_id: str) -> list[dict]:
             "color": r["color"],
             "threshold_config": json.loads(r["threshold_json"]) if r["threshold_json"] else None,
             "catalog_id": r["catalog_id"] if "catalog_id" in r.keys() else None,
+            "allele_labels": json.loads(r["allele_labels_json"]) if r["allele_labels_json"] else None,
         }
         for r in rows
     ]
@@ -837,6 +857,10 @@ def _session_row_to_entry(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         ploidy=int(metadata.get("ploidy", 2)),
         background_mode=metadata.get("background_mode"),
         ntc_wells=metadata.get("ntc_wells"),
+        default_cycle=metadata.get("default_cycle"),
+        has_amplification_curve=bool(metadata.get("has_amplification_curve", True)),
+        read_labels=metadata.get("read_labels"),
+        imported_marker_alleles=metadata.get("imported_marker_alleles"),
     )
 
     # Load clustering results

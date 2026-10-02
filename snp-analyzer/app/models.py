@@ -1,9 +1,10 @@
 from __future__ import annotations
+import unicodedata
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal
 from uuid import UUID
-from pydantic import AwareDatetime, BaseModel, Field, JsonValue, computed_field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, computed_field, field_validator
 
 
 class WellCycleData(BaseModel):
@@ -64,6 +65,28 @@ class RatioOrigin(BaseModel):
     source: str = "zero"
 
 
+class ReadLabel(BaseModel):
+    """Instrument-declared name of one read (e.g. StepOne Pre-read / Amplification / Post-read)."""
+    stage: str
+    pcr_cycle: int | None = None
+    temperature: float | None = None
+
+
+class AlleleLabels(BaseModel):
+    """Operator-facing allele names, keyed by channel role (fixed keys)."""
+    model_config = ConfigDict(extra="forbid")
+
+    fam: str = Field(min_length=1, max_length=32)
+    allele2: str = Field(min_length=1, max_length=32)
+
+    @field_validator("fam", "allele2")
+    @classmethod
+    def reject_control_characters(cls, value: str) -> str:
+        if any(unicodedata.category(ch) == "Cc" for ch in value):
+            raise ValueError("Allele names must not contain control characters")
+        return value
+
+
 class UnifiedData(BaseModel):
     input_revision: int = Field(default=0, ge=0)
     instrument: str                  # "QuantStudio 3" or "CFX Opus"
@@ -97,6 +120,15 @@ class UnifiedData(BaseModel):
     # No-template wells as declared in the instrument's own plate setup.
     # Used as the ratio origin when the operator has not marked NTCs by hand.
     ntc_wells: list[str] | None = None
+    # First cycle shown by the UI when the instrument declares one (StepOne:
+    # the Amplification read). None keeps the legacy suggested-cycle behaviour.
+    default_cycle: int | None = None
+    # False for endpoint-only runs that have no amplification curve to plot.
+    has_amplification_curve: bool = True
+    # cycle (read index) -> instrument read name; None when not declared.
+    read_labels: dict[int, ReadLabel] | None = None
+    # Allele names declared by the instrument, by marker name.
+    imported_marker_alleles: dict[str, AlleleLabels] | None = None
 
 
 class UploadResponse(BaseModel):
@@ -118,6 +150,9 @@ class UploadResponse(BaseModel):
     # ones distort rather than baseline it, so the client offers only these
     # instead of re-deriving the rule (see processing/background.py).
     background_modes: list[str] = ["none"]
+    default_cycle: int | None = None
+    read_labels: dict[int, ReadLabel] | None = None
+    has_amplification_curve: bool = True
 
 
 class UploadPreviewRequiredResponse(BaseModel):
@@ -254,6 +289,9 @@ class MarkerRegion(BaseModel):
     # session marker was attached to (see POST .../attach-catalog). None for
     # markers that were never linked to a catalog assay.
     catalog_id: str | None = None
+    # Operator-facing allele names for this marker; None keeps the generic
+    # Allele 1 / Allele 2 wording.
+    allele_labels: AlleleLabels | None = None
 
 
 # ---------------------------------------------------------------------------
