@@ -349,9 +349,19 @@ it('RED/GREEN: PPTX and report-image zip send the live conditions and the marker
   stubDownload();
   const { result: hook } = renderHook(() => useExports());
   await hook.current.exportPPTX(['m1', 'm2']);
-  expect(exportPptx).toHaveBeenCalledWith('run-a', false, 'none', 20, 'rev-a', ['m1', 'm2']);
+  expect(exportPptx).toHaveBeenCalledWith('run-a', false, 'none', 20, 'rev-a', ['m1', 'm2'], undefined);
   await hook.current.exportScatterZip();
   expect(exportScatterZip).toHaveBeenCalledWith('run-a', false, 'none', 20, 'rev-a', undefined);
+});
+
+it('RED/GREEN: PPTX forwards includeTable=false live and on the stored retry', async () => {
+  vi.mocked(exportPptx).mockResolvedValue(new Blob(['p']));
+  stubDownload();
+  const { result: hook } = renderHook(() => useExports());
+  await hook.current.exportPPTX(undefined, false);
+  expect(exportPptx).toHaveBeenLastCalledWith('run-a', false, 'none', 20, 'rev-a', undefined, false);
+  await hook.current.exportStored('pptx', undefined, ['m3'], false);
+  expect(exportPptx).toHaveBeenLastCalledWith('run-a', false, 'none', 40, 'rev-a', ['m3'], false);
 });
 
 it('RED/GREEN: PDF forwards the marker selection', async () => {
@@ -368,7 +378,7 @@ it('RED/GREEN: stored pptx/zip export uses the stored conditions and keeps the m
   stubDownload();
   const { result: hook } = renderHook(() => useExports());
   await hook.current.exportStored('pptx', undefined, ['m3']);
-  expect(exportPptx).toHaveBeenCalledWith('run-a', false, 'none', 40, 'rev-a', ['m3']);
+  expect(exportPptx).toHaveBeenCalledWith('run-a', false, 'none', 40, 'rev-a', ['m3'], undefined);
   await hook.current.exportStored('zip', undefined, ['m3']);
   expect(exportScatterZip).toHaveBeenCalledWith('run-a', false, 'none', 40, 'rev-a', ['m3']);
 });

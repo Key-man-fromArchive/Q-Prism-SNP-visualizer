@@ -324,10 +324,10 @@ export function useExports(): {
     }
   }, [conditions, saveBlob]);
 
-  const exportPPTX = useCallback(async (markerIds?: readonly string[]) => {
+  const exportPPTX = useCallback(async (markerIds?: readonly string[], includeTable?: boolean) => {
     const current = conditions();
     try {
-      const blob = await exportPptx(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision, markerIds);
+      const blob = await exportPptx(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision, markerIds, includeTable);
       saveBlob(blob, current, `snp-report-${current.sessionId.replace(/[^a-zA-Z0-9._-]/g, '_')}.pptx`);
     } catch (error) {
       console.error('Failed to export PPTX:', error);
@@ -346,7 +346,7 @@ export function useExports(): {
     }
   }, [conditions, saveBlob]);
 
-  const exportStored = useCallback(async (kind: StoredExportKind, signal?: AbortSignal, markerIds?: readonly string[]) => {
+  const exportStored = useCallback(async (kind: StoredExportKind, signal?: AbortSignal, markerIds?: readonly string[], includeTable?: boolean) => {
     const current = storedConditions();
     try {
       if (signal?.aborted) return;
@@ -358,7 +358,7 @@ export function useExports(): {
       const blob = kind === 'csv'
         ? await exportCsv(current.sessionId, current.cycle, current.useRox, current.backgroundMode, current.revision)
         : kind === 'pdf' ? await exportPdf(...args, markerIds)
-          : kind === 'pptx' ? await exportPptx(...args, markerIds)
+          : kind === 'pptx' ? await exportPptx(...args, markerIds, includeTable)
             : kind === 'zip' ? await exportScatterZip(...args, markerIds)
               : await exportXlsx(...args);
       saveBlob(blob, current, `snp-${kind}-stored-${current.sessionId.replace(/[^a-zA-Z0-9._-]/g, '_')}.${kind}`, signal);
