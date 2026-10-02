@@ -32,11 +32,9 @@ function zipEntries(buf: Buffer): string[] {
 
 async function openExportDialog(page: Page) {
   await page.getByRole('button', { name: /^Export$/ }).click();
+  // Only the "Select markers" entry opens the dialog; format entries export at once.
+  await page.getByRole('menuitem', { name: 'Select markers' }).click();
   const dialog = page.getByTestId(ID.dialog);
-  if (!(await dialog.isVisible())) {
-    // The header menu lists formats first; the dialog opens from its entries.
-    await page.getByRole('menuitem').filter({ hasText: /PowerPoint|report/i }).first().click();
-  }
   await expect(dialog).toBeVisible();
   return dialog;
 }
