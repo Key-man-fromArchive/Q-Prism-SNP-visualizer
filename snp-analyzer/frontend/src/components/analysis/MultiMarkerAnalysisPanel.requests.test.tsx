@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MultiMarkerAnalysisPanel } from './MultiMarkerAnalysisPanel';
 import { getScatter, runClustering, suggestCycle } from '@/lib/api';
+import { useLanguageStore } from '@/stores/language-store';
 import { useDataStore } from '@/stores/data-store';
 import { useNavigationStore } from '@/stores/navigation-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
@@ -21,6 +22,7 @@ vi.mock('./ResultsTable', () => ({ ResultsTable: () => null }));
 vi.mock('./AmplificationOverlay', () => ({ AmplificationOverlay: () => null }));
 const markers: MarkerRegion[] = [{ id: 'm', name: 'Synthetic marker', wells: ['A1'], ploidy: 2, color: '#000000' }];
 beforeEach(() => {
+  useLanguageStore.getState().setLanguage('en');
   vi.clearAllMocks();
   useSessionStore.setState({ sessionId: 'multi', initialAnalysisAvailable: false });
   useAnalysisStore.getState().setSession('multi', 'u');

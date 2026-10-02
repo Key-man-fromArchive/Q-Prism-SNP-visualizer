@@ -9,6 +9,9 @@ const ko: Translations = {
   protocolSaved: '프로토콜을 저장했습니다.',
   protocolEmpty: '프로토콜 단계가 없습니다. 단계를 추가하세요.',
   chartNoDisplayedCall: '표시된 판정 없음',
+  callShortHom1: '동형 1',
+  callShortHet: '이형',
+  callShortHom2: '동형 2',
   chartBackground: (mode: string) => `배경 보정: ${{ none: '없음', pre_read: '사전 측정', channel_min: '채널 최솟값' }[mode] ?? '미확인'}`,
   chartReferenceFlagged: '참조 신호 경고',
   analyzeRecommended: '추천 사이클 분석',
@@ -680,25 +683,25 @@ const ko: Translations = {
   ploidyLabel: '배수성',
   ploidyDiploid: '2배체 (2x)',
   exampleLoad: '예제 불러오기…',
-  exampleHint: '선택한 배수성(2x–8x)의 합성 데모 플레이트를 불러와 실제 파일 없이 dosage 판정을 확인합니다.',
+  exampleHint: '선택한 배수성(2x–8x)의 합성 데모 플레이트를 불러와 실제 파일 없이 대립유전자 수 판정을 확인합니다.',
   exampleLoading: (p: number) => `${p}x 예제 불러오는 중…`,
-  ploidyHint: '유전자좌당 대립유전자 copy 수. 배수성이 높을수록 dosage 클래스가 세분됩니다 (2x–8x).',
+  ploidyHint: '유전자좌당 대립유전자 수(카피 수). 배수성이 높을수록 대립유전자 수 클래스가 세분됩니다 (2x–8x).',
   boundaryLines: '경계선',
   boundaryLinesHint: '드래그 가능한 유전형 경계선 표시. 선을 끌어 이동, 선을 더블클릭하면 삭제, 빈 곳을 더블클릭하면 추가.',
   boundaryLinesManualOnly: '경계선 편집은 수동 유형(Manual)을 켜야 합니다',
-  offsetLabel: 'Dosage 오프셋',
-  offsetHint: '관측된 클래스가 어떤 절대 dosage인지(가장 낮은 클래스 = 이 dosage). 다배체 마커가 일부 클래스만 보일 때 조정하세요(예: 6배체가 3클래스를 0,1,2로 vs 4,5,6로).',
-  offsetUncertainHint: '오프셋은 추정값입니다 — 관측 클래스 중 축 극단에 붙은 것이 없어 절대 dosage를 확인해 주세요.',
+  offsetLabel: '대립유전자 수 오프셋',
+  offsetHint: '관측된 클래스가 실제 몇 개의 대립유전자 수에 해당하는지(가장 낮은 클래스 = 이 값) 지정합니다. 다배체 마커에서 일부 클래스만 보일 때 조정하세요(예: 6배체에서 3개 클래스를 0,1,2로 볼지 4,5,6으로 볼지).',
+  offsetUncertainHint: '오프셋은 추정값입니다. 관측된 클래스 중 축 끝에 붙은 것이 없으므로 실제 대립유전자 수를 확인해 주세요.',
   lowSeparation: '분리도 낮음',
-  lowSeparationHint: '인접 dosage 클래스가 겹칩니다(~3 SD보다 가까움). 이 배수성에서 dosage 판정이 신뢰도가 낮을 수 있으니 주의하거나 수동 검토하세요.',
+  lowSeparationHint: '인접한 대립유전자 수 클래스가 겹칩니다(~3 SD보다 가까움). 이 배수성에서는 판정 신뢰도가 낮을 수 있으니 주의하거나 직접 검토하세요.',
   analyzeHint: '최적 사이클(NTC 상승 전)을 제안하고 유전자형을 자동 그룹핑합니다',
   analyzeFailed: '분석 실패',
   analyzeSuggestedCycle: (c: string) => `제안 사이클: ${c}`,
   analyzeNtcOnset: (c: number) => `NTC 상승 시작: ${c} 사이클`,
   analyzeNtcNone: 'NTC 오염 없음',
-  stagePreRead: '프리리드(Pre-read)',
-  stageAmplification: '증폭(Amplification)',
-  stagePostRead: '포스트리드(Post-read)',
+  stagePreRead: '프리리드',
+  stageAmplification: '증폭',
+  stagePostRead: '포스트리드',
   confidence: '신뢰도',
   confidenceNoBasisHint: '신뢰도 값 없음: 이 웰에는 판정 근거가 될 신호가 없었습니다.',
   confidenceCeilingHint: '웰 수가 매우 적은 마커 영역(모델을 적합할 수 없음)에 대한 상한값이며, 실측 확률이 아닙니다.',
@@ -817,7 +820,7 @@ const ko: Translations = {
   wsAnalysisListTitle: '마커별 결과',
   wsAnalysisSelectMarkerLabel: '마커 선택',
   wsAnalysisWellsCount: (n: number) => `웰 ${n}개`,
-  wsAnalysisExpectedClasses: (n: number) => `최대 ${n}개 dosage 클래스 예상`,
+  wsAnalysisExpectedClasses: (n: number) => `대립유전자 수 클래스 최대 ${n}개`,
   wsAnalysisObservedClasses: (n: number) => `관측 ${n}개`,
   wsAnalysisGenotypeCountsTitle: '지노타입 판정',
   wsAnalysisExcludedLabel: '제외(NTC/대조 등)',
@@ -873,7 +876,7 @@ const ko: Translations = {
   mcatChemistryPlaceholder: '예: KASP, TaqMan',
   mcatPloidyLabel: '기본 배수성',
   mcatColorLabel: '색상',
-  mcatExpectedDosageClassesLabel: '예상 dosage 클래스 수',
+  mcatExpectedDosageClassesLabel: '예상 대립유전자 수 클래스',
   mcatInterpretationNotesLabel: '해석 노트',
   mcatAsgTargetIdLabel: 'ASG 타겟 ID',
   mcatCalibrationTitle: '보정(calibration) 근거',
@@ -890,9 +893,9 @@ const ko: Translations = {
   mcatNComparedLabel: '비교 표본 수',
   mcatConcordanceLabel: '일치율 (0-1)',
   mcatValidationNotesLabel: '검증 노트',
-  mcatDosageTrustLabel: 'Dosage 신뢰도',
-  mcatDosageTrustPutative: '잠정(putative)',
-  mcatDosageTrustValidated: '검증됨(validated)',
+  mcatDosageTrustLabel: '판정 신뢰도',
+  mcatDosageTrustPutative: '잠정',
+  mcatDosageTrustValidated: '검증됨',
   mcatCopyButton: '복사',
   mcatEditButton: '편집',
   mcatDeleteConfirm: (name: string) => `카탈로그 어세이 "${name}"을(를) 삭제할까요? 되돌릴 수 없습니다.`,
@@ -905,11 +908,11 @@ const ko: Translations = {
   wsMarkerCatalogSelectNone: '— 신규 (카탈로그 미연결) —',
   wsMarkerCatalogAttachError: (msg: string) => `카탈로그 어세이 연결 실패: ${msg}`,
 
-  // 마커별 dosage 신뢰도 hedge (분석 화면)
-  wsAnalysisDosageTrustPutative: '잠정 dosage (미검증)',
-  wsAnalysisDosageTrustValidated: '검증된 dosage',
+  // 마커별 판정 신뢰도 표시 (분석 화면)
+  wsAnalysisDosageTrustPutative: '잠정 판정 (미검증)',
+  wsAnalysisDosageTrustValidated: '검증된 판정',
   wsAnalysisDosageTrustPutativeHint:
-    '이 어세이는 카탈로그에 연결되어 있지 않거나, 연결된 카탈로그 항목이 독립 근거로 검증되지 않았거나 상대증폭 검증이 완료되지 않았습니다. 절대 dosage 판정은 잠정값입니다.',
+    '이 어세이는 카탈로그에 연결되어 있지 않거나, 연결된 카탈로그 항목이 독립 근거로 검증되지 않았거나 상대증폭 검증이 완료되지 않았습니다. 절대 대립유전자 수 판정은 잠정값입니다.',
   wsAnalysisDosageTrustValidatedHint:
     '이 어세이는 독립 근거로 검증되고 증폭/비율 매핑까지 확인된 카탈로그 항목에 연결되어 있습니다.',
 
@@ -943,7 +946,7 @@ const ko: Translations = {
   analysisWarningRelativeNtc:
     '저신호 웰을 NTC가 아니라 Undetermined로 두었습니다. 샘플과의 분리 폭이 충분하지 않거나(또는 플레이트의 너무 많은 부분을 차지해) 무주형 대조군으로 볼 근거가 없습니다. 실제 NTC 웰을 지정하면 비율 원점이 바로잡힙니다.',
   analysisWarningLowN: '클러스터를 적합할 웰이 부족합니다 — 판정은 잠정적입니다.',
-  analysisWarningAnchorConflict: '대조군 웰이 적합된 dosage 사다리와 어긋납니다.',
+  analysisWarningAnchorConflict: '대조군 웰이 적합된 대립유전자 수 사다리와 어긋납니다.',
   analysisWarningsTitle: '분석 경고',
   analysisWarningsBadge: (n: number) => `⚠ 경고 ${n}건`,
   analysisContextSummaryLine: (cycle: number, totalCycles: number, wells: number, markerCount: number | null) =>
@@ -951,20 +954,20 @@ const ko: Translations = {
       markerCount === null ? '마커 분할 여부 확인 불가' : markerCount > 0 ? `마커 ${markerCount}개 분할` : '마커 분할 없음'
     }`,
 
-  // assay가 낼 수 있는 최대 dosage — 추정이 아니라 사용자가 선언.
-  // 6배체 마커가 dosage 3까지만 나오는 건 플레이트가 아니라 assay의 성질입니다.
-  dosageMaxLabel: '이 assay의 최대 dosage',
+  // 어세이가 낼 수 있는 최대 대립유전자 수 — 추정이 아니라 사용자가 선언.
+  // 6배체 마커가 대립유전자 수 3까지만 나오는 건 플레이트가 아니라 어세이의 성질입니다.
+  dosageMaxLabel: '이 어세이의 최대 대립유전자 수',
   wsMarkerDosageMaxFull: (ploidy: number) => `전체 사다리 (0–${ploidy})`,
   wsMarkerDosageMaxOption: (max: number) => `0–${max}`,
   dosageMaxReset: '전체 사다리',
   dosageMaxApplied: (max: number) => `최대 ${max}로 제한`,
   dosageMaxUndeclared: (ploidy: number) => `전체 사다리 (0–${ploidy})`,
   dosageWindowObserved: (lo: number, hi: number) =>
-    lo === hi ? `관측: dosage ${lo}` : `관측: dosage ${lo}–${hi}`,
+    lo === hi ? `관측: 대립유전자 수 ${lo}` : `관측: 대립유전자 수 ${lo}–${hi}`,
 
-  // 관측된 dosage window (배수체)
+  // 관측된 대립유전자 수 범위 (배수체)
   dosageWindowUncertainHint:
-    '어느 클래스도 축에 붙어 있지 않아, 이 dosage들이 사다리 위 어디에 놓이는지 형광만으로는 알 수 없습니다. 위치를 아신다면 window를 이동하세요 — 클러스터 자체는 바뀌지 않습니다.',
+    '어느 클래스도 축 끝에 붙어 있지 않아, 이 대립유전자 수들이 사다리의 어디에 놓이는지 형광만으로는 알 수 없습니다. 위치를 알고 계시면 범위를 이동하세요. 클러스터 자체는 바뀌지 않습니다.',
 
   // ---------------------------------------------------------------------------
   // 인앱 피드백 (위젯 + 관리자 처리)
@@ -1057,14 +1060,14 @@ const ko: Translations = {
   workspaceManageProjects: '세션 및 프로젝트 관리 →',
 
   // P0-T0.3c: StepOnePlus marker allele names
-  markerAlleleFamLabel: 'Allele 1 이름 (FAM)',
-  markerAlleleAllele2Label: 'Allele 2 이름 (VIC/HEX)',
+  markerAlleleFamLabel: '대립유전자 1 이름 (FAM)',
+  markerAlleleAllele2Label: '대립유전자 2 이름 (VIC/HEX)',
   markerAlleleClear: '초기화',
 
   // P0-T0.3c: StepOne cycle labels and read names
-  steponePreRead: 'Pre-read',
-  steponeAmplification: 'Amplification',
-  steponePostRead: 'Post-read',
+  steponePreRead: '프리리드',
+  steponeAmplification: '증폭',
+  steponePostRead: '포스트리드',
   steponeReadNumber: (n: number) => `${n}번 판독`,
   steponeReadLabel: (pcr_cycle: number, temperature: number) => `PCR ${pcr_cycle} · ${temperature}°C`,
   steponeCycleLabel: (current: number, total: number, pcr_cycle: number, temperature: number) =>
@@ -1072,7 +1075,7 @@ const ko: Translations = {
 
   // P0-T0.3c: Genotype display guidance (unassigned wells)
   genotypeDisplayUnassignedWells: '미지정 웰',
-  genotypeDisplayUnassignedCount: (n: number) => `웰 ${n}개 미지정`,
+  genotypeDisplayUnassignedCount: (n: number) => `미지정 웰 ${n}개`,
 
   // P0-T0.3c: Export report menu and options
   exportReportPPTX: 'PowerPoint 보고서',
@@ -1080,8 +1083,8 @@ const ko: Translations = {
   exportReportCurrentScreen: '현재 화면 이미지',
   exportReportSelectMarkers: '마커 선택',
   exportReportIncludeTable: '결과표 포함',
-  exportReportPPTXTooltip: 'PowerPoint 프레젠테이션으로 내보내기 (산점도, 결과표 포함)',
-  exportReportScatterZipTooltip: '마커별 산점도를 PNG 이미지 묶음으로 내보내기',
+  exportReportPPTXTooltip: 'PowerPoint 프레젠테이션으로 내보냅니다 (산점도와 결과표 포함)',
+  exportReportScatterZipTooltip: '마커별 산점도를 PNG 이미지 묶음(ZIP)으로 내보냅니다',
   exportReportSelectMarkersTooltip: '내보낼 마커를 선택하세요',
 };
 

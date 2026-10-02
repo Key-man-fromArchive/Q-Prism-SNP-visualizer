@@ -1,11 +1,13 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CycleControl } from './CycleControl';
+import { useLanguageStore } from '@/stores/language-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useNavigationStore } from '@/stores/navigation-store';
 
 beforeEach(() => {
+  useLanguageStore.getState().setLanguage('en');
   vi.useFakeTimers();
   useSessionStore.setState({ sessionId: 'synthetic', sessionInfo: {
     session_id: 'synthetic', instrument: 'Synthetic', allele2_dye: 'HEX',

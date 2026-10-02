@@ -91,7 +91,20 @@ function accessibleFill(fill: string, dark: boolean): string {
   return pole;
 }
 
-const SHORT_CALLS: Record<string, string> = { 'Allele 1 Homo': 'Hom-1', 'Allele 2 Homo': 'Hom-2', Heterozygous: 'Het' };
+function shortCall(key: string, t: Readonly<Translations>): string | undefined {
+  if (key === 'Allele 1 Homo') return t.callShortHom1;
+  if (key === 'Allele 2 Homo') return t.callShortHom2;
+  if (key === 'Heterozygous') return t.callShortHet;
+  return undefined;
+}
+
+/** Display text for a backend data-window name; the name itself stays the key. */
+export function windowLabel(name: string, t: Readonly<Translations>): string {
+  if (name === 'Pre-read') return t.stagePreRead;
+  if (name === 'Amplification') return t.stageAmplification;
+  if (name === 'Post-read') return t.stagePostRead;
+  return name;
+}
 const GLYPHS: Record<string, string> = { 'triangle-up': '▲', circle: '●', square: '■', cross: '+', diamond: '◆', 'circle-open': '○', x: '×', 'square-open': '□', 'x-open': '⊗', 'diamond-open': '◇', hexagon: '⬢', star: '★', 'triangle-down': '▼', pentagon: '⬟', bowtie: '⋈' };
 
 export function callAppearance(key: string | null, ploidy: number, dark: boolean, t: Readonly<Translations>) {
@@ -99,7 +112,7 @@ export function callAppearance(key: string | null, ploidy: number, dark: boolean
   const info = chartCategory(key, ploidy, dark);
   const cellColor = wellInfo(key, ploidy, dark).color;
   return {
-    label: SHORT_CALLS[key] ?? callLabel(key, t),
+    label: shortCall(key, t) ?? callLabel(key, t),
     description: callLabel(key, t),
     bgColor: cellColor,
     textColor: contrastRatio('#ffffff', cellColor) > contrastRatio('#000000', cellColor) ? '#ffffff' : '#000000',
