@@ -19,7 +19,8 @@ import { chartCategory, callLabel, cycleReadText, chartPointState, chartStateTex
 import { plotlyColors } from "@/lib/plotly-theme";
 import {
   axisRangeLayout, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode, fitBounds,
-  hasNtcWells, NTC_AMBER, NTC_HANDLE_SIZE, NTC_MARKER_SIZE, ntcThresholdShapes, visibleBounds,
+  fromPlot, hasNtcWells, NTC_AMBER, NTC_HANDLE_SIZE, NTC_MARKER_SIZE, ntcDragRelayout, ntcThresholdShapes,
+  orientBounds, orientShape, toPlot, visibleBounds,
 } from "@/lib/scatter-axes";
 import { useWellFilter } from "@/hooks/use-well-filter";
 import { useQualityRevealedWell } from '@/hooks/use-quality-reveal';
@@ -147,6 +148,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
   const lockAspect = useSettingsStore((s) => s.lockAspect);
   const scatterTool = useSettingsStore((s) => s.scatterTool);
   const scatterAspect = useSettingsStore((s) => s.scatterAspect);
+  const orientation = useSettingsStore((s) => s.scatterOrientation);
   const xMin = useSettingsStore((s) => s.xMin);
   const xMax = useSettingsStore((s) => s.xMax);
   const yMin = useSettingsStore((s) => s.yMin);
@@ -426,6 +428,10 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     const decimals = normalizationApplied ? 4 : 1;
     const traces: Data[] = [];
     const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
+    // Everything below is computed in allele space (fam / allele2); `at` is the
+    // one place a point becomes plot x/y, so the orientation cannot be missed.
+    const at = (point: ScatterPoint) => toPlot({ fam: point.norm_fam, allele2: point.norm_allele2 }, orientation);
+    const cornerAt = toPlot(effectiveNtcCorner, orientation);
 
     // Build traces in a deterministic order: dosage genotype classes (for the
     // current ploidy, highest dosage first), then control/non-genotype types,
@@ -442,8 +448,8 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       const info = chartCategory(typeKey, ploidy, dark);
 
       traces.push({
-        x: points.map((p) => p.norm_fam),
-        y: points.map((p) => p.norm_allele2),
+        x: points.map((p) => at(p).x),
+        y: points.map((p) => at(p).y),
         mode: "markers",
         type: "scattergl",
         name: `${callLabel(typeKey, t)} (n=${points.length})`,
@@ -478,8 +484,8 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     }
 
     traces.push({
-      x: [effectiveNtcCorner.fam],
-      y: [effectiveNtcCorner.allele2],
+      x: [cornerAt.x],
+      y: [cornerAt.y],
       mode: "markers",
       type: "scatter",
       uid: 'ntc-threshold',
@@ -501,12 +507,13 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     });
     if (bnd) traces.push(boundaryLegendTrace(t.boundaryLines, editing, colors.fontColor) as unknown as Data);
 
-    const xLabel = normalizationApplied
+    const famTitle = normalizationApplied
       ? normalizedLabel(labels.fam, labels, true, t.normalizationFallback)
       : `${labels.fam} (raw RFU)`;
-    const yLabel = normalizationApplied
+    const allele2Title = normalizationApplied
       ? normalizedLabel(labels.allele2, labels, true, t.normalizationFallback)
       : `${labels.allele2} (raw RFU)`;
+    const [xLabel, yLabel] = orientation === "allele2_x" ? [allele2Title, famTitle] : [famTitle, allele2Title];
 
     const axisTitleFont = { size: 14, color: colors.fontColor };
 
@@ -523,7 +530,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     const shapes: Partial<Shape>[] = bnd
       ? bnd.map((r) => {
           const tlen = ext / Math.max(r, 1 - r, 1e-6);
-          return {
+          return orientShape({
             type: "line",
             x0: ratioOrigin.fam,
             y0: ratioOrigin.allele2,
@@ -531,7 +538,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
             y1: ratioOrigin.allele2 + tlen * (1 - r),
             line: boundaryLineStyle(editing, colors.fontColor),
             layer: "above",
-          };
+          }, orientation) as Partial<Shape>;
         })
       : [];
     // The NTC quadrant is drawn from the VISIBLE lower-left corner, not from
@@ -543,7 +550,9 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     const bounds = visibleBounds(
       axisMode,
       dataBounds(pointExtents, effectiveNtcCorner),
-      { xMin, xMax, yMin, yMax },
+      // The manual range is typed against the DISPLAYED axes; bounds here are
+      // in allele space until the layout below.
+      orientBounds({ xMin, xMax, yMin, yMax }, orientation),
       ratioOrigin,
       ntcAxisOffsets,
       // The corner stretches a fitted range only while it is being edited.
@@ -552,7 +561,8 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     // Quadrant and dashed edges exist only in threshold-edit mode, and the
     // edges stop at the data rather than running to the figure edge.
     const reach = dataBounds(pointExtents);
-    shapes.push(...(ntcThresholdShapes(editing, effectiveNtcCorner, bounds, { x: reach.xMax, y: reach.yMax }) as Partial<Shape>[]));
+    shapes.push(...(ntcThresholdShapes(editing, effectiveNtcCorner, bounds, { x: reach.xMax, y: reach.yMax })
+      .map((shape) => orientShape(shape, orientation)) as Partial<Shape>[]));
 
     // Selected-well number labels (FB-12): smaller dots (above) made it hard
     // to tell on screen which point a click actually landed on, so the
@@ -569,8 +579,8 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       const point = wellPositions.get(well);
       if (!point) return [];
       return [{
-        x: point.norm_fam,
-        y: point.norm_allele2,
+        x: at(point).x,
+        y: at(point).y,
         text: well,
         showarrow: false,
         yshift: 14,
@@ -585,7 +595,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       }];
     });
 
-    const axes = axisRangeLayout(axisMode, lockAspect, bounds);
+    const axes = axisRangeLayout(axisMode, lockAspect, orientBounds(bounds, orientation));
     const layout: Partial<Layout> = {
       xaxis: {
         title: { text: xLabel, font: axisTitleFont, standoff: 10 },
@@ -605,7 +615,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       hovermode: "closest",
       // Keep Plotly's preserved interaction state in sync with the explicit
       // NTC-origin range and its unit basis.
-      uirevision: `plate-${axisMode}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${ratioOrigin.fam}-${ratioOrigin.allele2}`,
+      uirevision: `plate-${orientation}-${axisMode}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${ratioOrigin.fam}-${ratioOrigin.allele2}`,
       // Box-select while selecting, zoom while editing thresholds -- and the
       // modebar below keeps both reachable either way, because picking one
       // well out of a dense cluster needs a zoom first.
@@ -727,6 +737,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     axisMode,
     lockAspect,
     editing,
+    orientation,
     normalizationApplied, roxOutlierWells,
     backgroundMode,
     sessionId,
@@ -858,10 +869,10 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       const px = clientX - box.left - (xa._offset ?? 0);
       const py = clientY - box.top - (ya._offset ?? 0);
       if (px < 0 || py < 0 || px > xa._length || py > ya._length) return null;
-      return {
-        fam: xa.range[0] + (px / xa._length) * (xa.range[1] - xa.range[0]),
-        allele2: ya.range[1] - (py / ya._length) * (ya.range[1] - ya.range[0]),
-      };
+      return fromPlot({
+        x: xa.range[0] + (px / xa._length) * (xa.range[1] - xa.range[0]),
+        y: ya.range[1] - (py / ya._length) * (ya.range[1] - ya.range[0]),
+      }, orientation);
     };
 
     const onDown = (event: MouseEvent) => {
@@ -869,9 +880,12 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       const xa = gd._fullLayout?.xaxis;
       const ya = gd._fullLayout?.yaxis;
       if (!point || !xa?._length || !ya?._length || !xa.range || !ya.range) return;
-      const dx = Math.abs(point.fam - ntcLiveRef.current.fam) /
+      // Pixel distance is measured on the plot axes, so compare in plot x/y.
+      const here = toPlot(point, orientation);
+      const handle = toPlot(ntcLiveRef.current, orientation);
+      const dx = Math.abs(here.x - handle.x) /
         Math.abs(xa.range[1] - xa.range[0]) * xa._length;
-      const dy = Math.abs(point.allele2 - ntcLiveRef.current.allele2) /
+      const dy = Math.abs(here.y - handle.y) /
         Math.abs(ya.range[1] - ya.range[0]) * ya._length;
       if (Math.hypot(dx, dy) > 18) return;
       dragging = true;
@@ -889,17 +903,11 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       };
       ntcLiveRef.current = next;
       const shapeBase = editRef.current?.length ?? 0;
-      void Plotly.relayout(gd, {
-        [`shapes[${shapeBase}].x1`]: next.fam,
-        [`shapes[${shapeBase}].y1`]: next.allele2,
-        [`shapes[${shapeBase + 1}].x0`]: next.fam,
-        [`shapes[${shapeBase + 1}].x1`]: next.fam,
-        [`shapes[${shapeBase + 2}].y0`]: next.allele2,
-        [`shapes[${shapeBase + 2}].y1`]: next.allele2,
-      });
+      void Plotly.relayout(gd, ntcDragRelayout(shapeBase, next, orientation));
+      const handle = toPlot(next, orientation);
       void Plotly.restyle(
         gd,
-        { x: [[next.fam]], y: [[next.allele2]], "marker.symbol": "diamond" },
+        { x: [[handle.x]], y: [[handle.y]], "marker.symbol": "diamond" },
         [(gd.data?.length ?? 1) - 1]
       );
     };
@@ -943,7 +951,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, linesActive, editing, setNtcCorner]);
+  }, [sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, linesActive, editing, setNtcCorner, orientation]);
 
   // Drag / add / delete the radial boundary lines (manual mode). A drag moves
   // the nearest ray; a double-click on a ray deletes it (ploidy-1), elsewhere
@@ -957,8 +965,9 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       const point = clientPoint(gd._fullLayout?.xaxis, gd._fullLayout?.yaxis, gd.getBoundingClientRect(), clientX, clientY);
       if (!point) return null;
       // Same origin the rays are drawn from, so the line follows the cursor.
-      const fx = Math.max(point.x - originRef.current.fam, 0);
-      const fy = Math.max(point.y - originRef.current.allele2, 0);
+      const data = fromPlot(point, orientation);
+      const fx = Math.max(data.fam - originRef.current.fam, 0);
+      const fy = Math.max(data.allele2 - originRef.current.allele2, 0);
       const total = fx + fy;
       if (total <= 0) return null;
       return Math.max(0, Math.min(1, fx / total));
@@ -1085,7 +1094,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [linesActive, editing, sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setEditBoundaries]);
+  }, [linesActive, editing, sessionId, currentCycle, ntcThreshold, ploidy, backgroundMode, useRox, setEditBoundaries, orientation]);
 
   // Cleanup
   useEffect(() => {

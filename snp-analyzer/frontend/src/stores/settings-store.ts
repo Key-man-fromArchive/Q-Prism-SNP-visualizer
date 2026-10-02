@@ -32,12 +32,18 @@ export type ScatterTool = 'select' | 'edit';
  *  forecloses the other. */
 export type ScatterAspect = '3:4' | '1:1' | '4:3';
 
+/** Which allele sits on the scatter's x axis. `fam_x` (default) is FAM on x and
+ *  VIC/HEX on y; `allele2_x` is the StepOne orientation (VIC/HEX on x, FAM on y).
+ *  Server exports take the same value as their `orientation` query argument. */
+export type ScatterOrientation = 'fam_x' | 'allele2_x';
+
 interface SettingsState {
   useRox: boolean;
   backgroundMode: BackgroundMode;
   axisMode: AxisMode;
   scatterTool: ScatterTool;
   scatterAspect: ScatterAspect;
+  scatterOrientation: ScatterOrientation;
   /** True once `setAxisMode`/`setFixAxis` ran; see `defaults.axisModeChosen`. */
   axisModeChosen: boolean;
   /** Equal data-per-pixel on both axes. A fam-fraction is an ANGLE about the
@@ -79,6 +85,7 @@ interface SettingsState {
   setAxisMode: (v: AxisMode) => void;
   setScatterTool: (v: ScatterTool) => void;
   setScatterAspect: (v: ScatterAspect) => void;
+  setScatterOrientation: (v: ScatterOrientation) => void;
   setLockAspect: (v: boolean) => void;
   setAxisRange: (r: { xMin: number; xMax: number; yMin: number; yMax: number }) => void;
   setFixAxis: (v: boolean) => void;
@@ -110,6 +117,7 @@ const defaults = {
   scatterTool: 'select' as ScatterTool,
   // Portrait by default: a scatter reads better taller than wide (P5).
   scatterAspect: '3:4' as ScatterAspect,
+  scatterOrientation: 'fam_x' as ScatterOrientation,
   // Whether the operator picked `axisMode` themselves. Until they do, the plot
   // chooses: NTC basis on a run with NTC wells, data fit on one without.
   axisModeChosen: false,
@@ -193,6 +201,7 @@ export const useSettingsStore = create<SettingsState>()(
       setAxisMode: (v) => set({ axisMode: v, fixAxis: v === 'manual', axisModeChosen: true }),
       setScatterTool: (v) => set({ scatterTool: v }),
       setScatterAspect: (v) => set({ scatterAspect: v }),
+      setScatterOrientation: (v) => set({ scatterOrientation: v }),
       setLockAspect: (v) => set({ lockAspect: v }),
       setAxisRange: ({ xMin, xMax, yMin, yMax }) =>
         set({ xMin, xMax, yMin, yMax }),
