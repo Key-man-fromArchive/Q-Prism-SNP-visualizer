@@ -525,7 +525,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
             </div>
 
             <ResultsTable ploidyOverride={selectedMarker.ploidy} alleleLabels={selectedMarker.allele_labels} />
-            <AmplificationOverlay ploidyOverride={selectedMarker.ploidy} />
+            <AmplificationOverlay ploidyOverride={selectedMarker.ploidy} alleleLabels={selectedMarker.allele_labels} />
           </>
         )}
       </div>
