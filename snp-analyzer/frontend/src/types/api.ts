@@ -94,6 +94,25 @@ export type UploadResponse = {
    *  Decided by the backend; the client offers exactly these. */
   background_modes?: BackgroundMode[];
   well_groups: Record<string, string[]> | null;
+  /** First cycle to show when the instrument declares one (StepOne: the Amplification read). */
+  default_cycle?: number | null;
+  /** Instrument read names keyed by cycle (read index); null when not declared. */
+  read_labels?: Record<number, ReadLabel> | null;
+  /** False for endpoint-only runs with no amplification curve to plot. */
+  has_amplification_curve?: boolean;
+};
+
+/** Mirrors backend `app.models.ReadLabel`. */
+export type ReadLabel = {
+  stage: string;
+  pcr_cycle?: number | null;
+  temperature?: number | null;
+};
+
+/** Mirrors backend `app.models.AlleleLabels`: 1-32 chars each, no control characters. */
+export type AlleleLabels = {
+  fam: string;
+  allele2: string;
 };
 
 export type ImportRole =
@@ -490,6 +509,8 @@ export type MarkerRegion = {
    * never linked to a catalog assay.
    */
   catalog_id?: string | null;
+  /** Operator-facing allele names; `null`/absent keeps the default wording. */
+  allele_labels?: AlleleLabels | null;
 };
 
 export type MarkersResponse = {

@@ -77,6 +77,25 @@ function buildQuery(params: Record<string, string | number | boolean | undefined
   return entries.length > 0 ? `?${entries.join('&')}` : '';
 }
 
+/** Shared export query; `marker_ids` is omitted (all markers) unless given. */
+function exportQuery(options: {
+  cycle?: number;
+  useRox?: boolean;
+  background?: BackgroundMode;
+  resultRevision?: string;
+  markerIds?: readonly string[];
+}): string {
+  const { cycle, useRox, background, resultRevision, markerIds } = options;
+  return buildQuery({
+    cycle,
+    cycle_mode: cycle === undefined ? undefined : 'absolute',
+    use_rox: useRox,
+    background,
+    result_revision: resultRevision,
+    marker_ids: markerIds === undefined ? undefined : markerIds.join(','),
+  });
+}
+
 const apiBasePath = runtimeApiBasePath();
 
 function apiUrl(path: string): string {
@@ -266,9 +285,10 @@ export async function exportPdf(
   useRox?: boolean,
   background?: BackgroundMode,
   cycle?: number,
-  resultRevision?: string
+  resultRevision?: string,
+  markerIds?: readonly string[]
 ): Promise<Blob> {
-  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background, result_revision: resultRevision });
+  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds });
   return blobFetch(`/api/data/${sid}/export/pdf${query}`);
 }
 
@@ -277,9 +297,10 @@ export async function exportXlsx(
   useRox?: boolean,
   background?: BackgroundMode,
   cycle?: number,
-  resultRevision?: string
+  resultRevision?: string,
+  markerIds?: readonly string[]
 ): Promise<Blob> {
-  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background, result_revision: resultRevision });
+  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds });
   return blobFetch(`/api/data/${sid}/export/xlsx${query}`);
 }
 
@@ -413,11 +434,11 @@ export async function saveMarkers(
   });
 }
 
-/** Partial update of one marker's fields (name/wells/ploidy/color/threshold_config). */
+/** Partial update of one marker's fields; `allele_labels: null` clears the names. */
 export async function updateMarker(
   sid: string,
   markerId: string,
-  patch: Partial<Pick<MarkerRegion, 'name' | 'wells' | 'ploidy' | 'color' | 'threshold_config'>>,
+  patch: Partial<Pick<MarkerRegion, 'name' | 'wells' | 'ploidy' | 'color' | 'threshold_config' | 'allele_labels'>>,
   expectedRevision?: number
 ): Promise<MarkersResponse & InputRevision> {
   return apiFetch<MarkersResponse & InputRevision>(`/api/data/${sid}/markers/${encodeURIComponent(markerId)}`, {
@@ -606,10 +627,35 @@ export async function exportCsv(
   cycle?: number,
   useRox?: boolean,
   background?: BackgroundMode,
-  resultRevision?: string
+  resultRevision?: string,
+  markerIds?: readonly string[]
 ): Promise<Blob> {
-  const query = buildQuery({ cycle, cycle_mode: cycle === undefined ? undefined : 'absolute', use_rox: useRox, background, result_revision: resultRevision });
+  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds });
   return blobFetch(`/api/data/${sid}/export/csv${query}`);
+}
+
+export async function exportPptx(
+  sid: string,
+  useRox?: boolean,
+  background?: BackgroundMode,
+  cycle?: number,
+  resultRevision?: string,
+  markerIds?: readonly string[]
+): Promise<Blob> {
+  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds });
+  return blobFetch(`/api/data/${sid}/export/pptx${query}`);
+}
+
+export async function exportScatterZip(
+  sid: string,
+  useRox?: boolean,
+  background?: BackgroundMode,
+  cycle?: number,
+  resultRevision?: string,
+  markerIds?: readonly string[]
+): Promise<Blob> {
+  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds });
+  return blobFetch(`/api/data/${sid}/export/scatter-png.zip${query}`);
 }
 
 // ============================================================================
