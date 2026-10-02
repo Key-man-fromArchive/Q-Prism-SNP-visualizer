@@ -5,7 +5,7 @@ from collections.abc import Mapping
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
-from app.reporting.charts import _FONT_FAMILY, _register_font, genotype_color
+from app.reporting.charts import _FONT_FAMILY, _register_font, genotype_color, literal_text
 from app.reporting.result_snapshot import ResultRow
 
 _DIM_ALPHA = 0.2
@@ -23,7 +23,7 @@ def _draw_marker_boundaries(axes, rows: list[ResultRow], layout: Mapping[str, st
     for marker_id, (c0, c1, r0, r1) in extents.items():
         axes.add_patch(Rectangle((c0 - 0.5, r0 - 0.5), c1 - c0 + 1, r1 - r0 + 1, fill=False,
                                  edgecolor="#374151", linewidth=1.2, linestyle="--"))
-        axes.text(c0 - 0.45, r0 - 0.55, layout[marker_id], fontsize=8, va="bottom",
+        axes.text(c0 - 0.45, r0 - 0.55, literal_text(layout[marker_id]), fontsize=8, va="bottom",
                   ha="left", color="#111827", fontfamily=[_FONT_FAMILY, "DejaVu Sans"])
 
 

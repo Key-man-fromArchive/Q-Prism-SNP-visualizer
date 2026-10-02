@@ -140,8 +140,8 @@ def test_axis_label_named_and_default(plate: SimpleNamespace) -> None:
         "cycle": 20, "use_rox": True, "algorithm": "threshold"}).status_code == 200
     snapshot = _capture(plate)
     assert axis_label(snapshot, "fam") == "FAM (norm)"
-    assert axis_label(snapshot, "fam", allele_labels=_labels()) == "FAM · WT (ROX 정규화)"
-    assert axis_label(snapshot, "allele2", allele_labels=_labels()) == f"{snapshot.unified.allele2_dye} · MT (ROX 정규화)"
+    assert axis_label(snapshot, "fam", allele_labels=_labels()) == "FAM · WT (ROX-normalized)"
+    assert axis_label(snapshot, "allele2", allele_labels=_labels()) == f"{snapshot.unified.allele2_dye} · MT (ROX-normalized)"
 
 
 def test_cycle_label_with_and_without_read_labels(plate: SimpleNamespace) -> None:

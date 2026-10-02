@@ -27,12 +27,12 @@ def _texts(ax):
 def test_title_axes_legend_and_well_labels_present():
     fig = build_scatter_figure(
         _points(), title="rs123 · Amplification 1/5 · PCR 36 · 40°C",
-        x_label="VIC · WT (ROX 정규화)", y_label="FAM · MUT (ROX 정규화)",
+        x_label="VIC · WT (ROX-normalized)", y_label="FAM · MUT (ROX-normalized)",
         legend_names={"Allele 1 Homo": "MUT/MUT", "Heterozygous": "MUT/WT"})
     ax = fig.axes[0]
     assert ax.get_title() == "rs123 · Amplification 1/5 · PCR 36 · 40°C"
-    assert ax.get_xlabel() == "VIC · WT (ROX 정규화)"
-    assert ax.get_ylabel() == "FAM · MUT (ROX 정규화)"
+    assert ax.get_xlabel() == "VIC · WT (ROX-normalized)"
+    assert ax.get_ylabel() == "FAM · MUT (ROX-normalized)"
     labels = [t.get_text() for t in ax.get_legend().get_texts()]
     assert "MUT/MUT (n=2)" in labels
     assert "MUT/WT (n=2)" in labels
@@ -87,6 +87,26 @@ def test_korean_names_render_without_missing_glyph_warning(caplog):
     assert png[:4] == b"\x89PNG"
     assert [str(w.message) for w in caught if "Glyph" in str(w.message)] == []
     assert [r.message for r in caplog.records if "Glyph" in r.message] == []
+
+
+_MATH_NAME = r"A$\frac$ x $_$"
+
+
+def test_user_names_are_not_parsed_as_mathtext():
+    png = render_scatter_png(
+        _points(), title=_MATH_NAME, x_label=_MATH_NAME, y_label=_MATH_NAME,
+        legend_names={"Heterozygous": _MATH_NAME})
+    assert png[:4] == b"\x89PNG"
+
+
+def test_plate_marker_label_is_not_parsed_as_mathtext():
+    from types import SimpleNamespace
+
+    from app.reporting.snapshot_plate import render_snapshot_plate
+    rows = [SimpleNamespace(well="A1", genotype="Allele 1 Homo", ploidy=2,
+                            marker=SimpleNamespace(marker_id="M1"))]
+    png = render_snapshot_plate(rows, marker_layout={"M1": _MATH_NAME})
+    assert png[:4] == b"\x89PNG"
 
 
 def test_default_call_keeps_legacy_labels():
