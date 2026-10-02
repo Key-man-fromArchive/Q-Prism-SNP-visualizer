@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { login } from './helpers';
 
+test.use({ baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:8402' });
+
 test('multi-marker 384 review keeps long context and warnings inside bounded regions', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await login(page);
@@ -99,7 +101,9 @@ test('result-first 96-well desktop keeps scatter, plate and selected summary in 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.locator('header').getByRole('button', { name: 'Export', exact: true }).click();
   const download = page.waitForEvent('download');
-  await page.getByRole('menuitem', { name: /PNG/ }).click();
+  // The menu also offers a PPTX/PNG-zip report, so pick the current-screen
+  // PNG by its exact label (exportReportCurrentScreen in en/ko).
+  await page.getByRole('menuitem', { name: /^(Current screen image|현재 화면 이미지)$/ }).click();
   expect((await download).suggestedFilename()).toMatch(/\.png$/);
   expect(analysisPosts).toBe(0);
 });
@@ -172,7 +176,10 @@ for (const width of [390, 768, 1024, 1280, 1440]) {
         const menuBounds = await menu.boundingBox();
         expect(menuBounds!.x).toBeGreaterThanOrEqual(0);
         expect(menuBounds!.x + menuBounds!.width).toBeLessThanOrEqual(width);
-        await expect(menu.getByRole('menuitem')).toHaveCount(5);
+        // Example session has no markers: CSV, current-screen PNG, print, PDF,
+        // XLSX, PPTX and PNG zip. The "select markers" item only appears once
+        // markers exist (Header.tsx exportItems).
+        await expect(menu.getByRole('menuitem')).toHaveCount(7);
         await page.keyboard.press('Escape');
         await expect(exportButton).toBeFocused();
         await expect(menu).not.toBeVisible();
