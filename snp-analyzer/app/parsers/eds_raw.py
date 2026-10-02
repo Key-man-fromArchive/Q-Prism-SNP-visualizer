@@ -61,6 +61,10 @@ def parse_eds(file_path: str) -> UnifiedData:
 
         # Find multicomponentdata.xml (required)
         mc_path = _find_file(names, "multicomponentdata.xml")
+        if not mc_path and _find_file(names, "multicomponent_data.txt"):
+            from app.parsers.stepone_eds import parse_stepone_eds
+
+            return parse_stepone_eds(zf, names)
         if not mc_path:
             raise ValueError(
                 "This .eds file does not contain multicomponentdata.xml.\n"
