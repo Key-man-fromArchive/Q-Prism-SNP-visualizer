@@ -3,7 +3,7 @@ import { channelLabels } from '@/lib/channel-labels';
 import { clampQcFraction, DEFAULT_QC_FRACTION, qcSummaryParts } from '@/lib/amplification-qc';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useDataStore } from '@/stores/data-store';
-import { useQcUiStore } from '@/stores/qc-ui-store';
+import { useSessionQc } from '@/stores/qc-ui-store';
 import { useSettingsStore } from '@/stores/settings-store';
 
 function fractionText(fraction: number): string {
@@ -25,10 +25,7 @@ export function AmplificationQcSummary() {
   const allele2Dye = useDataStore((s) => s.allele2Dye);
   const roleLabels = useDataStore((s) => s.channelLabels);
   const expert = useSettingsStore((s) => s.expertMode);
-  const settings = useSettingsStore((s) => s.amplificationQc);
-  const setQc = useSettingsStore((s) => s.setAmplificationQc);
-  const open = useQcUiStore((s) => s.controlsOpen);
-  const setOpen = useQcUiStore((s) => s.setControlsOpen);
+  const { settings, setSettings: setQc, open, setOpen } = useSessionQc();
   const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
 
   const parts = qcSummaryParts(qc, { fam: 'FAM', allele2: allele2Dye || labels.allele2 });

@@ -12,6 +12,7 @@ import { AlertTriangle, Info, Target } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useSessionQc } from "@/stores/qc-ui-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore, ZERO_ORIGIN } from "@/stores/data-store";
 import { getScatter, listMarkerCatalog } from "@/lib/api";
@@ -136,7 +137,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [markers]);
 
-  const qcSettings = useSettingsStore((s) => s.amplificationQc);
+  const { settings: qcSettings } = useSessionQc();
   const request = useMemo(() => {
     const amplification_qc = qcConfigFromSettings(qcSettings);
     return { algorithm: ClusteringAlgorithm.AUTO, cycle: currentCycle,
