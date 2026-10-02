@@ -4,7 +4,7 @@ import { useSettingsStore } from '@/stores/settings-store';
 import { useNavigationStore } from '@/stores/navigation-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useAuthStore } from '@/stores/auth-store';
-import { ApiError, exportCsv, exportPdf, exportXlsx } from '@/lib/api';
+import { ApiError, exportCsv, exportPdf, exportPptx, exportScatterZip, exportXlsx } from '@/lib/api';
 import Plotly from 'plotly.js-dist-min';
 import { getActiveChart, type ActiveChart } from '@/lib/chart-export-registry';
 import { cycleValueMap, unionCycles, type WellCycleCurve } from '@/lib/well-cycle-alignment';
@@ -134,6 +134,8 @@ export function downloadTextFile(filename: string, content: string, mimeType = '
   }
 }
 
+export type StoredExportKind = 'csv' | 'png' | 'pdf' | 'xlsx' | 'pptx' | 'zip';
+
 type ExportIdentity = { sessionId: string; entry: number; ownerId: string | undefined };
 type ExportConditions = ExportIdentity & { cycle: number | undefined; useRox: boolean; backgroundMode: BackgroundMode; revision: string };
 function stillOwns(identity: ExportIdentity): boolean {
@@ -205,9 +207,11 @@ async function renderStoredPng(current: ExportConditions, exportPNG: (signal?: A
 export function useExports(): {
   downloadCSV: () => Promise<void>;
   exportPNG: (signal?: AbortSignal) => Promise<void>;
-  exportPDF: () => Promise<void>;
+  exportPDF: (markerIds?: readonly string[]) => Promise<void>;
   exportXLSX: () => Promise<void>;
-  exportStored: (kind: 'csv' | 'png' | 'pdf' | 'xlsx', signal?: AbortSignal) => Promise<void>;
+  exportPPTX: (markerIds?: readonly string[], includeTable?: boolean) => Promise<void>;
+  exportScatterZip: (markerIds?: readonly string[]) => Promise<void>;
+  exportStored: (kind: StoredExportKind, signal?: AbortSignal, markerIds?: readonly string[], includeTable?: boolean) => Promise<void>;
   printReport: () => void;
 } {
   const conditions = useCallback(() => {
@@ -296,11 +300,11 @@ export function useExports(): {
     }
   }, [conditions]);
 
-  const exportPDF = useCallback(async () => {
+  const exportPDF = useCallback(async (markerIds?: readonly string[]) => {
     const current = conditions();
 
     try {
-      const blob = await exportPdf(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision);
+      const blob = await exportPdf(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision, markerIds);
       saveBlob(blob, current, `snp-report-${current.sessionId.replace(/[^a-zA-Z0-9._-]/g, '_')}.pdf`);
     } catch (error) {
       console.error('Failed to export PDF:', error);
@@ -320,7 +324,29 @@ export function useExports(): {
     }
   }, [conditions, saveBlob]);
 
-  const exportStored = useCallback(async (kind: 'csv' | 'png' | 'pdf' | 'xlsx', signal?: AbortSignal) => {
+  const exportPPTX = useCallback(async (markerIds?: readonly string[], includeTable?: boolean) => {
+    const current = conditions();
+    try {
+      const blob = await exportPptx(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision, markerIds, includeTable);
+      saveBlob(blob, current, `snp-report-${current.sessionId.replace(/[^a-zA-Z0-9._-]/g, '_')}.pptx`);
+    } catch (error) {
+      console.error('Failed to export PPTX:', error);
+      throw error;
+    }
+  }, [conditions, saveBlob]);
+
+  const exportScatterZipImages = useCallback(async (markerIds?: readonly string[]) => {
+    const current = conditions();
+    try {
+      const blob = await exportScatterZip(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision, markerIds);
+      saveBlob(blob, current, `snp-report-images-${current.sessionId.replace(/[^a-zA-Z0-9._-]/g, '_')}.zip`);
+    } catch (error) {
+      console.error('Failed to export report images:', error);
+      throw error;
+    }
+  }, [conditions, saveBlob]);
+
+  const exportStored = useCallback(async (kind: StoredExportKind, signal?: AbortSignal, markerIds?: readonly string[], includeTable?: boolean) => {
     const current = storedConditions();
     try {
       if (signal?.aborted) return;
@@ -328,11 +354,13 @@ export function useExports(): {
         await renderStoredPng(current, exportPNG, signal);
         return;
       }
+      const args = [current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision] as const;
       const blob = kind === 'csv'
         ? await exportCsv(current.sessionId, current.cycle, current.useRox, current.backgroundMode, current.revision)
-        : kind === 'pdf'
-          ? await exportPdf(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision)
-          : await exportXlsx(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision);
+        : kind === 'pdf' ? await exportPdf(...args, markerIds)
+          : kind === 'pptx' ? await exportPptx(...args, markerIds, includeTable)
+            : kind === 'zip' ? await exportScatterZip(...args, markerIds)
+              : await exportXlsx(...args);
       saveBlob(blob, current, `snp-${kind}-stored-${current.sessionId.replace(/[^a-zA-Z0-9._-]/g, '_')}.${kind}`, signal);
     } catch (error) {
       console.error(`Failed to export stored ${kind}:`, error);
@@ -349,6 +377,8 @@ export function useExports(): {
     exportPNG,
     exportPDF,
     exportXLSX,
+    exportPPTX,
+    exportScatterZip: exportScatterZipImages,
     exportStored,
     printReport,
   };

@@ -38,6 +38,7 @@ The SNP Visualizer parses qPCR fluorescence exports and renders interactive scat
 | :--- | :--- | :--- |
 | **QuantStudio 3** (Applied Biosystems) | `.eds` | Raw instrument files (ZIP archive with multicomponent XML) |
 | | `.xls` | Exported Multicomponent Data or Amplification Data |
+| **StepOnePlus** (Applied Biosystems) | `.eds` | Raw instrument files with 7 read-cycle data (Pre-read, PCR 36–40, Post-read) |
 | **CFX Opus** (Bio-Rad) | `.pcrd` | Raw encrypted CFX Opus run files |
 | | `.xlsx` | Amplification Results, End Point Results, or Allelic Discrimination |
 | | `.zip` | Archived XML exports (~16 files per run) |
@@ -50,6 +51,34 @@ The SNP Visualizer parses qPCR fluorescence exports and renders interactive scat
 Direct upload creates sessions for supported QuantStudio/Bio-Rad files. Generic, RDES, and RDML files use `/api/import/preview` and `/api/import/parse` so users can confirm table structure, assay mode, and channel-to-role mappings before import.
 
 Triplex and quadruplex imports (`WT/MT1/MT2`, `WT/MT1/MT2/MT3`) remain preview-only until full role-aware downstream analysis is enabled. WT/MT duplex imports can create analysis sessions.
+
+### Marker Allele Names
+
+For direct instrument uploads (StepOnePlus and QuantStudio), allele names are automatically populated from the instrument file if available. You can edit allele names for each marker in the Plate Setup tab:
+
+- **FAM dye channel** — typically the "wild-type" (WT) allele
+- **VIC/HEX/JOE/TET dye channel** — typically the "mutant" (MT) allele
+
+Names appear in the analysis scatter plots, plate views, and all result exports. Changing a name does not require re-analysis; exported results always display the current allele names.
+
+### ROX Normalization
+
+ROX auto-normalization is applied by default when:
+- A ROX passive reference dye is detected in the fluorescence data
+- The ROX signal is stable across all wells (quality check)
+
+You can confirm or adjust the normalization reference in the Cycle Control settings. For StepOnePlus and similar instruments, ROX normalization uses the ratio of dye signal to ROX signal for each read cycle.
+
+### Result Exports
+
+Analyzed results can be exported in multiple formats, with per-marker filtering for PDF, PowerPoint, and image bundles:
+
+- **PDF Report** — Scatter plot, genotype calls, and plate map for each selected marker; full results table with allele names and confidence scores
+- **PowerPoint Presentation** — Separate slides for each marker with scatter plots, genotype summaries, and overall results table; 16:9 aspect ratio
+- **Scatter Image Bundle (ZIP)** — Individual PNG images for each selected marker, optimized for presentations and reports
+- **Excel/CSV Spreadsheet** — Full results table with marker names and "Allele Call" column showing allele pair names (e.g., "WT/WT", "WT/MT", "MT/MT")
+
+All exports include the current marker allele names in calls and labels. Use the export menu to select which markers to include or download all markers.
 
 ### Template Downloads
 
