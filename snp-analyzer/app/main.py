@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.routers import upload, import_api, data, clustering, export, qc, sample, compare, statistics, presets, quality, batch, asg, examples, layouts, marker_catalog
 from app.routers import feedback, version
+from app.routers import export_pptx, export_images
 from app.routers import auth_router, users
 from app.auth_security import assert_auth_configuration
 from app.config import SNP_ROOT_PATH, is_asg_launch_mode
@@ -183,6 +184,8 @@ app.include_router(layouts.router)
 app.include_router(marker_catalog.router)
 app.include_router(feedback.router)
 app.include_router(version.router)
+app.include_router(export_pptx.router)
+app.include_router(export_images.router)
 
 # Serve React build (default) or legacy static (USE_LEGACY=1)
 use_legacy = os.environ.get("USE_LEGACY", "").strip().lower() in ("1", "true", "yes")

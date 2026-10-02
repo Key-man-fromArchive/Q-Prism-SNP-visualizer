@@ -2,15 +2,19 @@
 
 Follow AGENTS.md and docs/planning/06-tasks.md. This file records execution evidence, not permission to skip quality gates.
 
-## Current authorization — resumed 2026-09-07
+## Current contract — qprism-stepone-markers-20261002-v1 (2026-10-02)
+
+StepOnePlus .eds support, per-marker allele names, and exports (PDF, CSV/XLSX, PPTX, PNG zip). Baseline main 55a7452 (v1.3.1). User approved D-8/D-11/D-4 and recommended defaults on 2026-10-02; quote and decisions in docs/planning/stepone-2026-10-02/evidence/P0-T0.1.md. Run mode: `/auto-orchestrate --tmux --parallel 4` with the lane wrapper in the original repository root `.claude/orchestrate/stepone/`. Local commits and local Phase integration only; no remote push, deployment or notifications. A reject-all `pre-push` hook is installed in the shared `.git/hooks` for the contract duration and must be removed at contract end. Root orchestrates; specialist lanes implement. Previous contracts below are history.
+
+## Historical authorization — resumed 2026-09-07 (contract qprism-ux-followup-20260907-v1)
 
 User approved baseline lint, testing-tool/runtime/auth dependency remediation and autonomous implementation through completion, and explicitly requested specialist delegation. P0-R0-T1 and P0-S0-T1 cover that prerequisite scope. The blocked record below is historical: repair and re-run the gate, without re-asking the same scope question. Local commits/Phase integration are authorized; no remote push, deployment, or external notifications. Root orchestrates; specialist agents implement.
 
-## Current P0 resolution — 2026-09-07
+## Historical P0 resolution — 2026-09-07
 
 P0 completed 5/33 tasks; independent gate PASS at 079d23ce449b14a6e8789813f93d40a3fb6bc93d. Backend 502 tests + 2 subtests, frontend 105 tests, lint/type/build, changed-code coverage/complexity and dependency audits passed. Runtime/auth repair: 009a762; frontend final delivery: e9c9b1d (including 723b551/a11ece17). Existing legacy full-app coverage and large-function baselines are explicitly separate in the gate evidence. No waiver was used. P0 integrated into local main at 0bd509059ea62395b791c823a54d9a06c790b7e6; P1-R1-T1 now runs in worktree/ux-followup-p1. P1–P5 are not completed. Original AGENTS.md is unchanged.
 
-## Current P1 progress
+## Historical P1 progress (ux-followup contract)
 
 P1-R1-T1 (b7c6e875) and P1-R1-T2 (da35b12) independently verified; 7/33 total tasks complete. Latest full backend run: 552 passed + 2 subtests. P1-R1-T3 owns actual context capture, request ordering and DB-before-memory publication; it is in progress, not yet verified. Appendix records context-only mixed-algorithm metadata, actual normalization boolean semantics, preserved cycle=0 sentinel and explicit ploidy command behavior. Do not treat these metadata clarifications as new scientific algorithms.
 

@@ -1,848 +1,386 @@
-# Q-prism® Cluster Caller 피드백 대응 작업서 — Auto-Orchestrate
+# StepOnePlus · 마커별 분석 · 결과 출력 작업서 — Auto-Orchestrate (초안 r6, 병렬 레인)
 
-- Contract ID: `qprism-feedback-20260911-v1`
-- 작성일: 2026-09-11
-- 상태: READY — 정본 승격 완료(2026-09-11). 구현은 이후 auto-orchestrate 실행 요청부터 시작한다.
-- 기준 기획서: [`feedback-2026-09-11/00-overview.md`](feedback-2026-09-11/00-overview.md) 및 FB-01~FB-07 (멀티 AI 리뷰 정정 반영본)
-- 실행 기준 파일: `docs/planning/06-tasks.md` (**본 문서** — 승격 완료)
-- 이전 계약: `qprism-ux-followup-20260907-v1` — 완료 후 [`archive/06-tasks-ux-followup-20260907.md`](archive/06-tasks-ux-followup-20260907.md)로 보관. 보관본의 작업은 실행 대상이 아니다.
-
----
-
-## 0. 정본 승격 — 완료 (2026-09-11)
-
-auto-orchestrate는 **`docs/planning/06-tasks.md`만** 정본으로 읽는다. 승격은 아래와 같이 수행되었다.
-
-```bash
-git mv docs/planning/06-tasks.md docs/planning/archive/06-tasks-ux-followup-20260907.md
-mv  docs/planning/06-tasks-feedback-20260911.md docs/planning/06-tasks.md
-```
-
-- 이전 계약 `qprism-ux-followup-20260907-v1`은 **완료 상태**였다(태스크 커밋 37건, 체크박스 37/37, `execution.status = "complete"`).
-- 이전 계약의 worktree 8개와 브랜치는 **삭제하지 않았다.**
-
-### 남은 정리 — P0-T0.1에서 처리
-
-`.claude/orchestrate-state.json`은 아직 이전 계약을 가리킨다:
-`contract_id = qprism-ux-followup-20260907-v1`, `baseline_commit = 80c2c8a`,
-`tasks_file_sha256 = b1873340…`(보관본의 해시).
-
-**이 상태 파일은 이제 `06-tasks.md`의 내용과 일치하지 않는다.**
-해시 불일치 상태로 auto-orchestrate를 실행하면 완료된 계약을 새 문서에 대해 재개하려 할 수 있다.
-P0-T0.1에서 아래를 수행하기 전까지 **실행하지 않는다**:
-
-- `contract_id`를 `qprism-feedback-20260911-v1`로 새로 시작
-- `baseline_commit`을 `c2bc854`(main)로 설정
-- `tasks_file_sha256`을 현재 `06-tasks.md` 기준으로 재계산
-- 이전 계약의 `task_commits` 37건과 `authorization`(원격 push·배포 허용)을 **승계하지 않음**
-- 이전 상태는 `.claude/orchestrate-state-ux-followup-20260907.json` 등으로 보존
-
-`CLAUDE.md`의 "Orchestration Handoff" 절도 이전 계약의 진행 기록을 담고 있다.
-P0-T0.1에서 이번 계약 기준으로 갱신한다. **기존 기록은 이력으로 남기고 삭제하지 않는다.**
+- Contract ID: `qprism-stepone-markers-20261002-v1`
+- 작성일: 2026-10-02 · r6(리뷰 4차 반영: 사용자 설정 격리·거부 시험·venv 재구축·marker_id 매칭·P0 분할)
+- 상태: ACTIVE — 2026-10-02 사용자 승인으로 승격(D-8). 초안 이력은 git log 참조
+- 기준 기획서: [`stepone-2026-10-02/00-overview.md`](stepone-2026-10-02/00-overview.md) (r2)
+- baseline_commit: `55a7452` (main, v1.3.1). 루트 detached `201e0c7`에서 시작하지 않는다.
+- 실행 모드: `/auto-orchestrate --tmux --parallel 4` (Phase 안 레인 병렬, Phase 사이 직렬)
 
 ---
 
 ## 1. 실행 계약
 
-### 범위와 권한
+- 오케스트레이터(루트 세션)는 의존성 선택·위임·상태 갱신·레인 병합·검증·Phase 통합만 한다. 구현은 지정 specialist가 독립 tmux 프로세스에서 한다.
+- 로컬 커밋·로컬 Phase 통합까지만. **원격 push·배포·외부 알림 없음.** 이전 계약의 push·배포 권한을 승계하지 않는다.
+- 기능 작업은 `TDD_MODE:RED_FIRST`(RED → GREEN → REFACTOR 증거). 준비·문서·검증 작업은 예외.
+- specialist는 자기 레인 브랜치에 로컬 커밋 후 완료 신호를 남긴다. Phase 브랜치·main 병합은 오케스트레이터만 한다.
+- 호출당 12턴(통합·게이트 15턴). 초과 시 완료 부분·실패 명령·다음 수정점을 결과 파일에 남기고 종료한다.
+- 결정 게이트 차단 태스크는 BLOCKED. "비차단" 결정은 권장안으로 진행하고 증거에 기록한다. 사용자가 다른 안을 고르면 해당 태스크만 FAIL로 되돌려 재실행한다.
+- 고객 파일(`261002_QPrism_ASG-PCR.eds`)과 그 산출물은 커밋하지 않는다.
 
-대상은 프로덕션 피드백 7건(`user_feedback` 상태 `open`, 2026-09-11 수집)에 대응하는 FB-01~FB-07이다.
-판정 알고리즘, 클러스터링 수식, QC 임계값, 신규 파서 추가는 **범위 밖**이다.
-FB 문서의 멀티 AI 리뷰 정정본이 초안보다 우선한다.
-
-- 오케스트레이터는 의존성 선택·위임·상태 갱신·검증·Phase 통합을 담당한다. 소스·테스트 구현은 지정 specialist가 수행한다.
-- **일반 auto-orchestrate 모드**를 기본으로 한다. 작업서 존재만으로 구현·main 병합·원격 push·외부 알림을 수행하지 않는다.
-- **원격 push, 배포, 외부 알림은 이번 계약에서 승인되지 않았다.** 로컬 커밋과 로컬 Phase 통합까지만 수행한다.
-  (이전 계약의 `remote_push: true` / `deployment: true`를 이번 ID로 승계하지 않는다.)
-- ID·Depends On·Status·담당·Write Scope·검증을 파싱해 DAG를 만든다. 선행 FAIL/BLOCKED면 후속을 실행하지 않는다.
-  실패를 건너뛰어 Phase 완료로 처리하지 않는다.
-- Status는 TODO → IN_PROGRESS → DONE 또는 BLOCKED/FAIL로 갱신한다. 모든 AC·검증 충족 및 로컬 커밋 존재 시에만 DONE으로 표시한다.
-- 기능 작업은 `TDD_MODE:RED_FIRST`로 RED → GREEN → REFACTOR 증거를 남긴다. P0 준비·문서·검증 전용 작업에는 인위적 RED를 요구하지 않는다.
-- specialist는 로컬 커밋 후 `TASK_DONE:{task_id}:{commit_sha}`를 보고한다. main 병합·push는 specialist가 하지 않는다.
-- 호출은 기본 12턴, 통합 태스크는 최대 15턴. 초과 시 완료 부분·실패 명령·다음 수정점을 인계한다.
-- **결정 게이트(4절)가 미해결인 태스크는 BLOCKED로 두고 실행하지 않는다.** 추정값으로 진행하지 않는다.
-
-### 기준선
-
-작성 시점 루트 작업트리는 **detached HEAD `201e0c7`** 이고, `main`은 `c2bc854`로 **5커밋 앞서 있다**
-(`201e0c7`은 `main`의 조상). `main`은 `worktree/ux-followup-integration`에 체크아웃되어 있다.
-
-- **이번 계약의 baseline_commit은 `c2bc854`(main)다.** `201e0c7`에서 구현을 시작하지 않는다.
-- 루트의 미커밋 변경(`.gitignore` 수정, `node_modules` 삭제, `.claude/` 미추적)은 **P0-T0.1에서 정리 방침을 확정**한 뒤 진행한다.
-  임의로 커밋하거나 되돌리지 않는다.
-- `docs/planning/feedback-2026-09-11/`(기획서 8종)은 미추적 상태다. P0-T0.1에서 main에 커밋한다.
-
-### 브랜치·Worktree·동시성
-
-모든 Phase는 브랜치 기반 Worktree에서 수행한다. Phase N의 시작점은 이전 Phase 검증·통합이 끝난 `main`이다.
-기존 경로·브랜치는 확인 후 재사용하고 강제 초기화하지 않는다.
-
-| Phase | 브랜치 | Worktree (루트 기준) | 목적 |
-| --- | --- | --- | --- |
-| P0 | `feedback/p0-preflight` | `worktree/feedback-p0` | 기준선·색 토큰 단일화·검증 환경 |
-| P1 | `feedback/p1-linked-label` | `worktree/feedback-p1` | FB-01 연동 라벨 |
-| P2 | `feedback/p2-rawdata` | `worktree/feedback-p2` | FB-05·FB-06 프로토콜/Raw data |
-| P3 | `feedback/p3-ia` | `worktree/feedback-p3` | FB-07 정보구조 |
-| P4 | `feedback/p4-results` | `worktree/feedback-p4` | FB-04·FB-03 결과 화면 |
-| P5 | `feedback/p5-upload` | `worktree/feedback-p5` | FB-02 업로드 진입점 |
-| P6 | `feedback/p6-brand` | `worktree/feedback-p6` | FB-07·FB-02 브랜드 |
-
-생성 예: `git worktree add worktree/feedback-p0 -b feedback/p0-preflight main`
-
-- **기본 동시성 1.** P2의 백엔드(R) 작업과 P6의 문서 작업만 Write Scope 분리를 확인한 뒤 최대 2개 병렬화한다.
-- 동일 Worktree의 git index/커밋·패키지 설치·서버 조작은 직렬화한다.
-- 다음은 **공유 자원**이다. 태스크명이 달라도 동시 수정하지 않는다:
-  `app/models.py`, `app/routers/data.py`, `frontend/src/types/api.ts`, `frontend/src/App.tsx`,
-  `frontend/src/components/layout/Header.tsx`, `frontend/src/index.css`, `frontend/src/locales/{en,ko}.ts`
-- Write Scope 밖 수정이 필요하면 오케스트레이터에 영향 파일을 보고하고 소유권 조정 후 진행한다.
+### 경로 약어
+ROOT = `/mnt/docker/Q-Prism-SNP-visualizer`, BE = `snp-analyzer`, APP = `snp-analyzer/app`, FE = `snp-analyzer/frontend`, SRC = `snp-analyzer/frontend/src`, E2E = 저장소 `tests/`
 
 ---
 
-## 2. 공통 검증과 증거
+## 2. 병렬 실행 구조
 
-약어: BE=`snp-analyzer`, FE=`snp-analyzer/frontend`, SRC=`FE/src`. 명령은 해당 Phase Worktree에서 실행한다.
+### 2.1 원칙: 계약 선고정 → 레인 병렬 → Phase 통합
 
-| 별칭 | 디렉터리 | 명령 |
-| --- | --- | --- |
-| BE-TEST | BE | `venv/bin/python -m pytest tests/<task_test>.py --tb=short -q` |
-| BE-ALL | BE | `venv/bin/python -m pytest --tb=short -q` |
-| BE-LINT | BE | `venv/bin/ruff check <변경한 .py>` (전부 통과 필수) + `venv/bin/ruff format --check <신규 생성 .py만>` (P0-T0.1 / P2-R1-T1에서 정밀화 — 아래 주석) |
-| FE-TEST | FE | `npm run test -- src/<task_test>` |
-| FE-ALL | FE | `npm run test` |
-| FE-CHECK | FE | `npx tsc --noEmit`, `npm run lint`, `npm run build` 각각 실행 |
-| ROOT-E2E | 루트 | `E2E_BASE_URL=<이번 Worktree Vite 주소> npx playwright test tests/<NN-feature>.spec.ts --project=chromium --workers=1` |
-| EXISTING-E2E | FE | `VITE_DEV_API_TARGET=<격리 API 주소> E2E_PORT=<할당 포트> npm run e2e` |
-| VIEWPORT | 브라우저 | 1920x911(피드백 제출 뷰포트) · 1280px · 768px · 400px × 라이트/다크 |
+1. **P0에서 공유 파일을 한 번에 고정한다.** 새 필드·타입·함수 시그니처·DB 마이그레이션·라우터 등록·공통 파라미터·i18n 키·테스트 ID를 P0-T0.3a(백엔드)·b(프론트)·c(i18n)가 만든다(동작은 기본값/스텁, 기존 동작 불변).
+2. **이후 레인은 공유 파일을 수정하지 않는다.** 각 레인은 자기 Write Scope 안의 파일만 바꾼다. 공유 파일 수정이 필요하면 구현을 멈추고 결과 파일에 요청을 남긴다 → 오케스트레이터가 "계약 보정" 태스크(`P*-C<n>`)를 Phase 기준 브랜치 `stepone/pN`에 직렬로 커밋하고, **진행 중인 모든 레인이 `git merge stepone/pN`으로 보정을 받은 뒤** 재개한다(멈춘 레인만이 아니라 전부).
+3. **같은 Phase 레인끼리 Write Scope가 겹치지 않는다**(§2.4 소유표). 겹치면 그 Phase를 시작하지 않는다.
+4. **레인은 다른 레인의 결과를 기다리지 않는다.** 필요한 입력은 P0 계약 타입으로 합성·모킹한다. 실제 연결 확인은 Phase 게이트에서 한다.
 
-- **백엔드 인터프리터는 P0에서 구축한 계약 전용 venv를 절대경로로 쓴다**:
-  `/mnt/docker/Q-Prism-SNP-visualizer/worktree/feedback-p0/snp-analyzer/venv/bin/python`
-  (`bcrypt==4.0.1` 확인 완료). **호스트 설치 금지.** 루트 `snp-analyzer/venv`는 낡아 사용하지 않는다.
-  venv를 다른 worktree에 **심볼릭링크하지 않는다** — `.gitignore`의 `venv/`가 심볼릭링크를 걸러내지 못해 추적이 오염된다.
-- **프론트엔드는 worktree마다 `npm ci`로 설치한다.** 다른 worktree의 `node_modules`를 공유·심볼릭링크하지 않는다.
-  루트의 `node_modules`는 vitest 2.1.9로 main 요구(4.1.11)와 달라 테스트 1건과 빌드가 거짓 실패했다(P0-T0.1 기록).
-- **BE-LINT는 변경분 기준이다.** main `bbc6657`의 기준선은 `ruff check` **36 errors**
-  (F811 19 / E702 8 / F401 7 / F841 2 · `app/` 5건, `tests/` 31건)와
-  `ruff format --check` **122개 파일 미포맷**이다. 리포지토리에 ruff 설정 파일이 없어 기본 규칙이 적용되며,
-  코드베이스는 그 규칙으로 작성되지 않았다. 전체를 고치는 것은 이번 계약 범위 밖이며
-  (122개 파일 포맷은 모든 후속 diff·blame을 오염시킨다), **별도 계약으로 분리한다.**
-  **`ruff check`(린트 규칙)**: 변경한 `.py` 파일 전부가 통과해야 한다.
-  **`ruff format --check`(포맷)**: **신규 생성 파일에만** 요구한다. `ruff format`은 파일 단위 판정이라
-  기존 파일에 적용하면 그 파일 전체를 재포맷하게 되고, 이는 바로 위에서 배제한 diff·blame 오염과 같은 일이 된다.
-  실제로 P2-R1-T1이 수정한 `app/models.py`, `app/parsers/{pcrd,eds}_raw.py`, `app/routers/data.py`는
-  **main에서도 이미 미포맷**이었고, 같은 태스크가 새로 만든 `tests/test_protocol_step_read_fields.py`는 포맷을 만족했다.
-  기존 파일에 추가하는 코드는 주변 스타일을 따른다. 기준선 수치(36 / 122)가 늘면 회귀로 본다.
-- 백엔드는 임시 `DB_PATH`와 합성 계정·local 인증으로 실행한다. **운영 DB(`/app/data/snp_analyzer.db`)는 읽기 조회 외에 사용하지 않는다.**
-- 증거는 `docs/planning/feedback-2026-09-11/evidence/<task-id>.md`에 커밋·명령·결과·남은 문제를 기록한다.
-  스크린샷·trace는 격리 artifact 경로에 두고 링크한다. 비공개 샘플명·인증 파일은 커밋하지 않는다.
-- **Phase 품질 체인**: verification → evaluation → code-review → security(해당 변경) → frontend review(UI 변경).
-  관련 테스트·lint/build 성공, 미해결 중요 리뷰 이슈 0, **새 코드** coverage 70% 이상·복잡도 10 이하.
-  기존 실패·기존 coverage 부족·기존 보안 이슈는 기준선과 분리해 보고한다. 미충족 게이트를 PASS로 처리하지 않는다.
-- **재빌드 검증**: 배포 확인이 필요한 경우 `docker compose build --no-cache frontend`를 쓴다. 캐시 빌드는 낡은 번들을 배포한다.
-  단, **이번 계약에 배포 권한은 없다.** 로컬 dev 서버 검증까지만 수행한다.
+### 2.2 브랜치·Worktree
 
----
+- Phase 기준 브랜치: `stepone/pN` (Phase 시작 시 `main`에서 생성), worktree `ROOT/worktree/stepone-pN`
+- 레인 브랜치: `stepone/pN-<lane>` (Phase 기준 브랜치에서 생성), worktree `ROOT/worktree/stepone-pN-<lane>`
+  - 예: `git worktree add worktree/stepone-p1-parser -b stepone/p1-parser stepone/p1`
+- 레인 완료 후 오케스트레이터가 `stepone/pN`에 레인을 **정해진 순서로** `--no-ff` 병합 → Phase 게이트 → `main`에 로컬 병합.
+- 기존 worktree·브랜치(`ux-followup-*`, `feedback-*`)는 건드리지 않는다. 강제 초기화·삭제 금지.
 
-## 3. 인터페이스 계약 점검(ICV)
+### 2.3 tmux 실행 규약
 
-아래 계약 공백은 Resource(R) 작업으로 먼저 해소한다. Screen(S) 작업은 해당 R 완료 후 실행한다.
-**"기획서에 연결을 지정했다"는 것이 "API가 이미 지원한다"는 뜻은 아니다.**
+**레인 래퍼** `ROOT/.claude/orchestrate/stepone/run-lane.sh <task-id> <worktree> <model> <budget-usd>` (P0-T0.1에서 작성). 레인은 항상 이 래퍼로만 띄운다.
+1. 레인 worktree로 이동, 레인 환경변수 export(`DB_PATH`=레인 전용 임시 DB, `QPRISM_STEPONE_EDS`, `API_PORT`, `FE_PORT`, `VITE_DEV_API_TARGET`, `PYTHON`=계약 venv 절대경로) — 레인 명령에 `VAR=값` 접두사를 쓰지 않게 한다.
+2. `timeout 90m claude -p "<레인 프롬프트>" --model <model> --setting-sources project --strict-mcp-config --disable-slash-commands --settings ROOT/.claude/orchestrate/stepone/lane-settings.json --permission-mode acceptEdits --max-budget-usd <budget> --output-format json > <signal>/<task-id>.json; echo $? > <signal>/<task-id>.exit`
+3. 레인은 결과를 **자기 worktree 안** `.lane/<task-id>.result.md`에 쓴다. `.lane/`은 공용 `.git/info/exclude`(worktree가 공유)에 P0-T0.1이 한 번만 추가한다. 상태 첫 줄 `STATUS: DONE|BLOCKED|PARTIAL`.
+4. 래퍼가 종료 후 결과 파일을 신호 디렉터리 `ROOT/.claude/orchestrate/stepone/`로 복사하고, `STATUS: DONE`이고 `git status --porcelain`이 비어 있으면 `<task-id>.done`(내용: `git rev-parse HEAD`)을, 아니면 `<task-id>.blocked`를 쓴다. JSON의 `num_turns`·비용을 기록한다.
+- 레인은 신호 디렉터리에 직접 쓰지 않는다(작업 디렉터리 밖 쓰기 권한 불필요).
+- **`--setting-sources project`**: 사용자 설정(`~/.claude/settings.json`의 훅 — RTK 명령 재작성 포함 — 과 `settings.local.json`의 넓은 허용 규칙 `Bash(bash:*)`, `Bash(git push:*)`, `Bash(sudo:*)` 등)을 레인에서 불러오지 않는다. 권한은 `lane-settings.json`과 프로젝트 설정만으로 정해진다. RTK 재작성이 없으므로 `git push` 같은 금지 규칙이 그대로 맞는다.
 
-| 소비 동작 | 필요한 계약 / 현재 공백 | 생산 작업 | 소비 작업 |
-| --- | --- | --- | --- |
-| 프로토콜 판독 단계 표시 | `ProtocolStep.plate_read` / `temp_increment`; 파서가 계산하고도 버림 (`pcrd_raw.py:299-301`, `eds_raw.py:450-451,489`) | P2-R1-T1 | P2-S1-T1 |
-| 프로토콜 채널 카드 | 런 채널 목록을 프로토콜/세션 응답 계약으로 제공; 현재 `data-store` 캐시만 (stale 위험) | P2-R1-T1 | P2-S1-T1 |
-| 오버레이 처리 상태 표기 | `normalization_applied` / `background_mode` 에코; all-amplification 응답에 없음 (`routers/data.py:254-258`) | P2-R1-T2 | P2-S2-T1 |
-| 분석 경고 강등 | 경고 심각도 등급(`blocking`/`advisory`); 현재 `warnings`에 등급 없음 | P4-R1-T1 | P4-S4-T1 |
-| 구 URL 복원 | 구 탭 id(`analysis`+`surface`, `protocol`) → 신 탭 id 의미 보존 매핑 | P3-S2-T1 | P3-S1-T1 |
+**레인 권한 설정** `lane-settings.json`(D-11, P0-T0.1에서 작성·시험)
+- allow: `Read`, `Edit`, `Write`, `Grep`, `Glob`, `Bash($PYTHON *)`, `Bash(<venv>/bin/python *)`, `Bash(<venv>/bin/ruff *)`, `Bash(npm ci*)`, `Bash(npm run test*)`, `Bash(npm run lint*)`, `Bash(npm run build*)`, `Bash(npx tsc*)`, `Bash(npx vitest*)`, `Bash(npx playwright test*)`, `Bash(git status*)`, `Bash(git diff*)`, `Bash(git log*)`, `Bash(git add*)`, `Bash(git commit*)`, `Bash(git merge stepone/*)`, `Bash(git rev-parse*)`, `Bash(ls *)`, `Bash(mkdir -p .lane*)`
+- deny: `Bash(git push*)`, `Bash(rtk git push*)`, `Bash(git add -A*)`, `Bash(git add .*)`, `Bash(git add --all*)`, `Bash(git reset --hard*)`, `Bash(git checkout*)`, `Bash(git switch*)`, `Bash(git restore*)`, `Bash(git clean*)`, `Bash(git stash*)`, `Bash(git worktree*)`, `Bash(git branch -D*)`, `Bash(rm -rf*)`, `Bash(bash *)`, `Bash(sh *)`, `Bash(sudo*)`, `Bash(docker*)`, `Bash(pip install*)`, `Bash(npm install*)`, `Bash(claude*)`, `Bash(curl*)`, `Bash(wget*)`, `Edit(.claude/**)`, `Write(.claude/**)`, `Edit(.git/**)`, `Write(.git/**)`, `Edit(**/.env*)`, `Write(**/.env*)`
+- 커밋 메시지는 `git commit -F .lane/<task-id>.msg`로 쓴다(heredoc 금지 — 패턴 일치 보장). `git add`는 **파일 이름을 하나씩** 지정한다(`-A`·`.` 금지).
+- 레인 프롬프트 명령 규칙: `cd` 금지(래퍼가 이미 worktree에 있음), `&&`·`;` 연결 금지, 파이썬은 `$PYTHON` 문자 그대로 또는 venv 절대경로로 호출(허용 패턴과 글자 그대로 맞아야 함). `-p` 모드에서 허용 밖 명령은 묻지 않고 거부되므로, 막히면 `STATUS: BLOCKED`로 사유를 남긴다.
+- **감수하는 위험(명시)**: 빌드 레인은 `$PYTHON`·`npm`·`npx`를 허용하므로 이를 통한 임의 코드 실행(서브프로세스 `git push`, 외부 쓰기, 네트워크)을 패턴으로 막을 수 없다. 한계는 `timeout`·예산·레인 worktree 격리·병합 전 소유표 대조·게이트 리뷰다. 원격 push 차단의 최종 수단으로 P0-T0.1이 공용 `.git/hooks/pre-push`에 계약 기간 동안 모든 push를 거부하는 훅을 둔다(원격 설정은 바꾸지 않음, 기존 훅이 있으면 보존·연결, 계약 종료 시 원복, 증거 기록). 이 훅은 계약 기간 동안 **사용자 본인의 push도 막으므로** 설치·원복 시각을 사용자에게 알리고 `evidence/P0-T0.1.md`에 기록한다. 훅 파일 변조(python 경유)는 각 Phase 게이트에서 해시로 확인한다.
+- 레인은 장기 실행 서버를 띄우지 않는다. 서버가 필요한 검증(ROOT-E2E, 스모크)은 **오케스트레이터가 서버를 띄운 뒤** 레인을 실행하거나 게이트에서 직접 한다.
+- 네트워크·docker가 필요한 DEP-AUDIT는 레인이 아니라 **오케스트레이터가 게이트에서** 실행한다.
 
-**ICV 비대상 (기존 인프라 재사용, 신규 계약 불필요)**
-- 결과 무효화: `AnalysisContext.result_revision` / `input_revision`이 이미 존재 (`app/models.py:380,389`)
-- 미지 탭 id 크래시 방지: `navigation-store.ts`의 `parseNavigation` → `tab()` 타입가드가 이미 폴백 처리 (:25,:32-36,:56)
+**턴·시간 한도**: 이 CLI(2.1.287)에는 턴 한도 옵션이 없다. 강제 수단은 `timeout 90m`과 `--max-budget-usd`(구현 레인 기본 8, 게이트 10, 문서 2)다. "12턴" 크기 기준은 태스크 설계 기준으로만 쓰고, 실제 `num_turns`를 증거에 남긴다.
 
----
+**승인 전달**: 레인 프로세스도 전역 `~/.claude/CLAUDE.md`(분석 → 승인 → 실행)를 읽는다. P0-T0.1은 **사용자의 명시적 승인 이후에만** 실행되고, 사용자의 승인 문구를 그대로 `evidence/P0-T0.1.md`에 인용한다. 레인 프롬프트 첫 줄은 "사용자 승인 완료 — 계약 `qprism-stepone-markers-20261002-v1`, 승인 원문 `evidence/P0-T0.1.md`. 이 태스크 범위 안에서 바로 진행"이다. 범위 밖 변경이 필요하면 멈추고 `STATUS: BLOCKED`.
 
-## 4. 결정 게이트
+**감시**: 오케스트레이터는 60초마다 `.exit`를 확인한다. `.exit`가 있는데 `.done`이 없으면 FAIL(시간·예산 초과, 비정상 종료 포함). FAIL·BLOCKED는 같은 Phase의 다른 레인을 멈추지 않는다.
 
-**해결된 결정**
+**재시도**: 같은 레인 worktree·브랜치에서 이어서(부분 커밋 보존), 예산 1.5배, 1회. 다시 실패하면 태스크 분할안과 함께 사용자에게 보고한다.
 
-| ID | 항목 | 결정 | 근거 |
-| --- | --- | --- | --- |
-| D-1 | 제품 정식 명칭 | **`Q-prism® Cluster Caller` 채택.** `Q-prism`은 인바이러스테크 자사 저작물이므로 `®` 사용 가능 | 2026-09-11 사용자 확인 |
-| D-5 | 탭 ID 전면 변경 | **전면 재편 채택.** 새 탭 ID 3개(`plate`/`rawdata`/`results`) 도입, `WorkspaceTabs` 제거 | 2026-09-11 사용자 확인. 실측 비용 약 48곳(파일 9개)으로 기계적 치환 수준 |
-| D-6 | 산점도 종횡비 | **사용자 선택식.** 드롭다운으로 `4:3`(기본) / `1:1` 전환. 고정하지 않는다 | 2026-09-11 사용자 확인 |
+**스킬 기본값 재정의**: auto-orchestrate tmux 기본값(`/tmp/task-*.done`, 세션 `vibe`, 5초 폴링·600초 제한, Phase 단일 브랜치)을 위 값으로 바꿔 쓴다. 정리 단계의 삭제 대상은 신호 디렉터리 안으로 한정한다. tmux 세션 `qprism-stepone`, 레인당 패널 1개, 동시 최대 4.
 
-**미해결 — 해당 태스크는 BLOCKED로 시작한다**
+**순차 태스크 레인**: 한 레인은 태스크 여러 개를 순서대로 수행한다(예: P1-A1 → P1-A2). 다음 태스크는 같은 worktree에서 새 래퍼 호출로 시작한다.
 
-| ID | 항목 | 차단 태스크 | 필요한 답 |
-| --- | --- | --- | --- |
-| ~~D-2~~ | Q-prism 브랜드 팔레트 | **해결 (2026-09-12)** — 기존 가이드 없음. 오케스트레이터가 후보 시안을 설계해 **시각 비교로 제시**하고 사용자가 고른다. 선택 전까지 P6-S2-T1은 BLOCKED |
-| **D-3** | 로고·마크·히어로 아트·파비콘 | P6-S3-T1 | 에셋 파일 제공 또는 제작 승인. 현재 `frontend/public/`에 이미지 0개 |
-| ~~D-4~~ | 채널색 브랜드화 여부 | **해결 (2026-09-12)** — **유지.** FAM=파랑 / allele2=빨강은 qPCR 판독 관례이며 실험자 습관·기존 보고서와의 일치가 브랜드 일관성보다 우선한다 |
-| ~~D-7~~ | 업로드 경로 이원화 처리 | **해결 (2026-09-12)** — **역할 분리 유지.** 중앙 드롭존은 빠른 업로드, 드로어는 다건 관리. 구현은 그대로 두고 **파일 수·용량 한도와 오류 문구만 일치**시킨다 |
-| **D-8** | ASG `target_type` 전체 열거값 | P1-S1-T1 (부분) | 관측값은 `ad_hoc`/`marker_version`/`design_run_item` 셋뿐. ASG 계약 문서 확인 |
-| **D-9** | ASG 측 `protocol_steps` 스키마 검증 강도 | P2-R1-T1 (부분) | 필드 추가 사전 협의 필요 여부. `app/asg_result.py:91`이 외부로 직렬화 |
+### 2.4 Write Scope 소유표
 
-> D-8/D-9는 **부분 차단**이다. 해당 태스크의 나머지 범위는 진행하되, 매핑 테이블 확정과 ASG 협의 결과는
-> 미해결 항목으로 증거 문서에 남기고 Phase 게이트에서 보고한다.
+| 파일/영역 | 소유 태스크 | 나머지 |
+|---|---|---|
+| `APP/models.py`, `APP/db.py`, `APP/db_schema.sql`, `APP/main.py`, `APP/routers/export_params.py`(신규), `APP/routers/{export_pptx,export_images}.py`(**빈 라우터로 신규 생성만**, 내용은 P2-F/G), `BE/tests/test_contract_stepone.py`, `SRC/types/api.ts`, `SRC/lib/api.ts`, `SRC/lib/export-testids.ts`(신규), `BE/requirements.txt` | **P0-T0.3a/b만** | 읽기 전용 |
+| `APP/reporting/result_snapshot.py` | P0-T0.3a(`ExportOptions.marker_ids`(마지막 필드·기본값)·`filter_snapshot()` 완성) → P1-C1(`MarkerLabel`·`marker_labels`·현재 이름) | P2는 읽기 |
+| `SRC/locales/{en,ko}.ts` | P0-T0.3c(키 전부 생성) | 이후 레인은 **자기 접두사 키의 문구만** 수정: P1-D `markerAllele.*`·`stepone.*`, P2-H `genotypeDisplay.*`, P3-I `exportReport.*` |
+| `APP/parsers/**`, `APP/processing/ntc_detection.py` | P1-A | — |
+| `APP/routers/{clustering,layouts,marker_catalog,sample,upload,import_api}.py`, `APP/services/{import_session,session_restore}.py` | P1-B | — |
+| `APP/reporting/{charts,snapshot_presentation,snapshot_plate}.py`, `APP/reporting/filenames.py`(신규), `APP/reporting/fonts/**` | P0-T0.3a(`snapshot_presentation` 스텁만) → P1-C | **P2는 읽기만**(P2-E·F 포함) |
+| `SRC/lib/genotype.ts`(P0-T0.3b 스텁 → P1-D), `SRC/lib/{chart-semantics,scatter-axes}.ts`, `SRC/components/analysis/{PlateSetupTab,MarkerScatterPlot,ScatterPlot,MultiMarkerAnalysisPanel,CycleControl,AmplificationCurvePanel}.tsx`, `SRC/hooks/use-marker-scope*`, `SRC/lib/upload-response.ts` | P1-D | P2-H는 읽기 |
+| `APP/reporting/{snapshot_pdf,snapshot_xlsx}.py`, `APP/routers/{export,data,qc}.py` | P2-E | — |
+| `APP/reporting/snapshot_pptx.py`, `APP/routers/export_pptx.py` | P2-F | — |
+| `APP/reporting/snapshot_images.py`, `APP/routers/export_images.py` | P2-G | — |
+| `SRC/components/analysis/{ResultsTable,WellDetailPanel,PlateView,PlateLegend,WellTypePopup,FluorescenceDataCard,AmplificationOverlay}.tsx`, `SRC/components/analysis/MultiMarkerAnalysisPanel.tsx`(P2에서만, prop 전달), `SRC/components/statistics/StatisticsTab.tsx`, `SRC/components/batch/{BatchTab.tsx,project-export.ts,project-summary.ts}`, `SRC/components/shared/KeyboardHelpOverlay.tsx` | P2-H | — |
+| `SRC/components/layout/Header.tsx`, `SRC/hooks/use-exports.ts` | P3-I | — |
+| `E2E/29-stepone-markers.spec.ts`, `E2E/30-stepone-exports.spec.ts`, `E2E/fixtures/stepone/**` | P3-J | — |
+| `README.md`, `FE/package.json`(버전만), `APP/version.py`(버전만), `docs/release-notes/**` | P3-K | — |
+| 각 태스크 테스트 파일 | 해당 태스크 | — |
 
 ---
 
-## Phase P0 — 기준선과 색 체계 단일화
+## 3. 공통 검증
 
-### P0-T0.1: 기준 커밋·계약·검증 환경 확정
-- 담당: `orchestrator` (직접 수행)
-- Depends On: —
-- Status: TODO
-- Write Scope: `docs/planning/feedback-2026-09-11/**`, `docs/planning/06-tasks.md`, `docs/planning/archive/**`, `.claude/orchestrate-state.json`, `.gitignore`
-- 구현 내용
-  - `main`(`c2bc854`)을 baseline으로 확정. 루트 detached HEAD(`201e0c7`)에서 시작하지 않음을 확인한다.
-  - 루트 미커밋 변경(`.gitignore` 수정, `node_modules` 삭제, `.claude/` 미추적)의 처리 방침을 확정하고 기록한다.
-  - 기획서 8종(`docs/planning/feedback-2026-09-11/`)과 본 작업서를 main에 커밋한다.
-  - 0절 승격 절차를 수행한다(이전 계약 archive → 본 문서를 `06-tasks.md`로).
-  - `.claude/orchestrate-state.json`을 `contract_id: qprism-feedback-20260911-v1`, `baseline_commit: c2bc854`로 **새로 시작**한다. 이전 계약 파일은 보존한다.
-  - BE venv 준비(`bcrypt==4.0.1` 확인)와 FE 의존성 설치를 확인하고, 회귀 기준선(BE-ALL / FE-ALL / FE-CHECK 현재 통과 수)을 기록한다.
-  - **측정된 기준선 (main `bbc6657`)**: BE-ALL 798 passed + 2 subtests / 0 failed · FE 100 files 666 tests / 0 failed ·
-    `tsc --noEmit` 0 · eslint 0 · `npm run build` 성공. `ruff check` 36 errors와 `ruff format --check` 122 files는 **기존 문제**로 분리한다.
-- AC
-  - [ ] baseline이 `c2bc854`로 기록되고, 이전 계약의 worktree·브랜치가 삭제되지 않았다
-  - [ ] `06-tasks.md`가 본 계약 내용이고, 이전 계약이 `archive/`에 보존되었다
-  - [ ] 회귀 기준선(현재 통과/실패 수)이 증거 문서에 수치로 남았다
-- 검증: BE-ALL, FE-ALL, FE-CHECK (기준선 기록 목적, 실패가 있어도 수치로 남기고 진행)
+이전 계약의 별칭(BE-TEST, BE-ALL, BE-LINT, FE-TEST, FE-ALL, FE-CHECK, ROOT-E2E, EXISTING-E2E)과 규칙(worktree별 `npm ci`, ruff 변경분 기준·신규 파일 format, 새 코드 coverage ≥70%, 복잡도 ≤10, 임시 `DB_PATH`·합성 계정)을 그대로 쓴다.
+- 백엔드 인터프리터: P0에서 만든 계약 전용 venv `ROOT/worktree/stepone-p0/snp-analyzer/venv/bin/python`을 **절대경로로**. 심볼릭링크·호스트 설치 금지. 루트 `snp-analyzer/venv`는 쓰지 않는다.
+- 레인 테스트는 자기 worktree에서 돈다. 포트 배정: P1 8101–8104, P2 8201–8204, P3 8301–8303 (API), +100(프론트 dev: `VITE_DEV_API_TARGET=http://localhost:<API> npm run dev -- --port <API+100>`, `vite.config.ts` 기본 5173을 쓰지 않는다).
+- `npm ci`는 프론트 파일을 바꾸거나 FE-CHECK가 필요한 레인만 한다(백엔드 전용 레인은 생략).
+
+추가 별칭:
+- REAL-EDS: `QPRISM_STEPONE_EDS=<저장소 밖 실제 파일> BE-TEST tests/test_stepone_real_file.py` (파일 없으면 skip, 증거에 실행 여부 기록)
+- EXPORT-INSPECT: PDF 텍스트 추출, PPTX를 `python-pptx`로 열어 슬라이드·표·글꼴 검사, zip 항목 수·이름 검사
+- DEP-AUDIT: `pip-audit -r BE/requirements.txt` + `docker compose build backend`(이미지 빌드만)
+- LANE-MERGE: 레인을 Phase 브랜치에 병합한 상태에서 BE-ALL + FE-ALL + FE-CHECK
+
+증거: `docs/planning/stepone-2026-10-02/evidence/<task-id>.md` (레인 결과 파일을 오케스트레이터가 옮겨 적는다)
+
+**레인 병합 절차**: 레인마다 ① 병합 **전** 소유표 대조(`git diff --name-only stepone/pN...<lane>` ⊆ Write Scope, 아니면 병합 거부) ② `--no-ff` 병합 ③ 그 레인 관련 테스트(BE-ALL 또는 FE-ALL) — 깨지면 해당 레인을 되돌리고 FAIL.
+
+**Phase 게이트 체인**: LANE-MERGE → 레인별 AC 재확인 → code-review → security(해당 변경) → frontend review(UI 변경). 미해결 중요 이슈 0, 신규 실패 0. 미충족 게이트를 PASS로 처리하지 않는다.
+
+---
+
+## 4. 인터페이스 계약 점검(ICV)
+
+| 소비 동작 | 계약(P0-T0.3a/b/c에서 고정) | 생산(동작 구현) | 소비 |
+|---|---|---|---|
+| 첫 화면 사이클(복원 포함) | `UnifiedData.default_cycle: int\|None` + metadata_json 영속화 | P1-A(값·`compute_suggested_cycle`, `default_cycle ∈ cycles` 검증) | 세션 복원, 업로드 응답 |
+| 사이클 표시 | `UnifiedData.read_labels: dict[int, ReadLabel]\|None` (`stage, pcr_cycle, temperature`), 응답 모델 필드(`UploadResponse`·`SessionInfoResponse`) | P1-A(값) · **P1-B(응답에 채움: `import_session`, `sample.get_session_info`)** | P1-D, P2-E/F/G |
+| Ct 표·곡선 패널 | `UnifiedData.has_amplification_curve: bool = True`, 응답 모델 필드 | P1-A(값) · P1-B(응답) | P1-D, P2-E |
+| 대립유전자 이름 가져오기 | `UnifiedData.imported_marker_alleles: dict[str, AlleleLabels]\|None` | P1-A | P1-B |
+| 이름 저장·편집 | `MarkerRegion.allele_labels`, DB v11 `allele_labels_json`, save/load SQL (P0) · `MarkerUpdate`·`LayoutCreate/Apply` 필드(**P1-B**, 같은 라우터 파일 안 모델) | P1-B(API·가져오기·레이아웃) | P1-D, P2-* |
+| 출력의 현재 이름 | `ResultSnapshot.marker_labels: dict[str, MarkerLabel]` — **P0 계약 아님**: `MarkerLabel`과 필드 모두 `result_snapshot.py` 안에서 P1-C1이 정의. P1-C1이 `snapshot_rows` **한 곳에서** 행의 마커 이름·대립유전자 이름을 현재 값으로 바꾼다(`marker_id` 키, 깊은 복사) | P1-C | P2-E/F/G |
+| 표시 함수 | BE `snapshot_presentation.display_genotype/axis_label/cycle_label` · FE `lib/genotype.ts displayGenotype` — P0는 기존 표기 반환 | P1-C / P1-D | P2-* |
+| 마커 선택 내보내기 | `routers/export_params.parse_marker_ids()` + `ExportOptions.marker_ids` + `result_snapshot.filter_snapshot()` — **P0에서 완성**(검증·적용 포함) | P0-T0.3a | P2-E/F/G, P3-I |
+| 플레이트 맵(마커 배치·강조) | 기존 `render_snapshot_plate(rows)`에 키워드 인자 `marker_layout=None, highlight_marker_id=None` 추가(기존 호출 불변) | P1-C3 | P2-E, P2-F |
+| 프론트 API 함수·타입 | `lib/api.ts`: `exportPptx`, `exportScatterZip`, 기존 export 함수의 `markerIds` 인자, **`updateMarker` 패치 타입에 `allele_labels`(null 허용)**; `types/api.ts`: `MarkerRegion.allele_labels`, `SavedLayout` 마커 항목, 업로드·세션 응답 새 필드(선택 필드) | P0-T0.3b | P1-D, P2-H, P3-I |
+| 신규 라우트 | `routers/export_pptx.py`, `routers/export_images.py` 빈 라우터 + `main.py` 등록 | P2-F / P2-G | P3-I |
+| E2E 셀렉터 | `SRC/lib/export-testids.ts` 상수 | P0-T0.3b | P3-I, P3-J |
+
+`AlleleLabels = {"fam": str, "allele2": str}`(키 고정, 각 1–32자, 제어문자 금지).
+
+---
+
+## 5. 결정 게이트
+
+| ID | 항목 | 상태 | 적용 |
+|---|---|---|---|
+| D-1 | 첫 화면 사이클 | 결정됨 | StepOne = Amplification 첫 읽기 |
+| D-2 | 판정 표기 | 비차단 | `WT/WT · WT/MT · MT/MT`(FE·BE 상수 1곳) |
+| D-3 | StepOne PDF Ct 표 | 비차단 | 생략(`has_amplification_curve=False`) |
+| D-4 | PPTX 의존성 5종 | **차단 → P0-T0.3a requirements 부분, P2-F** | `python-pptx`, `lxml`, `XlsxWriter`, `Pillow`, `typing_extensions` 버전 고정 |
+| D-5 | PNG 묶음 | 비차단 | 백엔드 matplotlib zip |
+| D-9 | 증폭 곡선 패널 | 비차단 | 표시, x축 읽기 이름 |
+| D-10 | 마커 선택 범위 | 비차단 | PDF·PPTX·PNG 묶음 |
+| D-8 | 계약 활성화 | **차단 → P0-T0.1** | 사용자 승인 시 승격 |
+| D-11 | 헤드리스 레인 권한 모델 | **차단 → P0-T0.1** | 권장: `acceptEdits` + 명령 허용·금지 목록(§2.3). 대안: `--dangerously-skip-permissions`(권장하지 않음) |
+
+---
+
+## Phase P0 — 준비와 계약 고정 (병렬: T0.2 ∥ T0.3a, 이어서 T0.3b ∥ T0.3c)
+
+### P0-T0.1: 계약 승격과 기준선
+- 담당: orchestrator · Depends On: - · Status: BLOCKED (D-8, D-11)
+- 내용: 완료된 `06-tasks.md`(feedback 계약)를 `archive/06-tasks-feedback-20260911.md`로 보관, 본 초안 승격. 상태 파일은 **루트 `.claude/orchestrate-state.json`**(이전 상태 보존 사본 생성). `CLAUDE.md` Orchestration Handoff를 새 계약 기준으로 갱신(이전 기록 보존). 계약 전용 venv 구축(`bcrypt==4.0.1` 확인). baseline(BE-ALL/FE-ALL 통과 수, ruff 기준선) 기록. 신호 디렉터리·tmux 세션 생성. 사용자 승인 문구와 D-1~D-11 결정을 `evidence/P0-T0.1.md`에 기록(레인 프롬프트가 인용).
+- 추가 내용: `run-lane.sh`·`lane-settings.json` 작성, `.git/info/exclude`에 `.lane/` 한 번 추가. **시험 레인 1회**(빈 worktree): 허용 시험 — `git status`, `$PYTHON -m pytest tests/test_version_endpoint.py -q`, `npx tsc --version`, `.lane/` 결과 작성, `git add <파일>`, `git commit -F` → `.done` 생성. **거부 시험** — `git push --dry-run`, `rtk git push --dry-run`, `bash -c 'echo x'`, `sudo -n true`, worktree 밖 파일 쓰기(`Write ROOT/x.txt`), `.claude/` 쓰기, `cd .. && ls`, `git status && ls`가 모두 거부되는지, `pre-push` 훅이 `git push --dry-run`을 막는지 결과 파일에 기록. 시험 브랜치는 보존하되 병합하지 않는다.
+- AC: [ ] 상태 파일 해시 = 새 06-tasks.md · [ ] 이전 상태 보존 · [ ] baseline 기록 · [ ] `stepone/p0` worktree 생성 · [ ] 시험 레인: 허용 시험 전부 통과·`.done` 생성 · [ ] 거부 시험 8종 전부 거부 · [ ] `pre-push` 거부 훅 설치·기록 · [ ] 사용자 승인 원문 인용
 - 증거: `evidence/P0-T0.1.md`
 
-### P0-T0.2: 색 체계 단일화 (값 불변 리팩터링)
-- 담당: `frontend-specialist`
-- Depends On: P0-T0.1
-- Status: TODO
-- Write Scope: `SRC/lib/plotly-theme.ts`, `SRC/lib/constants.ts`, `SRC/lib/genotype.ts`, `SRC/components/protocol/ProtocolTab.tsx`, `SRC/index.css`
-- 구현 내용
-  - `plotly-theme.ts`의 하드코딩 HEX를 CSS 토큰 읽기(`getComputedStyle(document.body).getPropertyValue('--color-…')`)로 전환한다.
-  - `constants.ts` / `genotype.ts` / `ProtocolTab.tsx`의 `PHASE_COLORS`·`AMP_COLORS` HEX를 토큰 또는 단일 색 모듈로 모은다.
-  - **다크모드 전환 레이스 방어**: `body`에 `transition: background-color 0.3s`가 걸려 있어 토글 직후 `getComputedStyle`이 중간값을 읽을 수 있다. 전환 완료 후 재렌더하거나 전환 대상이 아닌 토큰에서 읽도록 한다.
-  - **색 값 자체는 바꾸지 않는다.** D-2 미확정 상태에서 팔레트를 바꾸지 않는다. 이 태스크는 "한 곳에서 바꿀 수 있게 만드는" 리팩터링이다.
-- AC
-  - [ ] 라이트/다크 모두에서 변경 전후 렌더 색이 동일하다 (시각 회귀 없음)
-  - [ ] Plotly 차트 색이 CSS 토큰에서 유도된다
-  - [ ] 다크모드 토글 직후에도 차트가 전환 중간색을 고정하지 않는다
-  - [ ] 하드코딩 HEX가 남은 위치가 증거 문서에 목록화되었다
-- 검증: FE-ALL, FE-CHECK, VIEWPORT(라이트/다크 토글 왕복)
-- 증거: `evidence/P0-T0.2.md`
+### P0-T0.2: 합성 `.eds` 생성기 (레인 `fixture`)
+- 담당: test-specialist · Depends On: P0-T0.1 · Status: TODO · **병렬: P0-T0.3a**
+- Write Scope: `BE/tests/{stepone_fixtures,quantstudio_fixtures,test_stepone_fixtures}.py`
+- 내용: 실제 형식 재현 생성기(ZIP: Manifest, experiment.xml(`<Markers>`·Allele·Reporter·InstrumentTypeId), plate_setup.xml, tcprotocol.xml, multicomponent_data.txt). 옵션: 마커 배치(2열 6마커), 대립유전자 이름(전부 기본·부분 기본·사용자·미사용 마커·같은 리포터), 음수, ROX 변동, CRLF, 끝 탭, 붙은 줄, 손상 변형(읽기 수 불일치·잘림·중복·염료 누락·hold 수집). QuantStudio 합성 `.eds` 생성기도 함께(골든 테스트용).
+- AC: [ ] 필드 수 분포(6/9/끝 3·4)가 실제와 같다 · [ ] 고객 값 미포함 · [ ] 생성기 자체 테스트
+- 검증: BE-TEST, BE-LINT
 
-### P0-S0-V: Preflight 게이트
-- 담당: `test-specialist`
-- Depends On: P0-T0.1, P0-T0.2
-- Status: TODO
-- Write Scope: `docs/planning/feedback-2026-09-11/evidence/**`
-- 구현 내용: 품질 체인 실행. 기준선 대비 신규 실패 0 확인. 기존 실패는 기준선으로 분리 기록.
-- AC
-  - [ ] BE-ALL / FE-ALL / FE-CHECK가 기준선 대비 신규 실패 0
-  - [ ] 시각 회귀 없음(P0-T0.2)
-- 검증: BE-ALL, FE-ALL, FE-CHECK
-- 증거: `evidence/P0-S0-V.md`
-
----
-
-## Phase P1 — 연동 컨텍스트 라벨 (FB-01)
-
-### P1-S1-T1: ASG 연동 컨텍스트 라벨 정상화
-- 담당: `frontend-specialist`
-- Depends On: P0-S0-V
-- Status: TODO (D-8 부분 차단 — 매핑 테이블 확정만 보류)
-- Write Scope: `SRC/components/layout/Header.tsx`, `SRC/components/layout/Header.test.tsx`, `SRC/locales/en.ts`, `SRC/locales/ko.ts`
-- 기획 근거: [FB-01](feedback-2026-09-11/FB-01-linked-context-label.md)
-- 구현 내용
-  - `LinkedIdentity`(`Header.tsx:22-28`)가 `target_type` / `target_id` 원시값을 **렌더링하지 않는다.**
-  - xl 미만 축약 경로 `<summary>ASG · {context.target_type}</summary>`(`Header.tsx:35`)도 **동일하게 수정한다.** 두 경로 모두 고쳐야 한다.
-  - 표시 우선순위: `tag_alias`(비어 있지 않을 때) → `marker_id` → i18n 매핑된 `target_type` 라벨. 셋 다 없으면 블록을 렌더링하지 않는다.
-  - `asgTargetLabel: (targetType: string) => string`을 `en.ts` / `ko.ts`에 **동시 추가**한다(`Translations` 타입이 키 동기화를 강제).
-  - 관측된 값 기준으로 매핑한다: `ad_hoc`(`tests/test_asg_launch_auth.py:87`), `marker_version`(`:56`), `design_run_item`(`tests/test_asg_result_save.py:105,209,302`). **`marker`/`design_result`/`order_item`은 코드에 존재하지 않는 추정값이므로 쓰지 않는다.**
-  - 미지의 `target_type`은 중립 문구로 폴백하고 **원시값을 화면·툴팁 어디에도 흘리지 않는다.**
-- AC
-  - [ ] `target_type` / `target_id`가 화면(툴팁 포함) 어디에도 나타나지 않는다 — 데스크톱·축약 두 경로 모두
-  - [ ] ad_hoc 런치(`tag_alias=""`, `marker_id="Ad hoc SNP Analyze"`)에서 `Ad hoc SNP Analyze`만 표시된다
-  - [ ] `tag_alias`가 빈 문자열이면 `marker_id`로 폴백한다
-  - [ ] 미지 `target_type`에서 크래시 없이 중립 폴백 또는 블록 숨김이 동작한다
-  - [ ] 비연동(local auth) 모드 렌더링이 변하지 않는다
-  - [ ] 백엔드 `linked_context` 응답은 변경하지 않았다
-- 검증: `FE-TEST src/components/layout/Header.test.tsx`, FE-ALL, FE-CHECK, `ROOT-E2E tests/26-asg-compatibility.spec.ts`
-- 증거: `evidence/P1-S1-T1.md` — D-8 미해결 시 확정 못 한 열거값을 명시
-
-### P1-S0-V: 표시 계층 게이트
-- 담당: `test-specialist`
-- Depends On: P1-S1-T1
-- Status: TODO
-- Write Scope: `docs/planning/feedback-2026-09-11/evidence/**`
-- 검증: FE-ALL, FE-CHECK, EXISTING-E2E
-- AC: [ ] 신규 실패 0 · [ ] 미해결 중요 리뷰 이슈 0 · [ ] 새 코드 coverage ≥70%
-- 증거: `evidence/P1-S0-V.md`
-
----
-
-## Phase P2 — 프로토콜·Raw data 콘텐츠 (FB-05, FB-06)
-
-> **현행 `protocol` 탭 ID 위에서 수행한다.** 탭 ID 재편(P3)보다 먼저 콘텐츠를 완성해 두 번 고치는 것을 피한다.
-
-### P2-R1-T1: ProtocolStep 모델 확장 + 파서 전달
-- 담당: `backend-specialist`
-- Depends On: P1-S0-V
-- Status: TODO (D-9 부분 차단 — ASG 협의 결과만 보류)
-- Write Scope: `BE/app/models.py`, `BE/app/parsers/pcrd_raw.py`, `BE/app/parsers/eds_raw.py`, `BE/app/routers/data.py`, `BE/tests/test_import_parsers_p2.py`, `BE/tests/<신규 protocol 테스트>`
-- 기획 근거: [FB-05](feedback-2026-09-11/FB-05-protocol-visualization.md)
-- 구현 내용
-  - `ProtocolStep`(`models.py:158-165`)에 세 필드를 **기본값과 함께** 추가한다:
-    `plate_read: bool = False`, `temp_increment: float | None = None`, `read_channels: list[str] = Field(default_factory=list)`
-  - `pcrd_raw.py`: `_parse_protocol()`이 이미 계산하는 `has_read`(`:299`)와 `inc`/`inc_temp`(`:300-301`)를
-    `ProtocolStep(...)` 생성(`:435-443`)에 전달한다. 현재는 라벨 문자열(`:412`)에만 쓰이고 버려진다.
-  - `eds_raw.py`: `CollectionFlag`(`:450-451,502`)와 `ext_temp`(`:489`)를 `ProtocolStep` 생성(`:518-526`)에 전달한다.
-  - **`read_channels`는 단계별 채널 정보가 원본에 없으면 채우지 않는다(빈 리스트).** 런 전체 채널로 대신 채우면
-    "이 단계에서 이 채널을 읽었다"는 거짓 단언이 된다.
-  - 런 채널 목록은 별도로 **프로토콜/세션 응답 계약**에 노출해 프론트 채널 카드가 `data-store` 캐시(stale 위험) 대신 이를 읽게 한다.
-  - `routers/data.py`의 예제 프로토콜 상수를 신규 필드에 맞춰 갱신한다.
-- AC
-  - [ ] `.pcrd` 임포트 시 판독 단계의 `plate_read === true`가 API 응답에 담긴다
-  - [ ] 터치다운 단계의 `temp_increment`가 부호를 포함해 담긴다
-  - [ ] 단계별 채널 정보가 없는 포맷에서 `read_channels`가 **비어 있다** (추측 값 없음)
-  - [ ] 기존 저장 프로토콜(신규 필드 없는 JSON)이 `app/db.py:692`·`:753`의 `ProtocolStep(**s)`로 오류 없이 복원된다
-  - [ ] `protocol_overrides`에 저장된 사용자 편집본도 복원된다
-  - [ ] ASG 저장 payload(`app/asg_result.py:91` `model_dump()`)에 신규 필드가 실려도 직렬화가 정상이다
-  - [ ] 런 채널 목록이 응답 계약으로 제공된다
-- 검증: `BE-TEST tests/test_import_parsers_p2.py`, BE-ALL, BE-LINT
-- 증거: `evidence/P2-R1-T1.md` — ASG 수신측 스키마 검증 강도(D-9) 확인 결과 기록
-
-### P2-R1-T2: 증폭 응답에 처리 상태 에코 추가
-- 담당: `backend-specialist`
-- Depends On: P1-S0-V
-- Status: TODO
-- Write Scope: `BE/app/routers/data.py`, `BE/app/models.py`(응답 스키마), `BE/tests/<신규 amplification 테스트>`
-- 기획 근거: [FB-06](feedback-2026-09-11/FB-06-rawdata-tab.md) §2
-- 구현 내용
-  - `/api/data/{sid}/amplification/all` 응답(`routers/data.py:254-258`)에
-    `normalization_applied: bool`과 `background_mode`를 **에코**로 추가한다.
-  - 현재 응답은 `allele2_dye` + role label metadata + `curves`뿐이라, 프론트가 스토어의 *요청값*으로
-    "정규화 적용됨"을 단언할 수밖에 없다. 이는 백엔드가 실제로 적용했는지와 무관한 주장이 된다.
-  - 산점도가 이미 쓰는 패턴(`normalizationApplied` 응답 필드 → `ScatterReferenceBasis`가 "요청 예 / 실제 적용 아니오"를 구분 표시)을 따른다.
-- AC
-  - [ ] 응답에 `normalization_applied` / `background_mode`가 포함된다
-  - [ ] 참조 채널이 없는 런에서 `use_rox=true`로 요청해도 `normalization_applied=false`가 정직하게 반환된다
-  - [ ] 기존 소비자(프론트 오버레이)가 신규 필드를 무시해도 동작한다 (하위 호환)
+### P0-T0.3a: 백엔드 계약 (레인 `contract`, 1/2)
+- 담당: backend-specialist · Depends On: P0-T0.1 · Status: TODO (requirements 부분만 D-4) · **병렬: P0-T0.2**
+- Write Scope: `APP/{models,db,db_schema,main}.py`(db_schema는 `.sql`), `APP/routers/{export_params,export_pptx,export_images}.py`(신규·빈 라우터), `APP/reporting/result_snapshot.py`(필터만), `APP/reporting/snapshot_presentation.py`(시그니처 스텁만), `BE/requirements.txt`, `BE/tests/test_contract_stepone.py`
+- 내용: §4 ICV 백엔드 부분 — UnifiedData 4필드, `MarkerRegion.allele_labels`·`AlleleLabels` 검증, 응답 모델(`UploadResponse`) 새 필드(기본값), DB v11 블록(PRAGMA 확인 후 `allele_labels_json`) + `db_schema.sql` + save/load SQL + `metadata_json` 저장·복원, `ExportOptions.marker_ids`(마지막 필드·기본값)·`filter_snapshot()`·`parse_marker_ids()` 완성, 표시 함수 스텁, 신규 라우터 등록, 의존성 고정(D-4 승인 시).
+- AC: [ ] 기존 동작 불변(BE-ALL 기준선 동일) · [ ] v10 DB → v11 무손상, 새 DB 스키마 일치 · [ ] 새 필드 없는 기존 세션 복원 정상, 새 필드 왕복, `read_labels` int 키 유지 · [ ] `parse_marker_ids` 검증(없는 id·중복·빈값 400)·`filter_snapshot` 동작 · [ ] 기존 `ExportOptions(...)` 위치 인자 호출(`data.py`, `export.py`) 불변 · [ ] 이 태스크 테스트는 P0-T0.2 생성기에 의존하지 않음
 - 검증: BE-TEST, BE-ALL, BE-LINT
-- 증거: `evidence/P2-R1-T2.md`
 
-### P2-S1-T1: 열 순환 프로파일 다이어그램 + 판독 채널 카드
-- 담당: `frontend-specialist`
-- Depends On: P2-R1-T1
-- Status: TODO
-- Write Scope: `SRC/components/protocol/ProtocolThermalProfile.tsx`(신규), `SRC/components/protocol/ProtocolTab.tsx`, `SRC/components/protocol/use-protocol-editor.ts`, `SRC/components/protocol/ProtocolTab.test.tsx`, `SRC/types/api.ts`, `SRC/locales/{en,ko}.ts`
-- 기획 근거: [FB-05](feedback-2026-09-11/FB-05-protocol-visualization.md) §3-2, §3-3
-- 구현 내용
-  - **인라인 SVG** 다이어그램을 신규 컴포넌트로 구현한다. Plotly를 쓰지 않는다 — 이 그림은 탐색이 아니라 요약이며,
-    의존성 0·다크모드 `currentColor`·인쇄 안정성이 우선이다.
-  - 가로축은 **실제 시간이 아니라 단계 순서**다. Initial Denaturation 300초와 Annealing 5초를 실시간 비례로 그리면 증폭 구간이 보이지 않는다. 지속시간은 라벨로 표기한다.
-  - 반복 구간은 `phase`로 묶어 배경 밴드 + `×N` 배지로 표현한다. 기존 `getPhaseColor()` 색 체계를 재사용한다.
-  - 판독 마커(📷)는 **`plate_read` 필드 기준**으로 찍는다. 현행 `isReadingStep(label)` 문자열 휴리스틱을 **제거**한다
-    (라벨은 사용자가 자유 편집 가능하므로 표시가 데이터가 아닌 문자열에 의존하고 있다).
-  - 터치다운은 `temp_increment`로 하강 표시한다.
-  - 채널 요약 카드는 P2-R1-T1이 제공한 **응답 계약**에서 읽는다. `--color-fam` / `--color-allele2` 토큰으로 산점도와 색을 맞춘다.
-  - `use-protocol-editor.ts`가 편집 시 신규 필드를 **유실시키지 않는지** 확인한다. `handleAddStep`이 만드는 신규 스텝에 기본값을 명시한다.
-  - `max-w-[800px]` 제한을 해제하고 넓은 화면에서 다이어그램+표를 배치한다. **표의 편집 기능은 그대로 유지한다.**
-- AC
-  - [ ] 사용자가 단계 라벨을 바꿔도 📷 표시가 유지된다 (휴리스틱 제거 증명)
-  - [ ] 프로토콜 편집 → 저장 → 재조회 시 `plate_read`/`temp_increment`가 보존된다
-  - [ ] 채널 정보가 없는 포맷에서 빈 칩/추측 값이 표시되지 않는다
-  - [ ] 다이어그램이 라이트/다크 모두에서 판독 가능하고 400px에서 가로 스크롤로 처리된다
-  - [ ] 기존 프로토콜 편집·저장·취소 동작이 회귀하지 않는다
-- 검증: `FE-TEST src/components/protocol/`, FE-ALL, FE-CHECK, VIEWPORT
-- 증거: `evidence/P2-S1-T1.md`
+### P0-T0.3b: 프론트 계약 (레인 `contract`, 2/2)
+- 담당: frontend-specialist · Depends On: P0-T0.3a · Status: TODO · **병렬: P0-T0.3c**
+- Write Scope: `SRC/types/api.ts`, `SRC/lib/api.ts`, `SRC/lib/export-testids.ts`(신규), `SRC/lib/genotype.ts`(시그니처 스텁만), 계약 테스트
+- 내용: 백엔드 계약을 그대로 옮긴 타입. **응답 새 필드는 모두 선택(`?:`)** 이라 기존 테스트 리터럴(`session-entry.test.ts`, `App.restore.test.tsx` 등)이 깨지지 않는다. `MarkerRegion.allele_labels?`, 레이아웃 마커 항목, `updateMarker` 패치 타입에 `allele_labels`(null 허용), `exportPptx`·`exportScatterZip`·기존 export 함수 `markerIds` 인자, 테스트 ID 상수, `displayGenotype` 스텁(기존 표기 반환).
+- AC: [ ] FE-CHECK·FE-ALL 기준선 동일 · [ ] 타입이 P0-T0.3a 응답 모델과 일치(계약 테스트)
+- 검증: FE-TEST, FE-ALL, FE-CHECK
 
-### P2-S2-T1: 증폭 오버레이 개선 + Raw data 화면 배치
-- 담당: `frontend-specialist`
-- Depends On: P2-R1-T2, P2-S1-T1
-- Status: TODO
-- Write Scope: `SRC/components/analysis/AmplificationOverlay.tsx`, `SRC/components/protocol/ProtocolTab.tsx`, `SRC/components/analysis/AnalysisTab.tsx`, `SRC/components/analysis/plot-cleanup.test.tsx`, `SRC/types/api.ts`, `SRC/locales/{en,ko}.ts`
-- 기획 근거: [FB-06](feedback-2026-09-11/FB-06-rawdata-tab.md) §3
-- 구현 내용
-  - 프로토콜 화면 하단에 **전체 플레이트 스코프** 오버레이를 추가 마운트한다. 분석 탭의 기존 마운트는 유지하되 보조 영역으로 둔다.
-  - **DOM id 스코프화**: `id="overlay-plot"` / `"overlay-container"` / `"toggle-overlay-btn"` / `"overlay-channel-select"`가
-    고정값이다. `useId()` 또는 prop 기반으로 바꾼다.
-    (참고: 현재는 `AnalysisWorkspace.tsx:104-139`의 삼항 분기로 오버레이가 항상 하나뿐이라 충돌이 없다.
-    이번 작업이 **처음으로** 두 인스턴스를 만든다. Plotly는 ref 기반이라 렌더 자체는 안전하지만,
-    `plot-cleanup.test.tsx:33,49`의 `querySelector('#overlay-plot')`가 모호해진다.)
-  - 헤더에 처리 상태를 **응답 에코 값 기준**으로 표시한다. 스토어 요청값으로 단언하지 않는다.
-  - 색 기준 선택기 추가: `유전형`(현행 `effective_type`) / `웰 타입` / `단색`.
-    **`단색`을 "raw"라고 표기하지 않는다** — Y값은 여전히 `norm_fam`/`norm_allele2`다(`AmplificationOverlay.tsx:67`).
-  - 하드코딩 영어 `"Hide Overlay"` / `"Show Overlay"`를 i18n 처리한다.
-  - 요청 중복은 **양쪽을 각각 펼쳤을 때만** 발생한다(기본 `useState(false)`, `if (!visible) return`).
-    엔드포인트는 인메모리 조회라 DB를 치지 않으므로 차단 사유는 아니다. 실측 후 필요하면 세션 캐시를 둔다.
-- AC
-  - [ ] 두 화면에 동시 마운트해도 두 차트가 각각 올바르게 렌더된다
-  - [ ] 탭 전환 시 Plotly 인스턴스가 누수되지 않는다 (`plot-cleanup` 통과)
-  - [ ] 처리 상태 표시가 응답 에코에 근거한다
-  - [ ] `Hide/Show Overlay`가 한국어 UI에서 한국어로 나온다
-  - [ ] 마커별 오버레이(`ploidyOverride`)가 회귀하지 않는다
-  - [ ] 오버레이는 `chart-export-registry`에 등록되지 않으므로 PNG/PDF 내보내기에 회귀가 없음을 확인했다
-- 검증: `FE-TEST src/components/analysis/plot-cleanup.test.tsx`, FE-ALL, FE-CHECK, VIEWPORT
-- 증거: `evidence/P2-S2-T1.md` — 요청 중복 실측 결과 포함
+### P0-T0.3c: i18n 키 (레인 `i18n`, haiku)
+- 담당: frontend-specialist · Depends On: P0-T0.3a · Status: TODO · **병렬: P0-T0.3b**
+- Write Scope: `SRC/locales/{en,ko}.ts`
+- 내용: 이후 레인이 쓸 키를 접두사별 블록(`markerAllele.*`, `stepone.*`, `genotypeDisplay.*`, `exportReport.*`)으로 미리 만든다(문구 초안). 키 목록은 기획서 §3에서 뽑아 결과 파일에 표로 남긴다.
+- AC: [ ] en/ko 키 집합 일치(기존 locale 일치 테스트 통과) · [ ] FE-CHECK
+- 검증: FE-ALL, FE-CHECK
 
-### P2-S0-V: 콘텐츠 게이트
-- 담당: `test-specialist`
-- Depends On: P2-S2-T1
-- Status: TODO
-- Write Scope: `docs/planning/feedback-2026-09-11/evidence/**`
-- 검증: BE-ALL, BE-LINT, FE-ALL, FE-CHECK, EXISTING-E2E
-- AC: [ ] 신규 실패 0 · [ ] 새 코드 coverage ≥70%·복잡도 ≤10 · [ ] 미해결 중요 리뷰 이슈 0 · [ ] 하위호환(구 프로토콜 JSON 복원) 확인
-- 증거: `evidence/P2-S0-V.md`
+### P0-S0-V: 준비 게이트
+- 담당: test-specialist(+ 오케스트레이터 직접 단계) · Depends On: P0-T0.2, P0-T0.3b, P0-T0.3c · Status: TODO
+- 내용: 레인 병합(fixture → contract → i18n) 후 LANE-MERGE, 소유표 대조. **오케스트레이터가 계약 venv를 새 `requirements.txt`로 다시 설치**(레인은 `pip install` 금지)하고 DEP-AUDIT 1차 실행. `main` 로컬 병합.
+- AC: [ ] LANE-MERGE 통과 · [ ] 공유 파일 변경이 P0-T0.3a/b/c에만 있음 · [ ] venv에서 `import pptx, xlsxwriter, lxml` 성공(D-4 승인 시) · [ ] DEP-AUDIT 결과 기록
 
 ---
 
-## Phase P3 — 정보구조 재편 (FB-07 IA)
+## Phase P1 — 핵심 구현 (병렬 4 레인)
 
-> **D-5 승인 완료(2026-09-11) — 착수 가능.**
->
-> 실측 영향 범위(초안의 "대량 수정"은 과장이었다):
->
-> | 계층 | 파일 | 참조 |
-> | --- | --- | --- |
-> | 루트 E2E (`tests/`) | 20개 중 **7개** | 25곳 (`tab-analysis` 7, `tab-protocol` 4, `workspace-tab-analysis` 5, `workspace-tab-plate` 9) |
-> | 프론트 e2e (`frontend/e2e/`) | — | 23곳 |
-> | 프론트 단위 | **1개** (`TabNavigation.keyboard.test.tsx`) | — |
->
-> 대부분 `workspace-tab-plate` → `tab-plate`, `tab-analysis` → `tab-results` 형태의 기계적 치환이다.
-> 영향 스펙: `05-interactions`, `20-keyboard`, `21-workspace-restore`, `23-undo`, `24-responsive`, `25-secondary-flows`, `26-chart-semantics`.
+레인 병합 순서: A(A1→A2) → B(B1→B2) → C(C1→C2→C3) → D(D1→D2)
 
-### P3-S1-T1: 최상위 탭 ID·라벨·순서 재편
-- 담당: `frontend-specialist`
-- Depends On: P2-S0-V
-- Status: TODO
-- Write Scope: `SRC/components/layout/TabNavigation.tsx`, `SRC/components/analysis/AnalysisWorkspace.tsx`, `SRC/App.tsx`, `SRC/stores/navigation-store.ts`, `SRC/lib/tab-keyboard.ts`, `SRC/locales/{en,ko}.ts`, 관련 테스트
-- 기획 근거: [FB-07](feedback-2026-09-11/FB-07-identity-and-ia.md) §3-1
-- 구현 내용
-  - 상위 탭을 **플레이트 설정 → Raw data → 결과 → 품질 → 통계 → 비교 → 라이브러리 → 프로젝트 → ⋯더보기(설정·참고자료·사용자·피드백)** 순으로 재편한다.
-  - `AnalysisWorkspace`의 2단 `WorkspaceTabs`(플레이트 설정/분석)를 **제거**하고 최상위로 승격한다. 사용자가 가장 먼저 하는 작업이 2계층에 묻혀 있는 문제를 해소한다.
-  - **라벨만 바꾸는 안으로는 불가능하다.** 현재 `plate`는 최상위 `TabId`가 아니라 `navigation-store`의 `surface` 값이다. 최상위 탭 두 개(Plate/Results)를 표현하려면 새 탭 ID가 필수다.
-  - 탭 ID 매핑:
+### P1-A1: QuantStudio 골든 테스트와 `eds_common` 분리 (레인 `parser`, 1/2)
+- 담당: backend-specialist · Depends On: P0-S0-V · Status: TODO
+- Write Scope: `APP/parsers/{eds_common,eds_raw}.py`, `BE/tests/test_eds_quantstudio_golden.py`
+- 내용: QuantStudio 합성 `.eds`로 `parse_eds` 골든 테스트(현행 고정) → 공용 함수 이전 → `eds_raw` 재노출.
+- AC: [ ] 골든 테스트 전후 동일 · [ ] 기존 import 유지 · [ ] 순환 import 없음
+- 검증: BE-TEST, BE-ALL, BE-LINT
 
-    | 신 최상위 탭 | 구 상태 |
-    | --- | --- |
-    | `plate` | `tab='analysis'` + `surface='plate'` |
-    | `results` | `tab='analysis'` + `surface='analysis'` |
-    | `rawdata` | `tab='protocol'` |
-
-  - `surface` 개념은 최상위 탭으로 흡수한다. `bannerDismissed` 상태와 세션 전환 리셋 로직도 함께 정리한다(FB-03에서 배너가 스코프 선택기로 대체되므로 P4와 조율).
-  - `설정` 탭을 더보기로 강등한다(P4에서 정규화·축 설정이 플롯 헤더로 올라가면 사용 빈도가 크게 떨어진다).
+### P1-A2: StepOne 파서와 신규 필드 값 (레인 `parser`, 2/2)
+- 담당: backend-specialist · Depends On: P1-A1 · Status: TODO
+- Write Scope: `APP/parsers/{stepone_eds,eds_raw,detector}.py`(eds_raw는 분기만), `APP/processing/ntc_detection.py`, `BE/tests/{test_stepone_eds,test_stepone_session_restore,test_stepone_real_file}.py`
+- 내용: 기획서 §3.1 2–5. 응답 노출은 P1-B 몫이므로 이 태스크는 `UnifiedData` 값과 `compute_suggested_cycle`(이미 `sample.py`·`import_session.py`가 호출)만 다룬다.
 - AC
-  - [ ] 상위 탭 순서가 `플레이트 설정 → Raw data → 결과 → …`다
-  - [ ] 플레이트 설정이 **1회 클릭**으로 도달된다
-  - [ ] `en`/`ko` 라벨이 모두 번역되고 타입 체크를 통과한다
-  - [ ] 키보드 탭 내비게이션(`navigateTabs`, roving `tabIndex`, `aria-selected`)이 새 순서에서 동작한다
-  - [ ] `TabNavigation.keyboard.test.tsx:7,10,14`의 `activeTab="analysis"` / `main-panel-analysis` / `'protocol'` 리터럴 단언이 갱신되었다
-- 검증: `FE-TEST src/components/layout/`, FE-ALL, FE-CHECK, EXISTING-E2E
-- 증거: `evidence/P3-S1-T1.md`
+  - [ ] 레코드·붙은 줄·끝 요약(3/4필드)·CRLF, 신호값 = `f[4]` 고정 테스트, 줄 수 상한
+  - [ ] 구간 Pre-read 1 / Amplification 2–6 / Post-read 7, `read_labels[2] == (6, 36, 40.0)`
+  - [ ] 반복×수집단계, 수집 없는 단계 0, 불일치·hold 수집·48웰은 오류(경로 미노출)
+  - [ ] 마커 6개·샘플명·웰 ID, 음수 보존
+  - [ ] QPrism1 → `{fam: "WT", allele2: "MT"}`, 기본값 마커 없음, 부분 기본값은 파일 값, 미사용 마커 제외, 같은/지원 외 리포터 건너뜀
+  - [ ] 업로드 응답과 **세션 재시작 복원 후** `suggested_cycle == 2` (기존 `sample.py` 호출 경로로 확인), `default_cycle ∉ cycles`이면 무시
+  - [ ] QuantStudio·CFX 제안 사이클 불변, `/api/upload` 합성 파일 성공, 7개 사이클 각각 scatter API 정상
+- 검증: BE-TEST, BE-ALL, BE-LINT, REAL-EDS
 
-### P3-S2-T1: 구 URL 매핑 + 연동 계약 갱신
-- 담당: `frontend-specialist`
-- Depends On: P3-S1-T1
-- Status: TODO
-- Write Scope: `SRC/lib/workspace-history.ts`, `SRC/lib/workspace-location.ts`, `SRC/hooks/use-workspace-location.ts`, `SRC/lib/quality-navigation.ts`, `SRC/stores/session-store.ts`(sessionQueries 해석), `SRC/App.tsx`(FeedbackWidget pageKey), 관련 테스트
-- 기획 근거: [FB-07](feedback-2026-09-11/FB-07-identity-and-ia.md) §3-1 호환성 주의
-- 구현 내용
-  - **`navigation-store`는 persist하지 않는다.** 위치가 살아남는 경로는 두 가지다:
-    (i) URL — `lib/workspace-history.ts`의 `pushState`/`replaceState`,
-    (ii) `session-store.sessionQueries` — 열린 세션별 쿼리 문자열이 `sessionStorage`(`qprism-file-workspace`)에 persist.
-    따라서 필요한 것은 **스토어 마이그레이션이 아니라 legacy URL 파싱 + canonical rewrite**다.
-  - 구 URL(`?tab=analysis&surface=plate` 등)을 읽어 신 탭 ID로 **의미를 보존해** 매핑하고 주소를 새 형태로 다시 쓴다.
-  - 크래시 방지 폴백은 **이미 구현되어 있다**(`navigation-store.ts`의 `parseNavigation` → `tab()` 타입가드, `:25,:32-36,:56`).
-    폴백만 있으면 북마크된 구 URL이 기본 탭으로 떨어져 **사용자 의도가 유실**된다. 매핑이 폴백보다 먼저 동작해야 한다.
-  - `lib/quality-navigation.ts`의 `surface: 'plate' | 'analysis'` 복귀 계약을 새 탭 구조에 맞춘다.
-  - `FeedbackWidget`의 `pageKey`가 새 탭 ID를 기록하게 한다. **과거 피드백의 `page_key`와 값이 달라지므로** 증거 문서에 매핑표를 남긴다.
-- AC
-  - [ ] 구 URL로 진입해도 의도한 탭으로 매핑되고 주소가 canonical 형태로 다시 쓰인다
-  - [ ] `sessionQueries`에 저장된 구 쿼리 문자열도 동일하게 매핑된다
-  - [ ] 미지 탭 ID의 기본 탭 폴백이 회귀하지 않는다
-  - [ ] 품질 탭 → 웰/마커 복귀 경로가 새 탭 구조에서 동작한다
-  - [ ] 피드백 `page_key` 신·구 매핑표가 증거에 기록되었다
-- 검증: `FE-TEST src/lib/workspace-location.test.ts`, `FE-TEST src/lib/quality-navigation.test.ts`, FE-ALL, FE-CHECK, EXISTING-E2E
-- 증거: `evidence/P3-S2-T1.md`
+### P1-B1: 마커 이름 API·레이아웃·카탈로그 (레인 `marker-api`, 1/2)
+- 담당: backend-specialist · Depends On: P0-S0-V · Status: TODO
+- Write Scope: `APP/routers/{clustering,layouts,marker_catalog}.py`, `BE/tests/test_marker_allele_labels_api.py`
+- 내용: `MarkerUpdate`·`LayoutCreate/Apply`에 `allele_labels`, GET/POST/PUT 반영(부분 갱신·명시 null 해제), 레이아웃 저장/적용(`model_dump` 경유 확인), 카탈로그 연결 시 빈 이름만 `allele1_base/allele2_base`로 미리 채움.
+- AC: [ ] 이름 변경은 판정 입력(`judgment_key`) 불변 — 재분석 불요 테스트 · [ ] PUT 왕복·null 해제 · [ ] 레이아웃 적용 시 이름 전달 · [ ] 잘못된 키·길이 400
+- 검증: BE-TEST, BE-ALL, BE-LINT
 
-### P3-S0-V: 정보구조 게이트
-- 담당: `test-specialist`
-- Depends On: P3-S2-T1
-- Status: TODO
-- Write Scope: 루트 `tests/**`, `docs/planning/feedback-2026-09-11/evidence/**`
-- 구현 내용: 탭 셀렉터를 일괄 갱신한다. 대상은 루트 E2E 7개 스펙(25곳), 프론트 e2e(23곳), `TabNavigation.keyboard.test.tsx` 1곳이다. 치환 후 **셀렉터가 남아 있지 않은지 grep으로 확인**한다.
-- AC: [ ] 루트 E2E 전체 통과 · [ ] FE-ALL 신규 실패 0 · [ ] 접근성(role/aria/roving tabIndex) 회귀 0 · [ ] 미해결 중요 리뷰 이슈 0
-- 검증: FE-ALL, FE-CHECK, ROOT-E2E(전체), EXISTING-E2E
-- 증거: `evidence/P3-S0-V.md`
+### P1-B2: 가져오기·응답 필드·복원 (레인 `marker-api`, 2/2)
+- 담당: backend-specialist · Depends On: P1-B1 · Status: TODO
+- Write Scope: `APP/routers/{sample,upload,import_api}.py`, `APP/services/{import_session,session_restore}.py`, `BE/tests/test_stepone_response_fields.py`
+- 내용: 업로드 시 `imported_marker_alleles` → `MarkerRegion.allele_labels`(합성 UnifiedData로 테스트, 파서 레인과 독립). 업로드 응답·`get_session_info`(dict) 응답에 `read_labels`·`has_amplification_curve`·`default_cycle`. 모든 업로드 진입점(`/api/upload`, import 미리보기 경로)이 `import_session`을 거치는지 확인 기록.
+- AC: [ ] 업로드·세션 정보 응답에 세 필드, 재시작 복원 후에도 · [ ] 응답이 `types/api.ts` 타입과 일치(계약 테스트) · [ ] 복원 시 `allele_labels` 유지
+- 검증: BE-TEST, BE-ALL, BE-LINT
+
+### P1-C1: 현재 이름 스냅샷과 표시 함수 (레인 `report-core`, 1/3)
+- 담당: backend-specialist · Depends On: P0-S0-V · Status: TODO
+- Write Scope: `APP/reporting/{result_snapshot,snapshot_presentation}.py`, `BE/tests/test_export_presentation.py`
+- 내용: `MarkerLabel` 모델과 `ResultSnapshot.marker_labels`를 이 파일에 정의한다. `capture_result_snapshot`이 `input_lock` 아래 `marker_store`(함수 안 `from app.routers.clustering import marker_store`, `clustering.py` 수정 없음)를 `marker_id` 키로 깊은 복사해 `marker_labels`로 담고, `snapshot_rows`에서 행의 마커 이름·대립유전자 이름을 현재 값으로 바꾼다(한 곳). 이때 `report_figures`·판정 수 등 **마커 비교는 객체 동등성이 아니라 `marker_id`로** 바꾸고, 그림 제목은 `marker_labels`의 현재 이름을 쓴다(`snapshot_presentation.py` 같은 레인 소유). 표시 함수: 판정 표기(D-2), 고배체 범례, 축 라벨 `FAM · WT (ROX 정규화)`, 사이클 라벨 `Amplification 1/5 · PCR 36 · 40°C`.
+- AC: [ ] 분석 뒤 이름 변경 → **기존 CSV 출력 텍스트**에 새 이름(라우트 수정 없이) · [ ] 이름 변경 후에도 `report_figures`가 마커별 점을 그대로 가짐(빈 그림 0) · [ ] 정규 판정 문자열 불변(ASG 계약 테스트 통과) · [ ] 이름 없는 런 표 구조 불변
+- 검증: BE-TEST, BE-ALL, BE-LINT
+
+### P1-C2: scatter 그림 가독성 (레인 `report-core`, 2/3)
+- 담당: backend-specialist · Depends On: P1-C1 · Status: TODO
+- Write Scope: `APP/reporting/charts.py`, `APP/reporting/fonts/**`, `BE/tests/test_chart_readability.py`
+- 내용: `render_scatter_png` — 제목(마커·사이클), 이름 붙은 축, 범례(표시 이름 + n, 그림 밖), 48웰 이하 웰 라벨, NanumGothic 등록, 종횡비 인자(4:3/1:1). 색은 정규 문자열로 조회.
+- AC: [ ] 제목·축·범례 문자열·웰 라벨 존재(matplotlib 객체 검사) · [ ] 한글 이름 렌더 시 글리프 누락 경고 0 · [ ] 종횡비 인자 반영
+- 검증: BE-TEST, BE-ALL, BE-LINT
+
+### P1-C3: 플레이트 맵 마커 배치와 안전 파일명 (레인 `report-core`, 3/3)
+- 담당: backend-specialist · Depends On: P1-C2 · Status: TODO
+- Write Scope: `APP/reporting/{snapshot_plate,filenames}.py`, `BE/tests/{test_plate_marker_layout,test_safe_filenames}.py`
+- 내용: 기존 `render_snapshot_plate(rows)`에 키워드 인자 `marker_layout=None, highlight_marker_id=None` 추가 — 마커 경계·약칭 + 판정 색, 강조 모드. 기존 호출 결과 불변. `filenames.py`: 안전 파일명(경로 구분자·`..`·제어문자·NUL 제거, 중복 번호, 길이 상한), RFC 5987 `Content-Disposition` 헬퍼.
+- AC: [ ] 6마커 맵에 약칭 6개 · [ ] 강조 모드는 해당 마커 웰만 진하게 · [ ] 파일명 공격 문자열 표 테스트
+- 검증: BE-TEST, BE-ALL, BE-LINT
+
+### P1-D1: 표시 함수와 플레이트 설정 화면 (레인 `fe-marker`, 1/2)
+- 담당: frontend-specialist · Depends On: P0-S0-V · Status: TODO
+- Write Scope: `SRC/lib/genotype.ts`, `SRC/lib/upload-response.ts`(새 선택 필드의 가벼운 형태 검사), `SRC/components/analysis/PlateSetupTab.tsx`, `SRC/hooks/use-marker-scope*`, 각 테스트, `SRC/locales/{en,ko}.ts`의 `markerAllele.*` 키 문구
+- 내용: 백엔드 응답은 P0 계약 타입으로 모킹(레인 독립). `lib/genotype.ts` 표시 함수(단일 진실 원천, D-2), `PlateSetupTab` 마커별 FAM 쪽 / VIC·HEX 쪽 이름 입력(한 줄 2열)·저장(`updateMarker`), 가져온 이름 표시.
+- AC: [ ] 이름 입력·저장·null 해제 · [ ] 가져온 이름 표시 · [ ] 키보드 접근성 · [ ] 이름 없으면 기존 표기 · [ ] 고배체 표기
+- 검증: FE-TEST, FE-ALL, FE-CHECK
+
+### P1-D2: scatter·사이클·곡선 (레인 `fe-marker`, 2/2)
+- 담당: frontend-specialist · Depends On: P1-D1 · Status: TODO
+- Write Scope: `SRC/lib/{chart-semantics,scatter-axes}.ts`, `SRC/components/analysis/{MarkerScatterPlot,ScatterPlot,MultiMarkerAnalysisPanel,CycleControl,AmplificationCurvePanel}.tsx`, 각 테스트, `SRC/locales/{en,ko}.ts`의 `stepone.*` 키 문구
+- 내용: scatter 축·범례 이름, `CycleControl`에 PCR 번호·온도(`read_labels`), `AmplificationCurvePanel` x축 읽기 이름(`has_amplification_curve=false`, D-9), PNG 캡션에 마커·이름·사이클 라벨.
+- AC: [ ] 축 `FAM · WT` / `VIC · MT` · [ ] 범례 표시 이름 · [ ] 화면에 Ct 값 표시가 있으면 `has_amplification_curve=false`일 때 숨김(없으면 결과 파일에 "해당 없음" 기록) · [ ] 첫 화면 사이클 2에서 "1/5 · PCR 36 · 40°C" · [ ] 곡선 x축 읽기 이름 · [ ] PNG 캡션
+- 검증: FE-TEST, FE-ALL, FE-CHECK
+
+### P1-S0-V: 핵심 게이트
+- 담당: test-specialist · Depends On: P1-A2, P1-B2, P1-C3, P1-D2 · Status: TODO
+- 내용: 레인 병합 후 LANE-MERGE, **오케스트레이터가 서버를 띄우고 직접**(레인 아님, `curl`은 레인 금지) 실제 백엔드로 연결 스모크(합성 파일 업로드 → 마커 6개·이름 → 이름 수정 → 마커 전환 → 스냅샷에 새 이름), 보안 리뷰(파서 입력 상한·ZIP·오류 메시지), `main` 로컬 병합.
+- AC: [ ] LANE-MERGE 통과 · [ ] 스모크 통과 · [ ] 마커 E2E(17, 21, 28) 회귀 0 · [ ] 미해결 중요 리뷰 0
 
 ---
 
-## Phase P4 — 결과 화면 (FB-04 + FB-03)
+## Phase P2 — 출력·화면 확장 (병렬 4 레인)
 
-> **두 기획서를 한 Phase로 묶는다.** 같은 `.analysis-grid` / `.analysis-scatter-canvas` 규칙을 바꾸므로 분리하면 서로를 되돌린다.
+레인 병합 순서: E(E1→E2) → F → G → H(H1→H2)
 
-### P4-R1-T1: 분석 경고 심각도 등급 계약
-- 담당: `backend-specialist`
-- Depends On: P3-S0-V
-- Status: TODO
-- Write Scope: `BE/app/models.py`, `BE/app/processing/**`(경고 생성부), `BE/tests/<경고 테스트>`, `SRC/lib/analysis-warnings.ts`, `SRC/types/api.ts`
-- 기획 근거: [FB-03](feedback-2026-09-11/FB-03-analysis-density.md) §8
-- 구현 내용
-  - 현재 `warnings`에는 **심각도 구분이 없다.** 등급 없이 경고를 화면 하단으로 내리는 것은 과학 도구에서 허용할 수 없다.
-  - `blocking`(상단 잔류) / `advisory`(하단 강등) 2단 등급을 계약에 추가한다. 기본값은 기존 동작을 보존하는 쪽으로 둔다.
-  - 기존 경고 각각을 어느 등급으로 분류할지 **판정 신뢰도 기준**으로 결정하고 근거를 문서화한다.
-    예: "저신호 웰을 NTC가 아니라 Undetermined로 두었습니다"는 비율 원점에 직접 영향 → `blocking` 후보.
-  - 기존 소비자가 등급 필드를 무시해도 동작하도록 하위 호환을 유지한다.
-- AC
-  - [ ] 응답의 각 경고가 등급을 갖는다
-  - [ ] 등급 분류 근거가 경고별로 문서화되었다
-  - [ ] 등급 필드를 무시하는 기존 코드 경로가 회귀하지 않는다
-- 검증: BE-TEST, BE-ALL, BE-LINT, FE-CHECK
-- 증거: `evidence/P4-R1-T1.md`
+### P2-E1: PDF (레인 `report-docs`, 1/2)
+- 담당: backend-specialist · Depends On: P1-S0-V · Status: TODO
+- Write Scope: `APP/reporting/snapshot_pdf.py`, `APP/routers/data.py`(PDF 라우트), `BE/tests/test_export_pdf_markers.py`
+- 내용: PDF 마커별 페이지(P1-C2 그림 + 그 마커 판정 수 + P1-C3 강조 맵), `Allele Call` 열(`_column_sections` 화이트리스트 포함), 전체 플레이트 맵(마커 배치), Ct 표 생략(D-3), PDF `marker_ids`(D-10, `parse_marker_ids`·`filter_snapshot`), 안전 파일명(P1-C3).
+- AC: [ ] PDF 텍스트에 마커 6개·MT/WT·한글 · [ ] 이름 없는 런 PDF 구조 불변 · [ ] 마커 1개 선택 PDF는 그 마커만 · [ ] 조건 불일치 409 유지 · [ ] StepOne 런 Ct 절 없음
+- 검증: BE-TEST, BE-ALL, BE-LINT, EXPORT-INSPECT
 
-### P4-S1-T1: 산점도 캔버스 종횡비 (기하 + 상태)
-- 담당: `frontend-specialist`
-- Depends On: P3-S0-V
-- Status: TODO
-- Write Scope: `SRC/index.css`, `SRC/stores/settings-store.ts`, `SRC/components/analysis/ScatterPlot.tsx`, `SRC/components/analysis/MarkerScatterPlot.tsx`, `SRC/stores/settings-store` 관련 테스트
-- 기획 근거: [FB-04](feedback-2026-09-11/FB-04-scatter-ergonomics.md) §3-1
-- 구현 내용
-  - **먼저 결함 제거**: `index.css` 1280px 블록에 `.analysis-scatter-canvas`가 두 번 선언된다
-    (`:166` `max-height:300px`, `:175` `height:360px`). 서로 다른 속성이라 둘 다 적용되어 **used height가 300px로 눌린다**
-    — 넓은 화면일수록 그래프가 작아지는 원인. 중복 선언을 하나로 합친다.
-  - **`max-height`로 종횡비를 보장하려는 시도는 실패한다.** 940px 폭에서 4:3은 705px가 필요하지만 911px 뷰포트의 70vh는 638px다.
-    높이를 자르면 실제 비율이 1.47:1이 된다. **폭을 종횡비에 맞춰 묶어야 한다.**
-  - **종횡비는 고정하지 않고 사용자 선택값으로 둔다** (D-6). `settings-store`에 상태를 두고 CSS 변수로 흘린다:
+### P2-E2: CSV·XLSX·QC (레인 `report-docs`, 2/2)
+- 담당: backend-specialist · Depends On: P2-E1 · Status: TODO
+- Write Scope: `APP/reporting/snapshot_xlsx.py`, `APP/routers/{export,qc}.py`, `BE/tests/test_export_allele_labels.py`
+- 내용: `Allele Call`·사이클 라벨 열, XLSX Summary 그림(P1-C2), QC 표시 이름, 안전 파일명.
+- AC: [ ] XLSX/CSV `Allele Call`, `Genotype` 정규 유지 · [ ] 이름 없는 런 출력 불변 · [ ] CSV 수식 주입 방지 유지
+- 검증: BE-TEST, BE-ALL, BE-LINT, EXPORT-INSPECT
 
-    ```ts
-    // settings-store
-    scatterAspect: '4:3' | '1:1'        // 기본값 '4:3'
-    setScatterAspect: (v: '4:3' | '1:1') => void
-    ```
+### P2-F: PPTX 출력 (레인 `report-pptx`)
+- 담당: backend-specialist · Depends On: P1-S0-V · Status: BLOCKED (D-4)
+- Write Scope: `APP/reporting/snapshot_pptx.py`, `APP/routers/export_pptx.py`, `BE/tests/test_export_pptx.py`
+- 내용: 기획서 §3.3 PPTX. 마커 선택은 `parse_marker_ids`·`filter_snapshot`, 그림은 P1-C2 `render_scatter_png`, 맵은 P1-C3 `snapshot_plate.render_snapshot_plate(..., highlight_marker_id=...)`(강조 모드; `charts.render_plate_png`와 다른 함수). 결과표 열은 웰·샘플·마커·`Allele Call`·신뢰도(이름 없는 마커는 정규 판정 문자열을 그대로 표시).
+- AC: [ ] 슬라이드 수 = 1 + 마커 수 + 1 + 결과표 장수(3단×16행=48웰/장) · [ ] 결과표 제외 옵션 · [ ] 조건 불일치 409 · [ ] 한글 글꼴 `latin`·`ea` 지정 · [ ] 마커 선택 (DEP-AUDIT는 P2-S0-V에서 오케스트레이터가 실행)
+- 검증: BE-TEST, BE-ALL, BE-LINT, EXPORT-INSPECT
 
-    ```css
-    .analysis-scatter-canvas {
-      --scatter-max-h: min(70vh, 640px);
-      --scatter-aspect-w: 4;            /* JS가 선택값에 따라 4 또는 1 */
-      --scatter-aspect-h: 3;            /*              3 또는 1 */
-      aspect-ratio: var(--scatter-aspect-w) / var(--scatter-aspect-h);
-      height: auto; width: 100%;
-      max-width: calc(var(--scatter-max-h) * var(--scatter-aspect-w) / var(--scatter-aspect-h));
-      min-height: 360px;                /* Plotly 0-height 마운트 방어 */
-      margin-inline: auto;              /* 남는 폭은 좌우 여백으로 */
-    }
-    ```
+### P2-G: 보고서 PNG 묶음 (레인 `report-images`)
+- 담당: backend-specialist · Depends On: P1-S0-V · Status: TODO
+- Write Scope: `APP/reporting/snapshot_images.py`, `APP/routers/export_images.py`, `BE/tests/test_export_scatter_zip.py`
+- AC: [ ] PNG 수 = 선택 마커 수 · [ ] 항목명 안전 처리(경로 구분자·`..`·제어문자·NUL·중복·길이) · [ ] 고정 타임스탬프·외부 속성 없음 · [ ] PDF와 같은 렌더 함수 · [ ] 조건 검사 · [ ] zip 크기 상한
+- 검증: BE-TEST, BE-ALL, BE-LINT, EXPORT-INSPECT
 
-  - **선택값별 실측(1920x911, 가용 폭 약 904px)**
+### P2-H1: 결과표·상세·플레이트 (레인 `fe-tables`, 1/2)
+- 담당: frontend-specialist · Depends On: P1-S0-V · Status: TODO
+- Write Scope: `SRC/components/analysis/{ResultsTable,WellDetailPanel,PlateView,PlateLegend,WellTypePopup}.tsx`, `SRC/components/analysis/MultiMarkerAnalysisPanel.tsx`(**prop 전달 부분만**, P1에서 P1-D2 소유였고 P2에서 이 태스크로 이관), 각 테스트, `SRC/locales/{en,ko}.ts`의 `genotypeDisplay.*` 키 문구
+- 내용: 받는 컴포넌트에 `alleleLabels` prop을 추가하고 `MultiMarkerAnalysisPanel`에서 선택 마커의 값을 넘긴다, 판정 표시 이름, 플레이트 범례 이름, 분석 화면 플레이트에서 마커 미지정 웰 회색·개수 안내.
+- AC: [ ] 판정 표시 이름 · [ ] 플레이트 범례 이름 · [ ] 미지정 웰 표시 · [ ] 이름 없으면 기존 표기
+- 검증: FE-TEST, FE-ALL, FE-CHECK
 
-    | 선택 | 캔버스 | 좌우 여백 | 현재(300px) 대비 높이 |
-    | --- | --- | --- | --- |
-    | `4:3` (기본) | 853 × 640 | 51px | **2.1배** |
-    | `1:1` | 640 × 640 | 264px | 2.1배 |
+### P2-H2: 통계·Batch·보조 화면 (레인 `fe-tables`, 2/2)
+- 담당: frontend-specialist · Depends On: P2-H1 · Status: TODO
+- Write Scope: `SRC/components/analysis/{FluorescenceDataCard,AmplificationOverlay}.tsx`, `SRC/components/statistics/StatisticsTab.tsx`, `SRC/components/batch/{BatchTab.tsx,project-export.ts,project-summary.ts}`, `SRC/components/shared/KeyboardHelpOverlay.tsx`, 각 테스트
+- AC: [ ] 판정 표시 지점 전수(grep 목록 = P2-H1+H2+P1-D 수정 목록, 증거에 기록. `lib/constants.ts`·`processing/*`의 정규 문자열은 대상 아님) · [ ] Batch 요약 CSV 정규 열 유지 + 표시 열
+- 검증: FE-TEST, FE-ALL, FE-CHECK
 
-    세로가 더 긴 모니터에서는 폭이 컬럼에 걸려 `4:3`은 928×696px가 된다(비율 유지).
-  - **UI 컨트롤(드롭다운)은 이 태스크가 아니라 P4-S2-T1의 플롯 헤더 바에 놓는다.** 두 태스크가 `ScatterViewControls.tsx`를 동시에 편집하지 않도록 소유권을 나눈다. 이 태스크는 상태와 기하까지만 담당하고, 기본값 `4:3`으로 검증한다.
-  - Plotly 마운트 시 `clientHeight > 0`인지 확인한다. 필요하면 `ResizeObserver` + `Plotly.Plots.resize`.
-    **종횡비 전환 시에도 Plotly가 리사이즈를 따라오는지** 확인한다 — 컨테이너 크기가 바뀌는데 차트가 그대로면 의미가 없다.
-  - `lockAspect`(`lib/scatter-axes.ts`의 `scaleanchor:'x'`, `scaleratio:1`)는 **데이터 축 비율**이며 캔버스 종횡비와 별개다.
-    둘 다 켜졌을 때 `constrain:'domain'`이 플롯 영역을 더 줄이지 않는지 확인한다.
-  - 두 플롯(`ScatterPlot`, `MarkerScatterPlot`)이 같은 클래스를 공유하므로 함께 검증한다.
-  - **`settings-store`에 필드를 추가하면 프리셋 직렬화 경로(`lib/apply-preset.ts`, `use-preset-operations.ts`)에 영향이 갈 수 있다.** 기존 프리셋(신규 필드 없음)을 적용해도 기본값으로 복원되는지 확인한다.
-- AC
-  - [ ] 1920x911 기본 상태에서 캔버스 `boundingBox()`의 width:height가 **4:3 ±2%** 이고 높이가 **600px 이상**이다 (300px로 눌리지 않는다)
-  - [ ] 캔버스 하단이 뷰포트를 넘어가는 것은 **허용**한다 (위 정정 참조)
-  - [ ] `scatterAspect`를 `1:1`로 바꾸면 캔버스가 640×640으로 렌더되고 좌우 중앙 정렬된다
-  - [ ] 종횡비 전환 후 Plotly 차트가 새 크기로 다시 그려진다
-  - [ ] 1280 / 768 / 400px에서 캔버스가 뷰포트 세로를 넘지 않는다
-  - [ ] 마운트 직후 캔버스 높이가 0이 아니어서 Plotly가 정상 렌더된다
-  - [ ] `lockAspect` 동작이 회귀하지 않는다
-  - [ ] 신규 필드 없는 기존 프리셋 적용 시 `scatterAspect`가 기본값 `4:3`으로 복원된다
-  - [ ] PNG/PDF 내보내기 산출물이 두 종횡비 모두에서 정상이다 (`use-exports.ts`의 캡처가 실측 크기를 쓰는지 확인)
-- 검증: `FE-TEST src/stores/settings-store`, `FE-TEST src/components/analysis/`, FE-ALL, FE-CHECK, `ROOT-E2E`(두 종횡비 boundingBox 단언), VIEWPORT
-- 증거: `evidence/P4-S1-T1.md`
-
-### P4-S2-T1: 플롯 헤더 바 — 정규화·축 설정 승격
-- 담당: `frontend-specialist`
-- Depends On: P4-S1-T1
-- Status: TODO
-- Write Scope: `SRC/components/analysis/ScatterViewControls.tsx`, `SRC/components/analysis/ScatterPlot.tsx`, `SRC/components/analysis/MarkerScatterPlot.tsx`, `SRC/components/settings/SettingsTab.tsx`, `SRC/locales/{en,ko}.ts`, 관련 테스트
-  (종횡비 **상태**는 P4-S1-T1 소유. 이 태스크는 그 상태를 읽는 **컨트롤**만 추가한다.)
-- 기획 근거: [FB-04](feedback-2026-09-11/FB-04-scatter-ergonomics.md) §3-2, §3-3
-- 구현 내용
-  - 정규화 체크박스(`scatter-use-rox`)와 축 입력(`axis-x-min`/`max`, `axis-y-min`/`max`)은 **이미 존재**하지만
-    접힌 `<details data-testid="analysis-advanced-settings">` 안에 매장되어 있다(`ScatterViewControls.tsx:170`, `:250`).
-    **기능 추가가 아니라 발견 가능성 문제다.**
-  - 항상 보이는 헤더 바로 승격: 정규화 체크박스(+참조 채널명), 축 모드 드롭다운, `축 설정…` 버튼, 드래그 도구 토글,
-    **종횡비 드롭다운**(`4:3` / `1:1`, P4-S1-T1의 `settings-store.scatterAspect`에 연결).
-  - `축 설정…` 클릭 시 x/y min·max 4개 입력을 인라인 팝오버로 열고, **`axisMode`를 자동으로 `manual`로 전환**한다.
-    현재는 `numberInput(..., !manual)`이라 manual을 먼저 골라야 입력이 활성화된다 — 사용자 요구와 어긋난다.
-  - 접힌 채 유지: NTC 사분면, NTC 축 오프셋, 배수성 상한 (전문가용 저빈도).
-  - **`data-testid`를 모두 보존한다.** 위치만 바뀌고 기존 단위 테스트는 통과해야 한다.
-  - 참조 채널 드롭다운은 **현재 채널 1개만** 담는다(런타임 재지정은 이번 범위 밖 — 저장 모델 확장이 필요하다).
-    참조 채널이 없는 런에서는 `hasNormalizationChannel` prop으로 비활성화하고 사유를 보인다.
-  - `SettingsTab`의 `useRox` 중복 노출을 정리한다. **`settings-store.useRox` 필드 자체는 절대 제거하지 않는다** — 프리셋이 이 값을 담는다.
-- AC
-  - [ ] 정규화 체크박스가 펼치는 동작 없이 플롯 위에 보인다
-  - [ ] 참조 채널명이 표시되고, 없는 런에서는 비활성 + 사유가 보인다
-  - [ ] `축 설정…` 클릭 → 축 모드를 먼저 바꾸지 않고도 min/max 편집이 가능하다
-  - [ ] 기존 `data-testid`가 모두 유지되어 기존 단위 테스트가 통과한다
-  - [ ] 종횡비 드롭다운에서 `4:3` ↔ `1:1`을 바꾸면 두 플롯 모두 즉시 반영된다
-  - [ ] 두 플롯이 동일한 컨트롤을 갖는다
-  - [ ] 프리셋 저장·적용(`apply-preset.ts`)이 회귀하지 않는다
-- 검증: `FE-TEST src/components/analysis/ScatterViewControls.test.tsx`, `FE-TEST src/components/settings/`, FE-ALL, FE-CHECK, VIEWPORT
-- 증거: `evidence/P4-S2-T1.md`
-
-### P4-S3-T1: 결과 중심 레이아웃
-- 담당: `frontend-specialist`
-- Depends On: P4-R1-T1, P4-S2-T1
-- Status: TODO
-- Write Scope: `SRC/components/analysis/AnalysisTab.tsx`, `SRC/components/analysis/AnalysisWorkspace.tsx`, `SRC/components/analysis/WellSelectionToolbar.tsx`, `SRC/components/analysis/MultiMarkerAnalysisPanel.tsx`, `SRC/components/analysis/ResultsTable.tsx`, `SRC/index.css`, `SRC/locales/{en,ko}.ts`, 관련 테스트
-- 기획 근거: [FB-03](feedback-2026-09-11/FB-03-analysis-density.md) §3
-- 구현 내용
-  - **경고 강등**: `analysisWarnings` Callout(`AnalysisTab.tsx:286`)을 `analysis-grid`(`:306`) 앞에서 `ResultsTable` 뒤로 옮긴다.
-    단 **P4-R1-T1의 등급이 `blocking`인 경고는 상단에 잔류**시킨다. 툴바에 `⚠ 경고 N건` 배지를 두고 클릭 시 하단으로 이동,
-    `aria-live`로 실시간 전파를 유지한다.
-  - **컨텍스트 요약 접기**: `analysis-context-summary`(`AnalysisResultStatus` + `PlateScopeSummary`)를 `<details>`로 접고 한 줄 요약만 노출.
-  - **그룹 프리셋 조건부화**: `WellSelectionToolbar.tsx:8`의 `DEFAULT_GROUPS` 6개는 "현재 선택을 그룹 N으로 저장"하는 프리셋 슬롯이며,
-    선택이 없으면 `manualGroupSelectFirst` 오류만 낸다. `hasSelection === true` 이거나 저장된 수동 그룹이 있을 때만 렌더한다.
-  - **안내 문구 이동**: "플레이트 웰을 고르거나 산점도에서 영역을 드래그하세요"를 플레이트 뷰 헤더 보조 문구로 옮긴다.
-  - **스코프 선택기**: 마커 0개 세션에도 `[전체 플레이트] [+ 마커로 분할]` 선택기를 둔다. 마커 ≥1개면 기존
-    `marker-selector-sidebar`(`MultiMarkerAnalysisPanel.tsx:258`)가 같은 자리에 들어간다. `split-marker-banner`는 이 선택기에 흡수되어 **제거**한다
-    (`bannerDismissed` 상태와 세션 전환 리셋 로직도 함께 제거 — 부분 제거 시 죽은 상태가 남는다).
-  - **`ResultsTable` 승격**: `[data-testid="results-scroll-region"]`의 `max-height: 24rem` 제약을 풀고 1급 영역으로 올린다.
-    (현재도 항상 렌더되지만 최하단에서 높이가 잘려 있다.)
-- AC
-  - [ ] 1920x911에서 스크롤 없이 산점도 전체와 유전형 요약이 보인다
-  - [ ] `blocking` 경고는 상단에 남고, `advisory`만 강등된다. 배지 클릭으로 하단 경고에 도달한다
-  - [ ] 그룹이 없고 선택도 없는 플레이트에서 그룹 프리셋 버튼이 렌더되지 않는다
-  - [ ] 마커 0개 세션에도 스코프 선택기가 보인다
-  - [ ] 마커 ≥1개 세션의 기존 마커 선택 동작이 회귀하지 않는다
-  - [ ] `split-marker-banner` 제거 후 죽은 상태(`bannerDismissed`)가 남지 않았다
-  - [ ] 키보드 배정(`use-keyboard-assignment`)과 `navigateTabs`가 유지된다
-- 검증: `FE-TEST src/components/analysis/`, FE-ALL, FE-CHECK, ROOT-E2E, VIEWPORT
-- 증거: `evidence/P4-S3-T1.md`
-
-### P4-S0-V: 결과 화면 게이트
-- 담당: `test-specialist`
-- Depends On: P4-S3-T1
-- Status: TODO
-- Write Scope: `docs/planning/feedback-2026-09-11/evidence/**`
-- AC: [ ] 신규 실패 0 · [ ] 새 코드 coverage ≥70%·복잡도 ≤10 · [ ] 접근성 회귀 0 · [ ] 1920x911 육안 확인 완료 · [ ] 미해결 중요 리뷰 이슈 0
-- 검증: BE-ALL, FE-ALL, FE-CHECK, ROOT-E2E, EXISTING-E2E, VIEWPORT
-- 증거: `evidence/P4-S0-V.md`
+### P2-S0-V: 출력 게이트
+- 담당: test-specialist + security-specialist · Depends On: P2-E2, P2-F, P2-G, P2-H2 · Status: TODO
+- 내용: 레인 병합(E→F→G→H) 후 LANE-MERGE, 합성 6마커 파일로 PDF·PPTX·XLSX·CSV·zip 생성·EXPORT-INSPECT, 마커 선택이 세 출력에서 같은 규칙인지 교차 확인, 보안 리뷰(파일명·zip·의존성·Content-Disposition), **오케스트레이터가 DEP-AUDIT 2차 실행**, `main` 로컬 병합.
+- AC: [ ] 기존 출력 테스트 회귀 0 · [ ] 세 출력 그림이 같은 렌더 경로 · [ ] 미해결 중요 리뷰 0
 
 ---
 
-## Phase P5 — 업로드 진입점 (FB-02 진입점 범위)
+## Phase P3 — 연결·검증·문서 (병렬 3 레인)
 
-### P5-S1-T1: 파일 워크스페이스 드로어 구조 리팩터링
-- 담당: `frontend-specialist`
-- Depends On: P4-S0-V
-- Status: TODO
-- Write Scope: `SRC/components/upload/FileWorkspaceDrawer.tsx`, `SRC/components/upload/FileWorkspaceTrigger.tsx`(신규), `SRC/components/layout/Header.tsx`, `SRC/components/upload/UploadZone.tsx`, `SRC/App.tsx`, 관련 테스트
-- 기획 근거: [FB-02](feedback-2026-09-11/FB-02-upload-entry-and-brand.md) §3-1
-- 구현 내용
-  - **핵심 제약**: 드로어 큐는 `FileWorkspaceDrawer.tsx:87`의 지역 `useState<QueueItem[]>`다.
-    `session-store`의 persist는 `openSessionIds` / `sessionQueries`만 담는다("Only WHICH plates are open survives a reload").
-    → **세션 유무로 드로어를 조건부 마운트/언마운트하면 업로드 중 큐가 소실된다.**
-    업로드가 끝나면 세션이 생기고 그 순간 `visibility.upload`가 false가 되므로, 조건부 마운트 설계는 **성공 직후 큐를 지우는 버그**를 낳는다.
-  - 패널(상시 마운트)과 트리거(복수 배치)를 분리한다. 패널은 `App.tsx` 최상위에 **항상** 마운트하고 큐 상태를 소유한다.
-    열림 상태와 큐는 Context 또는 zustand로 트리거에 노출한다.
-  - 트리거는 두 위치에 렌더하고 `visibility.upload`가 어느 쪽을 보일지 결정한다:
-    세션 없음 → `UploadZone` 하단 보조 액션 줄(`inline`), 세션 있음 → 헤더(`header`, 현행 아이콘+카운트).
-  - 패널은 portal로 렌더해 트리거 위치와 DOM 계층을 분리한다.
-  - 닫힘 시 포커스는 **현재 보이는 트리거**로 돌아가야 한다. `triggerRef` 단일 참조를 활성 트리거 레지스트리로 바꾼다.
-    포커스 트랩(`FOCUSABLE` 상수) 동작을 유지한다.
-- AC
-  - [ ] 세션이 없을 때 헤더에 드로어 트리거가 보이지 않는다
-  - [ ] 세션이 없을 때 드롭존 인근에서 파일 워크스페이스를 열 수 있다
-  - [ ] **업로드 진행 중 세션이 생성되어 트리거 위치가 바뀌어도 큐와 열림 상태가 유지된다** (핵심 회귀 방지)
-  - [ ] 두 트리거 중 어디서 열든 동일한 큐가 보인다
-  - [ ] 드로어를 닫으면 포커스가 현재 보이는 트리거로 돌아간다
-  - [ ] 드로어 내부 동작(파일 검증·ZIP 패키징·매핑 마법사 진입)이 변하지 않는다
-- 검증: `FE-TEST src/components/upload/`, `FE-TEST src/components/layout/Header.test.tsx`, FE-ALL, FE-CHECK, ROOT-E2E, VIEWPORT
-- 증거: `evidence/P5-S1-T1.md`
+레인 병합 순서: I → J → K
 
-### P5-S2-T1: 업로드 경로 한도·문구 일치
-- 담당: `frontend-specialist`
-- Depends On: P5-S1-T1, **D-7 결정**
-- Status: BLOCKED (D-7)
-- Write Scope: `SRC/lib/upload-jobs.ts`, `SRC/components/upload/UploadZone.tsx`, `SRC/components/upload/FileWorkspaceDrawer.tsx`, `SRC/locales/{en,ko}.ts`, 관련 테스트
-- 기획 근거: [FB-02](feedback-2026-09-11/FB-02-upload-entry-and-brand.md) §3-2
-- 구현 내용
-  - **중앙 드롭존은 이미 멀티 업로드를 지원한다** — `UploadZone.tsx:418`의 `multiple`, `:157-166`의 `runUploadJobs(files)` 배치.
-    문제는 "멀티가 헤더에만 있다"가 아니라 **같은 일을 하는 구현이 두 벌이고 한도·오류 복구가 다르다**는 것이다.
+### P3-I: 내보내기 메뉴 (레인 `fe-export`)
+- 담당: frontend-specialist · Depends On: P2-S0-V · Status: TODO
+- Write Scope: `SRC/components/layout/Header.tsx`, `SRC/hooks/use-exports.ts`(+테스트), `SRC/locales/{en,ko}.ts`의 `exportReport.*` 키 문구
+- AC: [ ] PPTX·보고서 PNG 묶음·마커 선택 메뉴, "현재 화면 이미지"와 구분된 이름 · [ ] `ExportKind`·`exportStored` 확장, 조건 불일치 재시도에 마커 선택 유지 · [ ] 테스트 ID는 `export-testids.ts` 상수 · [ ] ko/en
+- 검증: FE-TEST, FE-ALL, FE-CHECK
 
-    | | `UploadZone` | `FileWorkspaceDrawer` |
-    | --- | --- | --- |
-    | 다중 파일 | `runUploadJobs(files)` | 자체 `QueueItem[]` 상태 머신 |
-    | 한도 | `lib/upload-jobs.ts` 규칙 | `MAX_FILES_PER_DROP=20`, `MAX_TOTAL_BYTES=500MB` |
-    | 오류 복구 | `UploadJobSummary` | 큐 항목 `error` 상태 |
+### P3-J: 끝단 E2E (레인 `e2e`)
+- 담당: test-specialist · Depends On: P2-S0-V · Status: TODO
+- Write Scope: `E2E/29-stepone-markers.spec.ts`, `E2E/30-stepone-exports.spec.ts`, `E2E/fixtures/stepone/**`(합성 생성물)
+- 실행 전 오케스트레이터가 P3 API·프론트 서버를 띄운다(레인은 서버를 띄우지 않음).
+- 내용: 29 = 업로드 → 첫 화면 사이클 2(PCR 36) → 마커 6개 → 이름 수정 → 마커 전환 → 결과표(P2까지 병합된 main으로 레인 안에서 통과). 30 = `export-testids.ts` 셀렉터로 PDF·PPTX·zip 다운로드 검사(레인 안에서는 작성·정적 검사, 실행은 게이트에서 P3-I 병합 후).
+- AC: [ ] 29 레인 안에서 통과 · [ ] 30 게이트에서 통과
+- 검증: ROOT-E2E
 
-  - D-7 결정에 따라 통합하거나, 역할을 분리(단건 빠른 경로 / 다건 관리 경로)하고 **한도와 오류 문구만 일치**시킨다. 권장은 후자.
-- AC
-  - [ ] 두 경로의 파일 수·용량 한도가 동일하다
-  - [ ] 한도 초과 시 두 경로가 같은 문구를 보인다 (en/ko 모두)
-  - [ ] 중앙 드롭존의 다중 파일 배치 업로드가 회귀하지 않는다
-- 검증: `FE-TEST src/lib/upload-jobs.test.ts`, `FE-TEST src/components/upload/`, FE-ALL, FE-CHECK
-- 증거: `evidence/P5-S2-T1.md`
+### P3-K: 문서·버전 (레인 `docs`, haiku)
+- 담당: docs-specialist · Depends On: P2-S0-V · Status: TODO
+- Write Scope: `README.md`, `FE/package.json`(버전만), `APP/version.py`(버전만), `docs/release-notes/v1.4.0.md`
+- AC: [ ] 지원 장비에 StepOnePlus · [ ] ROX 자동 안내 · [ ] 마커 이름·PPTX·PNG 묶음 사용법 · [ ] 버전 1.4.0(`APP/version.py`·`FE/package.json` 동시, 버전 테스트 통과)
 
-### P5-S0-V: 업로드 게이트
-- 담당: `test-specialist`
-- Depends On: P5-S2-T1
-- Status: BLOCKED (D-7 경유)
-- Write Scope: `docs/planning/feedback-2026-09-11/evidence/**`
-- AC: [ ] 신규 실패 0 · [ ] 업로드 중 큐 유지 시나리오 E2E 통과 · [ ] 새 코드 coverage ≥70% · [ ] 미해결 중요 리뷰 이슈 0
-- 검증: FE-ALL, FE-CHECK, ROOT-E2E, EXISTING-E2E
-- 증거: `evidence/P5-S0-V.md`
+### P3-S0-V: 통합 게이트
+- 담당: test-specialist · Depends On: P3-I, P3-J, P3-K · Status: TODO
+- AC: [ ] LANE-MERGE · [ ] ROOT-E2E 전체(기존 실패는 기준선과 분리) · [ ] 뷰포트 4종 × 라이트/다크 · [ ] `main` 로컬 병합
+
+## Phase P4 — 인수 (직렬)
+
+### P4-S0-V: 실파일 인수
+- 담당: test-specialist · Depends On: P3-S0-V · Status: TODO
+- 내용: 실제 파일(저장소 밖)로 업로드 → 첫 화면 사이클 2(PCR 36) → 마커 6개 → QPrism1 MT/WT → 이름 수정 → PDF·PPTX·PNG 묶음(전체·마커 1개) 생성. 렌더 스크린샷을 저장소 밖 경로에 두고 경로만 증거에 기록.
+- AC: [ ] 기획서 §5 전부 · [ ] BE-ALL·FE-ALL·ROOT-E2E 통과 · [ ] 미해결 중요 리뷰 0 · [ ] 사용자에게 산출물 확인 요청
 
 ---
 
-## Phase P6 — 브랜드 정체성 (FB-07 + FB-02 브랜드 범위)
-
-### P6-S1-T1: 제품명 통일 — Q-prism® Cluster Caller
-- 담당: `frontend-specialist` + `docs-specialist`
-- Depends On: P5-S0-V
-- Status: TODO (**D-1 해소됨 — 실행 가능**)
-- Write Scope: `SRC/locales/{en,ko}.ts`, `FE/index.html`, `README.md`, `BE/app/reporting/pdf_builder.py`
-- 기획 근거: [FB-07](feedback-2026-09-11/FB-07-identity-and-ia.md) §3-2
-- 구현 내용
-  - 현재 리포지토리에 **세 가지 이름이 공존한다**: `ASG-PCR SNP 판별 분석기`(UI `locales:139/141`),
-    `Q-prism® SNP Visualizer`(`README.md:1`), `SNP analyzer`(컨테이너·경로). **하나로 통일한다.**
-  - 채택명: **`Q-prism® Cluster Caller`** (한국어 UI도 동일 표기, 부제로 `SNP 판별 · 대립유전자 클러스터링`).
-    `Q-prism`은 인바이러스테크 자사 저작물이므로 `®` 표기를 사용한다.
-  - 변경 지점: `appTitle`(en/ko), `index.html`의 `<title>` · `og:title` · `og:description` · `description` · `keywords`,
-    `README.md`, PDF 산출물 브랜드 문자열(`app/reporting/pdf_builder.py`).
-  - **ASG 플랫폼 연동 문구는 유지한다** — `Save result to ASG Designer`, `backToAsgDesigner`는 상대 시스템의 이름이다.
-  - `canonical`(`https://snpanalyze.ivttools.com/`) 변경 여부는 SEO 영향이 있으므로 **변경하지 않고** 증거에 검토 필요로 기록한다.
-- AC
-  - [ ] UI·`<title>`·OG·README·PDF 산출물에서 제품명이 일관된다
-  - [ ] `en`/`ko` 양쪽이 갱신되고 타입 체크를 통과한다
-  - [ ] ASG 연동 문구가 변경되지 않았다
-  - [ ] `canonical`이 변경되지 않았고, 변경 필요 여부가 증거에 기록되었다
-- 검증: FE-ALL, FE-CHECK, BE-TEST(PDF 산출물), ROOT-E2E
-- 증거: `evidence/P6-S1-T1.md`
-
-### P6-S2-T1: Q-prism 브랜드 팔레트 적용
-- 담당: `frontend-specialist`
-- Depends On: P6-S1-T1, **D-2 및 D-4 결정**
-- Status: BLOCKED (D-2, D-4)
-- Write Scope: `SRC/index.css`, `SRC/lib/plotly-theme.ts`(P0-T0.2 결과 위), `SRC/lib/constants.ts`, `SRC/lib/genotype.ts`, `SRC/components/protocol/ProtocolTab.tsx`
-- 기획 근거: [FB-07](feedback-2026-09-11/FB-07-identity-and-ia.md) §3-3
-- 구현 내용
-  - 현재 `--color-primary: #2563eb`는 **Tailwind 기본 blue-600**이다. 브랜드 색이 아니라 프레임워크 기본값이며,
-    사용자가 "촌스럽다"고 한 것의 물리적 근거다.
-  - D-2로 확정된 HEX를 `@theme` 블록과 `body.dark` 블록에 **동시** 반영한다. 한쪽만 바꾸면 다크 모드가 깨진다.
-  - P0-T0.2에서 색을 한 곳으로 모아 두었으므로, 이 태스크는 **값 교체**가 주된 작업이다.
-  - **절대 준수 제약**
-    1. `--color-fam` / `--color-allele2`는 D-4 결정에 따른다. 권장은 **유지** — FAM/HEX 채널 색은 qPCR 판독 관례이며 실험자 습관에 직결된다. 브랜드보다 과학적 관례가 우선한다.
-    2. 대비비: 본문 4.5:1, UI 요소 3:1(WCAG AA). 현행 `#1a1a2e` on `#f5f7fa`는 약 15:1로 여유가 크다 — 새 팔레트가 이를 깎지 않는지 검증한다.
-    3. 상태색 의미 보존: 경고=앰버, 위험=적, 성공=녹. 브랜드 색과 충돌하면 브랜드를 양보한다.
-- AC
-  - [ ] 라이트·다크 모두에서 본문 대비비가 WCAG AA를 만족한다
-  - [ ] 채널 색(`--color-fam`/`--color-allele2`)이 D-4 결정대로 처리되었다
-  - [ ] Plotly 차트 색이 앱 팔레트와 일치한다
-  - [ ] 상태색(경고/위험/성공) 의미가 보존된다
-  - [ ] 다크 모드 토글 왕복에서 색이 깨지지 않는다
-- 검증: FE-ALL, FE-CHECK, VIEWPORT(라이트/다크 × 4해상도), 대비비 자동 검사
-- 증거: `evidence/P6-S2-T1.md`
-
-### P6-S3-T1: 브랜드 에셋 · 업로드 히어로
-- 담당: `frontend-specialist`
-- Depends On: P6-S2-T1, **D-3 에셋 제공**
-- Status: BLOCKED (D-3)
-- Write Scope: `FE/public/brand/**`, `FE/public/favicon.svg`, `FE/index.html`, `SRC/components/upload/UploadZone.tsx`, `SRC/components/layout/Header.tsx`, `SRC/locales/{en,ko}.ts`
-- 기획 근거: [FB-02](feedback-2026-09-11/FB-02-upload-entry-and-brand.md) §3-3, §3-4
-- 구현 내용
-  - 현재 `frontend/public/`에는 템플릿 CSV/TSV 3개뿐이며 **이미지 에셋이 0개, 파비콘도 없다.** `index.html`에 `<link rel="icon">`도 없다.
-  - 에셋은 **SVG**를 권장한다 — 다크 모드에서 `currentColor`/CSS 변수 추종, 해상도·번들 크기 문제 없음.
-
-    | 에셋 | 경로 |
-    | --- | --- |
-    | 파비콘 | `frontend/public/favicon.svg` |
-    | Q-prism 마크 | `frontend/public/brand/qprism-mark.svg` |
-    | Invirustech 로고 | `frontend/public/brand/invirustech.svg` |
-    | 히어로 아트 | `frontend/public/brand/qprism-hero.svg` |
-
-  - `UploadZone` 상단에 브랜드 히어로 블록(마크 + `Q-prism® Cluster Caller` + 부제)을 추가한다.
-    **세션 없음 상태에서만** 표시해 분석 중 화면 공간을 잡아먹지 않는다.
-  - `Powered by Invirustech` 링크는 업로드 화면에서 하단 푸터로, 세션 중에는 현행 헤더 위치를 유지한다.
-- AC
-  - [ ] 파비콘이 브라우저 탭에 표시된다
-  - [ ] 히어로 블록이 세션 없음 상태에서만 보인다
-  - [ ] 히어로가 1920px과 400px 모두에서 깨지지 않는다
-  - [ ] 다크 모드에서 로고·아트가 판독 가능하다
-  - [ ] 분석 중 화면에 히어로가 나타나지 않는다
-- 검증: FE-ALL, FE-CHECK, ROOT-E2E, VIEWPORT(라이트/다크 × 4해상도)
-- 증거: `evidence/P6-S3-T1.md`
-
-### P6-S0-V: 브랜드·최종 인수 게이트
-- 담당: `test-specialist` + `security-specialist`
-- Depends On: P6-S3-T1
-- Status: BLOCKED (D-2, D-3 경유)
-- Write Scope: `docs/planning/feedback-2026-09-11/evidence/**`, `CLAUDE.md`(실행 증거 기록)
-- 구현 내용
-  - 전체 품질 체인 + 보안 리뷰 + 프론트엔드 리뷰.
-  - 피드백 7건 각각에 대해 **원문 요구 대비 충족 여부**를 대조표로 남긴다.
-  - `CLAUDE.md`에 이번 계약의 실행 증거(Contract ID, Phase별 커밋, 게이트 결과)를 기록한다.
-- AC
-  - [ ] BE-ALL / FE-ALL / FE-CHECK / ROOT-E2E / EXISTING-E2E 전체 통과
-  - [ ] 새 코드 coverage ≥70%, 복잡도 ≤10. 기존 기준선과 분리 보고
-  - [ ] 보안 리뷰 신규 이슈 0
-  - [ ] 피드백 7건 대조표 작성 완료
-  - [ ] 미해결 결정 게이트가 있으면 명시적으로 남았다
-- 검증: 전체 체인
-- 증거: `evidence/P6-S0-V.md`
-
----
-
-## 5. 태스크 요약 (DAG)
+## 6. 태스크 요약 (DAG)
 
 ```
-P0-T0.1 ──┬── P0-T0.2 ──┬── P0-S0-V
-          │             │
-          └─────────────┘
-                        │
-                   P1-S1-T1 ── P1-S0-V
-                                   │
-                   ┌───────────────┴───────────────┐
-              P2-R1-T1                        P2-R1-T2      (병렬 가능: 최대 2)
-                   │                               │
-              P2-S1-T1 ──────────┬─────────────────┘
-                                 │
-                            P2-S2-T1 ── P2-S0-V
-                                            │
-                            P3-S1-T1 ── P3-S2-T1 ── P3-S0-V
-                                                        │
-                        ┌───────────────────────────────┤
-                   P4-R1-T1                        P4-S1-T1
-                        │                               │
-                        └──────────┬──── P4-S2-T1 ──────┘
-                                   │
-                              P4-S3-T1 ── P4-S0-V
-                                              │
-                              P5-S1-T1 ── P5-S2-T1 ── P5-S0-V    [D-7]
-                                                          │
-                              P6-S1-T1 ── P6-S2-T1 ── P6-S3-T1 ── P6-S0-V
-                                            [D-2,D-4]      [D-3]
+P0-T0.1 ─┬─ P0-T0.2 (fixture) ─────────────────────────┐
+         └─ P0-T0.3a (contract) ─┬─ P0-T0.3b (contract) ─┤
+                                 └─ P0-T0.3c (i18n) ─────┴─ P0-S0-V
+P0-S0-V ─┬─ P1-A1 → P1-A2         (parser)      ─┐
+         ├─ P1-B1 → P1-B2         (marker-api)  ─┤
+         ├─ P1-C1 → P1-C2 → P1-C3 (report-core) ─┤
+         └─ P1-D1 → P1-D2         (fe-marker)   ─┴─ P1-S0-V
+P1-S0-V ─┬─ P2-E1 → P2-E2 (report-docs)  ─┐
+         ├─ P2-F          (report-pptx)  ─┤
+         ├─ P2-G          (report-images)─┤
+         └─ P2-H1 → P2-H2 (fe-tables)    ─┴─ P2-S0-V
+P2-S0-V ─┬─ P3-I fe-export ─┐
+         ├─ P3-J e2e ───────┤
+         └─ P3-K docs ──────┴─ P3-S0-V ─ P4-S0-V
 ```
-
-| Phase | 태스크 수 | 담당 | 착수 가능 여부 |
-| --- | --- | --- | --- |
-| P0 | 3 | orchestrator, frontend, test | **즉시** |
-| P1 | 2 | frontend, test | **즉시** (D-8 부분) |
-| P2 | 5 | backend ×2, frontend ×2, test | **즉시** (D-9 부분) |
-| P3 | 3 | frontend ×2, test | **즉시** (D-5 확정) |
-| P4 | 5 | backend, frontend ×3, test | **즉시** (D-6 확정) |
-| P5 | 3 | frontend ×2, test | P5-S2-T1은 **D-7 대기** |
-| P6 | 4 | frontend, docs, test, security | P6-S1-T1 실행 가능 / 나머지 **D-2·D-3·D-4 대기** |
-| **합계** | **25** | | |
-
-## 6. 실행 전 확인 목록
-
-- [x] 0절 승격 절차 수행 (이전 계약 archive → 본 문서를 `06-tasks.md`로) — 2026-09-11 완료
-- [ ] **`.claude/orchestrate-state.json`을 새 `contract_id`로 시작** (이전 상태 재사용 금지) — 현재 해시 불일치, P0-T0.1 전 실행 금지
-- [ ] `CLAUDE.md` Orchestration Handoff를 이번 계약 기준으로 갱신 (기존 이력 보존)
-- [ ] baseline = `main` `c2bc854` 확인 (detached `201e0c7` 아님)
-- [ ] 이전 계약 worktree·브랜치 보존 확인
-- [x] D-1 (제품명), D-5 (탭 ID 전면 재편), D-6 (4:3) 확정 — 2026-09-11
-- [ ] 결정 게이트 **D-2 / D-3 / D-4 / D-7** 답변 수령 (미수령 시 P5-S2·P6-S2·P6-S3은 BLOCKED 유지)
-- [ ] 원격 push·배포·외부 알림은 **이번 계약에 승인되지 않음**을 오케스트레이터가 인지
+총 30태스크(구현·준비 25 · 게이트 5), 레인 14개. 최대 동시 4. 임계 경로 13단계(r2 직렬 21단계).
+즉시 실행 가능: 없음(D-8·D-11 승인 필요). P2-F와 P0-T0.3a requirements 부분은 D-4 승인 필요.

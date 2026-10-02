@@ -2,7 +2,9 @@
 from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
+from typing import Literal
 
+from app.models import AnalysisRegionContext
 from app.reporting.result_snapshot import ResultRow, ResultSnapshot, snapshot_rows
 
 CellValue = str | int | float | bool | None
@@ -31,6 +33,24 @@ def report_metadata(snapshot: ResultSnapshot) -> list[tuple[str, CellValue]]:
         ("Passive Reference Dye", snapshot.passive_reference_label),
         ("Normalized Coordinate Basis", "post-background / positive passive reference when applied; raw fallback otherwise"),
     ]
+
+
+def display_genotype(genotype: str, marker: AnalysisRegionContext | None = None) -> str:
+    """Operator-facing call text. Contract stub: P1-C applies marker allele names."""
+    return genotype
+
+
+def axis_label(
+    snapshot: ResultSnapshot, axis: Literal["fam", "allele2"],
+    marker: AnalysisRegionContext | None = None,
+) -> str:
+    """Scatter axis title. Contract stub: P1-C applies marker allele names."""
+    return "FAM (norm)" if axis == "fam" else f"{snapshot.unified.allele2_dye} (norm)"
+
+
+def cycle_label(snapshot: ResultSnapshot, cycle: int) -> str:
+    """Read/cycle title. Contract stub: P1-C applies the instrument's read names."""
+    return str(cycle)
 
 
 def coordinate_basis(snapshot: ResultSnapshot) -> str:

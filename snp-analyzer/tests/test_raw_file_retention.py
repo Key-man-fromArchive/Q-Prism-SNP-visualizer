@@ -475,7 +475,7 @@ def test_migration_10_adds_session_raw_files_without_touching_existing_sessions(
         db.init_db()
         conn = db.get_db()
         conn.execute("DROP TABLE session_raw_files")
-        conn.execute("DELETE FROM schema_version WHERE version = 10")
+        conn.execute("DELETE FROM schema_version WHERE version >= 10")
         conn.execute(
             "INSERT INTO sessions (session_id, instrument, num_wells, num_cycles, allele2_dye, raw_filename, user_id) "
             "VALUES ('pre-existing-1', 'QuantStudio', 1, 1, 'VIC', 'old.eds', NULL)"
@@ -498,7 +498,7 @@ def test_migration_10_adds_session_raw_files_without_touching_existing_sessions(
             ).fetchone()
             is not None
         )
-        assert db._get_schema_version(conn) == 10
+        assert db._get_schema_version(conn) >= 10
 
         # ...and the pre-existing session/reading are completely untouched.
         session_row = conn.execute(

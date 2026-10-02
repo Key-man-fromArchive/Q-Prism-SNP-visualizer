@@ -9,6 +9,7 @@
  * Keep the label + palette rules in sync with the backend vocabulary.
  */
 import { WELL_TYPE_INFO, UNASSIGNED_TYPE, BRAND_HEX } from './constants';
+import type { MarkerRegion } from '@/types/api';
 
 export const MIN_PLOIDY = 2;
 export const MAX_PLOIDY = 8;
@@ -36,6 +37,12 @@ export function dosageOfLabel(label: string, ploidy: number): number | null {
 
 export function isGenotypeLabel(label: string, ploidy: number): boolean {
   return dosageOfLabel(label, ploidy) !== null;
+}
+
+/** Operator-facing call text. Contract stub: P1-D applies the marker's allele names. */
+export function displayGenotype(genotype: string, marker?: MarkerRegion | null): string {
+  void marker;
+  return genotype;
 }
 
 /** Compact label for tables/plate cells. Diploid: A1/Het/A2; higher: allele string. */
