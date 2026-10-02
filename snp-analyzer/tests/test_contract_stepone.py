@@ -15,7 +15,7 @@ from pydantic import ValidationError
 import app.db as db
 from app.models import (
     AlleleLabels, AnalysisContext, AnalysisRegionContext, ClusteringResult,
-    MarkerRegion, ReadLabel, UnifiedData, UploadResponse, WellCycleData,
+    MarkerRegion, ReadLabel, RegionResult, UnifiedData, UploadResponse, WellCycleData,
 )
 from app.reporting.result_snapshot import (
     ExportOptions, ResultSnapshot, filter_snapshot, snapshot_rows,
@@ -271,3 +271,81 @@ def test_new_routers_are_registered_and_empty():
 
     assert export_pptx.router.routes == [] and export_images.router.routes == []
     assert not [r for r in app.routes if "pptx" in getattr(r, "path", "") or "images" in getattr(r, "path", "")]
+
+
+# --- P0-C2 contract hardening ----------------------------------------------
+
+
+def test_allele_labels_strip_surrounding_whitespace():
+    labels = AlleleLabels(fam="  WT ", allele2="\tMT  ")
+    assert (labels.fam, labels.allele2) == ("WT", "MT")
+
+
+def test_allele_labels_length_is_measured_after_strip():
+    assert AlleleLabels(fam=" " + "a" * 32 + " ", allele2="b").fam == "a" * 32
+    with pytest.raises(ValidationError):
+        AlleleLabels(fam=" " + "a" * 33 + " ", allele2="b")
+
+
+@pytest.mark.parametrize("bad", [
+    "   ", " ", "‮WT", "W​T", "W T", "W T", "W‏T", "W﻿T", "W\x7fT",
+])
+@pytest.mark.parametrize("field", ["fam", "allele2"])
+def test_allele_labels_reject_blank_and_format_characters(field, bad):
+    values = {"fam": "WT", "allele2": "MT"}
+    values[field] = bad
+    with pytest.raises(ValidationError):
+        AlleleLabels(**values)
+
+
+@pytest.mark.parametrize("pair", [("WT", "wt"), ("Mt", "mT"), (" a ", "A")])
+def test_allele_labels_reject_names_equal_ignoring_case(pair):
+    with pytest.raises(ValidationError):
+        AlleleLabels(fam=pair[0], allele2=pair[1])
+
+
+def test_allele_labels_distinct_names_still_valid():
+    assert AlleleLabels(fam="WT", allele2="MT").allele2 == "MT"
+
+
+def test_filter_snapshot_filters_result_and_well_keyed_fields():
+    snapshot = _snapshot()
+    snapshot.result.confidences = {"A1": 0.9, "B1": 0.8}
+    snapshot.result.regions = [
+        RegionResult(id="m1", name="M1", wells=["A1", "A2"], ploidy=2, assignments={"A1": "Allele 1"}),
+        RegionResult(id="m2", name="M2", wells=["B1", "B2"], ploidy=2, assignments={"B1": "Allele 2"},
+                     confidences={"B1": 0.8}),
+    ]
+    snapshot.unified.ntc_wells = ["A2", "B2"]
+    snapshot.unified.imported_well_types = {"A1": "Unknown", "B2": "NTC"}
+    snapshot.unified.well_groups = {"g": ["A1", "B1"], "h": ["A1"]}
+    snapshot.unified.imported_markers = {"M1": ["A1", "A2"], "M2": ["B1", "B2"]}
+    snapshot.unified.sample_names = {"A1": "s1", "B2": "s4"}
+    before = snapshot.unified.model_dump()
+    filtered = filter_snapshot(snapshot, ("m2",))
+    assert set(filtered.result.assignments) <= {"B1", "B2"}
+    assert filtered.result.assignments == {"B1": "Allele 2"}
+    assert filtered.result.confidences == {"B1": 0.8}
+    assert [r.id for r in filtered.result.regions] == ["m2"]
+    assert filtered.unified.ntc_wells == ["B2"]
+    assert filtered.unified.imported_well_types == {"B2": "NTC"}
+    assert filtered.unified.well_groups == {"g": ["B1"]}
+    assert filtered.unified.imported_markers == {"M2": ["B1", "B2"]}
+    assert filtered.unified.sample_names == {"B2": "s4"}
+    assert snapshot.unified.model_dump() == before
+    assert snapshot.result.assignments == {"A1": "Allele 1", "B1": "Allele 2"}
+
+
+def test_filter_snapshot_keeps_none_optional_fields_none():
+    filtered = filter_snapshot(_snapshot(), ("m1",))
+    assert filtered.result.confidences is None
+    assert filtered.unified.ntc_wells is None
+    assert filtered.unified.imported_markers is None
+
+
+def test_parse_marker_ids_rejects_oversized_raw_value_before_splitting():
+    with pytest.raises(HTTPException) as exc:
+        parse_marker_ids("m," * 3000)
+    assert exc.value.status_code == 400
+    assert "too long" in exc.value.detail.lower()
+    assert parse_marker_ids("a" * 4096) == ("a" * 4096,)

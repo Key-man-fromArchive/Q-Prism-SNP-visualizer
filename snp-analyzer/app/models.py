@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal
 from uuid import UUID
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, computed_field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, computed_field, field_validator, model_validator
 
 
 class WellCycleData(BaseModel):
@@ -79,12 +79,24 @@ class AlleleLabels(BaseModel):
     fam: str = Field(min_length=1, max_length=32)
     allele2: str = Field(min_length=1, max_length=32)
 
+    @field_validator("fam", "allele2", mode="before")
+    @classmethod
+    def strip_surrounding_whitespace(cls, value: object) -> object:
+        # Before the length check, so min/max apply to the stored text.
+        return value.strip() if isinstance(value, str) else value
+
     @field_validator("fam", "allele2")
     @classmethod
     def reject_control_characters(cls, value: str) -> str:
-        if any(unicodedata.category(ch) == "Cc" for ch in value):
-            raise ValueError("Allele names must not contain control characters")
+        if any(unicodedata.category(ch) in {"Cc", "Cf", "Zl", "Zp"} for ch in value):
+            raise ValueError("Allele names must not contain control or invisible formatting characters")
         return value
+
+    @model_validator(mode="after")
+    def reject_identical_names(self) -> "AlleleLabels":
+        if self.fam.casefold() == self.allele2.casefold():
+            raise ValueError("Allele names must differ (ignoring case)")
+        return self
 
 
 class UnifiedData(BaseModel):
