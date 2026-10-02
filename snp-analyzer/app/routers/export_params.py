@@ -3,6 +3,16 @@ from fastapi import HTTPException
 
 MAX_MARKER_IDS = 200
 MAX_RAW_LENGTH = 4096
+ORIENTATIONS = ("fam_x", "allele2_x")
+
+
+def parse_orientation(raw: str | None) -> str:
+    """Scatter axis orientation; absent means ``fam_x`` (x = FAM)."""
+    if raw is None:
+        return "fam_x"
+    if raw not in ORIENTATIONS:
+        raise HTTPException(400, "orientation must be fam_x or allele2_x")
+    return raw
 
 
 def parse_marker_ids(raw: str | None) -> tuple[str, ...] | None:

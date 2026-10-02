@@ -202,8 +202,9 @@ def test_session_without_new_fields_restores_with_defaults(fresh_db):
 
 def test_export_options_marker_ids_is_last_field_with_default():
     names = [f.name for f in fields(ExportOptions)]
-    assert names[-1] == "marker_ids"
+    assert names[-2:] == ["marker_ids", "orientation"]
     assert ExportOptions().marker_ids is None
+    assert ExportOptions().orientation == "fam_x"
     legacy = ExportOptions(None, 1, True, "none", "legacy_latest")
     assert legacy.marker_ids is None and legacy.cycle == 1
 

@@ -169,11 +169,13 @@ def figure_options(snapshot: ResultSnapshot, figure: ReportFigure,
     if legend:
         title = f"{title}\n{legend}"
     present = {str(point["effective_type"]) for point in figure.points}
+    fam_on_x = snapshot.orientation == "fam_x"
     return {
         "title": title,
         "aspect": aspect,
-        "x_label": axis_label(snapshot, "allele2", marker, labels),
-        "y_label": axis_label(snapshot, "fam", marker, labels),
+        "x_label": axis_label(snapshot, "fam" if fam_on_x else "allele2", marker, labels),
+        "y_label": axis_label(snapshot, "allele2" if fam_on_x else "fam", marker, labels),
+        "orientation": snapshot.orientation,
         "legend_names": {gt: display_genotype(gt, marker, labels) for gt in sorted(present)} if labels else {},
     }
 

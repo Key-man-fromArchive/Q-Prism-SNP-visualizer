@@ -11,7 +11,7 @@ from app.reporting.filenames import content_disposition
 from app.reporting.result_snapshot import ExportOptions, capture_result_snapshot
 from app.reporting.snapshot_images import build_scatter_zip
 from app.reporting.snapshot_presentation import marker_scope
-from app.routers.export_params import parse_marker_ids
+from app.routers.export_params import parse_marker_ids, parse_orientation
 
 router = APIRouter()
 
@@ -26,11 +26,13 @@ def export_scatter_png_zip(
     cycle_mode: CycleMode = Query(default="legacy_latest"),
     result_revision: UUID | None = Query(default=None),
     marker_ids: str | None = Query(default=None),
+    orientation: str | None = Query(default=None),
 ):
     selected = parse_marker_ids(marker_ids)
+    axes = parse_orientation(orientation)
     snapshot = capture_result_snapshot(
         sid, current_user,
-        ExportOptions(result_revision, cycle, use_rox, background, cycle_mode, selected),
+        ExportOptions(result_revision, cycle, use_rox, background, cycle_mode, selected, axes),
     )
     return Response(
         build_scatter_zip(snapshot), media_type="application/zip",

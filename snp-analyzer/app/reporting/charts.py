@@ -76,6 +76,8 @@ _FONT_PATH = Path(__file__).parent / "fonts" / "NanumGothic-Regular.ttf"
 _FONT_FAMILY = "NanumGothic"
 _FONT_RC = {"font.family": [_FONT_FAMILY, "DejaVu Sans"]}
 _ASPECTS = {"4:3": (6.4, 4.8), "1:1": (5.4, 5.4), "3:4": (6.0, 8.0)}
+# orientation -> (point key on x, point key on y)
+_ORIENTATIONS = {"fam_x": ("norm_fam", "norm_allele2"), "allele2_x": ("norm_allele2", "norm_fam")}
 _AXIS_MARGIN = 0.05
 _WELL_LABEL_LIMIT = 48
 _font_registered = False
@@ -108,12 +110,18 @@ def build_scatter_figure(
     height: float | None = None, ploidy: int = 2, coordinate_basis: str = "normalized",
     *, title: str | None = None, x_label: str | None = None, y_label: str | None = None,
     legend_names: dict[str, str] | None = None, aspect: str | None = None,
+    orientation: str = "fam_x",
 ) -> Figure:
     """Build the scatter figure; the caller owns and must close it.
 
     ``legend_names`` maps canonical genotype strings to display names. Colours
-    are always looked up by the canonical string.
+    are always looked up by the canonical string. ``orientation`` is ``fam_x``
+    (x = FAM, y = allele-2 dye) or ``allele2_x`` (axes swapped); ``x_label`` and
+    ``y_label`` title the horizontal and vertical axis whichever data they hold.
     """
+    if orientation not in _ORIENTATIONS:
+        raise ValueError(f"orientation must be one of {sorted(_ORIENTATIONS)}")
+    x_key, y_key = _ORIENTATIONS[orientation]
     if aspect is not None and aspect not in _ASPECTS:
         raise ValueError(f"aspect must be one of {sorted(_ASPECTS)}")
     if aspect is not None:
@@ -129,22 +137,24 @@ def build_scatter_figure(
         names = legend_names or {}
         for gt, pts in groups.items():
             color = genotype_color(gt, ploidy) or "#6b7280"
-            xs = [p["norm_allele2"] for p in pts]
-            ys = [p["norm_fam"] for p in pts]
+            xs = [p[x_key] for p in pts]
+            ys = [p[y_key] for p in pts]
             ax.scatter(xs, ys, c=color, s=20, alpha=0.7, label=literal_text(f"{names.get(gt, gt)} (n={len(pts)})"),
                        edgecolors="white", linewidth=0.3)
 
         if len(points) <= _WELL_LABEL_LIMIT:
             for p in points:
-                ax.annotate(literal_text(str(p["well"])), (p["norm_allele2"], p["norm_fam"]), xytext=(3, 3),
+                ax.annotate(literal_text(str(p["well"])), (p[x_key], p[y_key]), xytext=(3, 3),
                             textcoords="offset points", fontsize=6, color="#374151")
 
-        ax.set_xlabel(literal_text(x_label or f"{allele2_dye} ({coordinate_basis})"), fontsize=10)
-        ax.set_ylabel(literal_text(y_label or f"FAM ({coordinate_basis})"), fontsize=10)
+        fam_default, allele2_default = f"FAM ({coordinate_basis})", f"{allele2_dye} ({coordinate_basis})"
+        fam_on_x = orientation == "fam_x"
+        ax.set_xlabel(literal_text(x_label or (fam_default if fam_on_x else allele2_default)), fontsize=10)
+        ax.set_ylabel(literal_text(y_label or (allele2_default if fam_on_x else fam_default)), fontsize=10)
         ax.set_title(literal_text(title or "Allele Discrimination Plot"), fontsize=12,
                      fontweight="bold")
-        xlim = _fitted_limits([p["norm_allele2"] for p in points])
-        ylim = _fitted_limits([p["norm_fam"] for p in points])
+        xlim = _fitted_limits([p[x_key] for p in points])
+        ylim = _fitted_limits([p[y_key] for p in points])
         if xlim and ylim:
             ax.set_xlim(*xlim)
             ax.set_ylim(*ylim)

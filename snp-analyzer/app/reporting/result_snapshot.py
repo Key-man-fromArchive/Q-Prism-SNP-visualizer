@@ -32,6 +32,7 @@ class ExportOptions:
     background: BackgroundMode | None = None
     cycle_mode: CycleMode = "legacy_latest"
     marker_ids: tuple[str, ...] | None = None
+    orientation: str = "fam_x"
 
 
 class MarkerLabel(BaseModel):
@@ -56,6 +57,8 @@ class ResultSnapshot:
     passive_reference_label: str
     # marker_id -> names at capture time; may lag the analysed marker set.
     marker_labels: dict[str, MarkerLabel] = field(default_factory=dict)
+    # Scatter axes of every figure: "fam_x" or "allele2_x".
+    orientation: str = "fam_x"
 
 
 @dataclass(frozen=True)
@@ -222,6 +225,7 @@ def capture_result_snapshot(
             _reference_label(data, context.cycle),
             {m.id: MarkerLabel(name=m.name, allele_labels=m.allele_labels)
              for m in deepcopy(marker_store.get(sid, []))},
+            options.orientation,
         )
     return filter_snapshot(snapshot, options.marker_ids)
 
@@ -283,6 +287,7 @@ def filter_snapshot(snapshot: ResultSnapshot, marker_ids: tuple[str, ...] | None
         groups, {n: s for n, s in snapshot.group_sources.items() if n in groups},
         deepcopy(snapshot.protocol), snapshot.raw_filename, snapshot.passive_reference_label,
         {k: v.model_copy(deep=True) for k, v in snapshot.marker_labels.items() if k in selected},
+        snapshot.orientation,
     )
 
 
