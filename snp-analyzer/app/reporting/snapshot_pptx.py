@@ -23,12 +23,13 @@ from app.reporting.snapshot_plate import render_snapshot_plate
 from app.reporting.snapshot_presentation import (
     MAX_LAYOUT_LABEL,
     ReportFigure,
+    call_text,
     coordinate_basis,
     cycle_label,
-    display_genotype,
     figure_options,
     figure_points,
     figure_title,
+    instrument_label,
     marker_scope,
     polyploid_legend,
 )
@@ -38,8 +39,8 @@ RESULT_HEADERS = ["Well", "Sample", "Marker", "Allele Call", "Confidence (%)"]
 ROWS_PER_BLOCK = 16
 BLOCKS_PER_SLIDE = 3
 WELLS_PER_PAGE = ROWS_PER_BLOCK * BLOCKS_PER_SLIDE
-_COLUMN_WIDTHS = (0.5, 1.1, 0.95, 1.0, 0.65)
-_SAMPLE_CHARS, _MARKER_CHARS, _CALL_CHARS = 18, 14, 14
+_COLUMN_WIDTHS = (0.5, 1.0, 0.95, 1.1, 0.65)
+_SAMPLE_CHARS, _MARKER_CHARS, _CALL_CHARS = 16, 14, 16
 MAX_COUNT_ROWS = 10
 _SLIDE_W, _SLIDE_H = 13.333, 7.5
 _HEADER_FILL = RGBColor(0xE8, 0xEE, 0xF4)
@@ -149,7 +150,7 @@ def _cover(deck, snapshot: ResultSnapshot, marker_count: int) -> None:
     slide = _blank(deck, "SNP Discrimination Report")
     details = [
         ["File", snapshot.raw_filename],
-        ["Instrument", snapshot.unified.instrument],
+        ["Instrument", instrument_label(snapshot)],
         ["Analysis cycle", cycle_label(snapshot, context.cycle)],
         ["Use ROX", context.use_rox],
         ["Passive reference", snapshot.passive_reference_label],
@@ -200,10 +201,7 @@ def _page_title(snapshot: ResultSnapshot, page: _MarkerPage) -> str:
 
 
 def _call_counts(page: _MarkerPage) -> list[list[object]]:
-    counts = Counter(
-        _clip(display_genotype(row.genotype, row.marker, row.allele_labels), _CALL_CHARS)
-        for row in page.rows
-    )
+    counts = Counter(_clip(call_text(row), _CALL_CHARS) for row in page.rows)
     shown = [[call, count] for call, count in counts.items()]
     if len(shown) <= MAX_COUNT_ROWS:
         return shown
@@ -262,7 +260,7 @@ def _result_table_rows(rows: list[ResultRow]) -> list[list[object]]:
             row.well,
             _clip(row.sample_name, _SAMPLE_CHARS),
             _clip(row.marker.name if row.marker else "", _MARKER_CHARS),
-            _clip(display_genotype(row.genotype, row.marker, row.allele_labels), _CALL_CHARS),
+            _clip(call_text(row), _CALL_CHARS),
             round(row.confidence * 100, 1) if row.confidence is not None else "",
         ]
         for row in rows

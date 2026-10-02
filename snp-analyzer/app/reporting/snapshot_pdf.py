@@ -20,8 +20,8 @@ from app.reporting.result_snapshot import ResultRow, ResultSnapshot, snapshot_ro
 from app.processing.ct_calculation import calculate_all_ct
 from app.reporting.snapshot_plate import render_snapshot_plate
 from app.reporting.snapshot_presentation import (
-    MAX_LAYOUT_LABEL, CellValue, ReportFigure, coordinate_basis, cycle_label, display_genotype,
-    figure_options, polyploid_legend, report_counts, report_figures, report_metadata, report_table,
+    MAX_LAYOUT_LABEL, CellValue, ReportFigure, call_text, coordinate_basis, cycle_label,
+    figure_options, has_call_column, polyploid_legend, report_counts, report_figures, report_metadata, report_table,
 )
 
 FONT = "ReportNanum"
@@ -63,7 +63,7 @@ def _column_sections(headers: list[str]) -> tuple[list[str], list[str]]:
 
 
 def _has_allele_names(rows: list[ResultRow]) -> bool:
-    return any(row.allele_labels is not None for row in rows)
+    return has_call_column(rows)
 
 
 def _call_table(
@@ -75,7 +75,7 @@ def _call_table(
         return headers, values
     at = headers.index("Genotype") + 1
     for row, cells in zip(rows, values, strict=True):
-        cells.insert(at, display_genotype(row.genotype, row.marker, row.allele_labels))
+        cells.insert(at, call_text(row))
     return [*headers[:at], "Allele Call", *headers[at:]], values
 
 
@@ -148,8 +148,7 @@ def _plate_layout(rows: list[ResultRow]) -> dict[str, str]:
 def _marker_detail(snapshot: ResultSnapshot, rows: list[ResultRow], marker: AnalysisRegionContext) -> list[Flowable]:
     """Counts of this marker's calls plus the plate map with its wells emphasised."""
     own = [row for row in rows if row.marker and row.marker.marker_id == marker.marker_id]
-    counts = Counter((row.genotype, display_genotype(row.genotype, row.marker, row.allele_labels))
-                     for row in own)
+    counts = Counter((row.genotype, call_text(row)) for row in own)
     name = own[0].marker.name if own and own[0].marker else marker.name
     plate = render_snapshot_plate(rows, marker_layout=_plate_layout(rows), highlight_marker_id=marker.marker_id)
     return [paragraph(f"Marker detail: {name} [{marker.marker_id}]", 11), Spacer(1, 6),

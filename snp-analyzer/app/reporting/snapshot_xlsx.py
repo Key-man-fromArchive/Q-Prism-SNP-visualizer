@@ -11,8 +11,8 @@ from app.models import AnalysisRegionContext
 from app.reporting.charts import render_scatter_png
 from app.reporting.result_snapshot import ResultRow, ResultSnapshot, snapshot_rows
 from app.reporting.snapshot_presentation import (
-    CellValue, coordinate_basis, cycle_label, display_genotype, figure_options, polyploid_legend,
-    report_counts, report_figures, report_metadata, report_table,
+    CellValue, call_text, coordinate_basis, cycle_label, figure_options, has_call_column,
+    polyploid_legend, report_counts, report_figures, report_metadata, report_table,
 )
 
 
@@ -40,7 +40,7 @@ def add_label_columns(
     ``Genotype`` and ``Cycle`` keep their canonical values; runs with neither
     kind of name come back untouched.
     """
-    named = any(row.allele_labels is not None for row in rows)
+    named = has_call_column(rows)
     cycle_text = cycle_label(snapshot, snapshot.context.cycle) if snapshot.unified.read_labels else None
     if not named and cycle_text is None:
         return headers, values
@@ -54,7 +54,7 @@ def add_label_columns(
         at = headers.index("Genotype") + 1
         headers.insert(at, "Allele Call")
         for row, cells in zip(rows, values, strict=True):
-            cells.insert(at, display_genotype(row.genotype, row.marker, row.allele_labels))
+            cells.insert(at, call_text(row))
     return headers, values
 
 
