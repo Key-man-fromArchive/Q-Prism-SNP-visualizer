@@ -265,12 +265,18 @@ def test_presentation_stubs_keep_existing_notation():
     assert cycle_label(snapshot, 3) == "3"
 
 
-def test_new_routers_are_registered_and_empty():
+def test_new_routers_are_registered_with_expected_paths():
     from app.main import app
     from app.routers import export_images, export_pptx
 
-    assert export_pptx.router.routes == [] and export_images.router.routes == []
-    assert not [r for r in app.routes if "pptx" in getattr(r, "path", "") or "images" in getattr(r, "path", "")]
+    app_paths = {getattr(r, "path", "") for r in app.routes}
+    expected = {
+        export_pptx: "/api/data/{sid}/export/pptx",
+        export_images: "/api/data/{sid}/export/scatter-png.zip",
+    }
+    for module, path in expected.items():
+        assert path in {r.path for r in module.router.routes}
+        assert path in app_paths
 
 
 # --- P0-C2 contract hardening ----------------------------------------------
