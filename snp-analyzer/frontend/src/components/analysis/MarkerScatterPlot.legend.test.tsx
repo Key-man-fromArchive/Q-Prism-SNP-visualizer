@@ -72,7 +72,7 @@ it('keeps a compact legend on its own row above the plot area and only lists the
   expect(layout.legend.x).toBeGreaterThan(0.5);
   // At or above the top edge of the plot area, with room reserved for it and the modebar.
   expect(layout.legend.y).toBeGreaterThanOrEqual(1);
-  expect(layout.margin.t).toBeGreaterThanOrEqual(48);
+  expect(layout.margin.t).toBeGreaterThanOrEqual(56);
   expect(layout.legend.bgcolor).toBeTruthy();
   expect(layout.margin.b).toBeLessThan(80);
   expect(traces.some((t) => t.name?.endsWith(' (n=2)'))).toBe(true);

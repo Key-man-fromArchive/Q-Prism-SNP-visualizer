@@ -60,7 +60,7 @@ const ko: Translations = {
   ampQcTitle: '증폭 기준', ampQcOff: '증폭 확인 꺼짐',
   ampQcSourceAuto: (fraction: string) => `자동, 상위 10%의 ${fraction}`,
   ampQcSourceManual: '수동', ampQcSourceMixed: '일부 수동',
-  ampQcEnabled: '증폭 확인', ampQcFraction: '상위 10% 대비 비율',
+  ampQcAdjust: '조정', ampQcEnabled: '증폭 확인', ampQcFraction: '상위 10% 대비 비율',
   ampQcThresholdInput: (channel: string) => `${channel} 기준값 (비우면 자동)`,
   ampQcMarkerNone: '이 마커는 증폭되지 않았습니다',
   ampQcWellNone: '증폭 없음',

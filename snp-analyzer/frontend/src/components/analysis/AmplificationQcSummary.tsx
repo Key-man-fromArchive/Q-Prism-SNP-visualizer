@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useI18n } from '@/hooks/use-i18n';
 import { channelLabels } from '@/lib/channel-labels';
 import { clampQcFraction, DEFAULT_QC_FRACTION, qcSummaryParts } from '@/lib/amplification-qc';
@@ -15,7 +16,12 @@ function parseThreshold(raw: string): number | null {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-/** One line stating which amplification thresholds the last analysis applied; in expert mode also the controls to change them. */
+/** Kept for the session so the editor stays as the expert left it. */
+let controlsOpen = false;
+
+const INPUT_CLASS = 'w-28 rounded border border-border bg-surface px-1.5 py-1';
+
+/** One line stating which amplification thresholds the last analysis applied; in expert mode also a collapsed editor for them. */
 export function AmplificationQcSummary() {
   const { t } = useI18n();
   const qc = useAnalysisStore((s) => s.result?.amplification_qc);
@@ -24,6 +30,8 @@ export function AmplificationQcSummary() {
   const expert = useSettingsStore((s) => s.expertMode);
   const settings = useSettingsStore((s) => s.amplificationQc);
   const setQc = useSettingsStore((s) => s.setAmplificationQc);
+  const [open, setOpenState] = useState(controlsOpen);
+  const setOpen = (v: boolean) => { controlsOpen = v; setOpenState(v); };
   const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
 
   const parts = qcSummaryParts(qc, { fam: 'FAM', allele2: allele2Dye || labels.allele2 });
@@ -37,32 +45,36 @@ export function AmplificationQcSummary() {
   if (!summary && !expert) return null;
   return (
     <div className="panel" data-testid="amplification-qc-card">
-      {summary && <p data-testid="amplification-qc-summary" className="text-xs text-text-muted">{summary}</p>}
-      {expert && (
-        <div data-testid="amplification-qc-controls" className="mt-2 flex flex-wrap items-end gap-3 text-xs text-text">
-          <label className="flex items-center gap-1.5">
-            <input type="checkbox" data-testid="qc-enabled" checked={settings.enabled}
+      <div className="flex items-center justify-between gap-2">
+        <p data-testid="amplification-qc-summary" className="min-w-0 truncate text-xs text-text-muted">{summary ?? t.ampQcTitle}</p>
+        {expert && (
+          <button type="button" data-testid="qc-adjust" aria-expanded={open} onClick={() => setOpen(!open)}
+            className="shrink-0 rounded border border-border px-2 py-0.5 text-xs text-text">{t.ampQcAdjust}</button>
+        )}
+      </div>
+      {expert && open && (
+        <div data-testid="amplification-qc-controls"
+          className="mt-2 grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2 text-xs text-text">
+          <label htmlFor="qc-enabled" className="col-span-2 flex items-center gap-1.5">
+            <input id="qc-enabled" type="checkbox" data-testid="qc-enabled" checked={settings.enabled}
               onChange={(e) => setQc({ enabled: e.target.checked })} />
             {t.ampQcEnabled}
           </label>
-          <label className="flex flex-col gap-0.5">
-            {t.ampQcFraction}: {settings.fraction.toFixed(2)}
-            <input type="range" data-testid="qc-fraction" min={0.05} max={0.9} step={0.05} disabled={!settings.enabled}
-              value={settings.fraction} className="w-32"
+          <label htmlFor="qc-fraction">{t.ampQcFraction}</label>
+          <span className="flex items-center gap-2">
+            <input id="qc-fraction" type="range" data-testid="qc-fraction" min={0.05} max={0.9} step={0.05} disabled={!settings.enabled}
+              value={settings.fraction} className="w-28"
               onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v)) setQc({ fraction: clampQcFraction(v) }); }} />
-          </label>
-          <label className="flex flex-col gap-0.5">
-            {t.ampQcThresholdInput(labels.fam)}
-            <input type="number" data-testid="qc-fam-threshold" min={0} step={0.1} disabled={!settings.enabled}
-              value={settings.famThreshold ?? ''} className="w-24 rounded border border-border bg-surface px-1.5 py-1"
-              onChange={(e) => setQc({ famThreshold: parseThreshold(e.target.value) })} />
-          </label>
-          <label className="flex flex-col gap-0.5">
-            {t.ampQcThresholdInput(labels.allele2)}
-            <input type="number" data-testid="qc-allele2-threshold" min={0} step={0.1} disabled={!settings.enabled}
-              value={settings.allele2Threshold ?? ''} className="w-24 rounded border border-border bg-surface px-1.5 py-1"
-              onChange={(e) => setQc({ allele2Threshold: parseThreshold(e.target.value) })} />
-          </label>
+            <span className="w-9 text-right tabular-nums">{settings.fraction.toFixed(2)}</span>
+          </span>
+          <label htmlFor="qc-fam-threshold">{t.ampQcThresholdInput(labels.fam)}</label>
+          <input id="qc-fam-threshold" type="number" data-testid="qc-fam-threshold" min={0} step={0.1} disabled={!settings.enabled}
+            value={settings.famThreshold ?? ''} className={INPUT_CLASS}
+            onChange={(e) => setQc({ famThreshold: parseThreshold(e.target.value) })} />
+          <label htmlFor="qc-allele2-threshold">{t.ampQcThresholdInput(labels.allele2)}</label>
+          <input id="qc-allele2-threshold" type="number" data-testid="qc-allele2-threshold" min={0} step={0.1} disabled={!settings.enabled}
+            value={settings.allele2Threshold ?? ''} className={INPUT_CLASS}
+            onChange={(e) => setQc({ allele2Threshold: parseThreshold(e.target.value) })} />
         </div>
       )}
     </div>

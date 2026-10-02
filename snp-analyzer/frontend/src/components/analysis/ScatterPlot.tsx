@@ -17,7 +17,7 @@ import { AnalysisCardHeader } from "./AnalysisCardHeader";
 import { WELL_TYPE_INFO } from "@/lib/constants";
 import { genotypeClasses, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
 import { chartCategory, callLabel, cycleReadText, chartPointState, chartStateText } from "@/lib/chart-semantics";
-import { compactLegend, plotlyColors } from "@/lib/plotly-theme";
+import { compactLegend, LEGEND_MARGIN_TOP, PLOTLY_MODEBAR, plotlyColors } from "@/lib/plotly-theme";
 import {
   axisRangeLayout, axisTitle, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode, fitBounds,
   fromPlot, hasNtcWells, NTC_AMBER, NTC_HANDLE_SIZE, NTC_MARKER_SIZE, ntcDragRelayout, ntcThresholdShapes,
@@ -625,13 +625,13 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       annotations,
       // The legend is a compact row above the plot area, below the modebar, so
       // it never covers data or tools (nothing is reserved under the axis).
-      margin: { t: 52, r: 10, b: 60, l: 70 },
+      margin: { t: LEGEND_MARGIN_TOP, r: 10, b: 60, l: 70 },
       legend: compactLegend(colors),
     };
 
     const config: Partial<Config> = {
       responsive: true,
-      displayModeBar: true,
+      displayModeBar: PLOTLY_MODEBAR,
       // zoom2d/pan2d are kept: with the clusters this squashed, selecting an
       // individual well is impossible without being able to zoom in first.
       modeBarButtonsToRemove: ["toImage", "sendDataToCloud"],

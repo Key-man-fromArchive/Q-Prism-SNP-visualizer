@@ -64,13 +64,20 @@ function readToken(name: string, fallback: string): string {
 export function compactLegend(colors: { legendBg: string; fontColor: string }) {
   return {
     orientation: "h" as const,
-    // Own row above the plot area; the modebar lives in the taller top margin.
+    // Own rows above the plot area; the modebar is hover-only and sits above them.
     x: 0.99, xanchor: "right" as const, y: 1, yanchor: "bottom" as const,
     bgcolor: colors.legendBg,
-    font: { size: 10, color: colors.fontColor },
+    font: { size: 9, color: colors.fontColor },
     itemsizing: "constant" as const,
+    tracegroupgap: 0,
+    entrywidth: 0,
   };
 }
+
+/** Top margin reserving room for the legend's (at most two) rows so it never
+ *  overlaps the data; the modebar only appears on hover (see PLOTLY_MODEBAR). */
+export const LEGEND_MARGIN_TOP = 58;
+export const PLOTLY_MODEBAR = "hover" as const;
 
 export function plotlyColors() {
   const dark = isDarkMode();
