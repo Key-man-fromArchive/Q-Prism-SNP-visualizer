@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { PersistStorage } from 'zustand/middleware';
 import type { BackgroundMode } from '@/types/api';
-import { DEFAULT_QC_SETTINGS, type AmplificationQcSettings } from '@/lib/amplification-qc';
 
 /** How the scatter plots range their axes.
  *  - `zero`   : legacy persisted name for the NTC-origin offset mode.
@@ -83,7 +82,6 @@ interface SettingsState {
   /** Reveals the technical controls and tables the default results view hides. */
   expertMode: boolean;
   /** Amplification check choices; sent with each analysis request when not at the defaults. */
-  amplificationQc: AmplificationQcSettings;
   // Actions
   setUseRox: (v: boolean) => void;
   setBackgroundMode: (v: BackgroundMode) => void;
@@ -111,7 +109,6 @@ interface SettingsState {
   setShowManualTypes: (v: boolean) => void;
   setShowEmptyWells: (v: boolean) => void;
   setExpertMode: (v: boolean) => void;
-  setAmplificationQc: (patch: Partial<AmplificationQcSettings>) => void;
   resetToDefaults: () => void;
 }
 
@@ -155,7 +152,6 @@ const defaults = {
   showManualTypes: true,
   showEmptyWells: false,
   expertMode: false,
-  amplificationQc: DEFAULT_QC_SETTINGS,
 };
 
 /** Bump whenever a *default's meaning* changes such that an already-stored
@@ -247,7 +243,6 @@ export const useSettingsStore = create<SettingsState>()(
       // The edit tool has no control outside expert mode, so leaving expert
       // mode also leaves the tool.
       setExpertMode: (v) => set(v ? { expertMode: true } : { expertMode: false, scatterTool: 'select' }),
-      setAmplificationQc: (patch) => set({ amplificationQc: { ...get().amplificationQc, ...patch } }),
       // Expert mode is a view preference, not an analysis setting: resetting
       // the analysis settings must not flip the screen layout under the user.
       resetToDefaults: () => set({ ...defaults, expertMode: get().expertMode }),

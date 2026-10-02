@@ -8,6 +8,7 @@ import { useAnalysisStore } from '@/stores/analysis-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useSettingsStore } from '@/stores/settings-store';
+import { useQcUiStore } from '@/stores/qc-ui-store';
 import type { AmplificationQcResult, MarkerRegion } from '@/types/api';
 vi.mock('@/lib/api', () => ({ runClustering: vi.fn().mockResolvedValue({ algorithm: 'auto', cycle: 20, assignments: {} }),
   suggestCycle: vi.fn(),
@@ -35,6 +36,7 @@ beforeEach(() => {
   useLanguageStore.getState().setLanguage('en');
   vi.clearAllMocks();
   useSettingsStore.getState().resetToDefaults();
+  useQcUiStore.setState({ bySession: {} });
   useSessionStore.setState({ sessionId: 'multi', initialAnalysisAvailable: false });
   useAnalysisStore.getState().setSession('multi', 'u');
   useNavigationStore.setState({ status: 'ready', surface: 'analysis' });
@@ -70,7 +72,7 @@ it('sends the operator choices with the analysis request only when they differ f
   act(() => useNavigationStore.setState({ cycle: 21 }));
   await act(async () => { await vi.advanceTimersByTimeAsync(500); });
   expect(vi.mocked(runClustering).mock.calls.at(-1)![1]).not.toHaveProperty('amplification_qc');
-  act(() => useSettingsStore.getState().setAmplificationQc({ famThreshold: 2 }));
+  act(() => useQcUiStore.getState().patchSettings('multi', { famThreshold: 2 }));
   await act(async () => { await vi.advanceTimersByTimeAsync(500); });
   expect(vi.mocked(runClustering).mock.calls.at(-1)![1]).toMatchObject({
     amplification_qc: { enabled: true, fraction: 1 / 3, fam_threshold: 2, allele2_threshold: null } });

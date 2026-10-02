@@ -4,6 +4,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useSessionQc } from "@/stores/qc-ui-store";
 import { useDataStore } from "@/stores/data-store";
 import {
   getWellGroups,
@@ -146,7 +147,7 @@ export function AnalysisTab() {
     })();
   }, [sessionId, setWellGroups]);
 
-  const qcSettings = useSettingsStore((s) => s.amplificationQc);
+  const { settings: qcSettings } = useSessionQc();
   const currentRequest = useMemo(() => {
     const amplification_qc = qcConfigFromSettings(qcSettings);
     return {

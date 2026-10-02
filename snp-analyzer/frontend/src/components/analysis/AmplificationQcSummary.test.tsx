@@ -5,6 +5,7 @@ import { useAnalysisStore } from '@/stores/analysis-store';
 import { useDataStore } from '@/stores/data-store';
 import { useLanguageStore } from '@/stores/language-store';
 import { useSettingsStore } from '@/stores/settings-store';
+import { useQcUiStore } from '@/stores/qc-ui-store';
 import type { AmplificationQcResult } from '@/types/api';
 
 const qc: AmplificationQcResult = {
@@ -14,7 +15,10 @@ const qc: AmplificationQcResult = {
 const withQc = (patch: Partial<AmplificationQcResult>) =>
   useAnalysisStore.setState({ result: { algorithm: 'auto', cycle: 1, assignments: {}, amplification_qc: { ...qc, ...patch } } });
 
+const savedQc = () => useQcUiStore.getState().bySession[''].settings;
+
 beforeEach(() => {
+  useQcUiStore.setState({ bySession: {} });
   useLanguageStore.getState().setLanguage('en');
   useSettingsStore.getState().resetToDefaults();
   useSettingsStore.setState({ expertMode: false });
@@ -71,11 +75,11 @@ it('lets an expert switch the check off, set the fraction and type manual thresh
   openControls();
   fireEvent.change(screen.getByTestId('qc-fraction'), { target: { value: '0.5' } });
   fireEvent.change(screen.getByTestId('qc-fam-threshold'), { target: { value: '2.5' } });
-  expect(useSettingsStore.getState().amplificationQc).toMatchObject({ fraction: 0.5, famThreshold: 2.5, allele2Threshold: null });
+  expect(savedQc()).toMatchObject({ fraction: 0.5, famThreshold: 2.5, allele2Threshold: null });
   fireEvent.change(screen.getByTestId('qc-fam-threshold'), { target: { value: '' } });
-  expect(useSettingsStore.getState().amplificationQc.famThreshold).toBeNull();
+  expect(savedQc().famThreshold).toBeNull();
   fireEvent.click(screen.getByTestId('qc-enabled'));
-  expect(useSettingsStore.getState().amplificationQc.enabled).toBe(false);
+  expect(savedQc().enabled).toBe(false);
 });
 
 it('keeps the fraction inside 0.05–0.9', () => {
@@ -83,14 +87,12 @@ it('keeps the fraction inside 0.05–0.9', () => {
   render(<AmplificationQcSummary />);
   openControls();
   fireEvent.change(screen.getByTestId('qc-fraction'), { target: { value: '5' } });
-  expect(useSettingsStore.getState().amplificationQc.fraction).toBe(0.9);
+  expect(savedQc().fraction).toBe(0.9);
   fireEvent.change(screen.getByTestId('qc-fraction'), { target: { value: '0.01' } });
-  expect(useSettingsStore.getState().amplificationQc.fraction).toBe(0.05);
+  expect(savedQc().fraction).toBe(0.05);
 });
 
 it('keeps the editor open across a remount (marker switch / re-analysis)', async () => {
-  const { useQcUiStore } = await import('@/stores/qc-ui-store');
-  useQcUiStore.setState({ controlsOpen: false });
   useSettingsStore.setState({ expertMode: true });
   const first = render(<AmplificationQcSummary />);
   fireEvent.click(screen.getByTestId('qc-adjust'));
@@ -99,5 +101,5 @@ it('keeps the editor open across a remount (marker switch / re-analysis)', async
   withQc({ source: 'manual' });
   render(<AmplificationQcSummary />);
   expect(screen.getByTestId('qc-enabled')).toBeTruthy();
-  expect(useQcUiStore.getState().controlsOpen).toBe(true);
+  expect(useQcUiStore.getState().bySession[''].open).toBe(true);
 });
