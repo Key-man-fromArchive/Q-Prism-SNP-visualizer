@@ -1,5 +1,6 @@
-import { wellInfo } from './genotype';
+import { displayGenotype, wellInfo } from './genotype';
 import type { Translations } from '@/locales/en';
+import type { MarkerRegion, ReadLabel } from '@/types/api';
 
 const LABEL_KEYS: Record<string, keyof Translations> = {
   NTC: 'wellTypeNTC', Unknown: 'wellTypeUnknown', 'Positive Control': 'wellTypePositiveControl',
@@ -11,6 +12,46 @@ const LABEL_KEYS: Record<string, keyof Translations> = {
 export function callLabel(key: string, t: Readonly<Translations>): string {
   const value = t[LABEL_KEYS[key]];
   return typeof value === 'string' ? value : key;
+}
+
+/** Call text for a marker's legend and hover: allele names for named diploid calls, else the localized call. */
+export function markerCallLabel(key: string, t: Readonly<Translations>, marker?: Pick<MarkerRegion, 'allele_labels'> | null): string {
+  // displayGenotype only reads the allele names
+  const shown = displayGenotype(key, marker as MarkerRegion | null | undefined);
+  return shown !== key ? shown : callLabel(key, t);
+}
+
+type ReadStage = 'pre' | 'post' | 'amplification';
+
+function readStage(label: ReadLabel): ReadStage {
+  const stage = label.stage.toLowerCase();
+  if (stage.includes('pre')) return 'pre';
+  if (stage.includes('post')) return 'post';
+  return 'amplification';
+}
+
+/** Instrument read name for a cycle, e.g. `Amplification 1/5 · PCR 36 · 40°C`; null when the run declares none. */
+export function cycleReadText(
+  cycle: number | null | undefined,
+  readLabels: Record<number, ReadLabel> | null | undefined,
+  t: Readonly<Translations>
+): string | null {
+  const label = cycle == null ? undefined : readLabels?.[cycle];
+  if (!readLabels || cycle == null || !label) return null;
+  const stage = readStage(label);
+  const hasDetail = label.pcr_cycle != null && label.temperature != null;
+  if (stage !== 'amplification') {
+    const name = stage === 'pre' ? t.steponePreRead : t.steponePostRead;
+    return hasDetail ? `${name} · ${t.steponeReadLabel(label.pcr_cycle!, label.temperature!)}` : name;
+  }
+  const amplification = Object.entries(readLabels)
+    .filter(([, other]) => readStage(other) === 'amplification')
+    .map(([key]) => Number(key))
+    .sort((a, b) => a - b);
+  const current = amplification.indexOf(cycle) + 1;
+  return hasDetail
+    ? t.steponeCycleLabel(current, amplification.length, label.pcr_cycle!, label.temperature!)
+    : `${t.steponeAmplification} ${current}/${amplification.length}`;
 }
 
 /** Presentation only: canonical keys, dosage, colors and assignments are untouched. */

@@ -11,11 +11,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Plotly from "plotly.js-dist-min";
 import { dosageOfLabel, defaultRatioCuts } from "@/lib/genotype";
-import { chartCategory, callLabel, chartPointState, chartStateText } from "@/lib/chart-semantics";
+import { chartCategory, markerCallLabel, cycleReadText, chartPointState, chartStateText } from "@/lib/chart-semantics";
 import { useI18n } from "@/hooks/use-i18n";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { channelLabels } from "@/lib/channel-labels";
-import { axisRangeLayout, dataBounds, visibleBounds } from "@/lib/scatter-axes";
+import { axisRangeLayout, axisTitle, dataBounds, visibleBounds } from "@/lib/scatter-axes";
 import { updateMarker } from "@/lib/api";
 import { clearActiveChart, setActiveChart } from "@/lib/chart-export-registry";
 import { completeThresholdConfig } from "@/lib/threshold-config";
@@ -140,6 +140,8 @@ export function MarkerScatterPlot({
   const editing = useSettingsStore((s) => s.scatterTool) === "edit";
   const scatterAspect = useSettingsStore((s) => s.scatterAspect);
   const hasNormalizationChannel = useSessionStore((s) => s.sessionInfo?.has_rox === true);
+  const readLabels = useSessionStore((s) => s.sessionInfo?.read_labels);
+  const alleleNames = marker.allele_labels;
   const normalizationApplied = useDataStore((s) => s.normalizationApplied);
   const ntcAxisOffsets = useMemo(
     () => normalizationApplied
@@ -357,7 +359,8 @@ export function MarkerScatterPlot({
     });
 
     const colors = plotlyColors();
-    const thresholdLabels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
+    const namedMarker = { allele_labels: alleleNames };
+    const thresholdLabels =channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
     const traces: Record<string, unknown>[] = [];
     for (const typeKey of order) {
       const pts = typeGroups.get(typeKey)!;
@@ -367,12 +370,12 @@ export function MarkerScatterPlot({
         y: pts.map((p) => p.norm_allele2),
         mode: "markers",
         type: "scattergl",
-        name: callLabel(typeKey, t),
+        name: markerCallLabel(typeKey, t, namedMarker),
         customdata: pts.map((p) => p.well),
         text: pts.map(
           (p) =>
             `<b>${t.chartWellAddress}: ${p.well}</b>${p.sample_name ? " (" + p.sample_name + ")" : ""}<br>` +
-            `${t.chartCall}: ${callLabel(typeKey, t)}<br>${chartStateText(selectedWellSet.has(p.well), roxOutlierWells.includes(p.well), t)}`
+            `${t.chartCall}: ${markerCallLabel(typeKey, t, namedMarker)}<br>${chartStateText(selectedWellSet.has(p.well), roxOutlierWells.includes(p.well), t)}`
         ),
         hoverinfo: "text",
         hovertemplate: "%{text}<extra></extra>",
@@ -485,13 +488,13 @@ export function MarkerScatterPlot({
     const axes = axisRangeLayout(axisMode, lockAspect, bounds);
     const layout: Record<string, unknown> = {
       xaxis: {
-        title: { text: `${labels.fam}${suffix}`, font: { size: 12, color: colors.fontColor } },
+        title: { text: axisTitle(labels.fam, alleleNames?.fam, suffix), font: { size: 12, color: colors.fontColor } },
         gridcolor: colors.gridColor,
         zerolinecolor: colors.lineColor,
         ...axes.xaxis,
       },
       yaxis: {
-        title: { text: `${labels.allele2}${suffix}`, font: { size: 12, color: colors.fontColor } },
+        title: { text: axisTitle(labels.allele2, alleleNames?.allele2, suffix), font: { size: 12, color: colors.fontColor } },
         gridcolor: colors.gridColor,
         zerolinecolor: colors.lineColor,
         ...axes.yaxis,
@@ -526,13 +529,14 @@ export function MarkerScatterPlot({
     const analysedAt = useAnalysisStore.getState().result?.analysis_context?.analysed_at;
     const entry = useSessionStore.getState().entryGeneration;
     const ownerId = useAuthStore.getState().user?.id;
+    const readText = cycleReadText(scatterProvenance?.cycle, readLabels, t);
     const publishExport = (element: HTMLDivElement) => {
       if (token !== exportRender.current || !revision || !scatterProvenance
         || !ownsChartResult(entry, ownerId, revision)) return;
       const wells = scopedPoints.map(point => point.well).sort().join(',');
       setActiveChart({ element, sessionId, resultRevision: revision,
         cycle: scatterProvenance.cycle, useRox: scatterProvenance.useRox, backgroundMode: scatterProvenance.backgroundMode, entry, ownerId,
-        caption: `marker ${marker.name}; cycle ${scatterProvenance.cycle}; ${scatterProvenance.useRox ? 'reference requested' : 'raw basis'}; background ${scatterProvenance.backgroundMode}; visible wells ${wells}; revision ${revision}; analysed ${analysedAt ?? 'unknown'}`,
+        caption: `marker ${marker.name}${alleleNames ? ` (${axisTitle(labels.fam, alleleNames.fam)} / ${axisTitle(labels.allele2, alleleNames.allele2)})` : ''}; cycle ${scatterProvenance.cycle}${readText ? ` (${readText})` : ''};${scatterProvenance.useRox ? 'reference requested' : 'raw basis'}; background ${scatterProvenance.backgroundMode}; visible wells ${wells}; revision ${revision}; analysed ${analysedAt ?? 'unknown'}`,
         // The marker scope can be re-rendered by selected-only, boundaries,
         // assignments or chart settings without a new result revision. A PNG
         // must be tied to this immutable render, not just its result context.
@@ -598,6 +602,8 @@ export function MarkerScatterPlot({
     roleLabels,
     marker.id,
     marker.name,
+    alleleNames,
+    readLabels,
     selectedWellSet,
     effectiveNtc,
     selectWell,

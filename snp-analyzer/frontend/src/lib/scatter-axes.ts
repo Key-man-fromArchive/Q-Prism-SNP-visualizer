@@ -125,6 +125,11 @@ export function axisRangeLayout(
   };
 }
 
+/** Axis title `FAM · WT`; the bare dye when the marker has no allele name. `suffix` carries the normalization, e.g. ` / ROX`. */
+export function axisTitle(dye: string, alleleName: string | null | undefined, suffix = ''): string {
+  return `${alleleName ? `${dye} · ${alleleName}` : dye}${suffix}`;
+}
+
 /** Round a bound to something an operator can read in a number input without
  *  it looking like noise (3 significant-ish figures, magnitude-aware). */
 export function roundBound(value: number): number {
