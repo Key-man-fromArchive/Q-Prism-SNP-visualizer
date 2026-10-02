@@ -10,6 +10,7 @@ from app.reporting.result_snapshot import ResultRow, ResultSnapshot, snapshot_ro
 
 # D-2: the one place to change the diploid call notation.
 DIPLOID_CALL_FORMAT = "{first}/{second}"
+DEFAULT_EXPORT_ASPECT = "3:4"  # portrait scatter for every export
 MAX_LAYOUT_LABEL = 12  # plate-map label length shared by PDF and PPTX
 CellValue = str | int | float | bool | None
 
@@ -71,9 +72,7 @@ def axis_label(
     if allele_labels is None:
         return f"{dye} (norm)"
     name = allele_labels.fam if axis == "fam" else allele_labels.allele2
-    reference = snapshot.passive_reference_label
-    basis = f"{reference}-normalized" if snapshot.context.normalization_applied else "norm"
-    return f"{dye} · {name} ({basis})"
+    return f"{dye} ({name})"
 
 
 def cycle_label(snapshot: ResultSnapshot, cycle: int) -> str:
@@ -159,7 +158,8 @@ def report_figures(snapshot: ResultSnapshot, rows: list[ResultRow]) -> list[Repo
 
 
 def figure_options(snapshot: ResultSnapshot, figure: ReportFigure,
-                   marker: AnalysisRegionContext | None) -> dict[str, object]:
+                   marker: AnalysisRegionContext | None,
+                   aspect: str = DEFAULT_EXPORT_ASPECT) -> dict[str, object]:
     """The one set of chart options for every export: title (with the higher-ploidy
     legend), axis labels and display names of the calls actually present."""
     label = snapshot.marker_labels.get(marker.marker_id) if marker else None
@@ -171,6 +171,7 @@ def figure_options(snapshot: ResultSnapshot, figure: ReportFigure,
     present = {str(point["effective_type"]) for point in figure.points}
     return {
         "title": title,
+        "aspect": aspect,
         "x_label": axis_label(snapshot, "allele2", marker, labels),
         "y_label": axis_label(snapshot, "fam", marker, labels),
         "legend_names": {gt: display_genotype(gt, marker, labels) for gt in sorted(present)} if labels else {},

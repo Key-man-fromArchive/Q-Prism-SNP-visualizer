@@ -75,7 +75,8 @@ def genotype_color(label: str, ploidy: int) -> str | None:
 _FONT_PATH = Path(__file__).parent / "fonts" / "NanumGothic-Regular.ttf"
 _FONT_FAMILY = "NanumGothic"
 _FONT_RC = {"font.family": [_FONT_FAMILY, "DejaVu Sans"]}
-_ASPECTS = {"4:3": (6.4, 4.8), "1:1": (5.4, 5.4)}
+_ASPECTS = {"4:3": (6.4, 4.8), "1:1": (5.4, 5.4), "3:4": (6.0, 8.0)}
+_AXIS_MARGIN = 0.05
 _WELL_LABEL_LIMIT = 48
 _font_registered = False
 
@@ -91,6 +92,15 @@ def _register_font() -> None:
 def literal_text(text: str) -> str:
     """Escape ``$`` so user-supplied names are never interpreted as mathtext."""
     return text.replace("$", r"\$")
+
+
+def _fitted_limits(values: list[float]) -> tuple[float, float] | None:
+    """Data range plus a 5% margin; no negative space unless a point is negative."""
+    if not values:
+        return None
+    low, high = min(values), max(values)
+    pad = (high - low) * _AXIS_MARGIN or 0.05
+    return (max(low - pad, 0.0) if low >= 0 else low - pad), high + pad
 
 
 def build_scatter_figure(
@@ -133,9 +143,15 @@ def build_scatter_figure(
         ax.set_ylabel(literal_text(y_label or f"FAM ({coordinate_basis})"), fontsize=10)
         ax.set_title(literal_text(title or "Allele Discrimination Plot"), fontsize=12,
                      fontweight="bold")
+        xlim = _fitted_limits([p["norm_allele2"] for p in points])
+        ylim = _fitted_limits([p["norm_fam"] for p in points])
+        if xlim and ylim:
+            ax.set_xlim(*xlim)
+            ax.set_ylim(*ylim)
         if groups:
-            ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0,
-                      framealpha=0.9)
+            # Below the plot, horizontal: never covers a point.
+            ax.legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.14), borderaxespad=0,
+                      ncol=2, framealpha=0.9)
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
     return fig
@@ -158,7 +174,7 @@ def render_scatter_png(points: list[dict], allele2_dye: str = "VIC", width: floa
     try:
         buf = io.BytesIO()
         with plt.rc_context(_FONT_RC):
-            fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+            fig.savefig(buf, format="png", dpi=150)
     finally:
         plt.close(fig)
     return buf.getvalue()
