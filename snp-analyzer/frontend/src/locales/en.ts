@@ -14,6 +14,7 @@ const en = {
   chartReferenceFlagged: 'Reference-signal warning',
   analyzeRecommended: 'Analyze recommended cycle',
   chartNtcThreshold: 'NTC thresholds',
+  normalizationFallback: 'Normalization',
   chartAutoCall: 'Automatic call',
   chartManualCall: 'Manual type',
   chartWellAddress: 'Well',

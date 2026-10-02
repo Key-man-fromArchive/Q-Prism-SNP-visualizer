@@ -11,10 +11,15 @@ export function channelLabels(
   };
 }
 
-export function normalizationLabel(labels: ChannelLabels): string {
-  return labels.normalization || "Normalization";
+export function normalizationLabel(labels: ChannelLabels, fallback: string): string {
+  return labels.normalization || fallback;
 }
 
-export function normalizedLabel(label: string, labels: ChannelLabels, useNormalization: boolean): string {
-  return useNormalization ? `${label} / ${normalizationLabel(labels)}` : label;
+export function normalizedLabel(
+  label: string,
+  labels: ChannelLabels,
+  useNormalization: boolean,
+  fallback: string
+): string {
+  return useNormalization ? `${label} / ${normalizationLabel(labels, fallback)}` : label;
 }

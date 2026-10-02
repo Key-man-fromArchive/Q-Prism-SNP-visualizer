@@ -449,7 +449,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
         name: `${callLabel(typeKey, t)} (n=${points.length})`,
         customdata: points.map((p) => p.well),
         text: points.map((p) => {
-          const normSuffix = normalizationApplied ? ` / ${normalizationLabel(labels)}` : "";
+          const normSuffix = normalizationApplied ? ` / ${normalizationLabel(labels, t.normalizationFallback)}` : "";
           return (
             `<b>${t.chartWellAddress}: ${p.well}</b>${p.sample_name ? " (" + p.sample_name + ")" : ""}<br>${t.chartCall}: ${callLabel(typeKey, t)}<br>` +
             `${labels.fam}${normSuffix}: ${p.norm_fam.toFixed(decimals)}<br>` +
@@ -457,7 +457,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
             (normalizationApplied
               ? `<br>${t.raw} ${labels.fam}: ${p.raw_fam.toFixed(1)}<br>${t.raw} ${labels.allele2}: ${p.raw_allele2.toFixed(1)}`
               : "") +
-            (p.raw_rox != null ? `<br>${normalizationLabel(labels)}: ${p.raw_rox.toFixed(1)}` : "") +
+            (p.raw_rox != null ? `<br>${normalizationLabel(labels, t.normalizationFallback)}:${p.raw_rox.toFixed(1)}` : "") +
             (p.auto_cluster ? `<br>${t.chartAutoCall}: ${callLabel(p.auto_cluster, t)}` : "") +
             (p.manual_type ? `<br>${t.chartManualCall}: ${callLabel(p.manual_type, t)}` : "") +
             (p.confidence != null ? `<br>${t.confidence}: ${Math.round(p.confidence * 100)}%` : "") +
@@ -502,10 +502,10 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     if (bnd) traces.push(boundaryLegendTrace(t.boundaryLines, editing, colors.fontColor) as unknown as Data);
 
     const xLabel = normalizationApplied
-      ? normalizedLabel(labels.fam, labels, true)
+      ? normalizedLabel(labels.fam, labels, true, t.normalizationFallback)
       : `${labels.fam} (raw RFU)`;
     const yLabel = normalizationApplied
-      ? normalizedLabel(labels.allele2, labels, true)
+      ? normalizedLabel(labels.allele2, labels, true, t.normalizationFallback)
       : `${labels.allele2} (raw RFU)`;
 
     const axisTitleFont = { size: 14, color: colors.fontColor };
