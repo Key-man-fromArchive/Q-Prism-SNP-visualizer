@@ -156,12 +156,16 @@ async def export_xlsx(
     cycle: int | None = Query(default=None, ge=0),
     cycle_mode: CycleMode = Query(default="legacy_latest"),
     result_revision: UUID | None = Query(default=None),
+    orientation: str | None = Query(default=None),
 ):
     from fastapi.responses import Response
     from app.reporting.snapshot_xlsx import build_snapshot_xlsx
+    from app.routers.export_params import parse_orientation
 
+    axes = parse_orientation(orientation)
     snapshot = capture_result_snapshot(
-        sid, current_user, ExportOptions(result_revision, cycle, use_rox, background, cycle_mode),
+        sid, current_user,
+        ExportOptions(result_revision, cycle, use_rox, background, cycle_mode, None, axes),
     )
     return Response(
         build_snapshot_xlsx(snapshot),

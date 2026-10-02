@@ -17,7 +17,8 @@ import { plotlyColors } from "@/lib/plotly-theme";
 import { channelLabels } from "@/lib/channel-labels";
 import {
   axisRangeLayout, axisTitle, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode,
-  fitBounds, hasNtcWells, NTC_AMBER, NTC_HANDLE_SIZE, NTC_MARKER_SIZE, ntcThresholdShapes, visibleBounds,
+  fitBounds, fromPlot, hasNtcWells, NTC_AMBER, NTC_HANDLE_SIZE, NTC_MARKER_SIZE, ntcDragRelayout, ntcThresholdShapes,
+  orientBounds, orientShape, toPlot, visibleBounds,
 } from "@/lib/scatter-axes";
 import { updateMarker } from "@/lib/api";
 import { clearActiveChart, setActiveChart } from "@/lib/chart-export-registry";
@@ -144,6 +145,7 @@ export function MarkerScatterPlot({
   // plot unselectable wherever a threshold happened to lie. See ScatterTool.
   const editing = useSettingsStore((s) => s.scatterTool) === "edit";
   const scatterAspect = useSettingsStore((s) => s.scatterAspect);
+  const orientation = useSettingsStore((s) => s.scatterOrientation);
   const hasNormalizationChannel = useSessionStore((s) => s.sessionInfo?.has_rox === true);
   const readLabels = useSessionStore((s) => s.sessionInfo?.read_labels);
   const alleleNames = marker.allele_labels;
@@ -376,12 +378,16 @@ export function MarkerScatterPlot({
     const namedMarker = { allele_labels: alleleNames };
     const thresholdLabels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
     const traces: Record<string, unknown>[] = [];
+    // Computed in allele space (fam / allele2); `at` is where a point becomes
+    // plot x/y so the orientation is applied in exactly one place.
+    const at = (p: ScatterPoint) => toPlot({ fam: p.norm_fam, allele2: p.norm_allele2 }, orientation);
+    const cornerAt = toPlot({ fam: effectiveNtc.corner.x, allele2: effectiveNtc.corner.y }, orientation);
     for (const typeKey of order) {
       const pts = typeGroups.get(typeKey)!;
       const info = chartCategory(typeKey, ploidy, dark);
       traces.push({
-        x: pts.map((p) => p.norm_fam),
-        y: pts.map((p) => p.norm_allele2),
+        x: pts.map((p) => at(p).x),
+        y: pts.map((p) => at(p).y),
         mode: "markers",
         type: "scattergl",
         name: `${markerCallLabel(typeKey, t, namedMarker)} (n=${pts.length})`,
@@ -415,8 +421,8 @@ export function MarkerScatterPlot({
     }
 
     traces.push({
-      x: [effectiveNtc.corner.x],
-      y: [effectiveNtc.corner.y],
+      x: [cornerAt.x],
+      y: [cornerAt.y],
       mode: "markers",
       type: "scatter",
       uid: 'ntc-threshold',
@@ -446,7 +452,7 @@ export function MarkerScatterPlot({
     const cuts = editRef.current;
     const shapes: Record<string, unknown>[] = cuts.map((r) => {
       const tlen = ext / Math.max(r, 1 - r, 1e-6);
-      return {
+      return orientShape({
         type: "line",
         x0: origin.fam,
         y0: origin.allele2,
@@ -454,7 +460,7 @@ export function MarkerScatterPlot({
         y1: origin.allele2 + tlen * (1 - r),
         line: boundaryLineStyle(editing, colors.fontColor),
         layer: "above",
-      };
+      }, orientation);
     });
     // Drawn from the VISIBLE lower-left corner rather than (0, 0): on raw
     // endpoint RFU the numeric origin is off-canvas under a tight autorange,
@@ -466,7 +472,8 @@ export function MarkerScatterPlot({
     const bounds = visibleBounds(
       axisMode,
       dataRange,
-      { xMin, xMax, yMin, yMax },
+      // Typed against the displayed axes; bounds stay in allele space here.
+      orientBounds({ xMin, xMax, yMin, yMax }, orientation),
       origin,
       ntcAxisOffsets,
       // The corner stretches a fitted range only while it is being edited.
@@ -475,20 +482,24 @@ export function MarkerScatterPlot({
     // Quadrant and dashed edges exist only in threshold-edit mode, and the
     // edges stop at the data rather than running to the figure edge.
     const reach = dataBounds(pointExtents);
-    shapes.push(...ntcThresholdShapes(editing, corner, bounds, { x: reach.xMax, y: reach.yMax }));
+    shapes.push(...ntcThresholdShapes(editing, corner, bounds, { x: reach.xMax, y: reach.yMax })
+      .map((shape) => orientShape(shape, orientation)));
 
     const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
     const suffix = normalizationApplied && labels.normalization ? ` / ${labels.normalization}` : "";
-    const axes = axisRangeLayout(axisMode, lockAspect, bounds);
+    const axes = axisRangeLayout(axisMode, lockAspect, orientBounds(bounds, orientation));
+    const famTitle = axisTitle(labels.fam, alleleNames?.fam, suffix);
+    const allele2Title = axisTitle(labels.allele2, alleleNames?.allele2, suffix);
+    const [xTitle, yTitle] = orientation === "allele2_x" ? [allele2Title, famTitle] : [famTitle, allele2Title];
     const layout: Record<string, unknown> = {
       xaxis: {
-        title: { text: axisTitle(labels.fam, alleleNames?.fam, suffix), font: { size: 12, color: colors.fontColor } },
+        title: { text: xTitle, font: { size: 12, color: colors.fontColor } },
         gridcolor: colors.gridColor,
         zerolinecolor: colors.lineColor,
         ...axes.xaxis,
       },
       yaxis: {
-        title: { text: axisTitle(labels.allele2, alleleNames?.allele2, suffix), font: { size: 12, color: colors.fontColor } },
+        title: { text: yTitle, font: { size: 12, color: colors.fontColor } },
         gridcolor: colors.gridColor,
         zerolinecolor: colors.lineColor,
         ...axes.yaxis,
@@ -504,7 +515,7 @@ export function MarkerScatterPlot({
       // place until the marker changed.
       // Offset/origin changes must invalidate Plotly's preserved pan/zoom;
       // otherwise an explicit new range can be hidden behind the old UI state.
-      uirevision: `marker-${marker.id}-${axisMode}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${origin.fam}-${origin.allele2}`,
+      uirevision: `marker-${marker.id}-${orientation}-${axisMode}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${origin.fam}-${origin.allele2}`,
       shapes,
       // The legend sits in a row under the axis title, never over the points.
       margin: { t: 10, r: 10, b: 120, l: 56 },
@@ -609,6 +620,7 @@ export function MarkerScatterPlot({
     axisMode,
     lockAspect,
     editing,
+    orientation,
     normalizationApplied,
     xMin,
     xMax,
@@ -659,10 +671,12 @@ export function MarkerScatterPlot({
       const px = clientX - bb.left - (xa._offset ?? 0);
       const py = clientY - bb.top - (ya._offset ?? 0);
       if (px < 0 || py < 0 || px > xa._length || py > ya._length) return null;
-      return {
+      // In allele space (x = fam, y = allele2), whichever way the axes are drawn.
+      const { fam, allele2 } = fromPlot({
         x: xa.range[0] + (px / xa._length) * (xa.range[1] - xa.range[0]),
         y: ya.range[1] - (py / ya._length) * (ya.range[1] - ya.range[0]),
-      };
+      }, orientation);
+      return { x: fam, y: allele2 };
     };
 
     const clientToRatio = (clientX: number, clientY: number): number | null => {
@@ -684,9 +698,12 @@ export function MarkerScatterPlot({
       const xa = fl?.xaxis;
       const ya = fl?.yaxis;
       if (data && xa?._length && ya?._length && xa.range && ya.range) {
-        const dxPx = Math.abs(data.x - ntcRef.current.corner.x) /
+        // Pixel distance is measured on the plot axes, so compare in plot x/y.
+        const here = toPlot({ fam: data.x, allele2: data.y }, orientation);
+        const handle = toPlot({ fam: ntcRef.current.corner.x, allele2: ntcRef.current.corner.y }, orientation);
+        const dxPx = Math.abs(here.x - handle.x) /
           Math.abs(xa.range[1] - xa.range[0]) * xa._length;
-        const dyPx = Math.abs(data.y - ntcRef.current.corner.y) /
+        const dyPx = Math.abs(here.y - handle.y) /
           Math.abs(ya.range[1] - ya.range[0]) * ya._length;
         if (Math.hypot(dxPx, dyPx) <= 18) {
           dragNtcRef.current = true;
@@ -725,17 +742,12 @@ export function MarkerScatterPlot({
         };
         ntcRef.current = next;
         const shapeBase = editRef.current.length;
-        void Plotly.relayout(gd, {
-          [`shapes[${shapeBase}].x1`]: next.corner.x,
-          [`shapes[${shapeBase}].y1`]: next.corner.y,
-          [`shapes[${shapeBase + 1}].x0`]: next.corner.x,
-          [`shapes[${shapeBase + 1}].x1`]: next.corner.x,
-          [`shapes[${shapeBase + 2}].y0`]: next.corner.y,
-          [`shapes[${shapeBase + 2}].y1`]: next.corner.y,
-        });
+        const nextCorner = { fam: next.corner.x, allele2: next.corner.y };
+        void Plotly.relayout(gd, ntcDragRelayout(shapeBase, nextCorner, orientation));
+        const handle = toPlot(nextCorner, orientation);
         void Plotly.restyle(
           gd,
-          { x: [[next.corner.x]], y: [[next.corner.y]], "marker.symbol": "diamond" },
+          { x: [[handle.x]], y: [[handle.y]], "marker.symbol": "diamond" },
           [gd.data?.length ? gd.data.length - 1 : 0]
         );
         return;
@@ -769,7 +781,7 @@ export function MarkerScatterPlot({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [editing, boundaryKey, ntcKey, persistThresholds]);
+  }, [editing, boundaryKey, ntcKey, persistThresholds, orientation]);
 
   useEffect(() => {
     const plot = plotRef.current;

@@ -15,7 +15,7 @@
 // fam-fraction ray until the genotype wedges no longer look like the cuts they
 // are. Anchoring at zero and holding the aspect fixes both.
 
-import type { AxisMode } from '@/stores/settings-store';
+import type { AxisMode, ScatterOrientation } from '@/stores/settings-store';
 
 export type AxisBounds = {
   xMin: number;
@@ -30,6 +30,48 @@ type Extent = { fam: number; allele2: number };
 export type AxisOffsets = { x: number; y: number };
 
 const PAD = 1.05;
+
+// Everything above and below works in allele space (`fam` / `allele2`). The
+// orientation only decides, at the edge, which of the two lands on the plot's
+// x axis, so each plot computes in allele space and converts once with these.
+
+/** Allele-space pair -> plot x/y. */
+export function toPlot(p: Extent, orientation: ScatterOrientation): { x: number; y: number } {
+  return orientation === 'allele2_x' ? { x: p.allele2, y: p.fam } : { x: p.fam, y: p.allele2 };
+}
+
+/** Plot x/y -> allele-space pair (the inverse of `toPlot`). */
+export function fromPlot(p: { x: number; y: number }, orientation: ScatterOrientation): Extent {
+  return orientation === 'allele2_x' ? { fam: p.y, allele2: p.x } : { fam: p.x, allele2: p.y };
+}
+
+/** Bounds between allele space and plot axes; swapping twice is the identity. */
+export function orientBounds(b: AxisBounds, orientation: ScatterOrientation): AxisBounds {
+  if (orientation !== 'allele2_x') return b;
+  return { xMin: b.yMin, xMax: b.yMax, yMin: b.xMin, yMax: b.xMax };
+}
+
+/** A Plotly shape drawn in allele space, mirrored onto the plot axes. */
+export function orientShape(shape: Record<string, unknown>, orientation: ScatterOrientation): Record<string, unknown> {
+  if (orientation !== 'allele2_x') return shape;
+  return { ...shape, x0: shape.y0, y0: shape.x0, x1: shape.y1, y1: shape.x1 };
+}
+
+/** Plotly relayout patch that moves the three NTC edit shapes (rect, fam edge,
+ *  allele2 edge, starting at index `base`) to `corner` while it is dragged. */
+export function ntcDragRelayout(base: number, corner: Extent, orientation: ScatterOrientation): Record<string, number> {
+  const rect = toPlot(corner, orientation);
+  const famEdge = orientation === 'allele2_x' ? ['y0', 'y1'] : ['x0', 'x1'];
+  const allele2Edge = orientation === 'allele2_x' ? ['x0', 'x1'] : ['y0', 'y1'];
+  return {
+    [`shapes[${base}].x1`]: rect.x,
+    [`shapes[${base}].y1`]: rect.y,
+    [`shapes[${base + 1}].${famEdge[0]}`]: corner.fam,
+    [`shapes[${base + 1}].${famEdge[1]}`]: corner.fam,
+    [`shapes[${base + 2}].${allele2Edge[0]}`]: corner.allele2,
+    [`shapes[${base + 2}].${allele2Edge[1]}`]: corner.allele2,
+  };
+}
 
 /** Where the data actually lies, including the NTC corner marker so it can
  *  never sit outside the plot the operator has to grab it in. */

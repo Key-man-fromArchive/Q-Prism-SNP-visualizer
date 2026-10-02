@@ -9,11 +9,11 @@
 // controls; the NTC corner arrives by prop because the plate keeps it in the
 // data store while a marker keeps it in its own threshold_config.
 import { useEffect, useState } from "react";
-import { AlertTriangle, Crosshair, Lock, Maximize2, MousePointer2, RotateCcw, SlidersHorizontal, Unlock } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Crosshair, Lock, Maximize2, MousePointer2, RotateCcw, SlidersHorizontal, Unlock } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSettingsStore, type AxisMode, type ScatterAspect } from "@/stores/settings-store";
 import { normalizationLabel } from "@/lib/channel-labels";
-import { effectiveAxisMode, roundBound, type AxisBounds } from "@/lib/scatter-axes";
+import { effectiveAxisMode, orientBounds, roundBound, type AxisBounds } from "@/lib/scatter-axes";
 import type { ChannelLabels } from "@/types/api";
 import { useDataStore } from "@/stores/data-store";
 
@@ -128,6 +128,9 @@ export function ScatterViewControls({
   const setScatterTool = useSettingsStore((s) => s.setScatterTool);
   const scatterAspect = useSettingsStore((s) => s.scatterAspect);
   const setScatterAspect = useSettingsStore((s) => s.setScatterAspect);
+  const orientation = useSettingsStore((s) => s.scatterOrientation);
+  const setOrientation = useSettingsStore((s) => s.setScatterOrientation);
+  const swapped = orientation === "allele2_x";
   const useRox = useSettingsStore((s) => s.useRox);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
   const setUseRox = useSettingsStore((s) => s.setUseRox);
@@ -180,13 +183,17 @@ export function ScatterViewControls({
     setAxisPopoverOpen(true);
   };
 
-  const fitToData = () =>
+  // `dataBounds` is in allele space; the manual range is typed against the
+  // displayed axes, so it is mapped through the orientation.
+  const fitToData = () => {
+    const shown = orientBounds(dataBounds, orientation);
     setAxisRange({
-      xMin: roundBound(Math.min(0, dataBounds.xMin)),
-      xMax: roundBound(dataBounds.xMax),
-      yMin: roundBound(Math.min(0, dataBounds.yMin)),
-      yMax: roundBound(dataBounds.yMax),
+      xMin: roundBound(Math.min(0, shown.xMin)),
+      xMax: roundBound(shown.xMax),
+      yMin: roundBound(Math.min(0, shown.yMin)),
+      yMax: roundBound(shown.yMax),
     });
+  };
 
   const axisModeLabel = (mode: AxisMode) =>
     mode === "zero" ? t.axisModeZero : mode === "auto" ? t.axisModeAuto : t.axisModeManual;
@@ -430,6 +437,23 @@ export function ScatterViewControls({
               </option>
             ))}
           </select>
+          {/* Which allele is on x. Default is FAM on x; swapped is the
+              StepOne orientation. Exports follow the same setting. */}
+          <button
+            type="button"
+            data-testid="scatter-swap-axes"
+            aria-pressed={swapped}
+            onClick={() => setOrientation(swapped ? "fam_x" : "allele2_x")}
+            title={t.scatterSwapAxes}
+            aria-label={t.scatterSwapAxes}
+            className={`rounded-md border p-1.5 ${
+              swapped
+                ? "border-primary bg-primary text-on-primary"
+                : "border-border bg-surface text-text hover:border-primary"
+            }`}
+          >
+            <ArrowLeftRight size={14} aria-hidden="true" />
+          </button>
         </div>
       </div>
 

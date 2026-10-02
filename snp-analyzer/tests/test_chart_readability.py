@@ -88,15 +88,19 @@ def test_portrait_png_keeps_three_by_four():
 
 
 def test_axes_fit_data_with_five_percent_margin_and_no_negative_space():
-    ax = build_scatter_figure(_points()).axes[0]
+    ax = build_scatter_figure(_points(), orientation="allele2_x").axes[0]
     assert ax.get_ylim() == pytest.approx((0.0, 0.5 + 0.5 * 0.05))
     assert ax.get_xlim() == pytest.approx((0.5 - 0.5 * 0.05, 1.0 + 0.5 * 0.05))
+    default = build_scatter_figure(_points()).axes[0]
+    assert default.get_xlim() == pytest.approx(ax.get_ylim())
+    assert default.get_ylim() == pytest.approx(ax.get_xlim())
 
 
 def test_axes_extend_below_zero_only_for_negative_points():
     points = _points()
     points[0]["norm_fam"] = -0.2
-    assert build_scatter_figure(points).axes[0].get_ylim()[0] < -0.2
+    assert build_scatter_figure(points).axes[0].get_xlim()[0] < -0.2
+    assert build_scatter_figure(points, orientation="allele2_x").axes[0].get_ylim()[0] < -0.2
 
 
 def test_no_zone_or_boundary_artists_in_export_figure():
@@ -143,5 +147,5 @@ def test_plate_marker_label_is_not_parsed_as_mathtext():
 
 def test_default_call_keeps_legacy_labels():
     ax = build_scatter_figure(_points(), allele2_dye="HEX").axes[0]
-    assert ax.get_xlabel() == "HEX (normalized)"
-    assert ax.get_ylabel() == "FAM (normalized)"
+    assert ax.get_xlabel() == "FAM (normalized)"
+    assert ax.get_ylabel() == "HEX (normalized)"
