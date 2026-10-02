@@ -84,8 +84,9 @@ function exportQuery(options: {
   background?: BackgroundMode;
   resultRevision?: string;
   markerIds?: readonly string[];
+  includeTable?: boolean;
 }): string {
-  const { cycle, useRox, background, resultRevision, markerIds } = options;
+  const { cycle, useRox, background, resultRevision, markerIds, includeTable } = options;
   return buildQuery({
     cycle,
     cycle_mode: cycle === undefined ? undefined : 'absolute',
@@ -93,6 +94,8 @@ function exportQuery(options: {
     background,
     result_revision: resultRevision,
     marker_ids: markerIds === undefined ? undefined : markerIds.join(','),
+    // The backend default is true, so only the opt-out is sent.
+    include_table: includeTable === false ? false : undefined,
   });
 }
 
@@ -640,9 +643,10 @@ export async function exportPptx(
   background?: BackgroundMode,
   cycle?: number,
   resultRevision?: string,
-  markerIds?: readonly string[]
+  markerIds?: readonly string[],
+  includeTable?: boolean
 ): Promise<Blob> {
-  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds });
+  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds, includeTable });
   return blobFetch(`/api/data/${sid}/export/pptx${query}`);
 }
 

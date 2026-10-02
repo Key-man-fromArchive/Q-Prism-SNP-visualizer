@@ -131,6 +131,9 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
   // null = every marker; a stale selection from another session is ignored.
   const [markerSelection, setMarkerSelection] = useState<{ session: string | null; ids: string[] } | null>(null);
   const [exportDialog, setExportDialog] = useState<{ open: boolean; format: ExportKind }>({ open: false, format: "pptx" });
+  const [includeTable, setIncludeTable] = useState(true);
+  // undefined = backend default (table included); only the opt-out is sent.
+  const tableOption = includeTable ? undefined : false;
   const selectedMarkers = new Set(markers.filter((m) =>
     markerSelection === null || markerSelection.session !== sessionId || markerSelection.ids.includes(m.id)).map((m) => m.id));
   const allMarkersSelected = selectedMarkers.size === markers.length;
@@ -264,7 +267,7 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
 
   const exportActions = (ids?: string[]): Record<ExportKind, () => Promise<void>> => ({
     csv: downloadCSV, png: exportPNG, xlsx: exportXLSX,
-    pdf: () => exportPDF(ids), pptx: () => exportPPTX(ids), zip: () => exportScatterZip(ids),
+    pdf: () => exportPDF(ids), pptx: () => exportPPTX(ids, tableOption), zip: () => exportScatterZip(ids),
   });
   const exportLabels: Record<ExportKind, string> = {
     csv: t.csvExportFailed, png: t.pngExportFailed, pdf: t.pdfExportFailed, xlsx: t.xlsxExportFailed,
@@ -309,7 +312,7 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
     if (!pendingMismatch || mismatchBusy || !ownsMismatch(pendingMismatch)) return;
     setMismatchBusy(true);
     try {
-      await exportStored(pendingMismatch.kind, mismatchAbort.current?.signal, pendingMismatch.markerIds);
+      await exportStored(pendingMismatch.kind, mismatchAbort.current?.signal, pendingMismatch.markerIds, tableOption);
       if (ownsMismatch(pendingMismatch)) closeMismatch();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -451,6 +454,12 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
           ))}
         </div>
         <ExportMarkerPicker markers={markers} selected={selectedMarkers} onToggle={toggleMarker} onToggleAll={toggleAllMarkers} />
+        {exportDialog.format === "pptx" && (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={includeTable} onChange={() => setIncludeTable((v) => !v)} />
+            <span>{t.exportReportIncludeTable}</span>
+          </label>
+        )}
         <Button data-testid={EXPORT_TEST_IDS.submit} className="self-end"
           disabled={noMarkerSelected && MARKER_SCOPED.has(exportDialog.format)}
           onClick={() => runExport(exportDialog.format)}>{t.exportMenu}</Button>

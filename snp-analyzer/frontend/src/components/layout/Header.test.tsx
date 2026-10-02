@@ -85,7 +85,7 @@ it('hides marker selection (and sends no ids) for a session without markers', as
   fireEvent.click(screen.getByRole('button', { name: /Export|내보내기/ }));
   expect(screen.queryByRole('menuitem', { name: ko.exportReportSelectMarkers })).toBeNull();
   fireEvent.click(menuItem(ko.exportReportPPTX));
-  await vi.waitFor(() => expect(exportFns.pptx).toHaveBeenCalledWith(undefined));
+  await vi.waitFor(() => expect(exportFns.pptx).toHaveBeenCalledWith(undefined, undefined));
 });
 
 async function deselectSecondMarker() {
@@ -101,7 +101,7 @@ it('applies the marker selection to PPTX, report images and PDF', async () => {
   await deselectSecondMarker();
   reopenMenu();
   fireEvent.click(menuItem(ko.exportReportPPTX));
-  await vi.waitFor(() => expect(exportFns.pptx).toHaveBeenCalledWith(['m1', 'm3']));
+  await vi.waitFor(() => expect(exportFns.pptx).toHaveBeenCalledWith(['m1', 'm3'], undefined));
   reopenMenu();
   fireEvent.click(menuItem(ko.exportReportScatterZip));
   await vi.waitFor(() => expect(exportFns.zip).toHaveBeenCalledWith(['m1', 'm3']));
@@ -122,6 +122,22 @@ it('exports the chosen format from the dialog and disables export with no marker
   expect(within(dialog).getByTestId(EXPORT_TEST_IDS.status)).toHaveTextContent('0/3');
 });
 
+it('turns the PPTX results table off from the dialog and keeps that on the stored retry', async () => {
+  exportFns.pptx.mockRejectedValueOnce(new ApiError('mismatch', 409, { detail: { code: 'EXPORT_CONDITION_MISMATCH' } }));
+  await renderWithMarkers();
+  fireEvent.click(menuItem(ko.exportReportSelectMarkers));
+  const dialog = await screen.findByTestId(EXPORT_TEST_IDS.dialog);
+  fireEvent.click(within(dialog).getByTestId(EXPORT_TEST_IDS.formatPptx));
+  const toggle = within(dialog).getByLabelText(ko.exportReportIncludeTable);
+  expect(toggle).toBeChecked();
+  fireEvent.click(toggle);
+  fireEvent.click(within(dialog).getByTestId(EXPORT_TEST_IDS.submit));
+  await vi.waitFor(() => expect(exportFns.pptx).toHaveBeenCalledWith(undefined, false));
+  await screen.findByRole('alertdialog');
+  fireEvent.click(screen.getByRole('button', { name: ko.exportStoredResult }));
+  await vi.waitFor(() => expect(exportFns.stored).toHaveBeenCalledWith('pptx', expect.anything(), undefined, false));
+});
+
 it('keeps the marker selection when a condition mismatch is resolved with the stored result', async () => {
   exportFns.pptx.mockRejectedValue(new ApiError('mismatch', 409, { detail: { code: 'EXPORT_CONDITION_MISMATCH' } }));
   await renderWithMarkers();
@@ -130,7 +146,7 @@ it('keeps the marker selection when a condition mismatch is resolved with the st
   fireEvent.click(menuItem(ko.exportReportPPTX));
   await screen.findByRole('alertdialog');
   fireEvent.click(screen.getByRole('button', { name: ko.exportStoredResult }));
-  await vi.waitFor(() => expect(exportFns.stored).toHaveBeenCalledWith('pptx', expect.anything(), ['m1', 'm3']));
+  await vi.waitFor(() => expect(exportFns.stored).toHaveBeenCalledWith('pptx', expect.anything(), ['m1', 'm3'], undefined));
 });
 
 it('keeps the marker selection when a condition mismatch is resolved by reanalysis', async () => {

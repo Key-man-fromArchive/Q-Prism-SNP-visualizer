@@ -57,6 +57,16 @@ describe('export request contract', () => {
     expect(zip).toContain('/export/scatter-png.zip?marker_ids=m1,m2');
   });
 
+  it('sends include_table=false for PPTX only when asked', async () => {
+    const fetcher = stubFetch();
+    await api.exportPptx('s', undefined, undefined, undefined, undefined, undefined, false);
+    await api.exportPptx('s', undefined, undefined, undefined, undefined, undefined, true);
+    await api.exportPptx('s');
+    expect(fetcher.mock.calls[0][0]).toContain('include_table=false');
+    expect(fetcher.mock.calls[1][0]).not.toContain('include_table');
+    expect(fetcher.mock.calls[2][0]).not.toContain('include_table');
+  });
+
   it('lets updateMarker patch and clear allele_labels', async () => {
     const fetcher = stubFetch();
     await api.updateMarker('s', 'm', { allele_labels: { fam: 'WT', allele2: 'MT' } }, 1);
