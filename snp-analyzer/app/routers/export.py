@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from app.processing.genotype_vocab import DEFAULT_PLOIDY, label_by_ratio
 from app.processing.background import BackgroundMode
 from app.auth import CurrentUser
+from app.reporting.filenames import content_disposition
 from app.reporting.result_snapshot import (
     ExportOptions, ResultRow, ResultSnapshot, capture_result_snapshot, snapshot_rows,
 )
@@ -110,11 +111,17 @@ def _csv_row(snapshot: ResultSnapshot, row: ResultRow) -> list[object]:
 
 def render_snapshot_csv(snapshot: ResultSnapshot) -> str:
     """Render exclusively from accepted copies; never re-read a live store."""
+    from app.reporting.snapshot_xlsx import add_label_columns
+
+    rows = snapshot_rows(snapshot)
+    headers, values = add_label_columns(
+        snapshot, rows, _csv_header(snapshot), [_csv_row(snapshot, row) for row in rows],
+    )
     with io.StringIO() as output:
         writer = csv.writer(output)
-        writer.writerow([_csv_text(value) for value in _csv_header(snapshot)])
-        for row in snapshot_rows(snapshot):
-            writer.writerow([_csv_text(value) for value in _csv_row(snapshot, row)])
+        writer.writerow([_csv_text(value) for value in headers])
+        for cells in values:
+            writer.writerow([_csv_text(value) for value in cells])
         return output.getvalue()
 
 
@@ -136,7 +143,7 @@ async def export_csv(
     filename = f"snp_export_whole-run_cycle{snapshot.context.cycle}.csv"
     return StreamingResponse(
         iter([content]), media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition(filename)},
     )
 
 
@@ -159,5 +166,6 @@ async def export_xlsx(
     return Response(
         build_snapshot_xlsx(snapshot),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="snp_report_whole-run_cycle{snapshot.context.cycle}.xlsx"'},
+        headers={"Content-Disposition": content_disposition(
+            f"snp_report_whole-run_cycle{snapshot.context.cycle}.xlsx")},
     )

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
@@ -11,6 +11,7 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 from app.models import (
     UnifiedData,
     ClusteringResult,
+    MarkerRegion,
     NormalizedPoint,
     RatioOrigin,
     RegionResult,
@@ -20,7 +21,7 @@ from app.processing.background import BackgroundMode
 from app.processing.genotype_vocab import label_by_ratio
 from app.processing.normalize import normalize_for_cycle, normalization_summary
 from app.processing.ratio_origin import shift_points_to_origin
-from app.routers.clustering import cluster_store, effective_well_types_for
+from app.routers.clustering import cluster_store, effective_well_types_for, marker_store
 from app.processing.analysis_state import input_lock, analysis_status
 from app.auth import CurrentUser, check_session_access
 from app.services.session_restore import get_session as _get_session
@@ -234,6 +235,7 @@ class QcSnapshot:
     result: ClusteringResult | None
     types: dict[str, str]
     status: dict[str, object]
+    current_markers: dict[str, MarkerRegion] = field(default_factory=dict)
 
 
 def _capture_qc(sid: str) -> QcSnapshot:
@@ -245,7 +247,25 @@ def _capture_qc(sid: str) -> QcSnapshot:
             result.model_copy(deep=True) if result else None,
             effective_well_types_for(sid, unified),
             analysis_status(sid),
+            {m.id: m.model_copy(deep=True) for m in marker_store.get(sid, [])},
         )
+
+
+def _with_display_names(metrics: dict[str, object], snapshot: QcSnapshot) -> dict[str, object]:
+    """Add the marker's current name and allele names to each per-marker entry.
+
+    Keys appear only when the operator renamed the marker or named its alleles,
+    so runs without names keep their previous response.
+    """
+    for entry in metrics.get("markers", []):  # type: ignore[attr-defined]
+        current = snapshot.current_markers.get(entry["id"])
+        if current is None:
+            continue
+        if current.name != entry["name"] or current.allele_labels is not None:
+            entry["display_name"] = current.name
+        if current.allele_labels is not None:
+            entry["allele_labels"] = current.allele_labels.model_dump()
+    return metrics
 
 
 def _median_signal(points: list[NormalizedPoint]) -> float:
@@ -506,7 +526,7 @@ async def qc_metrics(
         else _unknown_judgment(snapshot)
     )
     return {
-        **metrics,
+        **_with_display_names(metrics, snapshot),
         "ntc_check": ntc.model_dump(),
         "warnings": _control_warnings(points, snapshot.types, ntc),
         **_judgment_metadata(snapshot),
