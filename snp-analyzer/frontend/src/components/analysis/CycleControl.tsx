@@ -128,7 +128,9 @@ export function CycleControl() {
       {/* Cycle label + slider (hidden if windowCycles <= 1) */}
       {windowCycles > 1 && (
         <>
-          <label id="cycle-label" htmlFor="cycle-slider" className="text-sm text-text">
+          {/* The read label above already says where the slider is, so the
+              "Cycle n / N" count is kept for assistive tech only. */}
+          <label id="cycle-label" htmlFor="cycle-slider" className={readText ? 'sr-only' : 'text-sm text-text'}>
             {t.cycle}{' '}
             <span id="cycle-value" className="font-medium">
               {relativeValue}

@@ -13,7 +13,7 @@ import Plotly from "plotly.js-dist-min";
 import { dosageOfLabel, defaultRatioCuts } from "@/lib/genotype";
 import { chartCategory, markerCallLabel, cycleReadText, chartPointState, chartStateText } from "@/lib/chart-semantics";
 import { useI18n } from "@/hooks/use-i18n";
-import { plotlyColors } from "@/lib/plotly-theme";
+import { compactLegend, plotlyColors } from "@/lib/plotly-theme";
 import { channelLabels } from "@/lib/channel-labels";
 import {
   axisRangeLayout, axisTitle, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode,
@@ -144,6 +144,7 @@ export function MarkerScatterPlot({
   // A drag either selects wells or moves a threshold; both at once made the
   // plot unselectable wherever a threshold happened to lie. See ScatterTool.
   const editing = useSettingsStore((s) => s.scatterTool) === "edit";
+  const expert = useSettingsStore((s) => s.expertMode);
   const scatterAspect = useSettingsStore((s) => s.scatterAspect);
   const orientation = useSettingsStore((s) => s.scatterOrientation);
   const hasNormalizationChannel = useSessionStore((s) => s.sessionInfo?.has_rox === true);
@@ -427,8 +428,9 @@ export function MarkerScatterPlot({
       type: "scatter",
       uid: 'ntc-threshold',
       name: t.chartNtcThreshold,
-      // A legend entry explains the corner diamond (and the edit-mode handle).
-      showlegend: true,
+      // A legend entry explains the corner diamond (and the edit-mode handle);
+      // an expert-mode element, like the boundary lines.
+      showlegend: expert,
       hovertemplate:
         `${t.chartNtcThreshold}: ${thresholdLabels.fam} ≤ ${effectiveNtc.corner.x.toFixed(2)}<br>` +
         `${thresholdLabels.allele2} ≤ ${effectiveNtc.corner.y.toFixed(2)}<extra></extra>`,
@@ -442,7 +444,7 @@ export function MarkerScatterPlot({
       selected: { marker: { opacity: 1 } },
       unselected: { marker: { opacity: 1 } },
     });
-    traces.push(boundaryLegendTrace(t.boundaryLines, editing, colors.fontColor));
+    traces.push({ ...boundaryLegendTrace(t.boundaryLines, editing, colors.fontColor), showlegend: expert });
 
     let ext = 1;
     for (const p of scopedPoints) {
@@ -517,9 +519,10 @@ export function MarkerScatterPlot({
       // otherwise an explicit new range can be hidden behind the old UI state.
       uirevision: `marker-${marker.id}-${orientation}-${axisMode}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${origin.fam}-${origin.allele2}`,
       shapes,
-      // The legend sits in a row under the axis title, never over the points.
-      margin: { t: 10, r: 10, b: 120, l: 56 },
-      legend: { orientation: "h", y: -0.2, yanchor: "top", x: 0, xanchor: "left" },
+      // Compact translucent legend inside the top-right corner; nothing is
+      // reserved under the axis title.
+      margin: { t: 10, r: 10, b: 56, l: 56 },
+      legend: compactLegend(colors),
     };
 
     const config = {
@@ -620,6 +623,7 @@ export function MarkerScatterPlot({
     axisMode,
     lockAspect,
     editing,
+    expert,
     orientation,
     normalizationApplied,
     xMin,

@@ -10,6 +10,7 @@ import { createWellGroup, getWellGroups } from '@/lib/api';
 import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useLanguageStore } from '@/stores/language-store';
+import { useSettingsStore } from '@/stores/settings-store';
 
 vi.mock('@/lib/api', () => ({
   getWellGroups: vi.fn().mockResolvedValue({ groups: {} }),
@@ -21,6 +22,8 @@ beforeEach(() => {
   vi.mocked(getWellGroups).mockResolvedValue({ groups: {} });
   vi.mocked(createWellGroup).mockResolvedValue({ status: 'ok', name: '', wells: [] });
   useLanguageStore.getState().setLanguage('en');
+  // Group tools are expert-mode controls; expert-gating.test.tsx covers the basic toolbar.
+  useSettingsStore.setState({ expertMode: true });
   useSessionStore.setState({ sessionId: 's', wellGroups: null });
   useSelectionStore.setState({ selectedWells: [], selectedGroup: null, focusSelectedWells: false });
 });

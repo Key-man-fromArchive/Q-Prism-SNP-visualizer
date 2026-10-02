@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { ScatterViewControls } from './ScatterViewControls';
 import { useLanguageStore } from '@/stores/language-store';
 import { useSettingsStore } from '@/stores/settings-store';
@@ -12,6 +12,9 @@ const baseProps = {
   onNtcCornerChange: vi.fn(),
   normalizationApplied: false,
 } as const;
+
+// These controls are the expert-mode header; expert-gating.test.tsx covers the basic one.
+beforeEach(() => useSettingsStore.setState({ expertMode: true }));
 
 it.each(['en', 'ko'] as const)('summarizes inferred thresholds and unlocked axes without applying settings (%s)', language => {
   useLanguageStore.getState().setLanguage(language);

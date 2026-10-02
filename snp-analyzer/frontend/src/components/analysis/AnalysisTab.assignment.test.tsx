@@ -45,7 +45,7 @@ beforeEach(() => {
   useNavigationStore.setState({ session: 'synthetic-assignment', tab: 'analysis', status: 'ready', exportRestoring: false });
 });
 it('returns the current profile to AUTO without manual cuts when boundary mode is turned off', () => {
-  useSettingsStore.setState({ showManualTypes: true, showBoundaryLines: true });
+  useSettingsStore.setState({ showManualTypes: true, showBoundaryLines: true, expertMode: true });
   render(<AnalysisTab />);
   useAnalysisStore.getState().setCurrentRequest({ algorithm: 'threshold', cycle: 20, n_clusters: 4,
     threshold_config: { ntc_threshold: 0.1, allele1_ratio_max: 0.4, allele2_ratio_min: 0.6, boundaries: [0.5] } });

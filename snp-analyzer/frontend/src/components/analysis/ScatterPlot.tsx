@@ -16,7 +16,7 @@ import { channelLabels, normalizationLabel, normalizedLabel } from "@/lib/channe
 import { WELL_TYPE_INFO } from "@/lib/constants";
 import { genotypeClasses, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
 import { chartCategory, callLabel, cycleReadText, chartPointState, chartStateText } from "@/lib/chart-semantics";
-import { plotlyColors } from "@/lib/plotly-theme";
+import { compactLegend, plotlyColors } from "@/lib/plotly-theme";
 import {
   axisRangeLayout, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode, fitBounds,
   fromPlot, hasNtcWells, NTC_AMBER, NTC_HANDLE_SIZE, NTC_MARKER_SIZE, ntcDragRelayout, ntcThresholdShapes,
@@ -146,6 +146,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
   const storedAxisMode = useSettingsStore((s) => s.axisMode);
   const axisModeChosen = useSettingsStore((s) => s.axisModeChosen);
   const lockAspect = useSettingsStore((s) => s.lockAspect);
+  const expert = useSettingsStore((s) => s.expertMode);
   const scatterTool = useSettingsStore((s) => s.scatterTool);
   const scatterAspect = useSettingsStore((s) => s.scatterAspect);
   const orientation = useSettingsStore((s) => s.scatterOrientation);
@@ -490,8 +491,9 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       type: "scatter",
       uid: 'ntc-threshold',
       name: t.chartNtcThreshold,
-      // A legend entry explains the corner diamond (and the edit-mode handle).
-      showlegend: true,
+      // A legend entry explains the corner diamond (and the edit-mode handle);
+      // like the boundary lines it is an expert-mode element.
+      showlegend: expert,
       hovertemplate:
         `NTC: ${labels.fam} ≤ ${effectiveNtcCorner.fam.toFixed(2)}<br>` +
         `${labels.allele2} ≤ ${effectiveNtcCorner.allele2.toFixed(2)}<extra></extra>`,
@@ -505,7 +507,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       // selection used to fade it along with the data.
       ...OPAQUE_IN_BOTH_SELECTION_STATES,
     });
-    if (bnd) traces.push(boundaryLegendTrace(t.boundaryLines, editing, colors.fontColor) as unknown as Data);
+    if (bnd) traces.push({ ...boundaryLegendTrace(t.boundaryLines, editing, colors.fontColor), showlegend: expert } as unknown as Data);
 
     const famTitle = normalizationApplied
       ? normalizedLabel(labels.fam, labels, true, t.normalizationFallback)
@@ -622,9 +624,10 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       dragmode: editing ? "zoom" : "select",
       shapes,
       annotations,
-      // The legend sits in a row under the axis title, never over the points.
-      margin: { t: 10, r: 10, b: 130, l: 70 },
-      legend: { orientation: "h", y: -0.2, yanchor: "top", x: 0, xanchor: "left" },
+      // The legend is a compact translucent box inside the top-right corner so
+      // the plot keeps the whole canvas (nothing is reserved under the axis).
+      margin: { t: 10, r: 10, b: 60, l: 70 },
+      legend: compactLegend(colors),
     };
 
     const config: Partial<Config> = {
@@ -737,6 +740,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     axisMode,
     lockAspect,
     editing,
+    expert,
     orientation,
     normalizationApplied, roxOutlierWells,
     backgroundMode,

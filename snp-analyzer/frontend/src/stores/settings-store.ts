@@ -79,6 +79,8 @@ interface SettingsState {
   showAutoCluster: boolean;
   showManualTypes: boolean;
   showEmptyWells: boolean;
+  /** Reveals the technical controls and tables the default results view hides. */
+  expertMode: boolean;
   // Actions
   setUseRox: (v: boolean) => void;
   setBackgroundMode: (v: BackgroundMode) => void;
@@ -105,6 +107,7 @@ interface SettingsState {
   setShowAutoCluster: (v: boolean) => void;
   setShowManualTypes: (v: boolean) => void;
   setShowEmptyWells: (v: boolean) => void;
+  setExpertMode: (v: boolean) => void;
   resetToDefaults: () => void;
 }
 
@@ -147,6 +150,7 @@ const defaults = {
   showAutoCluster: true,
   showManualTypes: true,
   showEmptyWells: false,
+  expertMode: false,
 };
 
 /** Bump whenever a *default's meaning* changes such that an already-stored
@@ -165,8 +169,12 @@ const defaults = {
  *  from before this version is forced to `false` once, in `migrate`; the
  *  toolbar's lock button still works normally afterward, and a value the
  *  operator sets *after* migrating is never touched again because it is
- *  already at the current version. */
-const SETTINGS_STORE_VERSION = 1;
+ *  already at the current version.
+ *
+ *  v1 -> v2 (P7 expert mode): the threshold-edit tool is expert-only, so a
+ *  stored `scatterTool: 'edit'` would leave a basic-mode user in a drag mode
+ *  with no control to leave it. It is reset to `select` once. */
+const SETTINGS_STORE_VERSION = 2;
 
 /** Coerces a stored payload with no `version` key at all -- every payload
  *  written before this file introduced versioning, including the one from
@@ -193,7 +201,7 @@ function coerceMissingVersion<S>(base: PersistStorage<S> | undefined): PersistSt
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...defaults,
 
       setUseRox: (v) => set({ useRox: v }),
@@ -231,7 +239,12 @@ export const useSettingsStore = create<SettingsState>()(
       setShowAutoCluster: (v) => set({ showAutoCluster: v }),
       setShowManualTypes: (v) => set({ showManualTypes: v }),
       setShowEmptyWells: (v) => set({ showEmptyWells: v }),
-      resetToDefaults: () => set(defaults),
+      // The edit tool has no control outside expert mode, so leaving expert
+      // mode also leaves the tool.
+      setExpertMode: (v) => set(v ? { expertMode: true } : { expertMode: false, scatterTool: 'select' }),
+      // Expert mode is a view preference, not an analysis setting: resetting
+      // the analysis settings must not flip the screen layout under the user.
+      resetToDefaults: () => set({ ...defaults, expertMode: get().expertMode }),
     }),
     {
       name: 'snp-analyzer-settings',
@@ -242,6 +255,10 @@ export const useSettingsStore = create<SettingsState>()(
         if (version < 1) {
           // v0 -> v1: see SETTINGS_STORE_VERSION above.
           state.lockAspect = false;
+        }
+        if (version < 2) {
+          // v1 -> v2: see SETTINGS_STORE_VERSION above.
+          state.scatterTool = 'select';
         }
         return state as SettingsState;
       },
