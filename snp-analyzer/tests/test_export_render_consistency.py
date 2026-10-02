@@ -58,7 +58,7 @@ def _row(genotype: str, call_len: int = 0):
     marker = SimpleNamespace(name="m", marker_id="m1", ploidy=2)
     labels = SimpleNamespace(fam="F" * call_len, allele2="G" * call_len)
     return SimpleNamespace(genotype=genotype, marker=marker, allele_labels=labels if call_len else None,
-                           well="A1", sample_name="s", confidence=0.5)
+                           well="A1", sample_name="s", confidence=0.5, no_amplification=False)
 
 
 def test_pptx_long_allele_call_is_clipped_in_result_rows() -> None:

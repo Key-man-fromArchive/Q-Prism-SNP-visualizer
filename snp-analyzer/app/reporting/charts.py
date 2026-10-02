@@ -78,6 +78,9 @@ _FONT_RC = {"font.family": [_FONT_FAMILY, "DejaVu Sans"]}
 _ASPECTS = {"4:3": (6.4, 4.8), "1:1": (5.4, 5.4), "3:4": (6.0, 8.0)}
 # orientation -> (point key on x, point key on y)
 _ORIENTATIONS = {"fam_x": ("norm_fam", "norm_allele2"), "allele2_x": ("norm_allele2", "norm_fam")}
+_NO_AMPLIFICATION_LABEL = "No amplification"
+_NO_AMPLIFICATION_COLOR = "#9ca3af"
+_NO_AMPLIFICATION_SIZE = 8
 _AXIS_MARGIN = 0.05
 _WELL_LABEL_LIMIT = 48
 _font_registered = False
@@ -131,16 +134,23 @@ def build_scatter_figure(
         fig, ax = plt.subplots(figsize=(width or 6, height or 4.5))
 
         groups: dict[str, list] = {}
+        flat = [p for p in points if p.get("no_amplification")]
         for p in points:
-            groups.setdefault(p.get("effective_type", "Unknown"), []).append(p)
+            if not p.get("no_amplification"):
+                groups.setdefault(p.get("effective_type", "Unknown"), []).append(p)
 
         names = legend_names or {}
+        if flat:
+            # Unamplified wells carry no genotype signal: quiet grey, drawn underneath.
+            ax.scatter([p[x_key] for p in flat], [p[y_key] for p in flat], c=_NO_AMPLIFICATION_COLOR,
+                       s=_NO_AMPLIFICATION_SIZE, alpha=0.8, zorder=1,
+                       label=f"{_NO_AMPLIFICATION_LABEL} (n={len(flat)})", linewidth=0)
         for gt, pts in groups.items():
             color = genotype_color(gt, ploidy) or "#6b7280"
             xs = [p[x_key] for p in pts]
             ys = [p[y_key] for p in pts]
             ax.scatter(xs, ys, c=color, s=20, alpha=0.7, label=literal_text(f"{names.get(gt, gt)} (n={len(pts)})"),
-                       edgecolors="white", linewidth=0.3)
+                       edgecolors="white", linewidth=0.3, zorder=2)
 
         if len(points) <= _WELL_LABEL_LIMIT:
             for p in points:
@@ -158,7 +168,7 @@ def build_scatter_figure(
         if xlim and ylim:
             ax.set_xlim(*xlim)
             ax.set_ylim(*ylim)
-        if groups:
+        if groups or flat:
             # Below the plot, horizontal: never covers a point.
             ax.legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.14), borderaxespad=0,
                       ncol=2, framealpha=0.9)

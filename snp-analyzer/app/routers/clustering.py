@@ -11,6 +11,8 @@ from starlette.concurrency import run_in_threadpool
 
 from app.models import (
     AlleleLabels,
+    AmplificationQcConfig,
+    AmplificationQcResult,
     AnalysisContext,
     AnalysisRegionContext,
     RatioOrigin,
@@ -31,6 +33,7 @@ from app.processing.clustering import (
     cluster_kmeans,
     cluster_threshold,
 )
+from app.processing.amplification_qc import compute_amplification_qc
 from app.processing.genotype_vocab import validate_ploidy
 from app.processing.normalize import normalize_for_cycle, normalization_summary
 from app.processing.background import available_background_modes, BackgroundModeError
@@ -82,6 +85,8 @@ class MarkerUpdate(_BaseModel):
 
 
 router = APIRouter()
+
+UNDETERMINED = "Undetermined"  # canonical call of a well with no usable signal
 
 
 def _validated_allele_labels(raw: object) -> dict | None:
@@ -309,7 +314,7 @@ def _region_input_hash(
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
-def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringResult:
+def _run_regions(req, unified, cycle, point_dicts, control_wells, flat=frozenset()) -> ClusteringResult:
     """Genotype each marker region independently on its own well subset + ploidy.
 
     Each region reuses the same clustering path as a whole plate. Results are
@@ -356,6 +361,7 @@ def _run_regions(req, unified, cycle, point_dicts, control_wells) -> ClusteringR
             req.n_clusters,
             reg.ploidy,
         )
+        assignments.update({w: UNDETERMINED for w in reg.wells if w in flat})
         region_results.append(
             RegionResult(
                 id=reg.id,
@@ -465,10 +471,11 @@ def _snapshot_controls(snapshot: CalculationSnapshot) -> dict[str, str]:
                         WellType.ALLELE1_CONTROL.value, WellType.ALLELE2_CONTROL.value)}
 
 
-def _single_result(snapshot: CalculationSnapshot, points, controls) -> ClusteringResult:
+def _single_result(snapshot: CalculationSnapshot, points, controls, flat: frozenset[str] | set[str] = frozenset()) -> ClusteringResult:
     req, ploidy = snapshot.request, snapshot.unified.ploidy
     assignments, confidences, window, warnings = _cluster_point_dicts(
         points, controls, req.algorithm, req.threshold_config, req.n_clusters, ploidy)
+    assignments.update(dict.fromkeys(flat, UNDETERMINED))
     return ClusteringResult(
         algorithm=req.algorithm.value, cycle=snapshot.cycle, assignments=assignments,
         confidences=confidences or None, ploidy=ploidy, warnings=warnings,
@@ -530,17 +537,36 @@ def _attach_context(snapshot: CalculationSnapshot, result: ClusteringResult, ori
         cycle=snapshot.cycle, use_rox=req.use_rox,
         normalization_applied=applied, normalization_mixed=mixed,
         background=req.background or "none", algorithm=aggregate if regions else actual,
-        parameters=parameters, regions=regions, input_revision=snapshot.unified.input_revision)
+        parameters=parameters, regions=regions, input_revision=snapshot.unified.input_revision,
+        amplification_qc=result.amplification_qc)
+
+
+def _amplification_qc(snapshot: CalculationSnapshot, point_dicts, controls) -> AmplificationQcResult:
+    """No-amplification judgement for the wells that are actually being genotyped.
+
+    Control wells keep their declared type (an NTC is expected not to amplify),
+    so only the remaining samples are candidates; thresholds still come from the
+    whole plate."""
+    req = snapshot.request
+    candidates = [p["well"] for p in point_dicts if p["well"] not in controls]
+    return compute_amplification_qc(
+        snapshot.unified, snapshot.cycle, candidates,
+        req.amplification_qc or AmplificationQcConfig(), use_rox=req.use_rox)
 
 
 def _calculate_snapshot(snapshot: CalculationSnapshot) -> ClusteringResult:
     """Pure worker: no sessions/stores/DB access, scientific functions unchanged."""
     point_dicts, origin, excluded, points = _snapshot_points(snapshot)
     controls = _snapshot_controls(snapshot)
+    qc = _amplification_qc(snapshot, point_dicts, controls)
+    flat = set(qc.no_amplification_wells)
+    # Unamplified wells carry no genotype signal: out of the fit, called Undetermined.
+    fit_points = [p for p in point_dicts if p["well"] not in flat]
     if snapshot.request.regions:
-        result = _run_regions(snapshot.request, snapshot.unified, snapshot.cycle, point_dicts, controls)
+        result = _run_regions(snapshot.request, snapshot.unified, snapshot.cycle, fit_points, controls, flat)
     else:
-        result = _single_result(snapshot, point_dicts, controls)
+        result = _single_result(snapshot, fit_points, controls, flat)
+    result.amplification_qc = qc
     _attach_context(snapshot, result, origin, excluded, points)
     return result
 
