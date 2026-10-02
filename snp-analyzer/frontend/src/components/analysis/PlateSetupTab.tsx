@@ -514,6 +514,11 @@ export function PlateSetupTab() {
     const parsedLabels = parseAlleleLabelInputs(formFam, formAllele2);
     if (!parsedLabels.ok) return;
     const alleleLabels = parsedLabels.value;
+    if (alleleLabels && alleleLabels.fam.toLowerCase() === alleleLabels.allele2.toLowerCase()) {
+      setSaveError(`${t.markerAlleleFamLabel} ≠ ${t.markerAlleleAllele2Label}`);
+      return;
+    }
+    setSaveError(null);
 
     if (editingMarker === "new") {
       const id = genMarkerId();

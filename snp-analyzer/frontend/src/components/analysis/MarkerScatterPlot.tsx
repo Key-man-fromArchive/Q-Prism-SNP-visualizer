@@ -360,7 +360,7 @@ export function MarkerScatterPlot({
 
     const colors = plotlyColors();
     const namedMarker = { allele_labels: alleleNames };
-    const thresholdLabels =channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
+    const thresholdLabels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
     const traces: Record<string, unknown>[] = [];
     for (const typeKey of order) {
       const pts = typeGroups.get(typeKey)!;
@@ -536,7 +536,7 @@ export function MarkerScatterPlot({
       const wells = scopedPoints.map(point => point.well).sort().join(',');
       setActiveChart({ element, sessionId, resultRevision: revision,
         cycle: scatterProvenance.cycle, useRox: scatterProvenance.useRox, backgroundMode: scatterProvenance.backgroundMode, entry, ownerId,
-        caption: `marker ${marker.name}${alleleNames ? ` (${axisTitle(labels.fam, alleleNames.fam)} / ${axisTitle(labels.allele2, alleleNames.allele2)})` : ''}; cycle ${scatterProvenance.cycle}${readText ? ` (${readText})` : ''};${scatterProvenance.useRox ? 'reference requested' : 'raw basis'}; background ${scatterProvenance.backgroundMode}; visible wells ${wells}; revision ${revision}; analysed ${analysedAt ?? 'unknown'}`,
+        caption: `marker ${marker.name}${alleleNames ? ` (${axisTitle(labels.fam, alleleNames.fam)} / ${axisTitle(labels.allele2, alleleNames.allele2)})` : ''}; cycle ${scatterProvenance.cycle}${readText ? ` (${readText})` : ''}; ${scatterProvenance.useRox ? 'reference requested' : 'raw basis'}; background ${scatterProvenance.backgroundMode}; visible wells ${wells}; revision ${revision}; analysed ${analysedAt ?? 'unknown'}`,
         // The marker scope can be re-rendered by selected-only, boundaries,
         // assignments or chart settings without a new result revision. A PNG
         // must be tied to this immutable render, not just its result context.
