@@ -18,7 +18,6 @@ from pptx.util import Emu, Inches, Pt
 
 from app.models import AlleleLabels, AnalysisRegionContext
 from app.reporting.charts import render_scatter_png
-from app.reporting.filenames import safe_filename
 from app.reporting.result_snapshot import ResultRow, ResultSnapshot, snapshot_rows
 from app.reporting.snapshot_plate import render_snapshot_plate
 from app.reporting.snapshot_presentation import (
@@ -27,6 +26,8 @@ from app.reporting.snapshot_presentation import (
     cycle_label,
     display_genotype,
     figure_points,
+    figure_title,
+    marker_scope,
     polyploid_legend,
 )
 
@@ -187,11 +188,17 @@ def _scatter(snapshot: ResultSnapshot, page: _MarkerPage) -> bytes:
         snapshot.unified.allele2_dye,
         ploidy=marker.ploidy if marker else snapshot.result.ploidy,
         coordinate_basis=coordinate_basis(snapshot),
-        title=f"{page.title} · {cycle_label(snapshot, snapshot.context.cycle)}",
+        title=_page_title(snapshot, page),
         x_label=axis_label(snapshot, "allele2", marker, page.labels),
         y_label=axis_label(snapshot, "fam", marker, page.labels),
         legend_names=legend_names,
     )
+
+
+def _page_title(snapshot: ResultSnapshot, page: _MarkerPage) -> str:
+    if page.marker is None:
+        return f"{page.title} · {cycle_label(snapshot, snapshot.context.cycle)}"
+    return figure_title(snapshot, page.title, page.marker)
 
 
 def _call_counts(page: _MarkerPage) -> list[list[object]]:
@@ -220,12 +227,7 @@ def _marker_slide(
     layout: dict[str, str],
 ) -> None:
     marker = page.marker
-    title = (
-        page.title
-        if marker is None
-        else f"{page.title} [{marker.marker_id}] / ploidy {marker.ploidy}"
-    )
-    slide = _blank(deck, title)
+    slide = _blank(deck, _page_title(snapshot, page))
     legend = (
         polyploid_legend(page.labels, snapshot.unified.allele2_dye)
         if marker and marker.ploidy != 2
@@ -310,9 +312,5 @@ def build_snapshot_pptx(snapshot: ResultSnapshot, include_table: bool = True) ->
 
 def pptx_filename(snapshot: ResultSnapshot, selected: bool) -> str:
     """Download name; a marker selection puts the (safely reduced) marker names in it."""
-    scope = "whole-run"
-    if selected:
-        scope = "+".join(
-            safe_filename(page.title) for page in _marker_pages(snapshot, [])
-        )
+    scope = marker_scope(snapshot, selected) or "whole-run"
     return f"snp_report_{scope}_cycle{snapshot.context.cycle}.pptx"

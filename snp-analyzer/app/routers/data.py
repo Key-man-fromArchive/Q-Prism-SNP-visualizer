@@ -319,6 +319,7 @@ async def export_pdf(
     from app.reporting.filenames import content_disposition
     from app.reporting.result_snapshot import ExportOptions, capture_result_snapshot
     from app.reporting.snapshot_pdf import build_snapshot_pdf
+    from app.reporting.snapshot_presentation import marker_scope
     from app.routers.export_params import parse_marker_ids
 
     selected = parse_marker_ids(marker_ids)
@@ -329,7 +330,8 @@ async def export_pdf(
     return Response(
         build_snapshot_pdf(snapshot), media_type="application/pdf",
         headers={"Content-Disposition": content_disposition(
-            f"snp_report_whole-run_cycle{snapshot.context.cycle}.pdf")},
+            f"snp_report_{marker_scope(snapshot, selected is not None) or 'whole-run'}"
+            f"_cycle{snapshot.context.cycle}.pdf")},
     )
 
 

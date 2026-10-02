@@ -10,6 +10,7 @@ from app.processing.cycle_selection import CycleMode
 from app.reporting.filenames import content_disposition
 from app.reporting.result_snapshot import ExportOptions, capture_result_snapshot
 from app.reporting.snapshot_images import build_scatter_zip
+from app.reporting.snapshot_presentation import marker_scope
 from app.routers.export_params import parse_marker_ids
 
 router = APIRouter()
@@ -34,5 +35,7 @@ def export_scatter_png_zip(
     return Response(
         build_scatter_zip(snapshot), media_type="application/zip",
         headers={"Content-Disposition": content_disposition(
-            f"snp_scatter_png_cycle{snapshot.context.cycle}.zip")},
+            "snp_scatter_png_"
+            + (f"{scope}_" if (scope := marker_scope(snapshot, selected is not None)) else "")
+            + f"cycle{snapshot.context.cycle}.zip")},
     )
