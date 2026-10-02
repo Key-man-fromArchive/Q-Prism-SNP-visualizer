@@ -9,6 +9,7 @@ import { useSessionStore } from "@/stores/session-store";
 import { useDataStore } from "@/stores/data-store";
 import {
   saveMarkers,
+  updateMarker,
   getSamples,
   updateSamples,
   listLayouts,
@@ -18,7 +19,8 @@ import {
   attachMarkerCatalog,
   ApiError,
 } from "@/lib/api";
-import type { MarkerRegion, SavedLayout, LayoutApplyConflict, MarkerCatalogEntry } from "@/types/api";
+import { alleleSummary, parseAlleleLabelInputs } from "@/lib/genotype";
+import type { AlleleLabels, MarkerRegion, SavedLayout, LayoutApplyConflict, MarkerCatalogEntry } from "@/types/api";
 import { WellType } from "@/types/api";
 import { assignManualWells } from "@/lib/manual-commands";
 import { parseWellType } from "@/lib/well-type-input";
@@ -52,6 +54,30 @@ function genMarkerId(): string {
     return crypto.randomUUID();
   }
   return `m_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+type MarkerEditForm = {
+  name: string;
+  color: string;
+  ploidy: number;
+  catalogId: string | null;
+  dosageMax: number | null;
+  alleleLabels: AlleleLabels | null;
+};
+
+/** Which writes an edit needs: allele names have their own endpoint, the rest the bulk save. */
+function describeMarkerEdit(existing: MarkerRegion | undefined, form: MarkerEditForm) {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const labelsChanged = !same(form.alleleLabels, existing?.allele_labels);
+  const threshold = withDosageMax(existing?.threshold_config ?? null, form.dosageMax);
+  const otherChanged =
+    !existing ||
+    existing.name !== form.name ||
+    existing.color !== form.color ||
+    existing.ploidy !== form.ploidy ||
+    (existing.catalog_id ?? null) !== form.catalogId ||
+    !same(existing.threshold_config, threshold);
+  return { labelsChanged, otherChanged };
 }
 
 function WellInspectorAddress({ well }: { well: string | null }) {
@@ -111,6 +137,10 @@ export function PlateSetupTab() {
   // to prefill name/ploidy/color from when creating/editing a marker.
   const [catalogEntries, setCatalogEntries] = useState<MarkerCatalogEntry[]>([]);
   const [formCatalogId, setFormCatalogId] = useState<string>("");
+  // Per-marker allele names (FAM side / VIC-HEX side); both blank = default wording.
+  const [formFam, setFormFam] = useState("");
+  const [formAllele2, setFormAllele2] = useState("");
+  const labelsInvalid = !parseAlleleLabelInputs(formFam, formAllele2).ok;
 
   // Layout library (P4-S3) -- per-USER, not per-session, so this list is
   // never cleared by the session-change reset below.
@@ -414,6 +444,8 @@ export function PlateSetupTab() {
       markers[markers.length - 1]?.threshold_config?.dosage_max ?? null
     );
     setFormCatalogId("");
+    setFormFam("");
+    setFormAllele2("");
   }
 
   function openEditMarkerForm(id: string) {
@@ -425,6 +457,8 @@ export function PlateSetupTab() {
     setFormPloidy(m.ploidy);
     setFormDosageMax(m.threshold_config?.dosage_max ?? null);
     setFormCatalogId(m.catalog_id ?? "");
+    setFormFam(m.allele_labels?.fam ?? "");
+    setFormAllele2(m.allele_labels?.allele2 ?? "");
   }
 
   function closeMarkerForm() {
@@ -461,10 +495,25 @@ export function PlateSetupTab() {
     }
   }
 
+  async function persistAlleleLabels(markerId: string, labels: AlleleLabels | null) {
+    if (!sessionId) return;
+    try {
+      setSaveError(null);
+      const res = await updateMarker(sessionId, markerId, { allele_labels: labels });
+      setMarkers((prev) => [...res.markers, ...prev.filter((m) => m.wells.length === 0)]);
+      window.dispatchEvent(new CustomEvent("markers-changed"));
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function saveMarkerForm() {
     const name = formName.trim();
     if (!name) return;
     const catalogId = formCatalogId || null;
+    const parsedLabels = parseAlleleLabelInputs(formFam, formAllele2);
+    if (!parsedLabels.ok) return;
+    const alleleLabels = parsedLabels.value;
 
     if (editingMarker === "new") {
       const id = genMarkerId();
@@ -480,6 +529,7 @@ export function PlateSetupTab() {
         ploidy: formPloidy,
         color: formColor,
         catalog_id: catalogId,
+        allele_labels: alleleLabels,
         // Only carried when actually declared: an undeclared ceiling must stay
         // absent so the caller falls back to the organism's full ladder rather
         // than being handed a ploidy-shaped default it cannot tell apart.
@@ -494,6 +544,14 @@ export function PlateSetupTab() {
     if (editingMarker) {
       const editingId = editingMarker;
       const existing = markers.find((m) => m.id === editingId);
+      const { labelsChanged, otherChanged } = describeMarkerEdit(existing, {
+        name,
+        color: formColor,
+        ploidy: formPloidy,
+        catalogId,
+        dosageMax: formDosageMax,
+        alleleLabels,
+      });
       const next = markers.map((m) =>
         m.id === editingId
           ? {
@@ -503,6 +561,7 @@ export function PlateSetupTab() {
               ploidy: formPloidy,
               catalog_id: catalogId,
               threshold_config: withDosageMax(m.threshold_config, formDosageMax),
+              allele_labels: alleleLabels,
             }
           : m
       );
@@ -512,12 +571,23 @@ export function PlateSetupTab() {
       const target = next.find((m) => m.id === editingId);
       if (!target || target.wells.length === 0) return; // not yet persisted server-side
 
+      // Names go through the dedicated per-marker update (null clears them),
+      // after everything else so no later response overwrites them. A
+      // names-only edit skips the bulk save, which otherwise carries the
+      // previously stored names so each write has one owner.
+      const namesOnly = labelsChanged && !otherChanged;
+      const bulk = labelsChanged
+        ? next.map((m) =>
+            m.id === editingId ? { ...m, allele_labels: existing?.allele_labels ?? null } : m
+          )
+        : next;
+
       // Marker already exists on the backend: name/color/ploidy go through
       // the normal bulk persist; a NEW catalog link additionally needs the
       // dedicated attach-catalog endpoint (the bulk marker-set PUT/POST
       // doesn't itself run the catalog prefill logic).
-      const merged = await persist(next);
-      if (catalogId && catalogId !== (existing?.catalog_id ?? null) && sessionId) {
+      const merged = namesOnly ? bulk : await persist(bulk);
+      if (!namesOnly && catalogId && catalogId !== (existing?.catalog_id ?? null) && sessionId) {
         try {
           const attached = await attachMarkerCatalog(sessionId, editingId, catalogId);
           setMarkers((prev) => prev.map((m) => (m.id === editingId ? attached : m)));
@@ -530,6 +600,7 @@ export function PlateSetupTab() {
         }
       }
       void merged;
+      if (labelsChanged) await persistAlleleLabels(editingId, alleleLabels);
     }
   }
 
@@ -770,6 +841,11 @@ export function PlateSetupTab() {
                   <Pencil size={13} aria-hidden="true" />
                 </button>
               </div>
+              {m.allele_labels && (
+                <div data-testid="marker-card-alleles" className="mt-1 text-xs text-text-muted truncate">
+                  {alleleSummary(m.allele_labels, sessionInfo?.allele2_dye ?? "VIC")}
+                </div>
+              )}
               <div className="mt-1.5 text-xs text-text-muted">
                 {t.wsMarkerSampleCount(m.wells.length)}
               </div>
@@ -817,6 +893,44 @@ export function PlateSetupTab() {
                 placeholder={t.wsMarkerNamePlaceholder}
                 className="w-full border border-border rounded-md px-2 py-1.5 text-sm bg-surface text-text"
               />
+
+              <div className="grid grid-cols-2 gap-1.5 mt-2.5">
+                <label className="text-xs font-bold text-text-muted flex flex-col gap-1">
+                  {t.markerAlleleFamLabel}
+                  <input
+                    data-testid="marker-allele-fam-input"
+                    type="text"
+                    maxLength={32}
+                    value={formFam}
+                    aria-invalid={labelsInvalid && !formFam.trim()}
+                    onChange={(e) => setFormFam(e.target.value)}
+                    className="w-full border border-border rounded-md px-2 py-1.5 text-sm font-normal bg-surface text-text"
+                  />
+                </label>
+                <label className="text-xs font-bold text-text-muted flex flex-col gap-1">
+                  {t.markerAlleleAllele2Label}
+                  <input
+                    data-testid="marker-allele-allele2-input"
+                    type="text"
+                    maxLength={32}
+                    value={formAllele2}
+                    aria-invalid={labelsInvalid && !formAllele2.trim()}
+                    onChange={(e) => setFormAllele2(e.target.value)}
+                    className="w-full border border-border rounded-md px-2 py-1.5 text-sm font-normal bg-surface text-text"
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                data-testid="marker-allele-clear"
+                onClick={() => {
+                  setFormFam("");
+                  setFormAllele2("");
+                }}
+                className="mt-1 text-xs text-text-muted underline cursor-pointer"
+              >
+                {t.markerAlleleClear}
+              </button>
 
               <p className="text-xs font-bold text-text-muted mt-2.5 mb-1.5">
                 {t.wsMarkerColorLabel}
@@ -886,6 +1000,7 @@ export function PlateSetupTab() {
                 <button
                   type="button"
                   data-testid="marker-form-save"
+                  disabled={labelsInvalid}
                   onClick={saveMarkerForm}
                   className="flex-1 rounded-md py-1.5 font-semibold text-sm bg-primary text-on-primary cursor-pointer"
                 >
