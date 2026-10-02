@@ -244,6 +244,9 @@ async def get_session_info(sid: str, current_user: CurrentUser):
             if unified.read_labels else None
         ),
         "has_amplification_curve": unified.has_amplification_curve,
+        "instrument_detail": (
+            unified.instrument_detail.model_dump() if unified.instrument_detail else None
+        ),
     }
 
 
