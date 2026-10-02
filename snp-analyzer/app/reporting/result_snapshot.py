@@ -5,7 +5,7 @@ The in-process input lock is the same single-process boundary as publication.
 Adapters own these copies and must not mutate them or read live state afterwards.
 """
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 from typing import Literal, NoReturn
 from uuid import UUID
@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, JsonValue, TypeAdapter, ValidationError
 
 from app.auth import TokenData, check_session_access
 from app.models import (
-    AnalysisContext, AnalysisRegionContext, ClusteringResult, NormalizedPoint,
+    AlleleLabels, AnalysisContext, AnalysisRegionContext, ClusteringResult, NormalizedPoint,
     ProtocolStep, RatioOrigin, ThresholdConfig, UnifiedData,
 )
 from app.processing.analysis_state import analysis_status, input_lock
@@ -34,6 +34,12 @@ class ExportOptions:
     marker_ids: tuple[str, ...] | None = None
 
 
+class MarkerLabel(BaseModel):
+    """Current operator-facing names of one marker, as of capture."""
+    name: str
+    allele_labels: AlleleLabels | None = None
+
+
 @dataclass(frozen=True)
 class ResultSnapshot:
     session_id: str
@@ -48,6 +54,8 @@ class ResultSnapshot:
     protocol: list[ProtocolStep]
     raw_filename: str
     passive_reference_label: str
+    # marker_id -> names at capture time; may lag the analysed marker set.
+    marker_labels: dict[str, MarkerLabel] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -61,6 +69,7 @@ class ResultRow:
     ploidy: int | None
     assignment_status: str
     read_status: str
+    allele_labels: AlleleLabels | None = None
 
 
 class _ActualWindow(BaseModel):
@@ -182,7 +191,7 @@ def capture_result_snapshot(
     sid: str, user: TokenData, options: ExportOptions,
 ) -> ResultSnapshot:
     from app.db import get_db
-    from app.routers.clustering import cluster_store, group_store
+    from app.routers.clustering import cluster_store, group_store, marker_store
     from app.routers.data import protocol_store
     from app.routers.sample import sample_name_store
     from app.services.session_restore import restore_session
@@ -211,6 +220,8 @@ def capture_result_snapshot(
             deepcopy(protocol_store.get(sid, data.protocol_steps or [])),
             str(metadata["raw_filename"] or "") if metadata else "",
             _reference_label(data, context.cycle),
+            {m.id: MarkerLabel(name=m.name, allele_labels=m.allele_labels)
+             for m in deepcopy(marker_store.get(sid, []))},
         )
     return filter_snapshot(snapshot, options.marker_ids)
 
@@ -271,6 +282,7 @@ def filter_snapshot(snapshot: ResultSnapshot, marker_ids: tuple[str, ...] | None
         {w: v for w, v in snapshot.sample_names.items() if w in wells},
         groups, {n: s for n, s in snapshot.group_sources.items() if n in groups},
         deepcopy(snapshot.protocol), snapshot.raw_filename, snapshot.passive_reference_label,
+        {k: v.model_copy(deep=True) for k, v in snapshot.marker_labels.items() if k in selected},
     )
 
 
@@ -307,12 +319,16 @@ def snapshot_rows(snapshot: ResultSnapshot) -> list[ResultRow]:
     rows = []
     for well in sorted(snapshot.unified.wells, key=lambda w: (w[0], int(w[1:]))):
         marker = markers.get(well)
+        label = snapshot.marker_labels.get(marker.marker_id) if marker else None
+        if marker is not None and label is not None:
+            marker = marker.model_copy(update={"name": label.name})
         genotype, status = _row_call(snapshot, well, marker)
         ploidy = marker.ploidy if marker else (None if context.regions else snapshot.result.ploidy)
         point, read_status = _available_point(points.get(well))
         rows.append(ResultRow(well, snapshot.sample_names.get(well, ""), genotype,
                               (snapshot.result.confidences or {}).get(well), point,
-                              marker, ploidy, status, read_status))
+                              marker, ploidy, status, read_status,
+                              label.allele_labels if label else None))
     return rows
 
 

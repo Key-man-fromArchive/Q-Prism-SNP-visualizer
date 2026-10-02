@@ -1,0 +1,95 @@
+"""Scatter figure readability: title, axes, legend, well labels, font, aspect."""
+import logging
+import warnings
+
+import matplotlib.pyplot as plt
+import pytest
+
+from app.reporting.charts import build_scatter_figure, render_scatter_png
+
+
+def _points(n=6):
+    types = ["Allele 1 Homo", "Heterozygous", "Allele 2 Homo"]
+    return [{"well": f"A{i + 1}", "norm_fam": 0.1 * i, "norm_allele2": 1 - 0.1 * i,
+             "effective_type": types[i % 3]} for i in range(n)]
+
+
+@pytest.fixture(autouse=True)
+def _close():
+    yield
+    plt.close("all")
+
+
+def _texts(ax):
+    return [t.get_text() for t in ax.texts]
+
+
+def test_title_axes_legend_and_well_labels_present():
+    fig = build_scatter_figure(
+        _points(), title="rs123 · Amplification 1/5 · PCR 36 · 40°C",
+        x_label="VIC · WT (ROX 정규화)", y_label="FAM · MUT (ROX 정규화)",
+        legend_names={"Allele 1 Homo": "MUT/MUT", "Heterozygous": "MUT/WT"})
+    ax = fig.axes[0]
+    assert ax.get_title() == "rs123 · Amplification 1/5 · PCR 36 · 40°C"
+    assert ax.get_xlabel() == "VIC · WT (ROX 정규화)"
+    assert ax.get_ylabel() == "FAM · MUT (ROX 정규화)"
+    labels = [t.get_text() for t in ax.get_legend().get_texts()]
+    assert "MUT/MUT (n=2)" in labels
+    assert "MUT/WT (n=2)" in labels
+    assert "Allele 2 Homo (n=2)" in labels
+    assert sorted(_texts(ax)) == sorted(p["well"] for p in _points())
+
+
+def test_legend_is_outside_the_axes():
+    fig = build_scatter_figure(_points())
+    ax = fig.axes[0]
+    fig.canvas.draw()
+    legend_box = ax.get_legend().get_window_extent()
+    axes_box = ax.get_window_extent()
+    assert legend_box.x0 >= axes_box.x1 - 1
+
+
+def test_color_lookup_uses_canonical_string_not_display_name():
+    fig = build_scatter_figure(_points(3), legend_names={"Heterozygous": "A/B"})
+    ax = fig.axes[0]
+    colors = {c.get_label().split(" (n=")[0]: tuple(c.get_facecolor()[0][:3]) for c in ax.collections}
+    plain = build_scatter_figure(_points(3)).axes[0]
+    expected = {c.get_label().split(" (n=")[0]: tuple(c.get_facecolor()[0][:3]) for c in plain.collections}
+    assert colors["A/B"] == expected["Heterozygous"]
+
+
+def test_well_labels_omitted_above_48_wells():
+    fig = build_scatter_figure(_points(49))
+    assert _texts(fig.axes[0]) == []
+    assert len(build_scatter_figure(_points(48)).axes[0].texts) == 48
+
+
+@pytest.mark.parametrize("aspect,ratio", [("4:3", 4 / 3), ("1:1", 1.0)])
+def test_aspect_argument(aspect, ratio):
+    fig = build_scatter_figure(_points(), aspect=aspect)
+    w, h = fig.get_size_inches()
+    assert w / h == pytest.approx(ratio)
+    png = render_scatter_png(_points(), aspect=aspect)
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_invalid_aspect_rejected():
+    with pytest.raises(ValueError):
+        build_scatter_figure(_points(), aspect="16:9")
+
+
+def test_korean_names_render_without_missing_glyph_warning(caplog):
+    with warnings.catch_warnings(record=True) as caught, caplog.at_level(logging.WARNING):
+        warnings.simplefilter("always")
+        png = render_scatter_png(
+            _points(), title="마커 한글 · 증폭 1/5", x_label="VIC · 야생형 (ROX 정규화)",
+            y_label="FAM · 변이형 (ROX 정규화)", legend_names={"Heterozygous": "변이/야생"})
+    assert png[:4] == b"\x89PNG"
+    assert [str(w.message) for w in caught if "Glyph" in str(w.message)] == []
+    assert [r.message for r in caplog.records if "Glyph" in r.message] == []
+
+
+def test_default_call_keeps_legacy_labels():
+    ax = build_scatter_figure(_points(), allele2_dye="HEX").axes[0]
+    assert ax.get_xlabel() == "HEX (normalized)"
+    assert ax.get_ylabel() == "FAM (normalized)"
