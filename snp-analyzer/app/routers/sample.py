@@ -238,6 +238,12 @@ async def get_session_info(sid: str, current_user: CurrentUser):
         "suggested_cycle": suggested,
         "well_groups": unified.well_groups,
         "background_modes": available_background_modes(unified),
+        "default_cycle": unified.default_cycle,
+        "read_labels": (
+            {cycle: label.model_dump() for cycle, label in unified.read_labels.items()}
+            if unified.read_labels else None
+        ),
+        "has_amplification_curve": unified.has_amplification_curve,
     }
 
 
