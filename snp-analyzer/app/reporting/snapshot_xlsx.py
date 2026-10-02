@@ -11,11 +11,9 @@ from app.models import AnalysisRegionContext
 from app.reporting.charts import render_scatter_png
 from app.reporting.result_snapshot import ResultRow, ResultSnapshot, snapshot_rows
 from app.reporting.snapshot_presentation import (
-    CellValue, axis_label, coordinate_basis, cycle_label, display_genotype, polyploid_legend,
+    CellValue, coordinate_basis, cycle_label, display_genotype, figure_options, polyploid_legend,
     report_counts, report_figures, report_metadata, report_table,
 )
-
-CANONICAL_DIPLOID = ("Allele 1 Homo", "Heterozygous", "Allele 2 Homo")
 
 
 def _validate_text(values: list[CellValue]) -> None:
@@ -60,17 +58,6 @@ def add_label_columns(
     return headers, values
 
 
-def _scatter_options(snapshot: ResultSnapshot, marker: AnalysisRegionContext | None) -> dict[str, object]:
-    """Allele-aware axis and legend text; empty for a marker without names."""
-    label = snapshot.marker_labels.get(marker.marker_id) if marker else None
-    labels = label.allele_labels if label else None
-    if marker is None or labels is None:
-        return {}
-    legend = {g: display_genotype(g, marker, labels) for g in CANONICAL_DIPLOID} if marker.ploidy == 2 else {}
-    return {"x_label": axis_label(snapshot, "allele2", marker, labels),
-            "y_label": axis_label(snapshot, "fam", marker, labels), "legend_names": legend}
-
-
 def _polyploid_note(snapshot: ResultSnapshot, marker: AnalysisRegionContext | None) -> str | None:
     label = snapshot.marker_labels.get(marker.marker_id) if marker else None
     if marker is None or label is None or marker.ploidy == 2:
@@ -86,7 +73,7 @@ def _add_figures(summary: Worksheet, snapshot: ResultSnapshot, rows: list[Result
         summary.cell(anchor, 4, figure.title).data_type = "s"
         png = render_scatter_png(figure.points, snapshot.unified.allele2_dye, ploidy=figure.ploidy,
                                  coordinate_basis=coordinate_basis(snapshot),
-                                 **_scatter_options(snapshot, marker))
+                                 **figure_options(snapshot, figure, marker))
         image = Image(io.BytesIO(png))
         image.width, image.height = 640, 480
         summary.add_image(image, f"D{anchor + 1}")

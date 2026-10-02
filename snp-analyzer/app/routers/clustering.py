@@ -6,7 +6,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 
-from pydantic import BaseModel as _BaseModel, JsonValue
+from pydantic import BaseModel as _BaseModel, JsonValue, ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from app.models import (
@@ -234,6 +234,16 @@ def _cluster_point_dicts(
     # were actually made under rather than what it last sent.
     window["dosage_max"] = config.dosage_max
     return assignments, confidences, window, (warnings or None)
+
+
+def strict_marker(data: "MarkerRegion | dict") -> MarkerRegion:
+    """Re-validate a marker from an input path with the strict name rules (400 on failure)."""
+    raw = data.model_dump() if isinstance(data, MarkerRegion) else data
+    try:
+        return MarkerRegion.model_validate(raw, context={"strict_marker_name": True})
+    except ValidationError as exc:
+        detail = str(exc.errors()[0]["msg"]).removeprefix("Value error, ")
+        raise HTTPException(400, f"{detail} (id={raw.get('id')!r})") from exc
 
 
 def _validate_marker_set(markers: list[MarkerRegion], unified) -> None:
@@ -728,11 +738,12 @@ async def create_markers(sid: str, body: MarkerSetCreate, current_user: CurrentU
     check_session_access(sid, current_user)
     unified = _get_session(sid)
 
-    _validate_marker_set(body.markers, unified)
+    markers = [strict_marker(marker) for marker in body.markers]
+    _validate_marker_set(markers, unified)
 
     # DB-before-memory: write the durable copy first so a DB failure cannot
     # leave the in-memory store ahead of what is actually persisted.
-    revision = mutate_inputs(sid, body.expected_input_revision, markers=list(body.markers))
+    revision = mutate_inputs(sid, body.expected_input_revision, markers=markers)
     # Preserve prior provenance; its captured revision now identifies stale input.
     return {"markers": marker_store.get(sid, []), "input_revision": revision}
 
@@ -756,7 +767,8 @@ async def update_marker(sid: str, marker_id: str, body: MarkerUpdate, current_us
     if "allele_labels" in updates:
         updates["allele_labels"] = _validated_allele_labels(updates["allele_labels"])
     merged = {**markers[idx].model_dump(), **updates}
-    updated_marker = MarkerRegion(**merged)
+    # A legacy stored name stays editable for other fields; a new name is strict.
+    updated_marker = strict_marker(merged) if "name" in updates else MarkerRegion(**merged)
 
     others = [m for i, m in enumerate(markers) if i != idx]
     _validate_marker_set(others + [updated_marker], unified)
