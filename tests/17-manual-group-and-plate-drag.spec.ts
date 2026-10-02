@@ -1,6 +1,9 @@
 import { expect, test, type Page, type Locator } from '@playwright/test';
 import path from 'path';
 import { login, uploadAndWait } from './helpers';
+import { enableExpertMode } from './expert-mode';
+
+test.beforeEach(async ({ page }) => { await enableExpertMode(page); });
 
 /** A viewport tall enough to hold the analysis grid without the plot falling
  *  below the fold -- these tests press on plot coordinates, they are not a

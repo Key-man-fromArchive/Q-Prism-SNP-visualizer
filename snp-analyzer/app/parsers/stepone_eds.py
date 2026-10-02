@@ -27,6 +27,7 @@ from app.parsers.eds_common import (
     _well_sort_key,
     well_index_to_id,
 )
+from app.parsers.instrument_detail import read_eds_instrument_detail
 
 DYES = ("FAM", "ROX", "VIC")
 PLATE_ROWS, PLATE_COLS = 8, 12
@@ -383,4 +384,5 @@ def parse_stepone_eds(zf: zipfile.ZipFile, names: list[str]) -> UnifiedData:
             for cycle, read in enumerate(plan, start=1)
         },
         imported_marker_alleles=alleles or None,
+        instrument_detail=read_eds_instrument_detail(zf, names),
     )

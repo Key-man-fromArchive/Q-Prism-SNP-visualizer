@@ -18,6 +18,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 from app.models import UnifiedData, WellCycleData, DataWindow
+from app.parsers.instrument_detail import read_eds_instrument_detail
 from app.parsers.eds_common import (
     ROW_LABELS,
     STAGE_LABELS,
@@ -54,6 +55,13 @@ __all__ = [
     "parse_eds",
 ]
 
+def _instrument_label(detail, num_wells: int) -> str:
+    """Display string; the file's model when it states one, else the legacy QuantStudio text."""
+    if detail is not None and detail.model:
+        return f"{detail.model} (raw)" if num_wells == 96 else f"{detail.model} (raw, {num_wells}-well)"
+    return "QuantStudio 3 (raw)" if num_wells == 96 else f"QuantStudio (raw, {num_wells}-well)"
+
+
 def parse_eds(file_path: str) -> UnifiedData:
     """Parse a QuantStudio .eds raw instrument file."""
     with zipfile.ZipFile(file_path, "r") as zf:
@@ -79,6 +87,8 @@ def parse_eds(file_path: str) -> UnifiedData:
         exp_path = _find_file(names, "experiment.xml")
         if exp_path:
             plate_dims = _parse_plate_dims(zf.read(exp_path))
+
+        instrument_detail = read_eds_instrument_detail(zf, names)
 
         # Find plate_setup.xml (optional, for sample names and marker groups)
         sample_names: dict[int, str] = {}
@@ -255,7 +265,7 @@ def parse_eds(file_path: str) -> UnifiedData:
     )
 
     return UnifiedData(
-        instrument="QuantStudio 3 (raw)" if num_wells == 96 else f"QuantStudio (raw, {num_wells}-well)",
+        instrument=_instrument_label(instrument_detail, num_wells),
         allele2_dye=allele2_dye,
         wells=sorted(wells_set, key=_well_sort_key),
         cycles=sorted(cycles_set),
@@ -268,6 +278,7 @@ def parse_eds(file_path: str) -> UnifiedData:
         data_windows=windows if windows else None,
         well_groups=None,
         ntc_wells=ntc_wells or None,
+        instrument_detail=instrument_detail,
     )
 
 def _parse_multicomponent(xml_data: bytes) -> tuple[

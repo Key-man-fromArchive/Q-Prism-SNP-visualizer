@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
-import { AlertCircle, Check, Download, Moon, Redo2, Save, Sun, Undo2 } from "lucide-react";
+import { AlertCircle, Check, ChevronDown, Download, Moon, Redo2, Save, Sun, Undo2 } from "lucide-react";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useAuthStore } from "@/stores/auth-store";
@@ -22,6 +22,7 @@ import { ApiError, logout, saveAsgResult } from "@/lib/api";
 import { analyzeCurrent } from "@/lib/analysis-actions";
 import { loadAnalysisSession } from "@/lib/analysis-session";
 import type { LinkedASGContext } from '@/types/auth';
+import type { InstrumentDetail } from '@/types/api';
 import type { Translations } from '@/locales/en';
 
 // target_type/target_id are ASG's internal linkage identifiers (e.g. "ad_hoc", "1")
@@ -114,6 +115,15 @@ function ExportMarkerPicker({ markers, selected, onToggle, onToggleAll }: Export
   );
 }
 
+function instrumentDetailName(detail: InstrumentDetail | null | undefined, instrument?: string): string {
+  if (!detail) return '';
+  const { vendor, model } = detail;
+  if (model) return [vendor, model].filter(Boolean).join(' ');
+  if (!vendor) return '';
+  if (!instrument) return vendor;
+  return instrument.toLowerCase().startsWith(vendor.toLowerCase()) ? instrument : `${vendor} ${instrument}`;
+}
+
 export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const sessionId = useSessionStore((s) => s.sessionId);
@@ -123,6 +133,8 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
   const currentCycle = navigationCycle ?? legacyCycle;
   const useRox = useSettingsStore((s) => s.useRox);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
+  const expertMode = useSettingsStore((s) => s.expertMode);
+  const setExpertMode = useSettingsStore((s) => s.setExpertMode);
   const resultRevision = useAnalysisStore((s) => s.result?.analysis_context?.result_revision);
   const analysisPending = useAnalysisStore((s) => s.pending);
   const { isDark, toggle: toggleDarkMode } = useDarkMode();
@@ -322,6 +334,11 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
     }
   };
 
+  const detail = sessionInfo?.instrument_detail;
+  const detailName = instrumentDetailName(detail, sessionInfo?.instrument);
+  const instrumentText = detailName ? t.instrumentChip(detailName) : sessionInfo?.instrument;
+  const instrumentTitle = [detailName || sessionInfo?.instrument, detail?.software].filter(Boolean).join(' · ');
+
   return (
     <>
     <header className="app-header bg-surface border-b border-border">
@@ -333,9 +350,8 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
 
       {sessionInfo && (
         <div id="session-info" className="flex flex-wrap gap-2 items-center min-w-0">
-          <span id="instrument-badge" className="badge" title={sessionInfo.instrument}>{sessionInfo.instrument}</span>
+          <span id="instrument-badge" className="badge" title={instrumentTitle}>{instrumentText}</span>
           <span id="wells-badge" className="badge">{sessionInfo.num_wells} {t.wells}</span>
-          <span id="cycles-badge" className="badge">{sessionInfo.num_cycles} {t.cycles}</span>
           <QcBadges />
         </div>
       )}
@@ -399,23 +415,32 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
         {showFileWorkspaceTrigger && <FileWorkspaceTrigger placement="header" />}
 
         {user && (
-          <div className="header-account flex items-center flex-wrap gap-2">
-            <span className="header-username text-xs text-text" title={user.display_name || user.username}>{user.display_name || user.username}</span>
-            <span className={`text-xs px-1.5 py-0.5 rounded-full border ${
-              user.role === "admin" ? "border-primary text-primary" : "border-border text-text-muted"
-            }`}>
-              {user.role}
-            </span>
-            <button
-              onClick={handleLogout}
-              className="shrink-0 whitespace-nowrap text-xs text-text-muted hover:text-danger cursor-pointer transition-colors"
-              title={t.signOut}
-            >
-              {t.logout}
-            </button>
+          <div className="header-account">
+            <Menu
+              label={user.display_name || user.username}
+              triggerClassName="px-2.5 py-0.5 text-xs rounded-xl"
+              trigger={<>
+                <span className="header-username" title={user.display_name || user.username}>{user.display_name || user.username}</span>
+                <span className={user.role === "admin" ? "text-primary" : "text-text-muted"}>· {user.role}</span>
+                <ChevronDown size={12} aria-hidden="true" />
+              </>}
+              items={[{ key: "logout", label: t.logout, onSelect: () => void handleLogout() }]}
+            />
           </div>
         )}
 
+        <button
+          type="button"
+          data-testid="expert-mode-toggle"
+          aria-pressed={expertMode}
+          title={t.expertModeTooltip}
+          onClick={() => setExpertMode(!expertMode)}
+          className={`text-xs border rounded-xl px-2.5 py-0.5 cursor-pointer transition-colors ${
+            expertMode ? "border-primary text-primary" : "border-border text-text-muted hover:text-primary hover:border-primary"
+          }`}
+        >
+          {t.expertMode}
+        </button>
         <button
           onClick={() => setLanguage(language === "en" ? "ko" : "en")}
           title={language === "en" ? "한국어로 전환" : "Switch to English"}

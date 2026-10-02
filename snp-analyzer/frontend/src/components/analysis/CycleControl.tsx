@@ -75,7 +75,14 @@ export function CycleControl() {
     return () => window.removeEventListener('goto-cycle', handler);
   }, [ready, availableCycles, setCycle]);
 
-  const readText = cycleReadText(currentCycle, sessionInfo?.read_labels, t);
+  // A pre/post read already names itself on the active window button, so the
+  // label keeps only what the button lacks (PCR cycle and temperature).
+  const fullReadText = cycleReadText(currentCycle, sessionInfo?.read_labels, t);
+  const windowName = windows && windows.length > 1 && activeWindow && activeWindow.name !== 'Amplification'
+    ? windowLabel(activeWindow.name, t) : null;
+  const readText = windowName && fullReadText?.startsWith(windowName)
+    ? fullReadText.slice(windowName.length).replace(/^\s*·\s*/, '') || null
+    : fullReadText;
 
   // Hide if single cycle and no multiple windows
   const shouldHide =
@@ -128,7 +135,9 @@ export function CycleControl() {
       {/* Cycle label + slider (hidden if windowCycles <= 1) */}
       {windowCycles > 1 && (
         <>
-          <label id="cycle-label" htmlFor="cycle-slider" className="text-sm text-text">
+          {/* The read label above already says where the slider is, so the
+              "Cycle n / N" count is kept for assistive tech only. */}
+          <label id="cycle-label" htmlFor="cycle-slider" className={readText ? 'sr-only' : 'text-sm text-text'}>
             {t.cycle}{' '}
             <span id="cycle-value" className="font-medium">
               {relativeValue}

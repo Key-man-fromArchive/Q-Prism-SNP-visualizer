@@ -4,6 +4,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useSessionQc } from "@/stores/qc-ui-store";
 import { useDataStore } from "@/stores/data-store";
 import {
   getWellGroups,
@@ -13,7 +14,11 @@ import { useAnalysisStore } from "@/stores/analysis-store";
 import { CycleControl } from "./CycleControl";
 import { ResultsPlotToggle } from "./ResultsPlotToggle";
 import { PlateView } from "./PlateView";
+import { AmplificationQcSummary } from "./AmplificationQcSummary";
+import { qcConfigFromSettings } from "@/lib/amplification-qc";
 import { WellDetailPanel } from "./WellDetailPanel";
+import { GenotypeSummary } from "./GenotypeSummary";
+import { countCalls } from "@/lib/genotype-counts";
 import { ResultsTable } from "./ResultsTable";
 import { AmplificationOverlay } from "./AmplificationOverlay";
 import { WellTypePopup } from "./WellTypePopup";
@@ -34,6 +39,7 @@ export function AnalysisTab() {
   const setWellGroups = useSessionStore((s) => s.setWellGroups);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
   const selectedWells = useSelectionStore((s) => s.selectedWells);
+  const expert = useSettingsStore((s) => s.expertMode);
   const showEmptyWells = useSettingsStore((s) => s.showEmptyWells);
   const setShowEmptyWells = useSettingsStore((s) => s.setShowEmptyWells);
   const wellTypeAssignments = useDataStore((s) => s.wellTypeAssignments);
@@ -141,13 +147,18 @@ export function AnalysisTab() {
     })();
   }, [sessionId, setWellGroups]);
 
-  const currentRequest = useMemo(() => ({
-    algorithm: "auto" as const, cycle: currentCycle, n_clusters: nClusters,
-    ploidy, background: backgroundMode, use_rox: useRox,
-    threshold_config: { ntc_threshold: ntcThreshold, allele1_ratio_max: allele1RatioMax,
-      allele2_ratio_min: allele2RatioMin, ntc_fam_max: ntcCorner?.fam ?? null,
-      ntc_allele2_max: ntcCorner?.allele2 ?? null },
-  }), [currentCycle, nClusters, ploidy, backgroundMode, useRox, ntcThreshold, allele1RatioMax, allele2RatioMin, ntcCorner]);
+  const { settings: qcSettings } = useSessionQc();
+  const currentRequest = useMemo(() => {
+    const amplification_qc = qcConfigFromSettings(qcSettings);
+    return {
+      algorithm: "auto" as const, cycle: currentCycle, n_clusters: nClusters,
+      ploidy, background: backgroundMode, use_rox: useRox,
+      threshold_config: { ntc_threshold: ntcThreshold, allele1_ratio_max: allele1RatioMax,
+        allele2_ratio_min: allele2RatioMin, ntc_fam_max: ntcCorner?.fam ?? null,
+        ntc_allele2_max: ntcCorner?.allele2 ?? null },
+      ...(amplification_qc ? { amplification_qc } : {}),
+    };
+  }, [currentCycle, nClusters, ploidy, backgroundMode, useRox, ntcThreshold, allele1RatioMax, allele2RatioMin, ntcCorner, qcSettings]);
   useCurrentAnalysisRequest(currentRequest, 'analysis');
   const handleAnalyze = () => analyzeCurrent(currentRequest);
   const handleRecommended = () => analyzeRecommended(currentRequest, cycle =>
@@ -163,6 +174,15 @@ export function AnalysisTab() {
   const groupNames = useMemo(
     () => (wellGroups ? Object.keys(wellGroups) : []),
     [wellGroups]
+  );
+
+  // Whole-plate call summary, shown even when nothing could be called
+  // (all wells "Undetermined" or NTC), like the per-marker view.
+  const assignments = useAnalysisStore((s) => s.result?.assignments);
+  const plateWells = useDataStore((s) => s.plateWells);
+  const callSummary = useMemo(
+    () => countCalls({ ...assignments, ...wellTypeAssignments }, plateWells.map((well) => well.well), ploidy),
+    [assignments, wellTypeAssignments, plateWells, ploidy],
   );
 
   const totalWells = useMemo(() => {
@@ -223,7 +243,7 @@ export function AnalysisTab() {
           </span>
         )}
         {/* Draggable genotype-boundary lines — only meaningful in manual mode */}
-        <button
+        {expert && <button
           onClick={() => {
             if (showBoundaryLines) useAnalysisStore.getState().setCurrentRequest(currentRequest);
             setShowBoundaryLines(!showBoundaryLines);
@@ -238,8 +258,8 @@ export function AnalysisTab() {
           }`}
         >
           <Ruler size={14} aria-hidden="true" /> {t.boundaryLines}
-        </button>
-        <button type="button" data-testid="analyze-recommended" onClick={handleRecommended} disabled={analyzing || !sessionId}>{t.analyzeRecommended}</button>
+        </button>}
+        {expert && <button type="button" data-testid="analyze-recommended" onClick={handleRecommended} disabled={analyzing || !sessionId}>{t.analyzeRecommended}</button>}
         <button
           data-testid="analyze-current"
           onClick={handleAnalyze}
@@ -299,6 +319,7 @@ export function AnalysisTab() {
         <ResultsPlotToggle />
 
         <div className="analysis-review-stack">
+          <GenotypeSummary ploidy={ploidy} entries={callSummary.entries} excluded={callSummary.excluded} />
           {/* P4-S3-T1 (FB-03 §3-2): only meaningful before anything is
               selected -- moved here from WellSelectionToolbar's always-on
               banner, as the plate view's secondary hint. */}
@@ -306,11 +327,12 @@ export function AnalysisTab() {
             <p data-testid="plate-view-hint" className="text-xs text-text-muted">{t.selectionHelp}</p>
           )}
           <PlateView />
+          <AmplificationQcSummary />
           <WellDetailPanel />
         </div>
       </div>
 
-      <div className="analysis-secondary px-4 pb-4 sm:px-6"><ResultsTable /></div>
+      {expert && <div className="analysis-secondary px-4 pb-4 sm:px-6"><ResultsTable /></div>}
 
       {/* P4-S3-T1 (FB-03 §3-1): "advisory" warnings are demoted below the
           results, not hidden -- aria-live keeps them announced as they
@@ -334,9 +356,9 @@ export function AnalysisTab() {
           MultiMarkerAnalysisPanel's `ploidyOverride` for marker-scoped
           curves. Default (empty) idPrefix keeps its ids unscoped, matching
           e2e/p4-s2-analysis-tab.spec.ts's `#toggle-overlay-btn` locator. */}
-      <div style={{ padding: "0 24px 16px" }}>
+      {expert && <div style={{ padding: "0 24px 16px" }}>
         <AmplificationOverlay />
-      </div>
+      </div>}
 
       {/* Well Type Popup */}
       {popupPos && popupWells.length > 0 && (

@@ -5,6 +5,7 @@ import { useAnalysisStore } from '@/stores/analysis-store';
 import { useDataStore } from '@/stores/data-store';
 import { useNavigationStore } from '@/stores/navigation-store';
 import { useSessionStore } from '@/stores/session-store';
+import { useSettingsStore } from '@/stores/settings-store';
 import type { MarkerRegion, ScatterPoint } from '@/types/api';
 
 const seen = vi.hoisted(() => ({
@@ -35,6 +36,7 @@ function point(well: string): ScatterPoint {
 
 beforeEach(() => {
   seen.plate.length = 0; seen.detail.length = 0; seen.table.length = 0;
+  useSettingsStore.setState({ expertMode: true }); // the full results table is expert-only
   useSessionStore.setState({ sessionId: 'alleles', initialAnalysisAvailable: false });
   useAnalysisStore.getState().setSession('alleles', 'u');
   useNavigationStore.setState({ status: 'ready', surface: 'analysis', marker: null });
@@ -47,4 +49,21 @@ it('passes the selected marker allele names and the marker-unassigned wells to t
   expect(last(seen.table)).toMatchObject({ alleleLabels: { fam: 'WT', allele2: 'MT' } });
   expect(last(seen.detail)).toMatchObject({ alleleLabels: { fam: 'WT', allele2: 'MT' } });
   expect(last(seen.plate)).toMatchObject({ alleleLabels: { fam: 'WT', allele2: 'MT' }, unassignedWells: ['A3', 'A4'] });
+});
+
+it('hands the table every well its own marker names, not just the selected marker', () => {
+  render(<MultiMarkerAnalysisPanel markers={[named, unnamed]} />);
+  const map = seen.table[seen.table.length - 1].wellAlleleLabels as Map<string, unknown>;
+  expect(map.get('A1')).toEqual({ fam: 'WT', allele2: 'MT' });
+  expect(map.get('A2')).toBeNull();
+});
+
+it('hides the full table and the recommended-cycle button until expert mode, and puts the counts under the plate', () => {
+  useSettingsStore.setState({ expertMode: false });
+  const { container } = render(<MultiMarkerAnalysisPanel markers={[named, unnamed]} />);
+  expect(seen.table).toHaveLength(0);
+  expect(container.querySelector('[data-testid="multi-analyze-recommended"]')).toBeNull();
+  expect(container.querySelector('[data-testid="marker-observed-classes"]')).toBeNull();
+  const stack = container.querySelector('.analysis-review-stack')!;
+  expect(stack.querySelector('[data-testid="genotype-counts-card"]')).not.toBeNull();
 });

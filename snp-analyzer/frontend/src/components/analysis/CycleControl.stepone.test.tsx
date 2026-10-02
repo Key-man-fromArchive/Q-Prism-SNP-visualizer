@@ -35,6 +35,21 @@ it('shows the PCR number and temperature for the first screen cycle', () => {
   expect(screen.getByTestId('cycle-read-label')).toHaveTextContent('Amplification 1/2 · PCR 36 · 40°C');
 });
 
+const windows = [
+  { name: 'Pre-read', start_cycle: 1, end_cycle: 1 },
+  { name: 'Amplification', start_cycle: 2, end_cycle: 3 },
+  { name: 'Post-read', start_cycle: 4, end_cycle: 4 },
+];
+
+it('does not repeat the post-read stage as a label next to the post-read window button', () => {
+  setup(readLabels, 4);
+  useSessionStore.setState({ sessionInfo: { ...useSessionStore.getState().sessionInfo!, data_windows: windows } });
+  render(<CycleControl />);
+  expect(screen.getAllByText('Post-read')).toHaveLength(1);
+  expect(screen.getByTestId('cycle-read-label')).toHaveTextContent('PCR 40 · 25°C');
+  expect(screen.getByTestId('cycle-read-label')).not.toHaveTextContent('Post-read');
+});
+
 it('shows no read label for runs without declared reads', () => {
   setup(null, 2);
   render(<CycleControl />);

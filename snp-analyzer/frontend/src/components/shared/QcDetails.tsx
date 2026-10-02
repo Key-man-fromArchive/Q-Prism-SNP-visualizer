@@ -4,6 +4,7 @@ import type { QcResponse } from '@/types/api';
 import { QcOnset } from './QcOnset';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useSessionStore } from '@/stores/session-store';
+import { useSettingsStore } from '@/stores/settings-store';
 import { QualityWellLink } from './QualityWellLink';
 
 function QcLifecycle({ data }: { data: QcResponse }) {
@@ -66,12 +67,26 @@ function NtcWells({ data }: { data: QcResponse }) {
       {well.signal !== null && <> · {well.signal.toFixed(2)}</>}</li>)}</ul>
   </section>)}</>;
 }
+/** Default-mode summary: the selected marker and one status word. The full
+ *  call-rate / NTC / judgment sentence stays in expert mode and in the panel. */
+function BasicSummary({ data }: { data: QcResponse }) {
+  const { t } = useI18n();
+  const ntcOk = data.ntc_check.status === 'ok';
+  const ok = ntcOk && data.judgment_status === 'verified';
+  if (ok) return <>{t.qcStatusOk}</>;
+  // One status word with its single cause; the marker is already named on the result card.
+  const cause = ntcOk ? t.qcCauseJudgment(data.judgment_status) : t.qcCauseNtc(data.ntc_check.status);
+  return <>{t.qcStatusReview} · {cause}</>;
+}
 export function QcDetails({ data }: { data: QcResponse }) {
   const { t } = useI18n();
+  const expert = useSettingsStore(state => state.expertMode);
   return <details className="relative text-xs" data-testid="qc-details">
     <summary className="cursor-pointer badge qc-badge" data-testid="ntc-status" data-status={data.ntc_check.status}>
-      <CompactCall data={data} />
-      {t.qcNtcState(data.ntc_check.status)} · {t.qcJudgmentState(data.judgment_status)}
+      {expert ? <>
+        <CompactCall data={data} />
+        {t.qcNtcState(data.ntc_check.status)} · {t.qcJudgmentState(data.judgment_status)}
+      </> : <BasicSummary data={data} />}
     </summary>
     <div className="absolute left-0 top-full z-50 mt-2 w-80 max-w-[90vw] max-h-[65vh] overflow-auto rounded border border-border bg-surface p-3 shadow-lg">
       <Judgment data={data} />

@@ -11,9 +11,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Plotly from "plotly.js-dist-min";
 import { dosageOfLabel, defaultRatioCuts } from "@/lib/genotype";
+import { useScatterFit } from "@/lib/scatter-fit";
 import { chartCategory, markerCallLabel, cycleReadText, chartPointState, chartStateText } from "@/lib/chart-semantics";
 import { useI18n } from "@/hooks/use-i18n";
-import { plotlyColors } from "@/lib/plotly-theme";
+import { compactLegend, LEGEND_MARGIN_TOP, PLOTLY_MODEBAR, plotlyColors } from "@/lib/plotly-theme";
 import { channelLabels } from "@/lib/channel-labels";
 import {
   axisRangeLayout, axisTitle, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode,
@@ -30,6 +31,7 @@ import { useSelectionStore } from "@/stores/selection-store";
 import { useQualityRevealedWell } from '@/hooks/use-quality-reveal';
 import { useWellFilter } from '@/hooks/use-well-filter';
 import { visibleQualityPoint } from '@/lib/quality-display';
+import { NO_AMPLIFICATION, useNoAmplificationWells } from '@/lib/amplification-qc';
 import { useSettingsStore } from "@/stores/settings-store";
 import type { ScatterAspect } from "@/stores/settings-store";
 import { useSessionStore } from "@/stores/session-store";
@@ -62,6 +64,7 @@ type PlotlyGraphDiv = HTMLDivElement & {
 // well-count cap on individual labels.
 const MARKER_SIZE = 8;
 const MARKER_SIZE_NTC = 7;
+const MARKER_SIZE_NO_AMPLIFICATION = 5;
 const MARKER_SIZE_SELECTED = 12;
 
 // Feeds `.analysis-scatter-canvas`'s `aspect-ratio` (index.css, P4-S1-T1);
@@ -115,6 +118,9 @@ export function MarkerScatterPlot({
   }, [origin]);
   const plotRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
+  useScatterFit(plotRef, () => {
+    if (initialized.current && plotRef.current) Plotly.Plots.resize(plotRef.current);
+  });
   const exportRender = useRef(0);
   const eventsBound = useRef(false);
   const selectedWells = useSelectionStore((s) => s.selectedWells);
@@ -144,6 +150,7 @@ export function MarkerScatterPlot({
   // A drag either selects wells or moves a threshold; both at once made the
   // plot unselectable wherever a threshold happened to lie. See ScatterTool.
   const editing = useSettingsStore((s) => s.scatterTool) === "edit";
+  const expert = useSettingsStore((s) => s.expertMode);
   const scatterAspect = useSettingsStore((s) => s.scatterAspect);
   const orientation = useSettingsStore((s) => s.scatterOrientation);
   const hasNormalizationChannel = useSessionStore((s) => s.sessionInfo?.has_rox === true);
@@ -164,9 +171,13 @@ export function MarkerScatterPlot({
     const markerPoints = points.filter((p) => wellSet.has(p.well));
     return markerPoints.filter(point => visibleQualityPoint(point, revealedWell, isWellVisible(point.well), focusActive, selectedWellSet));
   }, [points, wellSet, focusActive, selectedWellSet, revealedWell, isWellVisible]);
+  const noAmplification = useNoAmplificationWells();
   const assignmentFor = useCallback(
-    (well: string): string | null => region?.assignments?.[well] ?? null,
-    [region]
+    (well: string): string | null => {
+      const call = region?.assignments?.[well] ?? null;
+      return noAmplification.has(well) && (call === null || call === "Undetermined") ? NO_AMPLIFICATION : call;
+    },
+    [region, noAmplification]
   );
 
   // The axis basis the operator did not pick: NTC basis only on a run that has
@@ -401,7 +412,8 @@ export function MarkerScatterPlot({
         hovertemplate: "%{text}<extra></extra>",
         marker: {
           size: pts.map((p) =>
-            selectedWellSet.has(p.well) ? MARKER_SIZE_SELECTED : typeKey === "NTC" ? MARKER_SIZE_NTC : MARKER_SIZE
+            selectedWellSet.has(p.well) ? MARKER_SIZE_SELECTED : typeKey === "NTC" ? MARKER_SIZE_NTC
+              : typeKey === NO_AMPLIFICATION ? MARKER_SIZE_NO_AMPLIFICATION : MARKER_SIZE
           ),
           color: info.color,
           symbol: info.symbol,
@@ -427,8 +439,9 @@ export function MarkerScatterPlot({
       type: "scatter",
       uid: 'ntc-threshold',
       name: t.chartNtcThreshold,
-      // A legend entry explains the corner diamond (and the edit-mode handle).
-      showlegend: true,
+      // A legend entry explains the corner diamond (and the edit-mode handle);
+      // an expert-mode element, like the boundary lines.
+      showlegend: expert,
       hovertemplate:
         `${t.chartNtcThreshold}: ${thresholdLabels.fam} ≤ ${effectiveNtc.corner.x.toFixed(2)}<br>` +
         `${thresholdLabels.allele2} ≤ ${effectiveNtc.corner.y.toFixed(2)}<extra></extra>`,
@@ -442,7 +455,7 @@ export function MarkerScatterPlot({
       selected: { marker: { opacity: 1 } },
       unselected: { marker: { opacity: 1 } },
     });
-    traces.push(boundaryLegendTrace(t.boundaryLines, editing, colors.fontColor));
+    traces.push({ ...boundaryLegendTrace(t.boundaryLines, editing, colors.fontColor), showlegend: expert });
 
     let ext = 1;
     for (const p of scopedPoints) {
@@ -517,14 +530,15 @@ export function MarkerScatterPlot({
       // otherwise an explicit new range can be hidden behind the old UI state.
       uirevision: `marker-${marker.id}-${orientation}-${axisMode}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${origin.fam}-${origin.allele2}`,
       shapes,
-      // The legend sits in a row under the axis title, never over the points.
-      margin: { t: 10, r: 10, b: 120, l: 56 },
-      legend: { orientation: "h", y: -0.2, yanchor: "top", x: 0, xanchor: "left" },
+      // Compact legend on its own row above the plot area, below the modebar;
+      // nothing is reserved under the axis title.
+      margin: { t: LEGEND_MARGIN_TOP, r: 10, b: 56, l: 56 },
+      legend: compactLegend(colors),
     };
 
     const config = {
       responsive: true,
-      displayModeBar: true,
+      displayModeBar: PLOTLY_MODEBAR,
       // zoom2d/pan2d stay: picking one well out of a dense cluster needs a
       // zoom first, whichever tool a drag is bound to.
       modeBarButtonsToRemove: ["toImage", "sendDataToCloud"],
@@ -620,6 +634,7 @@ export function MarkerScatterPlot({
     axisMode,
     lockAspect,
     editing,
+    expert,
     orientation,
     normalizationApplied,
     xMin,

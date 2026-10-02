@@ -11,6 +11,7 @@ from app.reporting.result_snapshot import ResultRow, ResultSnapshot, snapshot_ro
 # D-2: the one place to change the diploid call notation.
 DIPLOID_CALL_FORMAT = "{first}/{second}"
 DEFAULT_EXPORT_ASPECT = "3:4"  # portrait scatter for every export
+NO_AMPLIFICATION_LABEL = "No amplification"
 MAX_LAYOUT_LABEL = 12  # plate-map label length shared by PDF and PPTX
 CellValue = str | int | float | bool | None
 
@@ -26,7 +27,7 @@ def report_metadata(snapshot: ResultSnapshot) -> list[tuple[str, CellValue]]:
     context = snapshot.context
     return [
         ("Scope", "whole-run"), ("File", snapshot.raw_filename),
-        ("Instrument", snapshot.unified.instrument),
+        ("Instrument", instrument_label(snapshot)),
         ("Allele 2 dye", snapshot.unified.allele2_dye),
         ("Result Revision", str(context.result_revision)),
         ("Input Revision", context.input_revision),
@@ -53,6 +54,28 @@ def display_genotype(
     if genotype not in pairs:
         return genotype
     return DIPLOID_CALL_FORMAT.format(first=pairs[genotype][0], second=pairs[genotype][1])
+
+
+def call_text(row: ResultRow) -> str:
+    """Operator-facing call of one row: ``No amplification`` or its (named) genotype."""
+    if row.no_amplification:
+        return NO_AMPLIFICATION_LABEL
+    return display_genotype(row.genotype, row.marker, row.allele_labels)
+
+
+def has_call_column(rows: list[ResultRow]) -> bool:
+    """Whether the ``Allele Call`` column adds anything over ``Genotype``."""
+    return any(row.allele_labels is not None or row.no_amplification for row in rows)
+
+
+def instrument_label(snapshot: ResultSnapshot) -> str:
+    """Declared vendor / model / software, else the parser's instrument string."""
+    detail = snapshot.unified.instrument_detail
+    if detail is None:
+        return snapshot.unified.instrument
+    identity = " ".join(part for part in (detail.vendor, detail.model) if part)
+    label = " · ".join(part for part in (identity, detail.software) if part)
+    return label or snapshot.unified.instrument
 
 
 def polyploid_legend(allele_labels: AlleleLabels | None, allele2_dye: str) -> str | None:
@@ -143,7 +166,8 @@ def row_values(snapshot: ResultSnapshot, row: ResultRow) -> list[CellValue]:
 
 def figure_points(rows: list[ResultRow]) -> list[dict[str, object]]:
     return [{"well": row.well, "norm_fam": row.point.norm_fam,
-             "norm_allele2": row.point.norm_allele2, "effective_type": row.genotype}
+             "norm_allele2": row.point.norm_allele2, "effective_type": row.genotype,
+             **({"no_amplification": True} if row.no_amplification else {})}
             for row in rows if row.point is not None]
 
 
@@ -186,7 +210,9 @@ def _current_name(snapshot: ResultSnapshot, marker: AnalysisRegionContext) -> st
 
 
 def report_counts(rows: list[ResultRow]) -> list[list[CellValue]]:
-    counts = Counter((row.marker.marker_id if row.marker else "", row.genotype)
+    """Call counts per marker; unamplified wells get their own row, apart from Undetermined."""
+    counts = Counter((row.marker.marker_id if row.marker else "",
+                      NO_AMPLIFICATION_LABEL if row.no_amplification else row.genotype)
                      for row in rows)
     return [[marker, genotype, count] for (marker, genotype), count in counts.items()]
 

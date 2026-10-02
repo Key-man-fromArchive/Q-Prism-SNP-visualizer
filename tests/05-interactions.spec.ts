@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
 import { login, loginRequest, uploadAndWait } from './helpers';
+import { enableExpertMode } from './expert-mode';
+
+test.beforeEach(async ({ page }) => { await enableExpertMode(page); });
 
 const QS_MULTICOMPONENT = path.resolve(
   '/mnt/ivt-ngs1/5.work-AI/SNP-dsicrimination/Quantstudio3/ASG-PCR-NTCtest_Multicomponent Data.xls'
@@ -20,7 +23,7 @@ test.describe('Plate View Interaction', () => {
 
     // Detail panel should update
     const detailContent = page.locator('#detail-content');
-    await expect(detailContent).not.toContainText(/Click a well to see details|웰을 클릭하여 상세정보 확인/, { timeout: 3000 });
+    await expect(detailContent).not.toContainText(/Click a well to see details|웰을 클릭하면 상세정보를 볼 수 있습니다/, { timeout: 3000 });
     // Should have a detail table with values
     await expect(detailContent.locator('.detail-table').first()).toBeVisible();
   });
@@ -249,7 +252,7 @@ test.describe('API Endpoints Direct', () => {
     expect(response.ok()).toBe(true);
     const json = await response.json();
     expect(json.session_id).toBeTruthy();
-    expect(json.instrument).toBe('QuantStudio 3');
+    expect(json.instrument).toMatch(/QuantStudio.*3/);
     expect(json.num_cycles).toBe(25);
     expect(json.num_wells).toBeGreaterThan(0);
     expect(json.has_rox).toBe(true);

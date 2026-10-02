@@ -27,7 +27,8 @@ export const qcFixture = (): QcResponse => ({ call_rate: .75, n_called: 3, n_tot
 beforeEach(() => {
   vi.resetAllMocks();
   useLanguageStore.setState({ language: 'en' });
-  useSettingsStore.setState({ useRox: false, backgroundMode: 'none' });
+  // The refresh button and the call-rate summary are expert-mode views (QcBadges.basic.test.tsx covers the default).
+  useSettingsStore.setState({ useRox: false, backgroundMode: 'none', expertMode: true });
   useAuthStore.getState().setUser({ id: 'u', username: 'u', display_name: null, role: 'user' });
   useSessionStore.getState().setSession('s', { session_id: 's', instrument: 'synthetic', allele2_dye: 'VIC', num_wells: 4,
     num_cycles: 3, has_rox: false, data_windows: null, suggested_cycle: 0, well_groups: null });

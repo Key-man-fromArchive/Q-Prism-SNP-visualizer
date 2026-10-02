@@ -11,9 +11,19 @@ File structure:
 
 import xlrd
 
-from app.models import UnifiedData, WellCycleData, DataWindow
+from app.models import DataWindow, InstrumentDetail, UnifiedData, WellCycleData
+from app.parsers.instrument_detail import xls_instrument_detail
 
 WELL_ROWS = "ABCDEFGH"
+LEGACY_INSTRUMENT = "QuantStudio 3"
+
+
+def _sheet_instrument(sheet: xlrd.sheet.Sheet) -> tuple[str, InstrumentDetail | None]:
+    """(display string, detail) from the header block above the data table."""
+    limit = min(60, sheet.nrows)
+    rows = [[sheet.cell_value(r, c) for c in range(sheet.ncols)] for r in range(limit)]
+    detail = xls_instrument_detail(rows)
+    return (detail.model if detail else LEGACY_INSTRUMENT), detail
 
 
 def well_num_to_id(n: int) -> str:
@@ -104,8 +114,10 @@ def parse_quantstudio(file_path: str) -> UnifiedData:
         cycles_set.add(cycle)
 
     sorted_cycles = sorted(cycles_set)
+    instrument, detail = _sheet_instrument(sheet)
     return UnifiedData(
-        instrument="QuantStudio 3",
+        instrument=instrument,
+        instrument_detail=detail,
         allele2_dye=allele2_dye,
         wells=sorted(wells_set, key=_well_sort_key),
         cycles=sorted_cycles,
@@ -217,8 +229,10 @@ def parse_quantstudio_amplification(file_path: str) -> UnifiedData:
         cycles_set.add(cycle)
 
     sorted_cycles = sorted(cycles_set)
+    instrument, detail = _sheet_instrument(sheet)
     return UnifiedData(
-        instrument="QuantStudio 3",
+        instrument=instrument,
+        instrument_detail=detail,
         allele2_dye=allele2_dye,
         wells=sorted(wells_set, key=_well_sort_key),
         cycles=sorted_cycles,

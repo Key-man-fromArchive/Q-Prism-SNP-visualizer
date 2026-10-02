@@ -23,7 +23,8 @@ test.describe('QuantStudio Multicomponent Data Upload', () => {
     // parses, so the run identity is read off the header badges.
     await expect(page.locator('#instrument-badge')).toContainText('QuantStudio', { timeout: 15000 });
     await expect(page.locator('#wells-badge')).toContainText(/\d+\s*(wells|웰)/);
-    await expect(page.locator('#cycles-badge')).toContainText(/\d+\s*(cycles|사이클)/);
+    // The cycle count chip was dropped from the header (the cycle bar says it).
+    await expect(page.locator('#cycles-badge')).toHaveCount(0);
   });
 
   test('analysis panel appears after upload', async ({ page }) => {
@@ -38,7 +39,8 @@ test.describe('QuantStudio Multicomponent Data Upload', () => {
     await uploadAndWait(page, QS_MULTICOMPONENT);
 
     await expect(page.locator('#instrument-badge')).toContainText('QuantStudio');
-    await expect(page.locator('#cycles-badge')).toContainText(/25\s*(cycles|사이클)/);
+    await expect(page.locator('#wells-badge')).toContainText(/\d+\s*(wells|웰)/);
+    await expect(page.locator('#cycle-max')).toHaveText('25');
   });
 
   test('scatter plot renders with data points', async ({ page }) => {

@@ -100,6 +100,37 @@ export type UploadResponse = {
   read_labels?: Record<number, ReadLabel> | null;
   /** False for endpoint-only runs with no amplification curve to plot. */
   has_amplification_curve?: boolean;
+  /** Instrument identity declared by the file; null/absent when unknown. */
+  instrument_detail?: InstrumentDetail | null;
+};
+
+/** Mirrors backend `app.models.InstrumentDetail`. */
+export type InstrumentDetail = {
+  vendor?: string | null;
+  model?: string | null;
+  software?: string | null;
+};
+
+/** Mirrors backend `app.models.AmplificationQcConfig` (fraction 0.05–0.9, thresholds ≥ 0). */
+export type AmplificationQcConfig = {
+  enabled?: boolean;
+  fraction?: number;
+  fam_threshold?: number | null;
+  allele2_threshold?: number | null;
+};
+
+/** Mirrors backend `app.models.AmplificationQcResult`. Flagged wells keep the
+ *  canonical `Undetermined` call; this list is the only way to tell them apart. */
+export type AmplificationQcResult = {
+  enabled: boolean;
+  available: boolean;
+  fraction: number;
+  fam_threshold: number | null;
+  allele2_threshold: number | null;
+  source: 'auto' | 'manual' | 'mixed' | 'off';
+  baseline_cycle: number | null;
+  read_cycle: number | null;
+  no_amplification_wells: string[];
 };
 
 /** Mirrors backend `app.models.ReadLabel`. */
@@ -395,9 +426,12 @@ export type ClusteringRequest = {
   // numbers than the operator is looking at. null => 'none' (raw).
   background?: BackgroundMode | null;
   use_rox?: boolean;
+  /** null/absent => defaults (enabled, fraction 1/3, automatic thresholds). */
+  amplification_qc?: AmplificationQcConfig | null;
 };
 
 export type ClusteringResult = {
+  amplification_qc?: AmplificationQcResult | null;
   algorithm: string;
   cycle: number;
   assignments: Record<string, string>;
@@ -452,6 +486,7 @@ export type AnalysisContext = {
   parameters: Record<string, JsonValue>;
   regions: AnalysisRegionContext[];
   input_revision: number;
+  amplification_qc?: AmplificationQcResult | null;
 };
 export type AnalysisRegionContext = {
   marker_id: string;

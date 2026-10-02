@@ -12,6 +12,7 @@ import { WELL_TYPE_INFO } from '@/lib/constants';
 import { wellInfo, dosageOfLabel } from '@/lib/genotype';
 import { callAppearance, displayedCall, outsideDisplayScope } from '@/lib/chart-semantics';
 import { PlateLegend } from './PlateLegend';
+import { NO_AMPLIFICATION, markNoAmplification, useNoAmplificationWells } from '@/lib/amplification-qc';
 import { useWellFilter } from '@/hooks/use-well-filter';
 import { useWellGrid } from '@/hooks/use-well-grid';
 import { useI18n } from '@/hooks/use-i18n';
@@ -59,7 +60,9 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAllele
   const selectWells = useSelectionStore((s) => s.selectWells);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
-  const plateWells = useDataStore((s) => s.plateWells);
+  const storedPlateWells = useDataStore((s) => s.plateWells);
+  const noAmplification = useNoAmplificationWells();
+  const plateWells = useMemo(() => markNoAmplification(storedPlateWells, noAmplification), [storedPlateWells, noAmplification]);
   const setPlateData = useDataStore((s) => s.setPlateData);
 
   // Drag selection state
@@ -120,6 +123,21 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAllele
   const keyboardGrid = useWellGrid(plateRows, plateCols, plateWells.map(well => well.well));
   const isLargePlate = plateCols.length > 12;
 
+  // The scroll instruction is only worth the space when the plate really overflows.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [overflowX, setOverflowX] = useState(false);
+  useEffect(() => {
+    const region = scrollRef.current;
+    if (!region) return;
+    const measure = () => setOverflowX(region.scrollWidth > region.clientWidth + 1);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(region);
+    if (region.firstElementChild) observer.observe(region.firstElementChild);
+    return () => observer.disconnect();
+  }, [status, plateCols.length, plateRows.length]);
+
   // Build wellMap for quick lookup
   const wellMap = useMemo(() => {
     const map = new Map();
@@ -149,7 +167,7 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAllele
     if (
       effectiveType !== null &&
       (dosageOfLabel(effectiveType, ploidy) !== null ||
-        effectiveType in WELL_TYPE_INFO)
+        effectiveType in WELL_TYPE_INFO || effectiveType === NO_AMPLIFICATION)
     ) {
       return wellInfo(effectiveType, ploidy, dark).color;
     }
@@ -311,9 +329,9 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAllele
         <StatusState variant="empty" message={t.plateEmpty} />
       )}
 
-      <div role="region" aria-label={t.plateScrollHint} tabIndex={0} data-testid="plate-scroll-region"
+      <div role="region" aria-label={t.plateScrollHint} tabIndex={0} data-testid="plate-scroll-region" ref={scrollRef}
         style={{ overflowX: 'auto', display: status === "ready" && plateWells.length > 0 ? undefined : 'none' }}>
-      <p className="text-xs text-text-muted mb-1">{t.plateScrollHint}</p>
+      {overflowX && <p className="text-xs text-text-muted mb-1" data-testid="plate-scroll-hint">{t.plateScrollHint}</p>}
       <div
         id="plate-grid"
         role="grid"
@@ -326,7 +344,9 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAllele
           gridTemplateColumns: `auto repeat(${plateCols.length}, 1fr)`,
           gridTemplateRows: `auto repeat(${plateRows.length}, 1fr)`,
           gap: '2px',
-          maxWidth: isLargePlate ? '820px' : '380px',
+          // Square cells follow the column width, so a 24-column plate capped at
+          // 600px stays ~16 rows * 25px tall and the call summary remains in view.
+          maxWidth: isLargePlate ? '600px' : '380px',
           margin: '0 auto'
         }}
       >
@@ -397,7 +417,7 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAllele
               const shownCall = displayedCall(wellData, showManualTypes, showAutoCluster);
               const baseCall = callAppearance(shownCall, ploidy, dark, t);
               const call = { ...baseCall, ...callTexts(shownCall, t, baseCall, wellAlleleLabels ? wellAlleleLabels.get(wellId) : alleleLabels) };
-              const cellSize = isLargePlate ? '18px' : '28px';
+              const cellSize = isLargePlate ? '18px' : '22px';
 
               const stateSuffix = isSelected || isMultiSelected
                 ? `, ${t.wellSelectedState}`

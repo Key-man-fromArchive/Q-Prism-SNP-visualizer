@@ -9,6 +9,7 @@ import { channelLabels, normalizationLabel } from "@/lib/channel-labels";
 import { callLabel } from "@/lib/chart-semantics";
 import { useRequestStatus } from "@/hooks/use-request-status";
 import { callTexts } from "./call-text";
+import { markNoAmplification, useNoAmplificationWells } from "@/lib/amplification-qc";
 import type { AlleleLabels, AmplificationCurve } from "@/types/api";
 
 type WellDetailPanelProps = { ploidyOverride?: number; alleleLabels?: AlleleLabels | null };
@@ -56,9 +57,11 @@ export function WellDetailPanel({ ploidyOverride, alleleLabels }: WellDetailPane
   const [curve, setCurve] = useState<{ data: AmplificationCurve; key: string } | null>(null);
 
   // Find point data for selected well
-  const pointData = selectedWell
+  const storedPoint = selectedWell
     ? scatterPoints.find((p) => p.well === selectedWell) ?? null
     : null;
+  const noAmplification = useNoAmplificationWells();
+  const pointData = storedPoint ? markNoAmplification([storedPoint], noAmplification)[0] : null;
 
   const numCycles = sessionInfo?.num_cycles ?? 1;
   const fetchKey = JSON.stringify([sessionId, selectedWell, useRox, backgroundMode]);

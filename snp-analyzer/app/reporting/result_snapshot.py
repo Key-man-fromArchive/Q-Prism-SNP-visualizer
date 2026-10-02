@@ -73,6 +73,8 @@ class ResultRow:
     assignment_status: str
     read_status: str
     allele_labels: AlleleLabels | None = None
+    # Judged unamplified at analysis time; ``genotype`` stays the canonical Undetermined.
+    no_amplification: bool = False
 
 
 class _ActualWindow(BaseModel):
@@ -321,6 +323,8 @@ def snapshot_rows(snapshot: ResultSnapshot) -> list[ResultRow]:
         snapshot.unified, context.cycle, use_rox=context.use_rox, background=context.background,
     )}
     markers = {well: marker for marker in context.regions for well in marker.wells}
+    qc = context.amplification_qc
+    flat = set(qc.no_amplification_wells) if qc is not None and qc.enabled else set()
     rows = []
     for well in sorted(snapshot.unified.wells, key=lambda w: (w[0], int(w[1:]))):
         marker = markers.get(well)
@@ -333,7 +337,8 @@ def snapshot_rows(snapshot: ResultSnapshot) -> list[ResultRow]:
         rows.append(ResultRow(well, snapshot.sample_names.get(well, ""), genotype,
                               (snapshot.result.confidences or {}).get(well), point,
                               marker, ploidy, status, read_status,
-                              label.allele_labels if label else None))
+                              label.allele_labels if label else None,
+                              well in flat and genotype == "Undetermined"))
     return rows
 
 

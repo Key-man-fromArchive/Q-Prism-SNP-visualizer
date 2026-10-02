@@ -53,6 +53,19 @@ const en = {
   qcOnsetReason: (reason: string) => ({ none: 'Evaluation completed', no_ntc: 'No NTC curves identified', missing_signal: 'Incomplete NTC signals', insufficient_points: 'Too few curve measurements' }[reason] ?? 'Evaluation reason unavailable'),
   qcOnsetRevision: (revision: number | null) => 'Recommendation input revision: ' + (revision ?? 'unknown'),
   qcLoading: 'Loading QC…', qcLoadFailed: 'QC unavailable. Retry to verify.', qcRefresh: 'Refresh QC',
+  qcStatusOk: 'OK', qcStatusReview: 'Needs review', expertMode: 'Expert mode',
+  qcCauseNtc: (s: string) => ({ warning: 'NTC warning', no_ntc: 'No NTC', insufficient: 'NTC insufficient' }[s] ?? 'NTC unknown'),
+  qcCauseJudgment: (s: string) => ({ stale: 'Inputs changed', legacy_unknown: 'Legacy judgment', missing: 'No judgment' }[s] ?? 'Judgment unknown'),
+  expertModeTooltip: 'Show technical controls and full result tables',
+  wellTypeNoAmplification: 'No amplification',
+  ampQcTitle: 'Amplification threshold', ampQcOff: 'Amplification check off',
+  ampQcSourceAuto: (fraction: string) => `auto, ${fraction} of the top 10%`,
+  ampQcSourceManual: 'manual', ampQcSourceMixed: 'partly manual',
+  ampQcAdjust: 'Adjust', ampQcEnabled: 'Check amplification', ampQcFraction: 'Fraction of the top 10%',
+  ampQcThresholdInput: (channel: string) => `${channel} threshold (blank = auto)`,
+  ampQcMarkerNone: 'This marker did not amplify.',
+  ampQcWellNone: 'No amplification',
+  instrumentChip: (name: string) => `Instrument: ${name}`,
   qcJudgment: 'Stored judgment QC', qcWholeRun: 'Whole run', qcPlateNtc: 'Current plate-wide NTC check',
   qcMarkerUnavailable: 'Selected marker has no stored QC. Select another marker or reanalyze.',
   qcFlagged: 'Flagged NTC wells', qcUnevaluable: 'Unevaluable NTC wells',
@@ -935,7 +948,7 @@ const en = {
   wsMarkerCatalogAttachError: (msg: string) => `Failed to link catalog assay: ${msg}`,
 
   // Per-marker dosage-trust hedge (Analysis surface)
-  wsAnalysisDosageTrustPutative: 'Provisional dosage (unvalidated)',
+  wsAnalysisDosageTrustPutative: 'Needs review',
   wsAnalysisDosageTrustValidated: 'Validated dosage',
   wsAnalysisDosageTrustPutativeHint:
     'This assay has no catalog link, or its catalog entry has not been validated against an independent ground truth AND had its relative amplification verified. Absolute dosage calls remain provisional.',

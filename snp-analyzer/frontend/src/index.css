@@ -182,6 +182,14 @@ body.dark .panel {
 .header-context { display: flex; flex: 1 1 30rem; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; min-width: 0; }
 .header-actions { display: flex; flex: 1 1 38rem; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; min-width: 0; }
 .header-account { min-width: 0; max-width: 100%; }
+.header-account button { max-width: 14rem; }
+.header-account .header-username { display: inline-block; max-width: 9rem; vertical-align: bottom; }
+/* From laptop width the actions stay on one line; the session context beside them wraps instead. */
+@media (min-width: 1280px) {
+  .app-header { flex-wrap: nowrap; }
+  .header-context { flex: 1 1 14rem; }
+  .header-actions, .header-actions #export-buttons { flex: 0 0 auto; flex-wrap: nowrap; }
+}
 .header-username, .header-linked-context, #instrument-badge { overflow-wrap: anywhere; min-width: 0; max-width: 100%; white-space: normal; }
 .header-username { flex: 1 1 10rem; max-width: 16rem; }
 .header-username, #instrument-badge { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
@@ -192,6 +200,10 @@ body.dark .panel {
 .app-header button, .app-header a { flex-shrink: 0; }
 .app-header button { white-space: nowrap; }
 .app-navigation { padding-inline: var(--workspace-gutter); }
+/* Cycle control and the analyze actions share one row; they wrap only when they must. */
+.analysis-primary-toolbar { display: flex; flex-wrap: wrap; align-items: center; }
+.analysis-primary-toolbar > #cycle-control { flex: 1 1 24rem; min-width: 0; }
+.analysis-primary-toolbar > :not(#cycle-control) { flex: 0 1 auto; margin-left: auto; min-width: 0; }
 .analysis-grid { grid-template-columns: minmax(0, 1fr); }
 .template-tooltip { width: min(24rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; overflow-wrap: anywhere; }
 .protocol-editor { width: 100%; min-width: 0; }
@@ -214,6 +226,8 @@ body.dark .panel {
    compaction that freed real space above the canvas stays (see
    evidence/P4-S3-T1.md's "orchestrator correction" note). */
 .analysis-scatter-canvas {
+  /* Fallback only: lib/scatter-fit.ts overrides this inline with the
+     measured remaining viewport height (P7-C4). */
   --scatter-max-h: min(70vh, 640px);
   --scatter-aspect-w: 4;
   --scatter-aspect-h: 3;
@@ -221,7 +235,7 @@ body.dark .panel {
   height: auto;
   width: 100%;
   max-width: calc(var(--scatter-max-h) * var(--scatter-aspect-w) / var(--scatter-aspect-h));
-  min-height: 360px; /* guards against a 0-height Plotly mount */
+  min-height: 320px; /* guards against a 0-height Plotly mount */
   margin-inline: auto;
 }
 .analysis-advanced-settings > div { max-height: 18rem; overflow: auto; }
@@ -257,9 +271,6 @@ body.dark .panel {
   .detail-panel #detail-content > table td { overflow-wrap: anywhere; }
   [data-testid="marker-selector-sidebar"] { max-height: 32rem; overflow: auto; }
   [data-testid="marker-warnings"] { max-height: 5rem; overflow: auto; }
-  .analysis-primary-toolbar { display: flex; align-items: center; }
-  .analysis-primary-toolbar > * { flex: 1; min-width: 0; }
-  .analysis-primary-toolbar #cycle-control { flex: .8; }
   .analysis-review-stack [data-testid="plate-scroll-region"] { max-height: none; overflow-x: auto; overflow-y: hidden; }
   .analysis-context-summary-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; padding: .5rem 1.5rem 0; }
   .analysis-context-summary-body > section { margin: 0; padding: .5rem; font-size: .75rem; }
@@ -280,11 +291,17 @@ body.dark .panel {
   /* P5-E: the portrait 3:4 default is taller than wide, so in the two-column
      layout cap the height by the viewport (the width max-width is derived
      from this, keeping the ratio) so scatter, plate and summary stay in the
-     first screen. Applies to 1:1 and 4:3 alike. */
-  .analysis-scatter-canvas { --scatter-max-h: min(70vh, 640px, calc(100dvh - 520px)); }
+     first screen. The plot takes the largest 3:4 box that fits the card width
+     and the viewport height, centred when width is left over. Applies to 1:1
+     and 4:3 alike. */
   [data-testid="analysis-warnings"] { max-height: 5rem; overflow: auto; }
   [data-testid="analysis-scope-selector"] { margin-top: .5rem; }
-  [data-testid="analysis-result-status"] { padding: .5rem .75rem; }
+  /* 1440x1000 budget: the status facts read as one wrapped line, and the call
+     tiles show count and name side by side, so scatter, plate and the selected
+     well summary all fit the first screen. */
+  [data-testid="analysis-result-status"] { display: flex; flex-wrap: wrap; column-gap: 1rem; padding: .25rem .75rem; margin-block: .25rem; }
+  [data-testid="genotype-counts"] > div { display: flex; align-items: baseline; justify-content: center; gap: .375rem; padding: .125rem .375rem; }
+  [data-testid="genotype-counts"] > div > div { margin-top: 0; }
 }
 @media (min-width: 768px) { :root { --workspace-gutter: 1.5rem; } }
 @media (min-width: 1280px) { .analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

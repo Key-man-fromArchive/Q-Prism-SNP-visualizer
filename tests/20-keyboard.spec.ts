@@ -1,6 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { ADMIN_USERNAME, ADMIN_PASSWORD } from './helpers';
 import AxeBuilder from '@axe-core/playwright';
+import { enableExpertMode } from './expert-mode';
+
+test.beforeEach(async ({ page }) => { await enableExpertMode(page); });
 
 async function mock384Geometry(page: Page) {
   // Transport fixture only: production parser geometry is deliberately unchanged.

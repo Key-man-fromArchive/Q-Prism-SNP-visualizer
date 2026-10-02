@@ -9,16 +9,18 @@ import type { ScatterAspect } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { getScatter } from "@/lib/api";
+import { useScatterFit } from "@/lib/scatter-fit";
 import { analyzeCurrent } from "@/lib/analysis-actions";
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { ownsChartResult } from '@/lib/chart-export-owner';
-import { channelLabels, normalizationLabel, normalizedLabel } from "@/lib/channel-labels";
+import { channelLabels, normalizationLabel } from "@/lib/channel-labels";
+import { AnalysisCardHeader } from "./AnalysisCardHeader";
 import { WELL_TYPE_INFO } from "@/lib/constants";
 import { genotypeClasses, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
 import { chartCategory, callLabel, cycleReadText, chartPointState, chartStateText } from "@/lib/chart-semantics";
-import { plotlyColors } from "@/lib/plotly-theme";
+import { compactLegend, LEGEND_MARGIN_TOP, PLOTLY_MODEBAR, plotlyColors } from "@/lib/plotly-theme";
 import {
-  axisRangeLayout, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode, fitBounds,
+  axisRangeLayout, axisTitle, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode, fitBounds,
   fromPlot, hasNtcWells, NTC_AMBER, NTC_HANDLE_SIZE, NTC_MARKER_SIZE, ntcDragRelayout, ntcThresholdShapes,
   orientBounds, orientShape, toPlot, visibleBounds,
 } from "@/lib/scatter-axes";
@@ -136,7 +138,11 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
   // the traces -- the chrome-only relayout below cannot repaint markers.
   const dark = useIsDarkMode();
   const plotRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
+  useScatterFit(canvasRef, () => {
+    if (initialized.current && plotRef.current) Plotly.Plots.resize(plotRef.current);
+  });
   const exportRender = useRef(0);
 
   const sessionId = useSessionStore((s) => s.sessionId);
@@ -146,6 +152,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
   const storedAxisMode = useSettingsStore((s) => s.axisMode);
   const axisModeChosen = useSettingsStore((s) => s.axisModeChosen);
   const lockAspect = useSettingsStore((s) => s.lockAspect);
+  const expert = useSettingsStore((s) => s.expertMode);
   const scatterTool = useSettingsStore((s) => s.scatterTool);
   const scatterAspect = useSettingsStore((s) => s.scatterAspect);
   const orientation = useSettingsStore((s) => s.scatterOrientation);
@@ -490,8 +497,9 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       type: "scatter",
       uid: 'ntc-threshold',
       name: t.chartNtcThreshold,
-      // A legend entry explains the corner diamond (and the edit-mode handle).
-      showlegend: true,
+      // A legend entry explains the corner diamond (and the edit-mode handle);
+      // like the boundary lines it is an expert-mode element.
+      showlegend: expert,
       hovertemplate:
         `NTC: ${labels.fam} ≤ ${effectiveNtcCorner.fam.toFixed(2)}<br>` +
         `${labels.allele2} ≤ ${effectiveNtcCorner.allele2.toFixed(2)}<extra></extra>`,
@@ -505,14 +513,12 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       // selection used to fade it along with the data.
       ...OPAQUE_IN_BOTH_SELECTION_STATES,
     });
-    if (bnd) traces.push(boundaryLegendTrace(t.boundaryLines, editing, colors.fontColor) as unknown as Data);
+    if (bnd) traces.push({ ...boundaryLegendTrace(t.boundaryLines, editing, colors.fontColor), showlegend: expert } as unknown as Data);
 
-    const famTitle = normalizationApplied
-      ? normalizedLabel(labels.fam, labels, true, t.normalizationFallback)
-      : `${labels.fam} (raw RFU)`;
-    const allele2Title = normalizationApplied
-      ? normalizedLabel(labels.allele2, labels, true, t.normalizationFallback)
-      : `${labels.allele2} (raw RFU)`;
+    // Same title shape as the per-marker plot; only the normalization is noted.
+    const titleSuffix = normalizationApplied ? ` / ${normalizationLabel(labels, t.normalizationFallback)}` : "";
+    const famTitle = axisTitle(labels.fam, null, titleSuffix);
+    const allele2Title = axisTitle(labels.allele2, null, titleSuffix);
     const [xLabel, yLabel] = orientation === "allele2_x" ? [allele2Title, famTitle] : [famTitle, allele2Title];
 
     const axisTitleFont = { size: 14, color: colors.fontColor };
@@ -622,14 +628,15 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       dragmode: editing ? "zoom" : "select",
       shapes,
       annotations,
-      // The legend sits in a row under the axis title, never over the points.
-      margin: { t: 10, r: 10, b: 130, l: 70 },
-      legend: { orientation: "h", y: -0.2, yanchor: "top", x: 0, xanchor: "left" },
+      // The legend is a compact row above the plot area, below the modebar, so
+      // it never covers data or tools (nothing is reserved under the axis).
+      margin: { t: LEGEND_MARGIN_TOP, r: 10, b: 60, l: 70 },
+      legend: compactLegend(colors),
     };
 
     const config: Partial<Config> = {
       responsive: true,
-      displayModeBar: true,
+      displayModeBar: PLOTLY_MODEBAR,
       // zoom2d/pan2d are kept: with the clusters this squashed, selecting an
       // individual well is impossible without being able to zoom in first.
       modeBarButtonsToRemove: ["toImage", "sendDataToCloud"],
@@ -737,6 +744,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     axisMode,
     lockAspect,
     editing,
+    expert,
     orientation,
     normalizationApplied, roxOutlierWells,
     backgroundMode,
@@ -1147,6 +1155,8 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
 
   return (
     <div className="panel scatter-panel">
+      {/* Same card header as the per-marker view, so every instrument reads alike. */}
+      <AnalysisCardHeader name={t.wsScopeWholePlateOption} ploidy={ploidy} wells={scatterPoints.length} />
       {/* P12-PLOT-TOGGLE: kept as ScatterPlot's own slim row (not threaded
           into ScatterViewControls' header) -- that header's flex-wrap row
           was already full at the 2-column 1440x1000 width, so the toggle
@@ -1158,7 +1168,6 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       {viewToggle && <div className="mb-1 xl:mb-px flex justify-end">{viewToggle}</div>}
       <ScatterViewControls
         runHasNtc={runHasNtc}
-        title={t.alleleDiscrimination}
         dataBounds={controlBounds}
         labels={controlLabels}
         ntcCorner={ntcCorner}
@@ -1177,7 +1186,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
           onApply: handleDosageMaxApply,
         }}
       />
-      <div className="relative analysis-scatter-canvas" style={scatterAspectVars(scatterAspect)}>
+      <div ref={canvasRef} className="relative analysis-scatter-canvas" style={scatterAspectVars(scatterAspect)}>
         <div
           id="scatter-plot"
           data-visible-wells={visiblePoints.length}

@@ -19,6 +19,10 @@ it('ko has no untranslated "dosage" wording in user-facing strings', () => {
   expect(texts.filter((s) => /dosage|copy/i.test(s))).toEqual([]);
 });
 
+it('words the empty well-detail hint as a sentence', () => {
+  expect(ko.clickWellToSee).toBe('웰을 클릭하면 상세정보를 볼 수 있습니다');
+});
+
 it('window names are translated for display only', () => {
   expect(windowLabel('Pre-read', ko)).toBe('프리리드');
   expect(windowLabel('Amplification', ko)).toBe('증폭');

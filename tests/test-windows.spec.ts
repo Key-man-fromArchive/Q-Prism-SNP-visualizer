@@ -1,5 +1,12 @@
 import { test, expect } from "@playwright/test";
 import { uploadAndWait } from "./helpers";
+import { enableExpertMode } from "./expert-mode";
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("snp-analyzer-language", JSON.stringify({ state: { language: "en" }, version: 0 })));
+  await enableExpertMode(page);
+});
 
 const EDS_FILE = "/mnt/ivt-ngs1/5.work-AI/SNP-dsicrimination/RAW-data/260126-QS3.eds";
 

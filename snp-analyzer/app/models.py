@@ -2,9 +2,9 @@ from __future__ import annotations
 import unicodedata
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, ValidationInfo, computed_field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, SerializerFunctionWrapHandler, ValidationInfo, computed_field, field_validator, model_serializer, model_validator
 
 
 class WellCycleData(BaseModel):
@@ -99,6 +99,41 @@ class AlleleLabels(BaseModel):
         return self
 
 
+class InstrumentDetail(BaseModel):
+    """Instrument identity declared by the source file, for display only."""
+    vendor: str | None = None        # e.g. "Applied Biosystems"
+    model: str | None = None         # e.g. "StepOnePlus"
+    software: str | None = None      # e.g. "StepOne Software v2.3"
+
+
+class AmplificationQcConfig(BaseModel):
+    """Request: no-amplification well detection (None on the request = defaults).
+
+    A manual threshold replaces the automatic one for that channel only.
+    """
+    enabled: bool = True
+    fraction: float = Field(default=1 / 3, ge=0.05, le=0.9)
+    fam_threshold: float | None = Field(default=None, ge=0)
+    allele2_threshold: float | None = Field(default=None, ge=0)
+
+
+class AmplificationQcResult(BaseModel):
+    """Result: thresholds actually applied and the wells judged not amplified.
+
+    Such wells keep the canonical ``Undetermined`` call (ASG contract); this
+    list is the only way to tell them apart from other undetermined wells.
+    """
+    enabled: bool
+    available: bool                  # False when the run has no Pre-read
+    fraction: float
+    fam_threshold: float | None = None
+    allele2_threshold: float | None = None
+    source: Literal["auto", "manual", "mixed", "off"]
+    baseline_cycle: int | None = None
+    read_cycle: int | None = None
+    no_amplification_wells: list[str] = Field(default_factory=list)
+
+
 class UnifiedData(BaseModel):
     input_revision: int = Field(default=0, ge=0)
     instrument: str                  # "QuantStudio 3" or "CFX Opus"
@@ -141,6 +176,16 @@ class UnifiedData(BaseModel):
     read_labels: dict[int, ReadLabel] | None = None
     # Allele names declared by the instrument, by marker name.
     imported_marker_alleles: dict[str, AlleleLabels] | None = None
+    instrument_detail: InstrumentDetail | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_instrument_detail(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # Keeps every pre-P7 dump (and its golden digests) byte-identical for
+        # files that declare no instrument identity.
+        dumped = handler(self)
+        if dumped.get("instrument_detail") is None:
+            dumped.pop("instrument_detail", None)
+        return dumped
 
 
 class UploadResponse(BaseModel):
@@ -165,6 +210,7 @@ class UploadResponse(BaseModel):
     default_cycle: int | None = None
     read_labels: dict[int, ReadLabel] | None = None
     has_amplification_curve: bool = True
+    instrument_detail: InstrumentDetail | None = None
 
 
 class UploadPreviewRequiredResponse(BaseModel):
@@ -523,6 +569,8 @@ class ClusteringRequest(BaseModel):
     background: Literal["none", "pre_read", "channel_min"] | None = None
     # Must match the scatter coordinates used to place manual thresholds.
     use_rox: bool = True
+    # None => defaults (enabled, fraction 1/3, automatic thresholds).
+    amplification_qc: AmplificationQcConfig | None = None
 
 
 class AnalysisRegionContext(BaseModel):
@@ -557,6 +605,7 @@ class AnalysisContext(BaseModel):
     parameters: dict[str, JsonValue]
     regions: list[AnalysisRegionContext]
     input_revision: int = Field(ge=0)
+    amplification_qc: AmplificationQcResult | None = None
 
     @field_validator("analysed_at")
     @classmethod
@@ -566,6 +615,7 @@ class AnalysisContext(BaseModel):
 
 class ClusteringResult(BaseModel):
     analysis_context: AnalysisContext | None = None
+    amplification_qc: AmplificationQcResult | None = None
 
     # Pydantic supports this property wrapper; mypy cannot model it (as above
     # for MarkerCatalogEntry.dosage_trust). Keep the precise public return type.

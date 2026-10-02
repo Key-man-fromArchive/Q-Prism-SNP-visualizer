@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { login } from './helpers';
+import { enableExpertMode } from './expert-mode';
+
+test.beforeEach(async ({ page }) => { await enableExpertMode(page); });
 
 test.use({ baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:8402' });
 
@@ -43,7 +46,12 @@ test('multi-marker 384 review keeps long context and warnings inside bounded reg
   expect((await page.getByTestId('marker-selector-sidebar').boundingBox())!.height).toBeLessThanOrEqual(512);
   await expect(page.getByTestId('marker-warnings')).toContainText('Synthetic warning');
   await expect.poll(() => page.getByTestId('marker-warnings').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
-  await expect.poll(() => page.getByTestId('plate-scroll-region').evaluate(node => node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight)).toBe(true);
+  // The 384 plate is sized to fit this width, so it no longer has to overflow; the region
+  // must still be the bounded, keyboard-reachable scroller that takes over when it does.
+  const plateRegion = page.getByTestId('plate-scroll-region');
+  await expect(plateRegion).toHaveCSS('overflow-x', 'auto');
+  await expect(plateRegion).toHaveAttribute('tabindex', '0');
+  expect((await plateRegion.boundingBox())!.width).toBeLessThanOrEqual(1440);
   await page.locator('#plate-grid [data-well="A1"]').click();
   await expect(page.locator('.detail-panel')).toContainText('Synthetic A1');
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);

@@ -93,6 +93,15 @@ export const WELL_TYPE_INFO = {
   Omit: { label: "Omit (exclude)", color: "#a16207", symbol: "x" },
 } as const;
 
+/** Display-only call for wells the amplification check flagged (the backend keeps `Undetermined`).
+ *  Kept out of WELL_TYPE_INFO: that map drives the assignable well types. */
+export const NO_AMPLIFICATION = "No Amplification";
+export const NO_AMPLIFICATION_TYPE = {
+  label: "No amplification",
+  color: "#b8bec8",
+  symbol: "circle",
+} as const;
+
 export const UNASSIGNED_TYPE = {
   label: "Unassigned",
   color: "#6366f1",

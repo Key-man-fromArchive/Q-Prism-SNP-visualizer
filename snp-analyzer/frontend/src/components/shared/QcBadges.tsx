@@ -28,6 +28,6 @@ export function QcBadges() {
   return <div className="flex flex-wrap items-center gap-2" data-testid="qc-summary">
     <LoadedQc key={`${requestKey}:${retry}`} requestKey={requestKey} sid={session.sessionId}
       cycle={navigation.cycle} useRox={settings.useRox} background={settings.backgroundMode} />
-    <button type="button" className="text-xs underline" onClick={() => setRetry(value => value + 1)}>{t.qcRefresh}</button>
+    {settings.expertMode && <button type="button" className="text-xs underline" onClick={() => setRetry(value => value + 1)}>{t.qcRefresh}</button>}
   </div>;
 }

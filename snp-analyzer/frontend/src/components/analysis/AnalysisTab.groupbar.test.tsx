@@ -46,7 +46,7 @@ beforeEach(() => {
   useAuthStore.setState({ user: { id: 'u', username: 'u', role: 'admin', display_name: null } });
   useSessionStore.setState({ sessionId: 'group-bar-fixture', wellGroups: null });
   useSelectionStore.setState({ currentCycle: 0, selectedWells: [], selectedGroup: null });
-  useSettingsStore.setState({ showEmptyWells: false });
+  useSettingsStore.setState({ showEmptyWells: false, expertMode: true });
   useDataStore.setState({ wellTypeAssignments: {} });
   useAnalysisStore.getState().setSession('group-bar-fixture', 'u');
   useAnalysisStore.getState().updateInputRevision('group-bar-fixture', 'u', 0);

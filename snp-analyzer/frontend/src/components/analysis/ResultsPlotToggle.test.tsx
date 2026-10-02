@@ -2,8 +2,12 @@
 // @SPEC docs/planning/feedback-2026-09-11/evidence/P12-PLOT-TOGGLE.md
 import type { ReactNode } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { ResultsPlotToggle } from './ResultsPlotToggle';
+import { useSettingsStore } from '@/stores/settings-store';
+
+// The scatter/curve switch only exists in expert mode (expert-gating.test.tsx covers the basic view).
+beforeEach(() => useSettingsStore.setState({ expertMode: true }));
 
 // Real ScatterPlot/AmplificationCurvePanel each render `viewToggle` inside
 // their own header (see ScatterViewControls' doc comment) -- these stubs do
