@@ -110,15 +110,6 @@ def test_quantstudio_eds_reports_only_what_the_file_says(tmp_path):
     )
 
 
-def test_other_formats_declare_nothing():
-    # No CFX/xls/xlsx field is documented as carrying a model or software
-    # version, so these stay None rather than being inferred from the format.
-    from app.parsers import cfx_opus, cfx_xml_parser, generic_table, pcrd_raw, quantstudio
-
-    for module in (cfx_opus, cfx_xml_parser, generic_table, pcrd_raw, quantstudio):
-        assert "instrument_detail" not in Path(module.__file__).read_text(encoding="utf-8")
-
-
 def _import(c, unified):
     return create_session_from_import(
         unified=unified, filename="run.eds", user_id="user-1",

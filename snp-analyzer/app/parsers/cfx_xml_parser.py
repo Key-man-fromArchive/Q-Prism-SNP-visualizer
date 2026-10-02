@@ -16,11 +16,27 @@ No external dependencies — uses stdlib xml.etree.ElementTree and zipfile.
 """
 
 import os
+import re
 import tempfile
 import zipfile
 import xml.etree.ElementTree as ET
 
 from app.models import UnifiedData, WellCycleData, DataWindow
+from app.parsers.instrument_detail import cfx_instrument_label, cfx_xml_export_detail
+
+_RUN_INFORMATION = re.compile(r"run(?:_x0020_|[ _])information\.xml$", re.IGNORECASE)
+
+
+def _identity(xml_files: dict[str, str]) -> dict:
+    """``instrument`` and ``instrument_detail`` fields from the Run Information export, if any."""
+    detail = None
+    path = xml_files.get("run_information")
+    if path:
+        try:
+            detail = cfx_xml_export_detail(ET.parse(path).getroot())
+        except ET.ParseError:
+            detail = None
+    return {"instrument": cfx_instrument_label(detail), "instrument_detail": detail}
 
 
 # --- Filename patterns (Bio-Rad consistent suffixes) ---
@@ -87,6 +103,9 @@ def _find_xml_files(extract_dir: str) -> dict[str, str]:
             if not fname.lower().endswith(".xml"):
                 continue
             full_path = os.path.join(dirpath, fname)
+            if _RUN_INFORMATION.search(fname):
+                found["run_information"] = full_path
+                continue
             for key, suffix in _PATTERNS.items():
                 if fname.endswith(suffix):
                     found[key] = full_path
@@ -219,7 +238,7 @@ def _assemble_tier1(xml_files: dict[str, str]) -> UnifiedData:
     has_meaningful_names = any(v and v != "SNP" for v in sample_names.values())
 
     return UnifiedData(
-        instrument="CFX Opus",
+        **_identity(xml_files),
         allele2_dye=dye_allele2,
         wells=wells,
         cycles=cycles,
@@ -273,7 +292,7 @@ def _assemble_tier2(xml_files: dict[str, str]) -> UnifiedData:
     has_meaningful_names = any(v and v != "SNP" for v in sample_names.values())
 
     return UnifiedData(
-        instrument="CFX Opus",
+        **_identity(xml_files),
         allele2_dye=allele2_dye,
         wells=wells,
         cycles=[1],
@@ -306,7 +325,7 @@ def _assemble_tier3(xml_files: dict[str, str]) -> UnifiedData:
     has_meaningful_names = any(v and v != "SNP" for v in sample_names.values())
 
     return UnifiedData(
-        instrument="CFX Opus",
+        **_identity(xml_files),
         allele2_dye="HEX",
         wells=wells,
         cycles=[1],

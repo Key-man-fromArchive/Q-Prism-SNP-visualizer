@@ -29,6 +29,7 @@ from app.parsers.generic_table import (
     _raise_if_issues,
     _to_duplex_unified,
 )
+from app.parsers.instrument_detail import rdml_instrument_detail
 from app.parsers.vendor_presets import apply_vendor_presets
 
 
@@ -67,6 +68,9 @@ class _RdmlDocument:
     series: list[_RdmlSeries] = field(default_factory=list)
     instrument: str | None = None
     vendor: str | None = None
+    model: str | None = None
+    vendor_name: str | None = None
+    software: str | None = None
 
     @property
     def run_ids(self) -> list[str]:
@@ -243,6 +247,9 @@ class RDMLParser:
                 "vendor_preset_id": mapping_config.vendor_preset_id,
             }
         )
+        detail = rdml_instrument_detail(document.model,document.vendor_name, document.software)
+        if detail is not None:
+            run.metadata["instrument_detail"] = detail.model_dump()
         return run
 
     def to_unified(self, import_run: ImportRun) -> UnifiedData:
@@ -256,9 +263,11 @@ def _read_rdml(file_path: Path) -> _RdmlDocument:
         raise_import_error(ImportErrorCode.UNSUPPORTED_CONTENT, message="The XML root is not RDML.")
 
     document = _RdmlDocument(source_entry=source_entry)
-    document.instrument = _first_text(root, {"instrument", "device", "thermalCycler"})
+    document.instrument = document.model = _first_text(root, {"instrument", "device", "thermalCycler"})
     vendor_text = _first_text(root, {"vendor", "manufacturer", "software"})
     document.vendor = vendor_text
+    document.vendor_name = _first_text(root, {"vendor", "manufacturer"})
+    document.software = _software_text(root)
     if document.instrument is None:
         document.instrument = vendor_text
 
@@ -544,6 +553,17 @@ def _first_text(element: ET.Element, names: set[str]) -> str | None:
         if _local_name(child.tag) in names and child.text and child.text.strip():
             return child.text.strip()
     return None
+
+
+def _software_text(root: ET.Element) -> str | None:
+    """``dataCollectionSoftware`` name and version, else a plain ``software`` element."""
+    for element in _iter_local(root, "dataCollectionSoftware"):
+        name = _first_text(element, {"name"})
+        version = _first_text(element, {"version"})
+        joined = " ".join(part for part in (name, version) if part)
+        if joined:
+            return joined
+    return _first_text(root, {"software"})
 
 
 def _attr(element: ET.Element, names: set[str]) -> str | None:
