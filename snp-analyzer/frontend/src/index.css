@@ -226,6 +226,8 @@ body.dark .panel {
    compaction that freed real space above the canvas stays (see
    evidence/P4-S3-T1.md's "orchestrator correction" note). */
 .analysis-scatter-canvas {
+  /* Fallback only: lib/scatter-fit.ts overrides this inline with the
+     measured remaining viewport height (P7-C4). */
   --scatter-max-h: min(70vh, 640px);
   --scatter-aspect-w: 4;
   --scatter-aspect-h: 3;
@@ -233,7 +235,7 @@ body.dark .panel {
   height: auto;
   width: 100%;
   max-width: calc(var(--scatter-max-h) * var(--scatter-aspect-w) / var(--scatter-aspect-h));
-  min-height: 360px; /* guards against a 0-height Plotly mount */
+  min-height: 320px; /* guards against a 0-height Plotly mount */
   margin-inline: auto;
 }
 .analysis-advanced-settings > div { max-height: 18rem; overflow: auto; }
@@ -292,7 +294,6 @@ body.dark .panel {
      first screen. The plot takes the largest 3:4 box that fits the card width
      and the viewport height, centred when width is left over. Applies to 1:1
      and 4:3 alike. */
-  .analysis-scatter-canvas { --scatter-max-h: min(calc(100dvh - 480px), 820px); }
   [data-testid="analysis-warnings"] { max-height: 5rem; overflow: auto; }
   [data-testid="analysis-scope-selector"] { margin-top: .5rem; }
   /* 1440x1000 budget: the status facts read as one wrapped line, and the call

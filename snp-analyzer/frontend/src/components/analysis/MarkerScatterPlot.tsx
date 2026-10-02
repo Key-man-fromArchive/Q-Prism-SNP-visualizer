@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Plotly from "plotly.js-dist-min";
 import { dosageOfLabel, defaultRatioCuts } from "@/lib/genotype";
+import { useScatterFit } from "@/lib/scatter-fit";
 import { chartCategory, markerCallLabel, cycleReadText, chartPointState, chartStateText } from "@/lib/chart-semantics";
 import { useI18n } from "@/hooks/use-i18n";
 import { compactLegend, LEGEND_MARGIN_TOP, PLOTLY_MODEBAR, plotlyColors } from "@/lib/plotly-theme";
@@ -117,6 +118,9 @@ export function MarkerScatterPlot({
   }, [origin]);
   const plotRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
+  useScatterFit(plotRef, () => {
+    if (initialized.current && plotRef.current) Plotly.Plots.resize(plotRef.current);
+  });
   const exportRender = useRef(0);
   const eventsBound = useRef(false);
   const selectedWells = useSelectionStore((s) => s.selectedWells);
