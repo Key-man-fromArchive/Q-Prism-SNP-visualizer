@@ -7,7 +7,7 @@ import { useNavigationStore } from '@/stores/navigation-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useAuthStore } from '@/stores/auth-store';
 import { clearActiveChart, setActiveChart } from '@/lib/chart-export-registry';
-import { exportCsv } from '@/lib/api';
+import { exportCsv, exportPdf, exportPptx, exportScatterZip } from '@/lib/api';
 import Plotly from 'plotly.js-dist-min';
 
 vi.mock('plotly.js-dist-min', () => ({ default: { toImage: vi.fn() } }));
@@ -18,7 +18,7 @@ vi.mock('@/lib/api', () => {
       super(message); this.code = payload.detail?.code ?? null;
     }
   }
-  return { ApiError, exportCsv: vi.fn(), exportPdf: vi.fn(), exportXlsx: vi.fn() };
+  return { ApiError, exportCsv: vi.fn(), exportPdf: vi.fn(), exportXlsx: vi.fn(), exportPptx: vi.fn(), exportScatterZip: vi.fn() };
 });
 
 const result = (revision = 'rev-a') => ({ algorithm: 'auto', cycle: 40, assignments: {},
@@ -336,4 +336,39 @@ it('never writes a missing (well, cycle) reading as "0" in the CSV', () => {
   // ... but A2's MISSING cycle-1 reading is blank, not indistinguishable "0".
   expect(lines).toContain('A2,,7');
   expect(lines).not.toContain('A2,0,7');
+});
+
+function stubDownload(): void {
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() });
+}
+
+it('RED/GREEN: PPTX and report-image zip send the live conditions and the marker selection', async () => {
+  vi.mocked(exportPptx).mockResolvedValue(new Blob(['p']));
+  vi.mocked(exportScatterZip).mockResolvedValue(new Blob(['z']));
+  stubDownload();
+  const { result: hook } = renderHook(() => useExports());
+  await hook.current.exportPPTX(['m1', 'm2']);
+  expect(exportPptx).toHaveBeenCalledWith('run-a', false, 'none', 20, 'rev-a', ['m1', 'm2']);
+  await hook.current.exportScatterZip();
+  expect(exportScatterZip).toHaveBeenCalledWith('run-a', false, 'none', 20, 'rev-a', undefined);
+});
+
+it('RED/GREEN: PDF forwards the marker selection', async () => {
+  vi.mocked(exportPdf).mockResolvedValue(new Blob(['p']));
+  stubDownload();
+  const { result: hook } = renderHook(() => useExports());
+  await hook.current.exportPDF(['m2']);
+  expect(exportPdf).toHaveBeenCalledWith('run-a', false, 'none', 20, 'rev-a', ['m2']);
+});
+
+it('RED/GREEN: stored pptx/zip export uses the stored conditions and keeps the marker selection', async () => {
+  vi.mocked(exportPptx).mockResolvedValue(new Blob(['p']));
+  vi.mocked(exportScatterZip).mockResolvedValue(new Blob(['z']));
+  stubDownload();
+  const { result: hook } = renderHook(() => useExports());
+  await hook.current.exportStored('pptx', undefined, ['m3']);
+  expect(exportPptx).toHaveBeenCalledWith('run-a', false, 'none', 40, 'rev-a', ['m3']);
+  await hook.current.exportStored('zip', undefined, ['m3']);
+  expect(exportScatterZip).toHaveBeenCalledWith('run-a', false, 'none', 40, 'rev-a', ['m3']);
 });

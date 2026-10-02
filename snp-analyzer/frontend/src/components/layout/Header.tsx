@@ -7,7 +7,9 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useNavigationStore } from "@/stores/navigation-store";
 import { useAnalysisStore } from "@/stores/analysis-store";
 import { useDarkMode } from "@/hooks/use-dark-mode";
-import { useExports } from "@/hooks/use-exports";
+import { useExports, type StoredExportKind } from "@/hooks/use-exports";
+import { useMarkerScope } from "@/hooks/use-marker-scope";
+import { EXPORT_TEST_IDS } from "@/lib/export-testids";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
 import { useI18n } from "@/hooks/use-i18n";
 import { useLanguageStore } from "@/stores/language-store";
@@ -75,8 +77,44 @@ type HeaderProps = {
   showFileWorkspaceTrigger?: boolean;
 };
 
+type ExportKind = StoredExportKind;
+const DIALOG_FORMATS: { kind: ExportKind; testId: string }[] = [
+  { kind: "pdf", testId: EXPORT_TEST_IDS.formatPdf },
+  { kind: "csv", testId: EXPORT_TEST_IDS.formatCsv },
+  { kind: "xlsx", testId: EXPORT_TEST_IDS.formatXlsx },
+  { kind: "pptx", testId: EXPORT_TEST_IDS.formatPptx },
+  { kind: "zip", testId: EXPORT_TEST_IDS.formatPngZip },
+];
+// Only these formats honor a marker selection (CSV/XLSX always cover the whole run).
+const MARKER_SCOPED: ReadonlySet<ExportKind> = new Set<ExportKind>(["pdf", "pptx", "zip"]);
+
+type ExportMarkerPickerProps = {
+  markers: { id: string; name: string }[];
+  selected: ReadonlySet<string>;
+  onToggle: (id: string) => void;
+  onToggleAll: () => void;
+};
+
+function ExportMarkerPicker({ markers, selected, onToggle, onToggleAll }: ExportMarkerPickerProps) {
+  const { t } = useI18n();
+  return (
+    <div data-testid={EXPORT_TEST_IDS.markerList} className="flex flex-col gap-1" title={t.exportReportSelectMarkersTooltip}>
+      <label className="flex items-center gap-2 text-sm font-medium">
+        <input type="checkbox" data-testid={EXPORT_TEST_IDS.markerSelectAll}
+          checked={selected.size === markers.length} onChange={onToggleAll} />
+        <span data-testid={EXPORT_TEST_IDS.status}>{t.exportReportSelectMarkers} ({selected.size}/{markers.length})</span>
+      </label>
+      {markers.map((marker) => (
+        <label key={marker.id} data-testid={EXPORT_TEST_IDS.markerOption} className="flex items-center gap-2 text-sm pl-4">
+          <input type="checkbox" checked={selected.has(marker.id)} onChange={() => onToggle(marker.id)} />
+          <span>{marker.name}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
-  type ExportKind = "csv" | "png" | "pdf" | "xlsx";
   const sessionInfo = useSessionStore((s) => s.sessionInfo);
   const sessionId = useSessionStore((s) => s.sessionId);
   const reset = useSessionStore((s) => s.reset);
@@ -88,7 +126,20 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
   const resultRevision = useAnalysisStore((s) => s.result?.analysis_context?.result_revision);
   const analysisPending = useAnalysisStore((s) => s.pending);
   const { isDark, toggle: toggleDarkMode } = useDarkMode();
-  const { downloadCSV, exportPNG, exportPDF, exportXLSX, exportStored, printReport } = useExports();
+  const { downloadCSV, exportPNG, exportPDF, exportXLSX, exportPPTX, exportScatterZip, exportStored, printReport } = useExports();
+  const { markers } = useMarkerScope();
+  // null = every marker; a stale selection from another session is ignored.
+  const [markerSelection, setMarkerSelection] = useState<{ session: string | null; ids: string[] } | null>(null);
+  const [exportDialog, setExportDialog] = useState<{ open: boolean; format: ExportKind }>({ open: false, format: "pptx" });
+  const selectedMarkers = new Set(markers.filter((m) =>
+    markerSelection === null || markerSelection.session !== sessionId || markerSelection.ids.includes(m.id)).map((m) => m.id));
+  const allMarkersSelected = selectedMarkers.size === markers.length;
+  const markerIds: string[] | undefined = markers.length === 0 || allMarkersSelected
+    ? undefined : markers.filter((m) => selectedMarkers.has(m.id)).map((m) => m.id);
+  const noMarkerSelected = markers.length > 0 && selectedMarkers.size === 0;
+  const toggleMarker = (id: string) => setMarkerSelection({ session: sessionId,
+    ids: markers.filter((m) => m.id === id ? !selectedMarkers.has(id) : selectedMarkers.has(m.id)).map((m) => m.id) });
+  const toggleAllMarkers = () => setMarkerSelection({ session: sessionId, ids: allMarkersSelected ? [] : markers.map((m) => m.id) });
   const { undo, redo, canUndo, canRedo, pending: manualPending, error: manualError } = useUndoRedo();
   const { t } = useI18n();
   const { language, setLanguage } = useLanguageStore();
@@ -107,10 +158,11 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
   const mismatchAbort = useRef<AbortController | null>(null);
   const [exportMismatch, setExportMismatch] = useState<{
     kind: ExportKind; label: string; token: number; sessionId: string; entry: number; ownerId: string | undefined; revision: string | undefined;
+    markerIds: string[] | undefined;
   } | null>(null);
   const [mismatchBusy, setMismatchBusy] = useState(false);
   const closeMismatch = useCallback(() => { mismatchToken.current += 1; mismatchAbort.current?.abort(); mismatchAbort.current = null; setMismatchBusy(false); setExportMismatch(null); }, []);
-  const openMismatch = useCallback((kind: ExportKind, label: string) => {
+  const openMismatch = useCallback((kind: ExportKind, label: string, ids: string[] | undefined) => {
     const state = useAnalysisStore.getState();
     const token = mismatchToken.current + 1;
     mismatchToken.current = token;
@@ -118,7 +170,7 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
     mismatchAbort.current = new AbortController();
     setExportMismatch({ kind, label, token, sessionId: useSessionStore.getState().sessionId ?? '',
       entry: useSessionStore.getState().entryGeneration, ownerId: useAuthStore.getState().user?.id,
-      revision: state.result?.analysis_context?.result_revision });
+      revision: state.result?.analysis_context?.result_revision, markerIds: ids });
   }, []);
   const ownsMismatch = useCallback((value: NonNullable<typeof exportMismatch>, allowRevised = false) =>
     mismatchToken.current === value.token && useSessionStore.getState().sessionId === value.sessionId
@@ -183,7 +235,7 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
 
   // Wrap export functions to show user-visible errors
   const safeExport = useCallback(
-    (kind: ExportKind, fn: () => Promise<void>, label: string) => async () => {
+    (kind: ExportKind, fn: () => Promise<void>, label: string, ids?: string[]) => async () => {
       const origin = { sessionId: useSessionStore.getState().sessionId, entry: useSessionStore.getState().entryGeneration,
         ownerId: useAuthStore.getState().user?.id };
       const ownsOrigin = () => useSessionStore.getState().sessionId === origin.sessionId
@@ -193,13 +245,13 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
       } catch (err) {
         if (!ownsOrigin()) return;
         if (err instanceof ApiError && err.code === "EXPORT_CONDITION_MISMATCH") {
-          openMismatch(kind, label);
+          openMismatch(kind, label, ids);
           return;
         }
         if (err instanceof ApiError && err.code === "RESULT_REVISION_CONFLICT") {
           const refreshed = await loadAnalysisSession();
           if (refreshed) {
-            openMismatch(kind, label);
+            openMismatch(kind, label, ids);
             return;
           }
         }
@@ -210,12 +262,28 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
     [t, openMismatch]
   );
 
+  const exportActions = (ids?: string[]): Record<ExportKind, () => Promise<void>> => ({
+    csv: downloadCSV, png: exportPNG, xlsx: exportXLSX,
+    pdf: () => exportPDF(ids), pptx: () => exportPPTX(ids), zip: () => exportScatterZip(ids),
+  });
+  const exportLabels: Record<ExportKind, string> = {
+    csv: t.csvExportFailed, png: t.pngExportFailed, pdf: t.pdfExportFailed, xlsx: t.xlsxExportFailed,
+    pptx: t.exportReportPPTX, zip: t.exportReportScatterZip,
+  };
+  const runExport = (kind: ExportKind) => {
+    const ids = MARKER_SCOPED.has(kind) ? markerIds : undefined;
+    void safeExport(kind, exportActions(ids)[kind], exportLabels[kind], ids)();
+  };
   const exportItems: MenuItem[] = [
-    { key: "csv", label: t.exportCSV, onSelect: () => void safeExport("csv", downloadCSV, t.csvExportFailed)() },
-    { key: "png", label: t.exportPNG, onSelect: () => void safeExport("png", exportPNG, t.pngExportFailed)() },
+    { key: "csv", label: t.exportCSV, onSelect: () => runExport("csv") },
+    { key: "png", label: t.exportReportCurrentScreen, onSelect: () => runExport("png") },
     { key: "print", label: t.exportPrint, onSelect: () => void printReport() },
-    { key: "pdf", label: t.exportPDF, onSelect: () => void safeExport("pdf", exportPDF, t.pdfExportFailed)() },
-    { key: "xlsx", label: t.exportXLSX, onSelect: () => void safeExport("xlsx", exportXLSX, t.xlsxExportFailed)() },
+    { key: "pdf", label: t.exportPDF, disabled: noMarkerSelected, onSelect: () => runExport("pdf") },
+    { key: "xlsx", label: t.exportXLSX, onSelect: () => runExport("xlsx") },
+    { key: "pptx", label: t.exportReportPPTX, disabled: noMarkerSelected, onSelect: () => runExport("pptx") },
+    { key: "zip", label: t.exportReportScatterZip, disabled: noMarkerSelected, onSelect: () => runExport("zip") },
+    ...(markers.length > 0 ? [{ key: "markers", label: t.exportReportSelectMarkers,
+      onSelect: () => setExportDialog((d) => ({ ...d, open: true })) }] : []),
   ];
   const keyboardExport = useEffectEvent(() => { void safeExport("csv", downloadCSV, t.csvExportFailed)(); });
   useEffect(() => {
@@ -232,10 +300,7 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
     const accepted = await analyzeCurrent(request);
     if (!accepted || !ownsMismatch(pendingMismatch, true)) { setMismatchBusy(false); return; }
     closeMismatch();
-    const actions: Record<ExportKind, () => Promise<void>> = {
-      csv: downloadCSV, png: exportPNG, pdf: exportPDF, xlsx: exportXLSX,
-    };
-    try { await actions[pendingMismatch.kind](); }
+    try { await exportActions(pendingMismatch.markerIds)[pendingMismatch.kind](); }
     catch (err) { alert(t.exportFailed(pendingMismatch.label, err instanceof Error ? err.message : "Unknown error")); }
   };
 
@@ -244,7 +309,7 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
     if (!pendingMismatch || mismatchBusy || !ownsMismatch(pendingMismatch)) return;
     setMismatchBusy(true);
     try {
-      await exportStored(pendingMismatch.kind, mismatchAbort.current?.signal);
+      await exportStored(pendingMismatch.kind, mismatchAbort.current?.signal, pendingMismatch.markerIds);
       if (ownsMismatch(pendingMismatch)) closeMismatch();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -368,6 +433,29 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
       </div>
     </header>
     <ManualEditStatus pending={manualPending} error={manualError} />
+    <Modal
+      open={exportDialog.open}
+      onClose={() => setExportDialog((d) => ({ ...d, open: false }))}
+      title={t.exportReportSelectMarkers}
+      closeLabel={t.close}
+    >
+      <div data-testid={EXPORT_TEST_IDS.dialog} className="flex flex-col gap-3">
+        <div role="group" aria-label={t.exportMenu} className="flex flex-wrap gap-1">
+          {DIALOG_FORMATS.map(({ kind, testId }) => (
+            <Button key={kind} size="sm" data-testid={testId} aria-pressed={exportDialog.format === kind}
+              variant={exportDialog.format === kind ? "primary" : "secondary"}
+              title={kind === "pptx" ? t.exportReportPPTXTooltip : kind === "zip" ? t.exportReportScatterZipTooltip : undefined}
+              onClick={() => setExportDialog((d) => ({ ...d, format: kind }))}>
+              {{ pdf: t.exportPDF, csv: t.exportCSV, xlsx: t.exportXLSX, pptx: t.exportReportPPTX, zip: t.exportReportScatterZip, png: t.exportPNG }[kind]}
+            </Button>
+          ))}
+        </div>
+        <ExportMarkerPicker markers={markers} selected={selectedMarkers} onToggle={toggleMarker} onToggleAll={toggleAllMarkers} />
+        <Button data-testid={EXPORT_TEST_IDS.submit} className="self-end"
+          disabled={noMarkerSelected && MARKER_SCOPED.has(exportDialog.format)}
+          onClick={() => runExport(exportDialog.format)}>{t.exportMenu}</Button>
+      </div>
+    </Modal>
     <Modal
       open={exportMismatch !== null}
       onClose={closeMismatch}

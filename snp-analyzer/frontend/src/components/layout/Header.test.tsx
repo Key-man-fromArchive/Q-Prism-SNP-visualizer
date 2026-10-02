@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { EXPORT_TEST_IDS } from '@/lib/export-testids';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Header } from './Header';
 import { useAuthStore } from '@/stores/auth-store';
@@ -9,16 +10,18 @@ import { useAnalysisStore } from '@/stores/analysis-store';
 import { ApiError, saveAsgResult } from '@/lib/api';
 import ko from '@/locales/ko';
 
-const exportFns = vi.hoisted(() => ({ csv: vi.fn(), png: vi.fn(), pdf: vi.fn(), xlsx: vi.fn(), stored: vi.fn() }));
+const exportFns = vi.hoisted(() => ({ csv: vi.fn(), png: vi.fn(), pdf: vi.fn(), xlsx: vi.fn(), stored: vi.fn(), pptx: vi.fn(), zip: vi.fn() }));
+const markerApi = vi.hoisted(() => ({ get: vi.fn() }));
 const actions = vi.hoisted(() => ({ analyze: vi.fn(), refresh: vi.fn() }));
 
 vi.mock('@/lib/api', () => {
   class ApiError extends Error { code: string | null; constructor(message: string, _status: number, payload: { detail?: { code?: string } }) { super(message); this.code = payload.detail?.code ?? null; } }
-  return { ApiError, logout: vi.fn(), saveAsgResult: vi.fn() };
+  return { ApiError, logout: vi.fn(), saveAsgResult: vi.fn(), getMarkers: markerApi.get };
 });
 vi.mock('@/hooks/use-dark-mode', () => ({ useDarkMode: () => ({ isDark: false, toggle: vi.fn() }) }));
 vi.mock('@/hooks/use-exports', () => ({ useExports: () => ({ downloadCSV: exportFns.csv, exportPNG: exportFns.png,
-  exportPDF: exportFns.pdf, exportXLSX: exportFns.xlsx, exportStored: exportFns.stored, printReport: vi.fn() }) }));
+  exportPDF: exportFns.pdf, exportXLSX: exportFns.xlsx, exportPPTX: exportFns.pptx, exportScatterZip: exportFns.zip,
+  exportStored: exportFns.stored, printReport: vi.fn() }) }));
 vi.mock('@/hooks/use-undo-redo', () => ({ useUndoRedo: () => ({ canUndo: false, canRedo: false }) }));
 vi.mock('@/lib/analysis-actions', () => ({ analyzeCurrent: actions.analyze }));
 vi.mock('@/lib/analysis-session', () => ({ loadAnalysisSession: actions.refresh }));
@@ -27,6 +30,7 @@ vi.mock('@/components/analysis/AddToProjectButton', () => ({ AddToProjectButton:
 
 beforeEach(() => {
   vi.clearAllMocks();
+  markerApi.get.mockResolvedValue({ markers: [] });
   useSessionStore.setState({ sessionId: 'run-a', sessionInfo: null });
   useSelectionStore.setState({ currentCycle: 20 });
   useSettingsStore.setState({ useRox: false });
@@ -57,6 +61,90 @@ it('opens a decision dialog for a structured export mismatch and cancel prevents
   expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /^(Cancel|취소)$/ }));
   expect(exportFns.stored).not.toHaveBeenCalled();
+});
+
+const threeMarkers = ['m1', 'm2', 'm3'].map(id => ({ id, name: id.toUpperCase(), wells: ['A1'], ploidy: 2 }));
+async function renderWithMarkers() {
+  markerApi.get.mockResolvedValue({ markers: threeMarkers });
+  render(<Header />);
+  fireEvent.click(screen.getByRole('button', { name: /Export|내보내기/ }));
+  await screen.findByRole('menuitem', { name: ko.exportReportSelectMarkers });
+}
+const menuItem = (name: string) => screen.getByRole('menuitem', { name });
+const reopenMenu = () => fireEvent.click(screen.getByRole('button', { name: /Export|내보내기/ }));
+
+it('lists PPTX, report images and a distinct current-screen image once markers exist', async () => {
+  await renderWithMarkers();
+  expect(menuItem(ko.exportReportPPTX)).toBeInTheDocument();
+  expect(menuItem(ko.exportReportScatterZip)).toBeInTheDocument();
+  expect(menuItem(ko.exportReportCurrentScreen)).toBeInTheDocument();
+});
+
+it('hides marker selection (and sends no ids) for a session without markers', async () => {
+  render(<Header />);
+  fireEvent.click(screen.getByRole('button', { name: /Export|내보내기/ }));
+  expect(screen.queryByRole('menuitem', { name: ko.exportReportSelectMarkers })).toBeNull();
+  fireEvent.click(menuItem(ko.exportReportPPTX));
+  await vi.waitFor(() => expect(exportFns.pptx).toHaveBeenCalledWith(undefined));
+});
+
+async function deselectSecondMarker() {
+  fireEvent.click(menuItem(ko.exportReportSelectMarkers));
+  const options = await screen.findAllByTestId(EXPORT_TEST_IDS.markerOption);
+  expect(options).toHaveLength(3);
+  fireEvent.click(within(options[1]).getByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: ko.close }));
+}
+
+it('applies the marker selection to PPTX, report images and PDF', async () => {
+  await renderWithMarkers();
+  await deselectSecondMarker();
+  reopenMenu();
+  fireEvent.click(menuItem(ko.exportReportPPTX));
+  await vi.waitFor(() => expect(exportFns.pptx).toHaveBeenCalledWith(['m1', 'm3']));
+  reopenMenu();
+  fireEvent.click(menuItem(ko.exportReportScatterZip));
+  await vi.waitFor(() => expect(exportFns.zip).toHaveBeenCalledWith(['m1', 'm3']));
+  reopenMenu();
+  fireEvent.click(screen.getByRole('menuitem', { name: /PDF/ }));
+  await vi.waitFor(() => expect(exportFns.pdf).toHaveBeenCalledWith(['m1', 'm3']));
+});
+
+it('exports the chosen format from the dialog and disables export with no marker selected', async () => {
+  await renderWithMarkers();
+  fireEvent.click(menuItem(ko.exportReportSelectMarkers));
+  const dialog = await screen.findByTestId(EXPORT_TEST_IDS.dialog);
+  fireEvent.click(within(dialog).getByTestId(EXPORT_TEST_IDS.formatPngZip));
+  fireEvent.click(within(dialog).getByTestId(EXPORT_TEST_IDS.submit));
+  await vi.waitFor(() => expect(exportFns.zip).toHaveBeenCalledWith(undefined));
+  fireEvent.click(within(dialog).getByTestId(EXPORT_TEST_IDS.markerSelectAll));
+  expect(within(dialog).getByTestId(EXPORT_TEST_IDS.submit)).toBeDisabled();
+  expect(within(dialog).getByTestId(EXPORT_TEST_IDS.status)).toHaveTextContent('0/3');
+});
+
+it('keeps the marker selection when a condition mismatch is resolved with the stored result', async () => {
+  exportFns.pptx.mockRejectedValue(new ApiError('mismatch', 409, { detail: { code: 'EXPORT_CONDITION_MISMATCH' } }));
+  await renderWithMarkers();
+  await deselectSecondMarker();
+  reopenMenu();
+  fireEvent.click(menuItem(ko.exportReportPPTX));
+  await screen.findByRole('alertdialog');
+  fireEvent.click(screen.getByRole('button', { name: ko.exportStoredResult }));
+  await vi.waitFor(() => expect(exportFns.stored).toHaveBeenCalledWith('pptx', expect.anything(), ['m1', 'm3']));
+});
+
+it('keeps the marker selection when a condition mismatch is resolved by reanalysis', async () => {
+  actions.analyze.mockResolvedValue(true);
+  exportFns.zip.mockRejectedValueOnce(new ApiError('mismatch', 409, { detail: { code: 'EXPORT_CONDITION_MISMATCH' } }));
+  useAnalysisStore.getState().setSession('run-a', 'u');
+  useAnalysisStore.getState().setCurrentRequest({ algorithm: 'auto', cycle: 20, n_clusters: 4 });
+  await renderWithMarkers();
+  await deselectSecondMarker();
+  reopenMenu();
+  fireEvent.click(menuItem(ko.exportReportScatterZip));
+  await screen.findByRole('alertdialog');
+  fireEvent.click(screen.getByRole('button', { name: ko.exportReanalyzeCurrent }));
+  await vi.waitFor(() => expect(exportFns.zip).toHaveBeenLastCalledWith(['m1', 'm3']));
 });
 
 function openCsvMismatch() {
