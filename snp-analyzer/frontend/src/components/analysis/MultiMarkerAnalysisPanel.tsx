@@ -21,7 +21,7 @@ import { useNavigationStore, isResultsSurfaceActive } from "@/stores/navigation-
 import { useSettledAnalysis } from "@/hooks/use-settled-analysis";
 import { useCurrentAnalysisRequest } from '@/hooks/use-current-analysis-request';
 import { ClusteringAlgorithm } from "@/types/api";
-import type { MarkerCatalogEntry, MarkerRegion } from "@/types/api";
+import type { AlleleLabels, MarkerCatalogEntry, MarkerRegion } from "@/types/api";
 import { chartCategory, callAppearance } from "@/lib/chart-semantics";
 import { MARKER_PALETTE } from "@/lib/constants";
 import { dosageTrustForMarker } from "@/lib/marker-catalog";
@@ -235,6 +235,16 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     const claimed = new Set(markers.flatMap((m) => m.wells));
     return scatterPoints.map((p) => p.well).filter((w) => !claimed.has(w));
   }, [markers, scatterPoints]);
+
+  // Each well is named by the marker it belongs to; the selected marker wins an overlap.
+  const wellAlleleLabels = useMemo(() => {
+    const map = new Map<string, AlleleLabels | null>();
+    const ordered = selectedMarker ? [selectedMarker, ...markers.filter((m) => m !== selectedMarker)] : markers;
+    for (const m of ordered) {
+      for (const w of m.wells) if (!map.has(w)) map.set(w, m.allele_labels ?? null);
+    }
+    return map;
+  }, [markers, selectedMarker]);
 
   const useSidebar = markers.length >= SIDEBAR_THRESHOLD;
 
@@ -477,7 +487,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                 <p data-testid="plate-view-hint" className="text-xs text-text-muted">{t.selectionHelp}</p>
               )}
               <PlateView scopeWells={selectedMarker.wells} ploidyOverride={selectedMarker.ploidy}
-                alleleLabels={selectedMarker.allele_labels} unassignedWells={unassignedWells} />
+                alleleLabels={selectedMarker.allele_labels} wellAlleleLabels={wellAlleleLabels} unassignedWells={unassignedWells} />
               <WellDetailPanel ploidyOverride={selectedMarker.ploidy} alleleLabels={selectedMarker.allele_labels} />
             </div>
             </div>
