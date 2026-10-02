@@ -11,7 +11,7 @@ from app.processing.cycle_selection import CycleMode
 from app.reporting.filenames import content_disposition
 from app.reporting.result_snapshot import ExportOptions, capture_result_snapshot
 from app.reporting.snapshot_pptx import build_snapshot_pptx, pptx_filename
-from app.routers.export_params import parse_marker_ids
+from app.routers.export_params import parse_marker_ids, parse_orientation
 
 router = APIRouter()
 
@@ -31,16 +31,18 @@ def export_pptx(
     result_revision: UUID | None = Query(default=None),
     marker_ids: str | None = Query(default=None),
     include_table: bool = Query(default=True),
+    orientation: str | None = Query(default=None),
 ) -> Response:
     """Download a 16:9 deck, using the stored analysis conditions.
 
     Plain ``def``: rendering is CPU-bound, so FastAPI runs it in the threadpool."""
     selected = parse_marker_ids(marker_ids)
+    axes = parse_orientation(orientation)
     snapshot = capture_result_snapshot(
         sid,
         current_user,
         ExportOptions(
-            result_revision, cycle, use_rox, background, cycle_mode, selected
+            result_revision, cycle, use_rox, background, cycle_mode, selected, axes
         ),
     )
     return Response(
