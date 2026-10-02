@@ -5,9 +5,11 @@ import { useMemo } from 'react';
 import { useI18n } from '@/hooks/use-i18n';
 import { callAppearance, displayedCall } from '@/lib/chart-semantics';
 import { dosageOfLabel } from '@/lib/genotype';
-import type { PlateWell } from '@/types/api';
+import { callTexts } from './call-text';
+import type { AlleleLabels, PlateWell } from '@/types/api';
 
 type PlateLegendProps = {
+  alleleLabels?: AlleleLabels | null;
   wells: readonly PlateWell[];
   showManualTypes: boolean;
   showAutoCluster: boolean;
@@ -39,7 +41,7 @@ function orderKeys(keys: readonly string[], ploidy: number): string[] {
  * calls yet, so it never shows up as an empty box. Every visual (color,
  * glyph, label) is derived from callAppearance(), the same function
  * PlateView uses to paint each well, so the two can never drift apart. */
-export function PlateLegend({ wells, showManualTypes, showAutoCluster, ploidy, dark }: PlateLegendProps) {
+export function PlateLegend({ wells, showManualTypes, showAutoCluster, ploidy, dark, alleleLabels }: PlateLegendProps) {
   const { t } = useI18n();
 
   const entries = useMemo(() => {
@@ -49,12 +51,11 @@ export function PlateLegend({ wells, showManualTypes, showAutoCluster, ploidy, d
       if (key === null) continue;
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
-    return orderKeys([...counts.keys()], ploidy).map((key) => ({
-      key,
-      count: counts.get(key)!,
-      appearance: callAppearance(key, ploidy, dark, t),
-    }));
-  }, [wells, showManualTypes, showAutoCluster, ploidy, dark, t]);
+    return orderKeys([...counts.keys()], ploidy).map((key) => {
+      const base = callAppearance(key, ploidy, dark, t);
+      return { key, count: counts.get(key)!, appearance: { ...base, ...callTexts(key, t, base, alleleLabels) } };
+    });
+  }, [wells, showManualTypes, showAutoCluster, ploidy, dark, t, alleleLabels]);
 
   if (entries.length === 0) return null;
 

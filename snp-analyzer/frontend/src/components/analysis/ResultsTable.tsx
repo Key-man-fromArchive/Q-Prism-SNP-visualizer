@@ -3,11 +3,12 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { callAppearance } from "@/lib/chart-semantics";
+import { callTexts } from "./call-text";
 import { useWellFilter } from "@/hooks/use-well-filter";
 import { useWellGrid } from "@/hooks/use-well-grid";
 import { useI18n } from "@/hooks/use-i18n";
 import { StatusState } from "@/components/shared/ui";
-import type { ScatterPoint } from "@/types/api";
+import type { AlleleLabels, ScatterPoint } from "@/types/api";
 import { useIsDarkMode } from "@/hooks/use-dark-mode";
 
 function effectiveType(
@@ -21,9 +22,9 @@ function effectiveType(
   return null;
 }
 
-type ResultsTableProps = { ploidyOverride?: number };
+type ResultsTableProps = { ploidyOverride?: number; alleleLabels?: AlleleLabels | null };
 
-export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
+export function ResultsTable({ ploidyOverride, alleleLabels }: ResultsTableProps = {}) {
   const { t } = useI18n();
   const dark = useIsDarkMode();
   const scatterPoints = useDataStore((s) => s.scatterPoints);
@@ -131,7 +132,9 @@ export function ResultsTable({ ploidyOverride }: ResultsTableProps = {}) {
                 showAutoCluster,
                 showManualTypes
               );
-              const { label, bgColor, textColor, description } = callAppearance(type, ploidy, dark, t);
+              const appearance = callAppearance(type, ploidy, dark, t);
+              const { bgColor, textColor } = appearance;
+              const { label, description } = callTexts(type, t, appearance, alleleLabels);
 
               const confPct =
                 point.confidence != null ? ` · ${t.confidence} ${Math.round(point.confidence * 100)}%` : "";
