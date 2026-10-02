@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useSessionStore } from '@/stores/session-store';
-import { useSettingsStore } from '@/stores/settings-store';
+import { useSettingsStore, type ScatterOrientation } from '@/stores/settings-store';
 import { useNavigationStore } from '@/stores/navigation-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useAuthStore } from '@/stores/auth-store';
@@ -138,6 +138,13 @@ export type StoredExportKind = 'csv' | 'png' | 'pdf' | 'xlsx' | 'pptx' | 'zip';
 
 type ExportIdentity = { sessionId: string; entry: number; ownerId: string | undefined };
 type ExportConditions = ExportIdentity & { cycle: number | undefined; useRox: boolean; backgroundMode: BackgroundMode; revision: string };
+/** The chosen scatter orientation as trailing export arguments. The default
+ *  (`fam_x`) is what the server assumes, so only the swap is passed on and the
+ *  default request stays exactly as it was. */
+function orientationArg(): [orientation?: ScatterOrientation] {
+  const { scatterOrientation } = useSettingsStore.getState();
+  return scatterOrientation === 'allele2_x' ? [scatterOrientation] : [];
+}
 function stillOwns(identity: ExportIdentity): boolean {
   return useSessionStore.getState().sessionId === identity.sessionId
     && useSessionStore.getState().entryGeneration === identity.entry
@@ -304,7 +311,7 @@ export function useExports(): {
     const current = conditions();
 
     try {
-      const blob = await exportPdf(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision, markerIds);
+      const blob = await exportPdf(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision, markerIds, ...orientationArg());
       saveBlob(blob, current, `snp-report-${current.sessionId.replace(/[^a-zA-Z0-9._-]/g, '_')}.pdf`);
     } catch (error) {
       console.error('Failed to export PDF:', error);
@@ -316,7 +323,7 @@ export function useExports(): {
     const current = conditions();
 
     try {
-      const blob = await exportXlsx(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision);
+      const blob = await exportXlsx(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision, undefined, ...orientationArg());
       saveBlob(blob, current, `snp-report-${current.sessionId.replace(/[^a-zA-Z0-9._-]/g, '_')}.xlsx`);
     } catch (error) {
       console.error('Failed to export XLSX:', error);
@@ -327,7 +334,7 @@ export function useExports(): {
   const exportPPTX = useCallback(async (markerIds?: readonly string[], includeTable?: boolean) => {
     const current = conditions();
     try {
-      const blob = await exportPptx(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision, markerIds, includeTable);
+      const blob = await exportPptx(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision, markerIds, includeTable, ...orientationArg());
       saveBlob(blob, current, `snp-report-${current.sessionId.replace(/[^a-zA-Z0-9._-]/g, '_')}.pptx`);
     } catch (error) {
       console.error('Failed to export PPTX:', error);
@@ -338,7 +345,7 @@ export function useExports(): {
   const exportScatterZipImages = useCallback(async (markerIds?: readonly string[]) => {
     const current = conditions();
     try {
-      const blob = await exportScatterZip(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision, markerIds);
+      const blob = await exportScatterZip(current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision, markerIds, ...orientationArg());
       saveBlob(blob, current, `snp-report-images-${current.sessionId.replace(/[^a-zA-Z0-9._-]/g, '_')}.zip`);
     } catch (error) {
       console.error('Failed to export report images:', error);
@@ -357,10 +364,10 @@ export function useExports(): {
       const args = [current.sessionId, current.useRox, current.backgroundMode, current.cycle, current.revision] as const;
       const blob = kind === 'csv'
         ? await exportCsv(current.sessionId, current.cycle, current.useRox, current.backgroundMode, current.revision)
-        : kind === 'pdf' ? await exportPdf(...args, markerIds)
-          : kind === 'pptx' ? await exportPptx(...args, markerIds, includeTable)
-            : kind === 'zip' ? await exportScatterZip(...args, markerIds)
-              : await exportXlsx(...args);
+        : kind === 'pdf' ? await exportPdf(...args, markerIds, ...orientationArg())
+          : kind === 'pptx' ? await exportPptx(...args, markerIds, includeTable, ...orientationArg())
+            : kind === 'zip' ? await exportScatterZip(...args, markerIds, ...orientationArg())
+              : await exportXlsx(...args, undefined, ...orientationArg());
       saveBlob(blob, current, `snp-${kind}-stored-${current.sessionId.replace(/[^a-zA-Z0-9._-]/g, '_')}.${kind}`, signal);
     } catch (error) {
       console.error(`Failed to export stored ${kind}:`, error);

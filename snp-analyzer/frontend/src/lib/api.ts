@@ -1,3 +1,4 @@
+import type { ScatterOrientation } from '@/stores/settings-store';
 import type {
   BackgroundMode,
   UploadResponse,
@@ -85,8 +86,9 @@ function exportQuery(options: {
   resultRevision?: string;
   markerIds?: readonly string[];
   includeTable?: boolean;
+  orientation?: ScatterOrientation;
 }): string {
-  const { cycle, useRox, background, resultRevision, markerIds, includeTable } = options;
+  const { cycle, useRox, background, resultRevision, markerIds, includeTable, orientation } = options;
   return buildQuery({
     cycle,
     cycle_mode: cycle === undefined ? undefined : 'absolute',
@@ -96,6 +98,8 @@ function exportQuery(options: {
     marker_ids: markerIds === undefined ? undefined : markerIds.join(','),
     // The backend default is true, so only the opt-out is sent.
     include_table: includeTable === false ? false : undefined,
+    // The server default is fam_x, so only the swap is sent.
+    orientation: orientation === 'allele2_x' ? orientation : undefined,
   });
 }
 
@@ -289,9 +293,10 @@ export async function exportPdf(
   background?: BackgroundMode,
   cycle?: number,
   resultRevision?: string,
-  markerIds?: readonly string[]
+  markerIds?: readonly string[],
+  orientation?: ScatterOrientation
 ): Promise<Blob> {
-  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds });
+  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds, orientation });
   return blobFetch(`/api/data/${sid}/export/pdf${query}`);
 }
 
@@ -301,9 +306,10 @@ export async function exportXlsx(
   background?: BackgroundMode,
   cycle?: number,
   resultRevision?: string,
-  markerIds?: readonly string[]
+  markerIds?: readonly string[],
+  orientation?: ScatterOrientation
 ): Promise<Blob> {
-  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds });
+  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds, orientation });
   return blobFetch(`/api/data/${sid}/export/xlsx${query}`);
 }
 
@@ -644,9 +650,10 @@ export async function exportPptx(
   cycle?: number,
   resultRevision?: string,
   markerIds?: readonly string[],
-  includeTable?: boolean
+  includeTable?: boolean,
+  orientation?: ScatterOrientation
 ): Promise<Blob> {
-  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds, includeTable });
+  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds, includeTable, orientation });
   return blobFetch(`/api/data/${sid}/export/pptx${query}`);
 }
 
@@ -656,9 +663,10 @@ export async function exportScatterZip(
   background?: BackgroundMode,
   cycle?: number,
   resultRevision?: string,
-  markerIds?: readonly string[]
+  markerIds?: readonly string[],
+  orientation?: ScatterOrientation
 ): Promise<Blob> {
-  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds });
+  const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds, orientation });
   return blobFetch(`/api/data/${sid}/export/scatter-png.zip${query}`);
 }
 
