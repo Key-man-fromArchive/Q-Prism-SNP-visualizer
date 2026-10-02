@@ -13,6 +13,8 @@ import { useAnalysisStore } from "@/stores/analysis-store";
 import { CycleControl } from "./CycleControl";
 import { ResultsPlotToggle } from "./ResultsPlotToggle";
 import { PlateView } from "./PlateView";
+import { AmplificationQcSummary } from "./AmplificationQcSummary";
+import { qcConfigFromSettings } from "@/lib/amplification-qc";
 import { WellDetailPanel } from "./WellDetailPanel";
 import { ResultsTable } from "./ResultsTable";
 import { AmplificationOverlay } from "./AmplificationOverlay";
@@ -142,13 +144,18 @@ export function AnalysisTab() {
     })();
   }, [sessionId, setWellGroups]);
 
-  const currentRequest = useMemo(() => ({
-    algorithm: "auto" as const, cycle: currentCycle, n_clusters: nClusters,
-    ploidy, background: backgroundMode, use_rox: useRox,
-    threshold_config: { ntc_threshold: ntcThreshold, allele1_ratio_max: allele1RatioMax,
-      allele2_ratio_min: allele2RatioMin, ntc_fam_max: ntcCorner?.fam ?? null,
-      ntc_allele2_max: ntcCorner?.allele2 ?? null },
-  }), [currentCycle, nClusters, ploidy, backgroundMode, useRox, ntcThreshold, allele1RatioMax, allele2RatioMin, ntcCorner]);
+  const qcSettings = useSettingsStore((s) => s.amplificationQc);
+  const currentRequest = useMemo(() => {
+    const amplification_qc = qcConfigFromSettings(qcSettings);
+    return {
+      algorithm: "auto" as const, cycle: currentCycle, n_clusters: nClusters,
+      ploidy, background: backgroundMode, use_rox: useRox,
+      threshold_config: { ntc_threshold: ntcThreshold, allele1_ratio_max: allele1RatioMax,
+        allele2_ratio_min: allele2RatioMin, ntc_fam_max: ntcCorner?.fam ?? null,
+        ntc_allele2_max: ntcCorner?.allele2 ?? null },
+      ...(amplification_qc ? { amplification_qc } : {}),
+    };
+  }, [currentCycle, nClusters, ploidy, backgroundMode, useRox, ntcThreshold, allele1RatioMax, allele2RatioMin, ntcCorner, qcSettings]);
   useCurrentAnalysisRequest(currentRequest, 'analysis');
   const handleAnalyze = () => analyzeCurrent(currentRequest);
   const handleRecommended = () => analyzeRecommended(currentRequest, cycle =>
@@ -307,6 +314,7 @@ export function AnalysisTab() {
             <p data-testid="plate-view-hint" className="text-xs text-text-muted">{t.selectionHelp}</p>
           )}
           <PlateView />
+          <AmplificationQcSummary />
           <WellDetailPanel />
         </div>
       </div>

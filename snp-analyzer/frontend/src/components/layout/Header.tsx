@@ -324,6 +324,11 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
     }
   };
 
+  const detail = sessionInfo?.instrument_detail;
+  const detailName = [detail?.vendor, detail?.model].filter(Boolean).join(' ');
+  const instrumentText = detailName ? t.instrumentChip(detailName) : sessionInfo?.instrument;
+  const instrumentTitle = [detailName || sessionInfo?.instrument, detail?.software].filter(Boolean).join(' · ');
+
   return (
     <>
     <header className="app-header bg-surface border-b border-border">
@@ -335,7 +340,7 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
 
       {sessionInfo && (
         <div id="session-info" className="flex flex-wrap gap-2 items-center min-w-0">
-          <span id="instrument-badge" className="badge" title={sessionInfo.instrument}>{sessionInfo.instrument}</span>
+          <span id="instrument-badge" className="badge" title={instrumentTitle}>{instrumentText}</span>
           <span id="wells-badge" className="badge">{sessionInfo.num_wells} {t.wells}</span>
           <QcBadges />
         </div>

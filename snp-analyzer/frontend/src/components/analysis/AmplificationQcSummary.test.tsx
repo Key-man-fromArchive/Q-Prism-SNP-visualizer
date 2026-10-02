@@ -1,0 +1,63 @@
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, expect, it } from 'vitest';
+import { AmplificationQcSummary } from './AmplificationQcSummary';
+import { useAnalysisStore } from '@/stores/analysis-store';
+import { useDataStore } from '@/stores/data-store';
+import { useLanguageStore } from '@/stores/language-store';
+import { useSettingsStore } from '@/stores/settings-store';
+import type { AmplificationQcResult } from '@/types/api';
+
+const qc: AmplificationQcResult = {
+  enabled: true, available: true, fraction: 1 / 3, fam_threshold: 1.2, allele2_threshold: 0.1,
+  source: 'auto', baseline_cycle: 0, read_cycle: 2, no_amplification_wells: ['A1'],
+};
+const withQc = (patch: Partial<AmplificationQcResult>) =>
+  useAnalysisStore.setState({ result: { algorithm: 'auto', cycle: 1, assignments: {}, amplification_qc: { ...qc, ...patch } } });
+
+beforeEach(() => {
+  useLanguageStore.getState().setLanguage('en');
+  useSettingsStore.getState().resetToDefaults();
+  useSettingsStore.setState({ expertMode: false });
+  useDataStore.setState({ allele2Dye: 'VIC', channelLabels: null });
+  withQc({});
+});
+
+it('states the applied thresholds with the real channel labels and no controls by default', () => {
+  render(<AmplificationQcSummary />);
+  expect(screen.getByTestId('amplification-qc-summary'))
+    .toHaveTextContent('Amplification threshold FAM ≥ 1.20 · VIC ≥ 0.10 (auto, 1/3 of the top 10%)');
+  expect(screen.queryByTestId('amplification-qc-controls')).toBeNull();
+});
+
+it('says the threshold was set by hand when a manual value is used', () => {
+  withQc({ source: 'manual' });
+  render(<AmplificationQcSummary />);
+  expect(screen.getByTestId('amplification-qc-summary')).toHaveTextContent('(manual)');
+});
+
+it('says the check is off when it is disabled', () => {
+  withQc({ enabled: false, source: 'off' });
+  render(<AmplificationQcSummary />);
+  expect(screen.getByTestId('amplification-qc-summary')).toHaveTextContent('Amplification check off');
+});
+
+it('lets an expert switch the check off, set the fraction and type manual thresholds into the saved settings', () => {
+  useSettingsStore.setState({ expertMode: true });
+  render(<AmplificationQcSummary />);
+  fireEvent.change(screen.getByTestId('qc-fraction'), { target: { value: '0.5' } });
+  fireEvent.change(screen.getByTestId('qc-fam-threshold'), { target: { value: '2.5' } });
+  expect(useSettingsStore.getState().amplificationQc).toMatchObject({ fraction: 0.5, famThreshold: 2.5, allele2Threshold: null });
+  fireEvent.change(screen.getByTestId('qc-fam-threshold'), { target: { value: '' } });
+  expect(useSettingsStore.getState().amplificationQc.famThreshold).toBeNull();
+  fireEvent.click(screen.getByTestId('qc-enabled'));
+  expect(useSettingsStore.getState().amplificationQc.enabled).toBe(false);
+});
+
+it('keeps the fraction inside 0.05–0.9', () => {
+  useSettingsStore.setState({ expertMode: true });
+  render(<AmplificationQcSummary />);
+  fireEvent.change(screen.getByTestId('qc-fraction'), { target: { value: '5' } });
+  expect(useSettingsStore.getState().amplificationQc.fraction).toBe(0.9);
+  fireEvent.change(screen.getByTestId('qc-fraction'), { target: { value: '0.01' } });
+  expect(useSettingsStore.getState().amplificationQc.fraction).toBe(0.05);
+});

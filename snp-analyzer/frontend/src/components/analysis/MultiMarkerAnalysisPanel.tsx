@@ -26,6 +26,8 @@ import { chartCategory, callAppearance } from "@/lib/chart-semantics";
 import { MARKER_PALETTE } from "@/lib/constants";
 import { dosageTrustForMarker } from "@/lib/marker-catalog";
 import { analysisWarningTexts } from "@/lib/analysis-warnings";
+import { qcConfigFromSettings, useNoAmplificationWells } from "@/lib/amplification-qc";
+import { AmplificationQcSummary } from "./AmplificationQcSummary";
 import { MarkerScatterPlot } from "./MarkerScatterPlot";
 import { AmplificationCurvePanel } from "./AmplificationCurvePanel";
 import { CycleControl } from "./CycleControl";
@@ -135,8 +137,12 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [markers]);
 
-  const request = useMemo(() => ({ algorithm: ClusteringAlgorithm.AUTO, cycle: currentCycle,
-    n_clusters: 4, background: backgroundMode, use_rox: useRox }), [currentCycle, backgroundMode, useRox]);
+  const qcSettings = useSettingsStore((s) => s.amplificationQc);
+  const request = useMemo(() => {
+    const amplification_qc = qcConfigFromSettings(qcSettings);
+    return { algorithm: ClusteringAlgorithm.AUTO, cycle: currentCycle,
+      n_clusters: 4, background: backgroundMode, use_rox: useRox, ...(amplification_qc ? { amplification_qc } : {}) };
+  }, [currentCycle, backgroundMode, useRox, qcSettings]);
   useCurrentAnalysisRequest(request, 'analysis');
   const inputKey = JSON.stringify([request, inputRevision, markers.map(marker =>
     [marker.id, marker.wells, marker.ploidy, marker.threshold_config])]);
@@ -254,6 +260,14 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     if (!selectedRegion?.genotype_counts) return [];
     return Object.entries(selectedRegion.genotype_counts).filter(([k]) => k !== "excluded");
   }, [selectedRegion]);
+  // Flagged wells keep the backend's `Undetermined` call; they are counted in their own cell instead.
+  const noAmplification = useNoAmplificationWells();
+  const noAmplificationCount = selectedMarker
+    ? selectedMarker.wells.filter((w) => noAmplification.has(w)
+      && [null, undefined, "Undetermined"].includes(selectedRegion?.assignments?.[w])).length
+    : 0;
+  const markerNotAmplified = !!selectedMarker && selectedMarker.wells.length > 0
+    && selectedMarker.wells.every((w) => noAmplification.has(w));
   const observedClasses = countsEntries.filter(([, n]) => n > 0).length;
   const excludedCount = selectedRegion?.genotype_counts?.excluded ?? 0;
   const observedExceedsExpected = selectedMarker
@@ -420,6 +434,10 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                 </span>
               </div>
 
+              {markerNotAmplified && (
+                <p data-testid="marker-no-amplification" className="mb-3 text-sm text-text-muted">{t.ampQcMarkerNone}</p>
+              )}
+
               <div className="mb-3">
                 <WellSelectionToolbar />
               </div>
@@ -495,6 +513,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                     const label = countKeyToLabel(key, selectedMarker.ploidy);
                     const info = chartCategory(label, selectedMarker.ploidy, dark);
                     const short = callAppearance(label, selectedMarker.ploidy, dark, t).label;
+                    const shown = label === "Undetermined" ? Math.max(0, n - noAmplificationCount) : n;
                     return (
                       <div
                         key={key}
@@ -505,12 +524,18 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                           className="text-lg font-bold tabular-nums"
                           style={{ color: info.text }}
                         >
-                          {n}
+                          {shown}
                         </div>
                         <div className="text-[10px] text-text-muted font-mono mt-0.5">{short}</div>
                       </div>
                     );
                   })}
+                  {noAmplificationCount > 0 && (
+                    <div data-testid="genotype-count-no-amplification" className="border border-border rounded-md p-2 text-center">
+                      <div className="text-lg font-bold tabular-nums text-text-muted">{noAmplificationCount}</div>
+                      <div className="text-[10px] text-text-muted mt-0.5">{t.ampQcWellNone}</div>
+                    </div>
+                  )}
                   <div className="border border-border rounded-md p-2 text-center">
                     <div className="text-lg font-bold tabular-nums text-text-muted">
                       {excludedCount}
@@ -521,6 +546,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                   </div>
                 </div>
               </div>
+              <AmplificationQcSummary />
               <WellDetailPanel ploidyOverride={selectedMarker.ploidy} alleleLabels={selectedMarker.allele_labels} />
             </div>
             </div>

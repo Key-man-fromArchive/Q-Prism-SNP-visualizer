@@ -30,6 +30,7 @@ import { useSelectionStore } from "@/stores/selection-store";
 import { useQualityRevealedWell } from '@/hooks/use-quality-reveal';
 import { useWellFilter } from '@/hooks/use-well-filter';
 import { visibleQualityPoint } from '@/lib/quality-display';
+import { NO_AMPLIFICATION, useNoAmplificationWells } from '@/lib/amplification-qc';
 import { useSettingsStore } from "@/stores/settings-store";
 import type { ScatterAspect } from "@/stores/settings-store";
 import { useSessionStore } from "@/stores/session-store";
@@ -62,6 +63,7 @@ type PlotlyGraphDiv = HTMLDivElement & {
 // well-count cap on individual labels.
 const MARKER_SIZE = 8;
 const MARKER_SIZE_NTC = 7;
+const MARKER_SIZE_NO_AMPLIFICATION = 5;
 const MARKER_SIZE_SELECTED = 12;
 
 // Feeds `.analysis-scatter-canvas`'s `aspect-ratio` (index.css, P4-S1-T1);
@@ -165,9 +167,13 @@ export function MarkerScatterPlot({
     const markerPoints = points.filter((p) => wellSet.has(p.well));
     return markerPoints.filter(point => visibleQualityPoint(point, revealedWell, isWellVisible(point.well), focusActive, selectedWellSet));
   }, [points, wellSet, focusActive, selectedWellSet, revealedWell, isWellVisible]);
+  const noAmplification = useNoAmplificationWells();
   const assignmentFor = useCallback(
-    (well: string): string | null => region?.assignments?.[well] ?? null,
-    [region]
+    (well: string): string | null => {
+      const call = region?.assignments?.[well] ?? null;
+      return noAmplification.has(well) && (call === null || call === "Undetermined") ? NO_AMPLIFICATION : call;
+    },
+    [region, noAmplification]
   );
 
   // The axis basis the operator did not pick: NTC basis only on a run that has
@@ -402,7 +408,8 @@ export function MarkerScatterPlot({
         hovertemplate: "%{text}<extra></extra>",
         marker: {
           size: pts.map((p) =>
-            selectedWellSet.has(p.well) ? MARKER_SIZE_SELECTED : typeKey === "NTC" ? MARKER_SIZE_NTC : MARKER_SIZE
+            selectedWellSet.has(p.well) ? MARKER_SIZE_SELECTED : typeKey === "NTC" ? MARKER_SIZE_NTC
+              : typeKey === NO_AMPLIFICATION ? MARKER_SIZE_NO_AMPLIFICATION : MARKER_SIZE
           ),
           color: info.color,
           symbol: info.symbol,
