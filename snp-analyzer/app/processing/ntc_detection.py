@@ -18,7 +18,12 @@ def compute_suggested_cycle(unified: UnifiedData) -> int | None:
     Returns the cycle just before NTC amplification onset, or the last
     amplification cycle when there is no contamination. This is cheap (no
     clustering) so it stays fast on the upload path.
+
+    An instrument-declared ``default_cycle`` (StepOnePlus: first amplification
+    read) wins when it is one of the data's cycles; otherwise it is ignored.
     """
+    if unified.default_cycle is not None and unified.default_cycle in unified.cycles:
+        return unified.default_cycle
     info = _analyze_amplification(unified)
     if info is None:
         return None

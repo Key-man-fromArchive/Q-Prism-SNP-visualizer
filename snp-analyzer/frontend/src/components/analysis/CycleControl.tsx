@@ -6,6 +6,7 @@ import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useNavigationStore, isResultsSurfaceActive } from '@/stores/navigation-store';
 import { useI18n } from '@/hooks/use-i18n';
+import { cycleReadText } from '@/lib/chart-semantics';
 
 export function CycleControl() {
   const { t } = useI18n();
@@ -74,6 +75,8 @@ export function CycleControl() {
     return () => window.removeEventListener('goto-cycle', handler);
   }, [ready, availableCycles, setCycle]);
 
+  const readText = cycleReadText(currentCycle, sessionInfo?.read_labels, t);
+
   // Hide if single cycle and no multiple windows
   const shouldHide =
     sessionInfo &&
@@ -114,6 +117,12 @@ export function CycleControl() {
             </button>
           ))}
         </div>
+      )}
+
+      {readText && (
+        <span id="cycle-read-label" data-testid="cycle-read-label" className="text-sm text-text-muted">
+          {readText}
+        </span>
       )}
 
       {/* Cycle label + slider (hidden if windowCycles <= 1) */}

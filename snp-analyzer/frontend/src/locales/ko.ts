@@ -1058,7 +1058,7 @@ const ko: Translations = {
 
   // P0-T0.3c: StepOnePlus marker allele names
   markerAlleleFamLabel: 'Allele 1 이름 (FAM)',
-  markerAlleleAllele2Label: 'Allele 2 이름 (VIC)',
+  markerAlleleAllele2Label: 'Allele 2 이름 (VIC/HEX)',
   markerAlleleClear: '초기화',
 
   // P0-T0.3c: StepOne cycle labels and read names

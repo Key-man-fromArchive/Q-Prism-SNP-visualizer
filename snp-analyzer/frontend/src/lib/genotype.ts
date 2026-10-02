@@ -9,7 +9,7 @@
  * Keep the label + palette rules in sync with the backend vocabulary.
  */
 import { WELL_TYPE_INFO, UNASSIGNED_TYPE, BRAND_HEX } from './constants';
-import type { MarkerRegion } from '@/types/api';
+import type { AlleleLabels, MarkerRegion } from '@/types/api';
 
 export const MIN_PLOIDY = 2;
 export const MAX_PLOIDY = 8;
@@ -39,10 +39,52 @@ export function isGenotypeLabel(label: string, ploidy: number): boolean {
   return dosageOfLabel(label, ploidy) !== null;
 }
 
-/** Operator-facing call text. Contract stub: P1-D applies the marker's allele names. */
+/** Separator between the two allele names of a diploid call (D-2: one constant to change). */
+export const GENOTYPE_NAME_SEPARATOR = '/';
+
+const MAX_ALLELE_NAME = 32;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
+
+/** Operator-facing call text, the single source of truth for genotype wording.
+ *  Diploid calls use the marker's allele names, FAM-side first (`WT/MT`);
+ *  without names, and for polyploid allele-count strings, the stored label is
+ *  returned unchanged (see `alleleLegend` for the polyploid letters). */
 export function displayGenotype(genotype: string, marker?: MarkerRegion | null): string {
-  void marker;
-  return genotype;
+  const names = marker?.allele_labels;
+  if (!names) return genotype;
+  const dosage = DIPLOID_LABELS.indexOf(genotype);
+  if (dosage < 0) return genotype;
+  // dosage = number of FAM-side (allele 1) copies: 2 -> both, 1 -> one each, 0 -> none
+  const copies = [names.allele2, names.allele2, names.fam, names.fam];
+  const first = copies[dosage + 1];
+  const second = copies[dosage];
+  return `${first}${GENOTYPE_NAME_SEPARATOR}${second}`;
+}
+
+/** Legend for a polyploid marker's `AAAB` strings, or null when none applies. */
+export function alleleLegend(marker: MarkerRegion | null | undefined, allele2Dye: string): string | null {
+  const names = marker?.allele_labels;
+  if (!names || marker.ploidy <= 2) return null;
+  return `A = ${names.fam} (FAM), B = ${names.allele2} (${allele2Dye})`;
+}
+
+/** One-line dye/name pairing for a marker card, or null without names. */
+export function alleleSummary(names: AlleleLabels | null | undefined, allele2Dye: string): string | null {
+  if (!names) return null;
+  return `FAM · ${names.fam} / ${allele2Dye} · ${names.allele2}`;
+}
+
+type AlleleLabelInput = { ok: true; value: AlleleLabels | null } | { ok: false };
+
+/** Validate the two name inputs like the backend (1-32 chars, no control chars).
+ *  Both blank clears the names (`null`); a one-sided pair is invalid. */
+export function parseAlleleLabelInputs(fam: string, allele2: string): AlleleLabelInput {
+  const a = fam.trim();
+  const b = allele2.trim();
+  if (!a && !b) return { ok: true, value: null };
+  const valid = (s: string) => s.length >= 1 && s.length <= MAX_ALLELE_NAME && !CONTROL_CHARS.test(s);
+  return valid(a) && valid(b) ? { ok: true, value: { fam: a, allele2: b } } : { ok: false };
 }
 
 /** Compact label for tables/plate cells. Diploid: A1/Het/A2; higher: allele string. */

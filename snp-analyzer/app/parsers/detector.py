@@ -65,20 +65,20 @@ def detect_and_parse(file_path: str, original_filename: str = "") -> UnifiedData
     else:
         raise ValueError(
             f"Unsupported file extension: {ext}.\n"
-            "Upload .eds (QuantStudio raw), .pcrd (CFX Opus raw), "
+            "Upload .eds (QuantStudio or StepOnePlus raw), .pcrd (CFX Opus raw), "
             ".xls (QuantStudio export), .xlsx (CFX Opus export), "
             "or .zip (CFX XML export) files."
         )
 
 
 def _handle_eds(file_path: str) -> UnifiedData:
-    """Handle QuantStudio .eds raw instrument files."""
+    """Handle QuantStudio and StepOnePlus .eds raw instrument files."""
     from app.parsers.eds_raw import parse_eds
 
     if not zipfile.is_zipfile(file_path):
         raise ValueError(
             "This .eds file appears to be corrupted (not a valid ZIP archive).\n"
-            "Try re-exporting from QuantStudio."
+            "Try re-exporting from QuantStudio or StepOne Software."
         )
     with zipfile.ZipFile(file_path, "r") as zf:
         _validate_zip_archive(zf)

@@ -33,6 +33,7 @@ import { useSelectionStore } from "@/stores/selection-store";
 import { useDataStore } from "@/stores/data-store";
 import { getAmplification } from "@/lib/api";
 import { channelLabels } from "@/lib/channel-labels";
+import { cycleReadText } from "@/lib/chart-semantics";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { useRequestStatus } from "@/hooks/use-request-status";
 import { StatusState } from "@/components/shared/ui";
@@ -172,8 +173,14 @@ export function AmplificationCurvePanel({ active, viewToggle, bare = false }: Am
           : [];
 
         const c = plotlyColors();
+        // Endpoint-only runs (D-9): the x positions are reads, not PCR cycles, so name them.
+        const readTicks = sessionInfo?.has_amplification_curve === false && sessionInfo.read_labels
+          ? fetchedCurve.cycles.map((cycle) => cycleReadText(cycle, sessionInfo.read_labels, t) ?? String(cycle))
+          : null;
         const layout: Partial<Layout> = {
-          xaxis: { title: { text: t.axisCycle }, gridcolor: c.gridColor },
+          xaxis: readTicks
+            ? { tickmode: "array", tickvals: fetchedCurve.cycles, ticktext: readTicks, gridcolor: c.gridColor }
+            : { title: { text: t.axisCycle }, gridcolor: c.gridColor },
           // The curve now lives in the same large plot area as ScatterPlot
           // (no more 135px cap), so automargin only guards against a future,
           // even longer translation -- it isn't compensating for a tight fit.
@@ -206,7 +213,7 @@ export function AmplificationCurvePanel({ active, viewToggle, bare = false }: Am
     return () => {
       cancelled = true;
     };
-  }, [selectedWell, sessionId, useRox, backgroundMode, currentCycle, allele2Dye, roleLabels, hasMultiCycleData, fetchKey, setStatus, setError, t.axisCycle, t.curveReportedSignal]);
+  }, [selectedWell, sessionId, useRox, backgroundMode, currentCycle, allele2Dye, roleLabels, hasMultiCycleData, fetchKey, setStatus, setError, t, sessionInfo]);
 
   // See the `active` prop's doc comment: recover from a first draw that
   // happened while this view was hidden.

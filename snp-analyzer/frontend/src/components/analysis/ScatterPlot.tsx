@@ -15,7 +15,7 @@ import { ownsChartResult } from '@/lib/chart-export-owner';
 import { channelLabels, normalizationLabel, normalizedLabel } from "@/lib/channel-labels";
 import { WELL_TYPE_INFO } from "@/lib/constants";
 import { genotypeClasses, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
-import { chartCategory, callLabel, chartPointState, chartStateText } from "@/lib/chart-semantics";
+import { chartCategory, callLabel, cycleReadText, chartPointState, chartStateText } from "@/lib/chart-semantics";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { axisRangeLayout, dataBounds, visibleBounds } from "@/lib/scatter-axes";
 import { useWellFilter } from "@/hooks/use-well-filter";
@@ -137,6 +137,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
 
   const sessionId = useSessionStore((s) => s.sessionId);
   const hasNormalizationChannel = useSessionStore((s) => s.sessionInfo?.has_rox === true);
+  const readLabels = useSessionStore((s) => s.sessionInfo?.read_labels);
   const useRox = useSettingsStore((s) => s.useRox);
   const axisMode = useSettingsStore((s) => s.axisMode);
   const lockAspect = useSettingsStore((s) => s.lockAspect);
@@ -638,12 +639,13 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     const analysedAt = analysis.result?.analysis_context?.analysed_at;
     const entry = useSessionStore.getState().entryGeneration;
     const ownerId = useAuthStore.getState().user?.id;
+    const readText = cycleReadText(responseIdentity.cycle, readLabels, t);
     const publishExport = (element: HTMLDivElement) => {
       if (token !== exportRender.current || !sessionId || !revision
         || !ownsChartResult(entry, ownerId, revision)) return;
       setActiveChart({ element, sessionId, resultRevision: revision,
         cycle: responseIdentity.cycle, useRox: responseIdentity.useRox, backgroundMode: responseIdentity.backgroundMode, entry, ownerId,
-        caption: `whole-run; cycle ${responseIdentity.cycle}; ${responseIdentity.useRox ? 'reference requested' : 'raw basis'}; background ${responseIdentity.backgroundMode}; visible wells ${visiblePoints.map(point => point.well).sort().join(',')}; revision ${revision}; analysed ${analysedAt ?? 'unknown'}`,
+        caption: `whole-run; cycle ${responseIdentity.cycle}${readText ? ` (${readText})` : ''}; ${responseIdentity.useRox ? 'reference requested' : 'raw basis'}; background ${responseIdentity.backgroundMode}; visible wells ${visiblePoints.map(point => point.well).sort().join(',')}; revision ${revision}; analysed ${analysedAt ?? 'unknown'}`,
         // A new Plotly render may alter filters, traces or layout even when the
         // underlying response has the same wells. Bind the registry record to
         // this render generation and exact visible scope so an in-flight PNG
@@ -703,6 +705,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     scatterPoints,
     allele2Dye,
     roleLabels,
+    readLabels,
     useRox,
     xMin,
     xMax,

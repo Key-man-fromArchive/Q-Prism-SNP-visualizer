@@ -1094,7 +1094,7 @@ const en = {
 
   // P0-T0.3c: StepOnePlus marker allele names
   markerAlleleFamLabel: 'Allele 1 name (FAM)',
-  markerAlleleAllele2Label: 'Allele 2 name (VIC)',
+  markerAlleleAllele2Label: 'Allele 2 name (VIC/HEX)',
   markerAlleleClear: 'Clear',
 
   // P0-T0.3c: StepOne cycle labels and read names
