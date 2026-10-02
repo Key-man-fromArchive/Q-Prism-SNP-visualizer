@@ -1,9 +1,9 @@
-import { useState } from 'react';
 import { useI18n } from '@/hooks/use-i18n';
 import { channelLabels } from '@/lib/channel-labels';
 import { clampQcFraction, DEFAULT_QC_FRACTION, qcSummaryParts } from '@/lib/amplification-qc';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useDataStore } from '@/stores/data-store';
+import { useQcUiStore } from '@/stores/qc-ui-store';
 import { useSettingsStore } from '@/stores/settings-store';
 
 function fractionText(fraction: number): string {
@@ -16,9 +16,6 @@ function parseThreshold(raw: string): number | null {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-/** Kept for the session so the editor stays as the expert left it. */
-let controlsOpen = false;
-
 const INPUT_CLASS = 'w-28 rounded border border-border bg-surface px-1.5 py-1';
 
 /** One line stating which amplification thresholds the last analysis applied; in expert mode also a collapsed editor for them. */
@@ -30,8 +27,8 @@ export function AmplificationQcSummary() {
   const expert = useSettingsStore((s) => s.expertMode);
   const settings = useSettingsStore((s) => s.amplificationQc);
   const setQc = useSettingsStore((s) => s.setAmplificationQc);
-  const [open, setOpenState] = useState(controlsOpen);
-  const setOpen = (v: boolean) => { controlsOpen = v; setOpenState(v); };
+  const open = useQcUiStore((s) => s.controlsOpen);
+  const setOpen = useQcUiStore((s) => s.setControlsOpen);
   const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
 
   const parts = qcSummaryParts(qc, { fam: 'FAM', allele2: allele2Dye || labels.allele2 });

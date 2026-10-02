@@ -87,3 +87,17 @@ it('keeps the fraction inside 0.05–0.9', () => {
   fireEvent.change(screen.getByTestId('qc-fraction'), { target: { value: '0.01' } });
   expect(useSettingsStore.getState().amplificationQc.fraction).toBe(0.05);
 });
+
+it('keeps the editor open across a remount (marker switch / re-analysis)', async () => {
+  const { useQcUiStore } = await import('@/stores/qc-ui-store');
+  useQcUiStore.setState({ controlsOpen: false });
+  useSettingsStore.setState({ expertMode: true });
+  const first = render(<AmplificationQcSummary />);
+  fireEvent.click(screen.getByTestId('qc-adjust'));
+  expect(screen.getByTestId('qc-enabled')).toBeTruthy();
+  first.unmount();
+  withQc({ source: 'manual' });
+  render(<AmplificationQcSummary />);
+  expect(screen.getByTestId('qc-enabled')).toBeTruthy();
+  expect(useQcUiStore.getState().controlsOpen).toBe(true);
+});
