@@ -204,13 +204,15 @@ export function axisRangeLayout(
   };
 }
 
-/** Axis title `FAM (WT)`: the channel dye with the allele name in brackets.
- *  A role label such as `MT1 (VIC)` contributes only its dye; the label itself
- *  is kept when the marker has no allele name. `suffix` carries the
- *  normalization, e.g. ` / ROX`. */
+/** Axis title in one shape on every instrument: `FAM (WT)` when the allele has a
+ *  name, plain `FAM` otherwise. A role label such as `MT1 (VIC)` contributes its
+ *  dye, and its role as the name when no allele name is given (`VIC (MT1)`).
+ *  `suffix` is the single secondary note, the normalization, e.g. ` / ROX`. */
 export function axisTitle(label: string, alleleName: string | null | undefined, suffix = ''): string {
-  const dye = label.match(/\(([^)]*)\)\s*$/)?.[1]?.trim() || label;
-  return `${alleleName ? `${dye} (${alleleName})` : label}${suffix}`;
+  const role = label.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+  const dye = role?.[2]?.trim() || label;
+  const name = alleleName || (role ? role[1].trim() : '');
+  return `${name ? `${dye} (${name})` : dye}${suffix}`;
 }
 
 export const NTC_AMBER = '#f59e0b';

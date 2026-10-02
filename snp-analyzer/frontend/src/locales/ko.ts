@@ -53,6 +53,8 @@ const ko: Translations = {
   qcOnsetRevision: (revision: number | null) => '추천 입력 버전: ' + (revision ?? '미확인'),
   qcLoading: 'QC 조회 중…', qcLoadFailed: 'QC를 확인할 수 없습니다. 다시 조회하세요.', qcRefresh: 'QC 새로고침',
   qcStatusOk: '정상', qcStatusReview: '검토 필요', expertMode: '전문가 모드',
+  qcCauseNtc: (s: string) => ({ warning: 'NTC 경고', no_ntc: 'NTC 없음', insufficient: 'NTC 측정 불충분' }[s] ?? 'NTC 확인 불가'),
+  qcCauseJudgment: (s: string) => ({ stale: '입력 변경됨', legacy_unknown: '기존 판정', missing: '판정 없음' }[s] ?? '판정 확인 불가'),
   expertModeTooltip: '기술 설정과 전체 결과 표를 함께 표시합니다',
   wellTypeNoAmplification: '증폭 없음',
   ampQcTitle: '증폭 기준', ampQcOff: '증폭 확인 꺼짐',
@@ -389,7 +391,7 @@ const ko: Translations = {
 
   // Well Detail Panel
   wellDetails: '웰 상세정보',
-  clickWellToSee: '웰을 클릭하여 상세정보 확인',
+  clickWellToSee: '웰을 클릭하면 상세정보를 볼 수 있습니다',
   noDataForWell: (w: string) => `웰 ${w}의 데이터 없음`,
   well: '웰',
   sample: '샘플',

@@ -526,9 +526,9 @@ export function MarkerScatterPlot({
       // otherwise an explicit new range can be hidden behind the old UI state.
       uirevision: `marker-${marker.id}-${orientation}-${axisMode}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${origin.fam}-${origin.allele2}`,
       shapes,
-      // Compact translucent legend inside the top-right corner; nothing is
-      // reserved under the axis title.
-      margin: { t: 10, r: 10, b: 56, l: 56 },
+      // Compact legend on its own row above the plot area, below the modebar;
+      // nothing is reserved under the axis title.
+      margin: { t: 52, r: 10, b: 56, l: 56 },
       legend: compactLegend(colors),
     };
 

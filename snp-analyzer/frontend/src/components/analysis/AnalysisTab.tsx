@@ -16,6 +16,8 @@ import { PlateView } from "./PlateView";
 import { AmplificationQcSummary } from "./AmplificationQcSummary";
 import { qcConfigFromSettings } from "@/lib/amplification-qc";
 import { WellDetailPanel } from "./WellDetailPanel";
+import { GenotypeSummary } from "./GenotypeSummary";
+import { countCalls } from "@/lib/genotype-counts";
 import { ResultsTable } from "./ResultsTable";
 import { AmplificationOverlay } from "./AmplificationOverlay";
 import { WellTypePopup } from "./WellTypePopup";
@@ -173,6 +175,15 @@ export function AnalysisTab() {
     [wellGroups]
   );
 
+  // Whole-plate call summary, shown even when nothing could be called
+  // (all wells "Undetermined" or NTC), like the per-marker view.
+  const assignments = useAnalysisStore((s) => s.result?.assignments);
+  const plateWells = useDataStore((s) => s.plateWells);
+  const callSummary = useMemo(
+    () => countCalls({ ...assignments, ...wellTypeAssignments }, plateWells.map((well) => well.well), ploidy),
+    [assignments, wellTypeAssignments, plateWells, ploidy],
+  );
+
   const totalWells = useMemo(() => {
     if (!wellGroups) return 0;
     const all = new Set<string>();
@@ -307,6 +318,7 @@ export function AnalysisTab() {
         <ResultsPlotToggle />
 
         <div className="analysis-review-stack">
+          <GenotypeSummary ploidy={ploidy} entries={callSummary.entries} excluded={callSummary.excluded} />
           {/* P4-S3-T1 (FB-03 §3-2): only meaningful before anything is
               selected -- moved here from WellSelectionToolbar's always-on
               banner, as the plate view's secondary hint. */}

@@ -123,6 +123,21 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAllele
   const keyboardGrid = useWellGrid(plateRows, plateCols, plateWells.map(well => well.well));
   const isLargePlate = plateCols.length > 12;
 
+  // The scroll instruction is only worth the space when the plate really overflows.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [overflowX, setOverflowX] = useState(false);
+  useEffect(() => {
+    const region = scrollRef.current;
+    if (!region) return;
+    const measure = () => setOverflowX(region.scrollWidth > region.clientWidth + 1);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(region);
+    if (region.firstElementChild) observer.observe(region.firstElementChild);
+    return () => observer.disconnect();
+  }, [status, plateCols.length, plateRows.length]);
+
   // Build wellMap for quick lookup
   const wellMap = useMemo(() => {
     const map = new Map();
@@ -314,9 +329,9 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAllele
         <StatusState variant="empty" message={t.plateEmpty} />
       )}
 
-      <div role="region" aria-label={t.plateScrollHint} tabIndex={0} data-testid="plate-scroll-region"
+      <div role="region" aria-label={t.plateScrollHint} tabIndex={0} data-testid="plate-scroll-region" ref={scrollRef}
         style={{ overflowX: 'auto', display: status === "ready" && plateWells.length > 0 ? undefined : 'none' }}>
-      <p className="text-xs text-text-muted mb-1">{t.plateScrollHint}</p>
+      {overflowX && <p className="text-xs text-text-muted mb-1" data-testid="plate-scroll-hint">{t.plateScrollHint}</p>}
       <div
         id="plate-grid"
         role="grid"
@@ -329,7 +344,9 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAllele
           gridTemplateColumns: `auto repeat(${plateCols.length}, 1fr)`,
           gridTemplateRows: `auto repeat(${plateRows.length}, 1fr)`,
           gap: '2px',
-          maxWidth: isLargePlate ? '820px' : '380px',
+          // Square cells follow the column width, so a 24-column plate capped at
+          // 600px stays ~16 rows * 25px tall and the call summary remains in view.
+          maxWidth: isLargePlate ? '600px' : '380px',
           margin: '0 auto'
         }}
       >
