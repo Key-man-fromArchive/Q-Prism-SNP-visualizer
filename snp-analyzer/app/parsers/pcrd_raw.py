@@ -30,6 +30,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 from app.models import UnifiedData, WellCycleData, ProtocolStep, DataWindow
+from app.parsers.instrument_detail import cfx_instrument_label, pcrd_instrument_detail
 
 WELL_ROWS = "ABCDEFGH"
 def _load_pcrd_password() -> bytes | None:
@@ -147,8 +148,10 @@ def parse_pcrd(file_path: str) -> UnifiedData:
     for wells in imported_markers.values():
         wells.sort(key=_well_sort_key)
 
+    instrument_detail = pcrd_instrument_detail(root)
     return UnifiedData(
-        instrument="CFX Opus (raw)",
+        instrument=cfx_instrument_label(instrument_detail, " (raw)"),
+        instrument_detail=instrument_detail,
         allele2_dye=allele2_dye,
         wells=sorted(wells_set, key=_well_sort_key),
         cycles=sorted(cycles_set),

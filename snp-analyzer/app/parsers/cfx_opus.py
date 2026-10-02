@@ -16,7 +16,18 @@ import os
 import openpyxl
 
 from app.models import UnifiedData, WellCycleData, DataWindow
+from app.parsers.instrument_detail import cfx_export_detail, cfx_instrument_label
 from app.parsers.xlsx_fixer import fix_cfx_xlsx, needs_fixing
+
+
+def _identity(wb: openpyxl.Workbook) -> dict:
+    """``instrument`` and ``instrument_detail`` fields from the Run Information sheet, if any."""
+    sheet = next(
+        (wb[name] for name in wb.sheetnames if name.strip().lower() == "run information"), None
+    )
+    rows = sheet.iter_rows(values_only=True) if sheet is not None else []
+    detail = cfx_export_detail(rows)
+    return {"instrument": cfx_instrument_label(detail), "instrument_detail": detail}
 
 
 def parse_cfx_opus(file_path: str) -> UnifiedData:
@@ -76,7 +87,7 @@ def _parse_workbook(wb: openpyxl.Workbook) -> UnifiedData:
     sorted_cycles = sorted(cycles_set)
     window_name = "Amplification" if len(sorted_cycles) > 1 else "End Point"
     return UnifiedData(
-        instrument="CFX Opus",
+        **_identity(wb),
         allele2_dye=allele2_dye,
         wells=sorted(wells_set, key=_well_sort_key),
         cycles=sorted_cycles,
@@ -160,7 +171,7 @@ def parse_cfx_endpoint(file_path: str) -> UnifiedData:
             wells_set.add(well)
 
         return UnifiedData(
-            instrument="CFX Opus",
+            **_identity(wb),
             allele2_dye=allele2_dye,
             wells=sorted(wells_set, key=_well_sort_key),
             cycles=[1],
@@ -267,7 +278,7 @@ def parse_cfx_allelic(file_path: str) -> UnifiedData:
                     sample_names[well_str] = str(sample)
 
         return UnifiedData(
-            instrument="CFX Opus",
+            **_identity(wb),
             allele2_dye="HEX",
             wells=sorted(wells_set, key=_well_sort_key),
             cycles=[1],

@@ -21,7 +21,7 @@ from app.import_models import (
     ReporterChannel,
     ValidationIssue,
 )
-from app.models import UnifiedData, WellCycleData
+from app.models import InstrumentDetail, UnifiedData, WellCycleData
 from app.parsers.detector import _validate_zip_archive
 from app.parsers.vendor_presets import apply_vendor_presets
 
@@ -621,8 +621,10 @@ def _to_duplex_unified(import_run: ImportRun) -> UnifiedData:
                 normalization_value=normalization_value,
             )
         )
+    detail = import_run.metadata.get("instrument_detail")
     return UnifiedData(
         instrument=import_run.instrument,
+        instrument_detail=InstrumentDetail(**detail) if isinstance(detail, dict) else None,
         allele2_dye=mt1.dye_name or mt1.channel_id,
         wells=sorted({reading.well for reading in import_run.readings}),
         cycles=sorted({reading.cycle for reading in import_run.readings}),
