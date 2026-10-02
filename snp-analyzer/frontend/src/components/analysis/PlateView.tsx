@@ -32,11 +32,13 @@ type PlateViewProps = {
   scopeWells?: readonly string[];
   ploidyOverride?: number;
   alleleLabels?: AlleleLabels | null;
+  /** Each well's own marker names (wells in no marker are unnamed); replaces `alleleLabels` when given. */
+  wellAlleleLabels?: ReadonlyMap<string, AlleleLabels | null>;
   /** Wells that belong to no marker: drawn grey and counted in a note. */
   unassignedWells?: readonly string[];
 };
 
-export function PlateView({ scopeWells, ploidyOverride, alleleLabels, unassignedWells }: PlateViewProps = {}) {
+export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAlleleLabels, unassignedWells }: PlateViewProps = {}) {
   const { t } = useI18n();
   const dark = useIsDarkMode();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -394,7 +396,7 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, unassigned
               const wellColor = isEmpty ? '' : isUnassigned ? wellInfo(null, ploidy, dark).color : getWellColor(wellData);
               const shownCall = displayedCall(wellData, showManualTypes, showAutoCluster);
               const baseCall = callAppearance(shownCall, ploidy, dark, t);
-              const call = { ...baseCall, ...callTexts(shownCall, t, baseCall, alleleLabels) };
+              const call = { ...baseCall, ...callTexts(shownCall, t, baseCall, wellAlleleLabels ? wellAlleleLabels.get(wellId) : alleleLabels) };
               const cellSize = isLargePlate ? '18px' : '28px';
 
               const stateSuffix = isSelected || isMultiSelected
@@ -469,6 +471,7 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, unassigned
           ploidy={ploidy}
           dark={dark}
           alleleLabels={alleleLabels}
+          labelsByWell={wellAlleleLabels}
         />
       )}
 

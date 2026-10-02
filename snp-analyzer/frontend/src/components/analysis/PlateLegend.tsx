@@ -10,6 +10,8 @@ import type { AlleleLabels, PlateWell } from '@/types/api';
 
 type PlateLegendProps = {
   alleleLabels?: AlleleLabels | null;
+  /** Each well's own marker names; when given it replaces `alleleLabels`. */
+  labelsByWell?: ReadonlyMap<string, AlleleLabels | null>;
   wells: readonly PlateWell[];
   showManualTypes: boolean;
   showAutoCluster: boolean;
@@ -41,21 +43,33 @@ function orderKeys(keys: readonly string[], ploidy: number): string[] {
  * calls yet, so it never shows up as an empty box. Every visual (color,
  * glyph, label) is derived from callAppearance(), the same function
  * PlateView uses to paint each well, so the two can never drift apart. */
-export function PlateLegend({ wells, showManualTypes, showAutoCluster, ploidy, dark, alleleLabels }: PlateLegendProps) {
+export function PlateLegend({ wells, showManualTypes, showAutoCluster, ploidy, dark, alleleLabels, labelsByWell }: PlateLegendProps) {
   const { t } = useI18n();
 
   const entries = useMemo(() => {
     const counts = new Map<string, number>();
+    const names = new Map<string, Set<string>>();
     for (const well of wells) {
       const key = displayedCall(well, showManualTypes, showAutoCluster);
       if (key === null) continue;
       counts.set(key, (counts.get(key) ?? 0) + 1);
+      const own = labelsByWell ? labelsByWell.get(well.well) : alleleLabels;
+      const seen = names.get(key) ?? new Set<string>();
+      seen.add(own ? `${own.fam}\u0000${own.allele2}` : '');
+      names.set(key, seen);
     }
     return orderKeys([...counts.keys()], ploidy).map((key) => {
       const base = callAppearance(key, ploidy, dark, t);
-      return { key, count: counts.get(key)!, appearance: { ...base, ...callTexts(key, t, base, alleleLabels) } };
+      // Names only when every counted well agrees on them; mixed -> canonical wording.
+      const first = labelsByWell
+        ? wells.find((w) => displayedCall(w, showManualTypes, showAutoCluster) === key && labelsByWell.get(w.well))
+        : undefined;
+      const shared = labelsByWell
+        ? (names.get(key)!.size === 1 && first ? labelsByWell.get(first.well) : null)
+        : alleleLabels;
+      return { key, count: counts.get(key)!, appearance: { ...base, ...callTexts(key, t, base, shared) } };
     });
-  }, [wells, showManualTypes, showAutoCluster, ploidy, dark, t, alleleLabels]);
+  }, [wells, showManualTypes, showAutoCluster, ploidy, dark, t, alleleLabels, labelsByWell]);
 
   if (entries.length === 0) return null;
 

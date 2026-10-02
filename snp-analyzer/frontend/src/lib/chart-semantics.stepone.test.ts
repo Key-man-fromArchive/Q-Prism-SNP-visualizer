@@ -45,6 +45,16 @@ describe('markerCallLabel', () => {
   });
 });
 
+describe('axisTitle role label', () => {
+  it('does not repeat an allele name the role label already carries', () => {
+    expect(axisTitle('WT (FAM)', 'WT')).toBe('WT (FAM)');
+    expect(axisTitle('MT (VIC)', 'MT', ' / ROX')).toBe('MT (VIC) / ROX');
+  });
+  it('keeps a different allele name', () => {
+    expect(axisTitle('MT1 (VIC)', 'MT')).toBe('MT1 (VIC) · MT');
+  });
+});
+
 describe('axisTitle', () => {
   it('pairs dye and allele name', () => {
     expect(axisTitle('FAM', 'WT')).toBe('FAM · WT');
