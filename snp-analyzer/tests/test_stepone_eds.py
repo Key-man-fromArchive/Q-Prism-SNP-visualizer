@@ -281,6 +281,37 @@ def test_unused_marker_is_dropped(tmp_path):
     assert "Unused" not in _parse(tmp_path, options).imported_marker_alleles
 
 
+def _marker_xml(name, a1, a2):
+    return (
+        f"<Markers><Name>{name}</Name>"
+        f"<Allele1><Name>{a1}</Name><Reporter>VIC</Reporter></Allele1>"
+        f"<Allele2><Name>{a2}</Name><Reporter>FAM</Reporter></Allele2></Markers>"
+    )
+
+
+def test_duplicate_markers_with_same_mapping_collapse_to_one():
+    exp = f"<Experiment>{_marker_xml('M', 'A', 'B')}{_marker_xml('M', 'A', 'B')}</Experiment>"
+    assert stepone_eds.parse_marker_alleles(exp.encode(), {"M"}) == {
+        "M": AlleleLabels(fam="B", allele2="A")
+    }
+
+
+def test_duplicate_markers_with_conflicting_mapping_get_no_names():
+    exp = (
+        f"<Experiment>{_marker_xml('M', 'A', 'B')}{_marker_xml('M', 'C', 'D')}"
+        f"{_marker_xml('N', 'E', 'F')}</Experiment>"
+    )
+    result = stepone_eds.parse_marker_alleles(exp.encode(), {"M", "N"})
+    assert "M" not in result
+    assert result["N"] == AlleleLabels(fam="F", allele2="E")
+
+
+def test_text_parser_handles_nan_summary_glued_to_next_record():
+    text = _tiny().replace("0\t0\t5.5\t", "0\t0\tnan\t")
+    records = stepone_eds.parse_multicomponent_text(text)
+    assert records[(0, 1)] == {"FAM": 9.0, "ROX": 10.0, "VIC": 11.0}
+
+
 def test_overlong_allele_name_is_skipped_not_fatal():
     exp = (
         "<Experiment><Markers><Name>M</Name>"

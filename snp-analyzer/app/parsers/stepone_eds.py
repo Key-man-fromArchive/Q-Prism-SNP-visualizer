@@ -94,7 +94,7 @@ def _consume_line(
     """Handle one non-continuation line; return how many continuation lines follow."""
     if len(fields) < SUMMARY_FIELDS:
         raise _fail(line_no, "too few fields")
-    if fields[2].strip().isalpha():
+    if fields[2].strip().upper() in DYES:
         if len(fields) != RECORD_FIELDS:
             raise _fail(line_no, "unexpected field count")
         record = fields
@@ -265,15 +265,15 @@ def _marker_labels(marker: ET.Element) -> AlleleLabels | None:
 
 def parse_marker_alleles(exp_xml: bytes, used: set[str]) -> dict[str, AlleleLabels]:
     """Allele names per marker in ``used`` (markers placed on the plate)."""
-    labels: dict[str, AlleleLabels] = {}
+    seen: dict[str, AlleleLabels | None] = {}
     for marker in ET.fromstring(exp_xml).iter("Markers"):
         name = marker.findtext("Name", "").strip()
         if name not in used:
             continue
         parsed = _marker_labels(marker)
-        if parsed is not None:
-            labels[name] = parsed
-    return labels
+        # Repeated entries must agree; a conflict leaves the marker unnamed.
+        seen[name] = parsed if seen.get(name, parsed) == parsed else None
+    return {name: parsed for name, parsed in seen.items() if parsed is not None}
 
 
 # --- assembly -------------------------------------------------------------
