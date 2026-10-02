@@ -92,6 +92,8 @@ it('plate view greys marker-unassigned wells and states their count', async () =
   expect(grey.style.backgroundColor).not.toBe(coloured.style.backgroundColor);
   expect(coloured.dataset.unassigned).toBeUndefined();
   expect(view.container.querySelector('[data-well="A1"]')!.getAttribute('aria-label')).toContain('WT/WT');
+  expect(grey.getAttribute('aria-label')).toContain(en.genotypeDisplayUnassignedWells);
+  expect(coloured.getAttribute('aria-label')).not.toContain(en.genotypeDisplayUnassignedWells);
 });
 
 it('plate view shows no unassigned note when every well belongs to a marker', async () => {
