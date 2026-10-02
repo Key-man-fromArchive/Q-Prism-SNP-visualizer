@@ -29,6 +29,13 @@ it('states the applied thresholds with the real channel labels and no controls b
   expect(screen.queryByTestId('amplification-qc-controls')).toBeNull();
 });
 
+it('names only the dyes in the summary even when the run has WT/MT role labels', () => {
+  useDataStore.setState({ allele2Dye: 'HEX', channelLabels: { fam: 'WT (FAM)', allele2: 'MT1 (HEX)', normalization: null } });
+  render(<AmplificationQcSummary />);
+  expect(screen.getByTestId('amplification-qc-summary'))
+    .toHaveTextContent('Amplification threshold FAM ≥ 1.20 · HEX ≥ 0.10 (auto, 1/3 of the top 10%)');
+});
+
 it('says the threshold was set by hand when a manual value is used', () => {
   withQc({ source: 'manual' });
   render(<AmplificationQcSummary />);

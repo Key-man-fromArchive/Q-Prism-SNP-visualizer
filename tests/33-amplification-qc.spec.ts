@@ -57,12 +57,16 @@ test.describe('amplification check', () => {
 
     // A threshold no well can reach flags every well, and the summary says it was typed in.
     await page.getByTestId('qc-fam-threshold').fill('1000000');
+    await expect(page.getByTestId('amplification-qc-summary')).toContainText('(partly manual)');
+    await page.getByTestId('qc-allele2-threshold').fill('1000000');
     await expect(page.getByTestId('amplification-qc-summary')).toContainText('(manual)');
+    await expect(page.getByTestId('amplification-qc-summary')).not.toContainText('partly');
     await pickMarker(page, 'QPrism3');
     await expect(page.getByTestId('marker-no-amplification')).toBeVisible();
 
     // Blank means automatic again.
     await page.getByTestId('qc-fam-threshold').fill('');
+    await page.getByTestId('qc-allele2-threshold').fill('');
     await expect(page.getByTestId('amplification-qc-summary')).toHaveText(SUMMARY);
     await expect(page.getByTestId('marker-no-amplification')).toHaveCount(0);
 

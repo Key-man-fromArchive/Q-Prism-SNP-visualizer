@@ -26,7 +26,7 @@ export function AmplificationQcSummary() {
   const setQc = useSettingsStore((s) => s.setAmplificationQc);
   const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
 
-  const parts = qcSummaryParts(qc, labels);
+  const parts = qcSummaryParts(qc, { fam: 'FAM', allele2: allele2Dye || labels.allele2 });
   const checkedOff = (qc && !qc.enabled) || (!qc && !settings.enabled);
   const sourceText = !parts ? '' : parts.source === 'manual' ? t.ampQcSourceManual
     : parts.source === 'mixed' ? t.ampQcSourceMixed : t.ampQcSourceAuto(fractionText(qc?.fraction ?? settings.fraction));
