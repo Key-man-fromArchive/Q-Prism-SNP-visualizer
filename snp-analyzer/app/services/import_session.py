@@ -66,6 +66,7 @@ def create_session_from_import(
         default_cycle=getattr(unified, "default_cycle", None),
         read_labels=getattr(unified, "read_labels", None),
         has_amplification_curve=getattr(unified, "has_amplification_curve", True),
+        instrument_detail=getattr(unified, "instrument_detail", None),
     )
 
 
