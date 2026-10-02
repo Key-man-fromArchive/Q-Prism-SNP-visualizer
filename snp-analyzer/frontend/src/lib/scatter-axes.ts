@@ -59,6 +59,47 @@ export function dataBounds(points: Extent[], ntcCorner?: Extent | null): AxisBou
   };
 }
 
+/** Data-fit bounds: 5% margin around the points, with the lower edge snapped
+ *  to 0 only when the minimum is within 10% of the maximum of 0 (so a plot
+ *  of values near zero keeps its origin), and below 0 only when a point
+ *  actually is. The NTC corner is included only when the caller asks (edit
+ *  mode), so a hidden corner never stretches the axes. */
+export function fitBounds(points: Extent[], ntcCorner?: Extent | null): AxisBounds {
+  const finitePoints = points.filter((p) => Number.isFinite(p.fam) && Number.isFinite(p.allele2));
+  const xs = finitePoints.map((p) => p.fam);
+  const ys = finitePoints.map((p) => p.allele2);
+  if (ntcCorner && Number.isFinite(ntcCorner.fam) && Number.isFinite(ntcCorner.allele2)) {
+    xs.push(ntcCorner.fam);
+    ys.push(ntcCorner.allele2);
+  }
+  if (xs.length === 0) return { xMin: 0, xMax: 1, yMin: 0, yMax: 1 };
+  const [xMin, xMax] = fitAxis(Math.min(...xs), Math.max(...xs));
+  const [yMin, yMax] = fitAxis(Math.min(...ys), Math.max(...ys));
+  return { xMin, xMax, yMin, yMax };
+}
+
+function fitAxis(lo: number, hi: number): [number, number] {
+  const pad = Math.max((hi - lo) * 0.05, Math.abs(hi) * 0.02, 1e-6);
+  let min = lo - pad;
+  if (lo >= 0) min = lo <= hi * 0.1 ? 0 : Math.max(0, min);
+  return [min, hi + pad];
+}
+
+/** The mode in force. An operator's dropdown choice always wins; otherwise a
+ *  run with NTC wells keeps the NTC basis and one without fits the data. */
+export function effectiveAxisMode(mode: AxisMode, chosen: boolean, hasNtc: boolean): AxisMode {
+  if (chosen) return mode;
+  return hasNtc ? mode : 'auto';
+}
+
+type NtcCandidate = { well: string; manual_type?: string | null; auto_cluster?: string | null };
+
+/** Whether the run has NTC wells: the current call (manual over auto) of a
+ *  point, or a well-type assignment (manual or instrument-designated). */
+export function hasNtcWells(points: NtcCandidate[], wellTypes: Record<string, string>): boolean {
+  return points.some((p) => (p.manual_type ?? p.auto_cluster) === 'NTC' || wellTypes[p.well] === 'NTC');
+}
+
 /** The bounds a plot in `mode` is actually showing.
  *
  *  Used for two things: the explicit `range` handed to Plotly in the modes
@@ -70,10 +111,11 @@ export function visibleBounds(
   data: AxisBounds,
   manual: AxisBounds,
   ratioOrigin?: Extent | null,
-  offsets: AxisOffsets = { x: 0, y: 0 }
+  offsets: AxisOffsets = { x: 0, y: 0 },
+  fit?: AxisBounds
 ): AxisBounds {
   if (mode === 'manual') return manual;
-  if (mode === 'auto') return data;
+  if (mode === 'auto') return fit ?? data;
   // `zero` is retained as the persisted mode name for compatibility. Its UI
   // meaning is now NTC-origin mode: leave the configured amount of space
   // below/left of the ratio origin. Negative optical values still win over
@@ -113,23 +155,94 @@ export function axisRangeLayout(
       yaxis: { autorange: false, range: [bounds.yMin, bounds.yMax], rangemode: 'normal', ...aspect },
     };
   }
-  if (mode === 'auto') {
-    return {
-      xaxis: { autorange: true, range: undefined, rangemode: 'normal' },
-      yaxis: { autorange: true, range: undefined, rangemode: 'normal', ...aspect },
-    };
-  }
+  // `auto` (data fit) and the NTC basis both pin the range their bounds give.
   return {
     xaxis: { autorange: false, range: [bounds.xMin, bounds.xMax], rangemode: 'normal' },
     yaxis: { autorange: false, range: [bounds.yMin, bounds.yMax], rangemode: 'normal', ...aspect },
   };
 }
 
-/** Axis title `FAM · WT`; the bare dye when the marker has no allele name. `suffix` carries the normalization, e.g. ` / ROX`. */
-export function axisTitle(dye: string, alleleName: string | null | undefined, suffix = ''): string {
-  // A role label such as `WT (FAM)` already names the allele: don't repeat it.
-  const roleName = dye.replace(/\s*\([^)]*\)\s*$/, '');
-  return `${alleleName && roleName !== alleleName ? `${dye} · ${alleleName}` : dye}${suffix}`;
+/** Axis title `FAM (WT)`: the channel dye with the allele name in brackets.
+ *  A role label such as `MT1 (VIC)` contributes only its dye; the label itself
+ *  is kept when the marker has no allele name. `suffix` carries the
+ *  normalization, e.g. ` / ROX`. */
+export function axisTitle(label: string, alleleName: string | null | undefined, suffix = ''): string {
+  const dye = label.match(/\(([^)]*)\)\s*$/)?.[1]?.trim() || label;
+  return `${alleleName ? `${dye} (${alleleName})` : label}${suffix}`;
+}
+
+export const NTC_AMBER = '#f59e0b';
+/** Resting colour of the genotype boundary lines: a little darker than the
+ *  theme grid (#e5e7eb / #2d3040) in both themes. */
+const BOUNDARY_REST_COLOR = '#9ca3af';
+/** The NTC corner marker: small by default, the large drag handle in edit mode. */
+export const NTC_MARKER_SIZE = 8;
+export const NTC_HANDLE_SIZE = 13;
+
+/** Boundary-line `line` style: thin and quiet at rest, bold only while the
+ *  thresholds are being edited. */
+export function boundaryLineStyle(editing: boolean, boldColor: string) {
+  return editing
+    ? { color: boldColor, width: 2, dash: 'dot' as const }
+    : { color: BOUNDARY_REST_COLOR, width: 1, dash: 'dot' as const };
+}
+
+/** The NTC threshold rectangle and its two dashed edges. Drawn only while the
+ *  thresholds are edited; the edges stop at the data range (`reach`) instead of
+ *  running to the figure edge. At rest the small corner diamond is all that
+ *  remains. */
+export function ntcThresholdShapes(
+  editing: boolean,
+  corner: Extent,
+  bounds: AxisBounds,
+  reach: { x: number; y: number }
+): Record<string, unknown>[] {
+  if (!editing) return [];
+  const edge = { color: NTC_AMBER, width: 1, dash: 'dash' };
+  return [
+    {
+      type: 'rect',
+      x0: bounds.xMin,
+      y0: bounds.yMin,
+      x1: corner.fam,
+      y1: corner.allele2,
+      fillcolor: 'rgba(245, 158, 11, 0.13)',
+      line: { width: 0 },
+      layer: 'below',
+    },
+    {
+      type: 'line',
+      x0: corner.fam,
+      y0: bounds.yMin,
+      x1: corner.fam,
+      y1: Math.min(bounds.yMax, Math.max(reach.y, corner.allele2)),
+      line: edge,
+    },
+    {
+      type: 'line',
+      x0: bounds.xMin,
+      y0: corner.allele2,
+      x1: Math.min(bounds.xMax, Math.max(reach.x, corner.fam)),
+      y1: corner.allele2,
+      line: edge,
+    },
+  ];
+}
+
+/** Legend-only trace for the boundary lines (a dotted grey stroke). */
+export function boundaryLegendTrace(name: string, editing: boolean, boldColor: string): Record<string, unknown> {
+  return {
+    x: [null],
+    y: [null],
+    mode: 'lines',
+    type: 'scatter',
+    uid: 'legend-boundary',
+    name,
+    hoverinfo: 'skip',
+    line: boundaryLineStyle(editing, boldColor),
+    selected: { marker: { opacity: 1 } },
+    unselected: { marker: { opacity: 1 } },
+  };
 }
 
 /** Round a bound to something an operator can read in a number input without

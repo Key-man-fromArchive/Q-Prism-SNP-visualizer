@@ -10,8 +10,16 @@ beforeEach(() => {
   useSettingsStore.getState().resetToDefaults();
 });
 
-it('defaults scatterAspect to 4:3', () => {
-  expect(useSettingsStore.getState().scatterAspect).toBe('4:3');
+it('defaults scatterAspect to 3:4 (portrait)', () => {
+  expect(useSettingsStore.getState().scatterAspect).toBe('3:4');
+});
+
+it('tracks whether the operator picked the axis mode', () => {
+  expect(useSettingsStore.getState().axisModeChosen).toBe(false);
+  useSettingsStore.getState().setAxisMode('zero');
+  expect(useSettingsStore.getState().axisModeChosen).toBe(true);
+  useSettingsStore.getState().resetToDefaults();
+  expect(useSettingsStore.getState().axisModeChosen).toBe(false);
 });
 
 it('setScatterAspect switches to 1:1 and back', () => {
@@ -21,10 +29,10 @@ it('setScatterAspect switches to 1:1 and back', () => {
   expect(useSettingsStore.getState().scatterAspect).toBe('4:3');
 });
 
-it('resetToDefaults restores 4:3 after it was changed', () => {
+it('resetToDefaults restores 3:4 after it was changed', () => {
   useSettingsStore.getState().setScatterAspect('1:1');
   useSettingsStore.getState().resetToDefaults();
-  expect(useSettingsStore.getState().scatterAspect).toBe('4:3');
+  expect(useSettingsStore.getState().scatterAspect).toBe('3:4');
 });
 
 // applyPreset (src/components/settings/apply-preset.ts, out of this task's
@@ -34,7 +42,7 @@ it('resetToDefaults restores 4:3 after it was changed', () => {
 // scatterAspect key at all) must not disturb the default.
 it('leaves scatterAspect at its default when an unrelated (legacy-shaped) partial update is applied', () => {
   useSettingsStore.setState({ useRox: false, fixAxis: true, xMin: 1, xMax: 5 });
-  expect(useSettingsStore.getState().scatterAspect).toBe('4:3');
+  expect(useSettingsStore.getState().scatterAspect).toBe('3:4');
 });
 
 // zustand's persist `merge` defaults to `{ ...currentState, ...persistedState }`.
@@ -47,7 +55,7 @@ it('models persist merge of a legacy payload without scatterAspect: default surv
   const currentState = useSettingsStore.getState();
   const legacyPersisted = { useRox: false, ntcThreshold: 0.2 } as Partial<typeof currentState>;
   const merged = { ...currentState, ...legacyPersisted };
-  expect(merged.scatterAspect).toBe('4:3');
+  expect(merged.scatterAspect).toBe('3:4');
 });
 
 // P27-LOCK-DEFAULT (feedback-2026-09-11): raw RFU is routinely ~4-8x wider in

@@ -19,8 +19,9 @@ test('scatter canvas honours the chosen aspect ratio at 1920x911', async ({ page
     const b = await canvas.boundingBox();
     return { w: Math.round(b!.width), h: Math.round(b!.height), ratio: +(b!.width / b!.height).toFixed(3) };
   };
-  const four3 = await read();
-  console.log('ASPECT 4:3 →', JSON.stringify(four3));
+  // The default is portrait 3:4 (P5).
+  const three4 = await read();
+  console.log('ASPECT 3:4 →', JSON.stringify(three4));
 
   await page.evaluate(() => {
     const raw = localStorage.getItem('snp-analyzer-settings');
@@ -34,7 +35,7 @@ test('scatter canvas honours the chosen aspect ratio at 1920x911', async ({ page
   const one1 = await read();
   console.log('ASPECT 1:1 →', JSON.stringify(one1));
 
-  expect(Math.abs(four3.ratio - 4 / 3)).toBeLessThan(0.05);
-  expect(four3.h).toBeGreaterThanOrEqual(600);
+  expect(Math.abs(three4.ratio - 3 / 4)).toBeLessThan(0.05);
+  expect(three4.h).toBeGreaterThanOrEqual(360);
   expect(Math.abs(one1.ratio - 1)).toBeLessThan(0.05);
 });

@@ -15,7 +15,10 @@ import { chartCategory, markerCallLabel, cycleReadText, chartPointState, chartSt
 import { useI18n } from "@/hooks/use-i18n";
 import { plotlyColors } from "@/lib/plotly-theme";
 import { channelLabels } from "@/lib/channel-labels";
-import { axisRangeLayout, axisTitle, dataBounds, visibleBounds } from "@/lib/scatter-axes";
+import {
+  axisRangeLayout, axisTitle, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode,
+  fitBounds, hasNtcWells, NTC_AMBER, NTC_HANDLE_SIZE, NTC_MARKER_SIZE, ntcThresholdShapes, visibleBounds,
+} from "@/lib/scatter-axes";
 import { updateMarker } from "@/lib/api";
 import { clearActiveChart, setActiveChart } from "@/lib/chart-export-registry";
 import { completeThresholdConfig } from "@/lib/threshold-config";
@@ -63,7 +66,7 @@ const MARKER_SIZE_SELECTED = 12;
 // Feeds `.analysis-scatter-canvas`'s `aspect-ratio` (index.css, P4-S1-T1);
 // see the sibling copy in ScatterPlot.tsx for the rationale.
 function scatterAspectVars(aspect: ScatterAspect): CSSProperties {
-  const [w, h] = aspect === "1:1" ? [1, 1] : [4, 3];
+  const [w, h] = aspect === "1:1" ? [1, 1] : aspect === "4:3" ? [4, 3] : [3, 4];
   return { "--scatter-aspect-w": w, "--scatter-aspect-h": h } as CSSProperties;
 }
 
@@ -125,7 +128,9 @@ export function MarkerScatterPlot({
   const focusActive = focusSelectedWells && selectedWells.length > 0;
   const revealedWell = useQualityRevealedWell();
   const { isWellVisible } = useWellFilter(points);
-  const axisMode = useSettingsStore((s) => s.axisMode);
+  const storedAxisMode = useSettingsStore((s) => s.axisMode);
+  const axisModeChosen = useSettingsStore((s) => s.axisModeChosen);
+  const wellTypeAssignments = useDataStore((s) => s.wellTypeAssignments);
   const lockAspect = useSettingsStore((s) => s.lockAspect);
   const xMin = useSettingsStore((s) => s.xMin);
   const xMax = useSettingsStore((s) => s.xMax);
@@ -161,6 +166,15 @@ export function MarkerScatterPlot({
     (well: string): string | null => region?.assignments?.[well] ?? null,
     [region]
   );
+
+  // The axis basis the operator did not pick: NTC basis only on a run that has
+  // NTC wells (a call, a well type, or the marker's own assignment).
+  const runHasNtc = useMemo(
+    () => points.some((p) => wellSet.has(p.well) && assignmentFor(p.well) === "NTC")
+      || hasNtcWells(points.filter((p) => wellSet.has(p.well)), wellTypeAssignments),
+    [points, wellSet, assignmentFor, wellTypeAssignments]
+  );
+  const axisMode = effectiveAxisMode(storedAxisMode, axisModeChosen, runHasNtc);
 
   // Keep the Plotly instance mounted across marker switches. Boundary edits
   // are keyed by the marker/result signature, so a new marker starts from its
@@ -370,7 +384,7 @@ export function MarkerScatterPlot({
         y: pts.map((p) => p.norm_allele2),
         mode: "markers",
         type: "scattergl",
-        name: markerCallLabel(typeKey, t, namedMarker),
+        name: `${markerCallLabel(typeKey, t, namedMarker)} (n=${pts.length})`,
         customdata: pts.map((p) => p.well),
         text: pts.map(
           (p) =>
@@ -407,13 +421,14 @@ export function MarkerScatterPlot({
       type: "scatter",
       uid: 'ntc-threshold',
       name: t.chartNtcThreshold,
-      showlegend: false,
+      // A legend entry explains the corner diamond (and the edit-mode handle).
+      showlegend: true,
       hovertemplate:
         `${t.chartNtcThreshold}: ${thresholdLabels.fam} ≤ ${effectiveNtc.corner.x.toFixed(2)}<br>` +
         `${thresholdLabels.allele2} ≤ ${effectiveNtc.corner.y.toFixed(2)}<extra></extra>`,
       marker: {
-        size: 13,
-        color: "#f59e0b",
+        size: editing ? NTC_HANDLE_SIZE : NTC_MARKER_SIZE,
+        color: NTC_AMBER,
         symbol: effectiveNtc.enabled ? "diamond" : "diamond-open",
         line: { width: 2, color: colors.markerLineColor },
       },
@@ -421,6 +436,7 @@ export function MarkerScatterPlot({
       selected: { marker: { opacity: 1 } },
       unselected: { marker: { opacity: 1 } },
     });
+    traces.push(boundaryLegendTrace(t.boundaryLines, editing, colors.fontColor));
 
     let ext = 1;
     for (const p of scopedPoints) {
@@ -436,7 +452,7 @@ export function MarkerScatterPlot({
         y0: origin.allele2,
         x1: origin.fam + tlen * r,
         y1: origin.allele2 + tlen * (1 - r),
-        line: { color: colors.fontColor, width: 2, dash: "dot" },
+        line: boundaryLineStyle(editing, colors.fontColor),
         layer: "above",
       };
     });
@@ -444,44 +460,22 @@ export function MarkerScatterPlot({
     // endpoint RFU the numeric origin is off-canvas under a tight autorange,
     // which left most of the quadrant invisible and its draggable corner
     // marker sitting unexplained in the middle of the data.
+    const pointExtents = scopedPoints.map((p) => ({ fam: p.norm_fam, allele2: p.norm_allele2 }));
+    const corner = { fam: effectiveNtc.corner.x, allele2: effectiveNtc.corner.y };
+    const dataRange = dataBounds(pointExtents, corner);
     const bounds = visibleBounds(
       axisMode,
-      dataBounds(
-        scopedPoints.map((p) => ({ fam: p.norm_fam, allele2: p.norm_allele2 })),
-        { fam: effectiveNtc.corner.x, allele2: effectiveNtc.corner.y }
-      ),
+      dataRange,
       { xMin, xMax, yMin, yMax },
       origin,
-      ntcAxisOffsets
+      ntcAxisOffsets,
+      // The corner stretches a fitted range only while it is being edited.
+      fitBounds(pointExtents, editing ? corner : null)
     );
-    shapes.push(
-      {
-        type: "rect",
-        x0: bounds.xMin,
-        y0: bounds.yMin,
-        x1: effectiveNtc.corner.x,
-        y1: effectiveNtc.corner.y,
-        fillcolor: "rgba(245, 158, 11, 0.13)",
-        line: { width: 0 },
-        layer: "below",
-      },
-      {
-        type: "line",
-        x0: effectiveNtc.corner.x,
-        y0: bounds.yMin,
-        x1: effectiveNtc.corner.x,
-        y1: bounds.yMax,
-        line: { color: "#f59e0b", width: 1, dash: "dash" },
-      },
-      {
-        type: "line",
-        x0: bounds.xMin,
-        y0: effectiveNtc.corner.y,
-        x1: bounds.xMax,
-        y1: effectiveNtc.corner.y,
-        line: { color: "#f59e0b", width: 1, dash: "dash" },
-      }
-    );
+    // Quadrant and dashed edges exist only in threshold-edit mode, and the
+    // edges stop at the data rather than running to the figure edge.
+    const reach = dataBounds(pointExtents);
+    shapes.push(...ntcThresholdShapes(editing, corner, bounds, { x: reach.xMax, y: reach.yMax }));
 
     const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
     const suffix = normalizationApplied && labels.normalization ? ` / ${labels.normalization}` : "";
@@ -512,8 +506,9 @@ export function MarkerScatterPlot({
       // otherwise an explicit new range can be hidden behind the old UI state.
       uirevision: `marker-${marker.id}-${axisMode}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${origin.fam}-${origin.allele2}`,
       shapes,
-      margin: { t: 10, r: 10, b: 46, l: 56 },
-      legend: { orientation: "h", y: -0.2 },
+      // The legend sits in a row under the axis title, never over the points.
+      margin: { t: 10, r: 10, b: 120, l: 56 },
+      legend: { orientation: "h", y: -0.2, yanchor: "top", x: 0, xanchor: "left" },
     };
 
     const config = {
@@ -795,6 +790,7 @@ export function MarkerScatterPlot({
           isn't folded into ScatterViewControls' header. */}
       {viewToggle && <div className="mb-1 xl:mb-px flex justify-end">{viewToggle}</div>}
       <ScatterViewControls
+        runHasNtc={runHasNtc}
         dataBounds={dataBounds(
           scopedPoints.map((p) => ({ fam: p.norm_fam, allele2: p.norm_allele2 })),
           { fam: effectiveNtc.corner.x, allele2: effectiveNtc.corner.y }

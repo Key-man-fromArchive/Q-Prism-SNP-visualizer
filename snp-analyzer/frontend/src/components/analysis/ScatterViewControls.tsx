@@ -13,16 +13,25 @@ import { AlertTriangle, Crosshair, Lock, Maximize2, MousePointer2, RotateCcw, Sl
 import { useI18n } from "@/hooks/use-i18n";
 import { useSettingsStore, type AxisMode, type ScatterAspect } from "@/stores/settings-store";
 import { normalizationLabel } from "@/lib/channel-labels";
-import { roundBound, type AxisBounds } from "@/lib/scatter-axes";
+import { effectiveAxisMode, roundBound, type AxisBounds } from "@/lib/scatter-axes";
 import type { ChannelLabels } from "@/types/api";
 import { useDataStore } from "@/stores/data-store";
 
 export type ScatterCorner = { fam: number; allele2: number };
 
-function ScatterReferenceBasis({ requested, applied }: { requested: boolean; applied: boolean }) {
+/** The one-line summary shows only `ROX ✓` / `ROX ✗` / `ROX ?` (the dye name is
+ *  language-neutral); the full "requested / actually applied" sentence stays in
+ *  the element for screen readers and for the expanded panel's reading. */
+function ScatterReferenceBasis({ requested, applied, label }: { requested: boolean; applied: boolean; label: string }) {
   const { t } = useI18n();
   const reported = useDataStore(s => s.normalizationReported);
-  return <span data-testid="normalization-state" data-applied={applied} data-reported={reported}>{t.scatterReferenceBasis(requested, reported, applied)}</span>;
+  const mark = reported ? (applied ? "✓" : "✗") : "?";
+  return (
+    <span data-testid="normalization-state" data-applied={applied} data-reported={reported}>
+      <span aria-hidden="true" data-testid="normalization-short">{label} {mark}</span>
+      <span className="sr-only">{t.scatterReferenceBasis(requested, reported, applied)}</span>
+    </span>
+  );
 }
 
 /** The highest allele dosage this assay can produce, declared by the operator.
@@ -69,6 +78,10 @@ export type ScatterViewControlsProps = {
   /** The run carries a passive reference at all. Without one the toggle can
    *  only ever be a no-op, so it says so instead of pretending. */
   hasNormalizationChannel?: boolean;
+  /** The run has NTC wells. Until the operator picks an axis mode the plot
+   *  uses the NTC basis only when this is true, and the dropdown shows what
+   *  the plot is actually doing. */
+  runHasNtc?: boolean;
   /** Absent for a diploid marker, where the three classes ARE the ladder and
    *  there is nothing to declare. */
   dosageCeiling?: DosageCeiling | null;
@@ -86,7 +99,7 @@ export type ScatterViewControlsProps = {
   ratioOrigin?: { note: string; fam: number; allele2: number } | null;
 };
 
-const SCATTER_ASPECTS: ScatterAspect[] = ["4:3", "1:1"];
+const SCATTER_ASPECTS: ScatterAspect[] = ["3:4", "1:1", "4:3"];
 
 const AXIS_MODES: AxisMode[] = ["zero", "auto", "manual"];
 
@@ -99,12 +112,15 @@ export function ScatterViewControls({
   normalizationApplied,
   roxOutlierWells = [],
   hasNormalizationChannel = true,
+  runHasNtc = true,
   dosageCeiling = null,
   title,
   ratioOrigin = null,
 }: ScatterViewControlsProps) {
   const { t } = useI18n();
-  const axisMode = useSettingsStore((s) => s.axisMode);
+  const storedAxisMode = useSettingsStore((s) => s.axisMode);
+  const axisModeChosen = useSettingsStore((s) => s.axisModeChosen);
+  const axisMode = effectiveAxisMode(storedAxisMode, axisModeChosen, runHasNtc);
   const setAxisMode = useSettingsStore((s) => s.setAxisMode);
   const lockAspect = useSettingsStore((s) => s.lockAspect);
   const setLockAspect = useSettingsStore((s) => s.setLockAspect);
@@ -430,9 +446,13 @@ export function ScatterViewControls({
               and editable in the expanded `ntc-axis-offsets` control just
               below, and unlike the ratio origin or the NTC quadrant it is
               rarely away from its default. */}
-          {t.analysisAdvancedSettings} · {labels.fam}/{labels.allele2} · <ScatterReferenceBasis requested={useRox} applied={normalizationApplied} /> · {t.chartBackground(backgroundMode)}
-          {' · '}{t.analysisNtcMode(ntcCorner !== null)}: {labels.fam} ≤{roundBound(effectiveNtcCorner.fam)}, {labels.allele2} ≤{roundBound(effectiveNtcCorner.allele2)}
+          {t.analysisAdvancedSettings} · <ScatterReferenceBasis requested={useRox} applied={normalizationApplied} label={normalizationLabel(labels)} /> · {t.chartBackground(backgroundMode)}
         </summary>
+        {/* The details the one-line summary leaves out; the panel below is
+            only visible once expanded. */}
+        <p className="px-1 pt-1 text-xs text-text-muted" data-testid="scatter-threshold-summary">
+          {labels.fam}/{labels.allele2} · {t.analysisNtcMode(ntcCorner !== null)}: {labels.fam} ≤{roundBound(effectiveNtcCorner.fam)}, {labels.allele2} ≤{roundBound(effectiveNtcCorner.allele2)}
+        </p>
         <div
           data-testid="scatter-view-controls"
           className="flex flex-wrap items-end gap-x-4 gap-y-2 rounded-md border border-border bg-bg px-3 py-2"
