@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { moveMenuFocus } from '@/lib/menu-focus';
+
+const VIEWPORT_MARGIN = 8;
 
 export type MenuItem = {
   key: string;
@@ -31,6 +33,7 @@ export function Menu({ trigger, items, label, align = "end", className, triggerC
   const [activeIdx, setActiveIdx] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const close = useCallback((restoreFocus = true) => {
@@ -47,6 +50,20 @@ export function Menu({ trigger, items, label, align = "end", className, triggerC
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
+
+  // Keep the popup inside the viewport: long labels can push a right/left-anchored
+  // menu past the screen edge on narrow widths.
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    if (!open || !menu) return;
+    menu.style.transform = "";
+    const rect = menu.getBoundingClientRect();
+    const viewport = document.documentElement.clientWidth || window.innerWidth;
+    let shift = 0;
+    if (rect.left < VIEWPORT_MARGIN) shift = VIEWPORT_MARGIN - rect.left;
+    else if (rect.right > viewport - VIEWPORT_MARGIN) shift = viewport - VIEWPORT_MARGIN - rect.right;
+    if (shift !== 0) menu.style.transform = `translateX(${shift}px)`;
+  }, [open, items]);
 
   // Move DOM focus to the active item while open.
   useEffect(() => {
@@ -109,11 +126,12 @@ export function Menu({ trigger, items, label, align = "end", className, triggerC
       </button>
       {open && (
         <div
+          ref={menuRef}
           role="menu"
           aria-label={label}
           onKeyDown={onMenuKey}
           className={cn(
-            "absolute z-50 mt-1 min-w-[10rem] rounded-md border border-border bg-surface py-1 shadow-lg",
+            "absolute z-50 mt-1 w-max min-w-[10rem] max-w-[calc(100vw-16px)] rounded-md border border-border bg-surface py-1 shadow-lg",
             align === "end" ? "right-0" : "left-0"
           )}
         >
@@ -137,7 +155,7 @@ export function Menu({ trigger, items, label, align = "end", className, triggerC
               )}
             >
               {item.icon && <span aria-hidden="true" className="text-text-muted">{item.icon}</span>}
-              <span className="whitespace-nowrap">{item.label}</span>
+              <span>{item.label}</span>
             </button>
           ))}
         </div>
