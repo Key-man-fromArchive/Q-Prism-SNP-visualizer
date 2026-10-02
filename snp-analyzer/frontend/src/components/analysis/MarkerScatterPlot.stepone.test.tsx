@@ -46,9 +46,9 @@ it('titles the axes with dye and allele name and names legend entries after the 
   renderPlot(named);
   await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalled());
   const [traces, layout] = vi.mocked(Plotly.newPlot).mock.calls.at(-1)!.slice(1) as [Array<{ name: string }>, { xaxis: { title: { text: string } }; yaxis: { title: { text: string } } }];
-  expect(layout.xaxis.title.text).toBe('FAM · WT');
-  expect(layout.yaxis.title.text).toBe('VIC · MT');
-  expect(traces.map(trace => trace.name)).toContain('WT/MT');
+  expect(layout.xaxis.title.text).toBe('FAM (WT)');
+  expect(layout.yaxis.title.text).toBe('VIC (MT)');
+  expect(traces.map(trace => trace.name)).toContain('WT/MT (n=1)');
 });
 
 it('keeps the existing axis titles and call names without allele names', async () => {
@@ -57,7 +57,7 @@ it('keeps the existing axis titles and call names without allele names', async (
   const [traces, layout] = vi.mocked(Plotly.newPlot).mock.calls.at(-1)!.slice(1) as [Array<{ name: string }>, { xaxis: { title: { text: string } }; yaxis: { title: { text: string } } }];
   expect(layout.xaxis.title.text).toBe('FAM');
   expect(layout.yaxis.title.text).toBe('VIC');
-  expect(traces.map(trace => trace.name)).toContain('Heterozygous');
+  expect(traces.map(trace => trace.name)).toContain('Heterozygous (n=1)');
 });
 
 it('writes marker, allele names and the cycle label into the PNG caption', async () => {
@@ -65,8 +65,8 @@ it('writes marker, allele names and the cycle label into the PNG caption', async
   await waitFor(() => expect(getActiveChart('run-a', 'rev-a')).not.toBeNull());
   const caption = getActiveChart('run-a', 'rev-a')!.caption;
   expect(caption).toContain('QPrism1');
-  expect(caption).toContain('FAM · WT');
-  expect(caption).toContain('VIC · MT');
+  expect(caption).toContain('FAM (WT)');
+  expect(caption).toContain('VIC (MT)');
   expect(caption).toContain('Amplification 1/2 · PCR 36 · 40°C');
   expect(caption).toMatch(/\); (reference requested|raw basis); background /);
 });

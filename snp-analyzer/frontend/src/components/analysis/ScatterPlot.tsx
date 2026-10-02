@@ -17,7 +17,10 @@ import { WELL_TYPE_INFO } from "@/lib/constants";
 import { genotypeClasses, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
 import { chartCategory, callLabel, cycleReadText, chartPointState, chartStateText } from "@/lib/chart-semantics";
 import { plotlyColors } from "@/lib/plotly-theme";
-import { axisRangeLayout, dataBounds, visibleBounds } from "@/lib/scatter-axes";
+import {
+  axisRangeLayout, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode, fitBounds,
+  hasNtcWells, NTC_AMBER, NTC_HANDLE_SIZE, NTC_MARKER_SIZE, ntcThresholdShapes, visibleBounds,
+} from "@/lib/scatter-axes";
 import { useWellFilter } from "@/hooks/use-well-filter";
 import { useQualityRevealedWell } from '@/hooks/use-quality-reveal';
 import { visibleQualityPoint } from '@/lib/quality-display';
@@ -74,7 +77,7 @@ const MAX_WELL_LABELS = 8;
 // the canvas is bound by width so the ratio always holds, and the ratio
 // itself comes from here rather than a fixed value (FB-04 §3-1, D-6).
 function scatterAspectVars(aspect: ScatterAspect): CSSProperties {
-  const [w, h] = aspect === "1:1" ? [1, 1] : [4, 3];
+  const [w, h] = aspect === "1:1" ? [1, 1] : aspect === "4:3" ? [4, 3] : [3, 4];
   return { "--scatter-aspect-w": w, "--scatter-aspect-h": h } as CSSProperties;
 }
 
@@ -139,7 +142,8 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
   const hasNormalizationChannel = useSessionStore((s) => s.sessionInfo?.has_rox === true);
   const readLabels = useSessionStore((s) => s.sessionInfo?.read_labels);
   const useRox = useSettingsStore((s) => s.useRox);
-  const axisMode = useSettingsStore((s) => s.axisMode);
+  const storedAxisMode = useSettingsStore((s) => s.axisMode);
+  const axisModeChosen = useSettingsStore((s) => s.axisModeChosen);
   const lockAspect = useSettingsStore((s) => s.lockAspect);
   const scatterTool = useSettingsStore((s) => s.scatterTool);
   const scatterAspect = useSettingsStore((s) => s.scatterAspect);
@@ -204,6 +208,14 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
   const revealedWell = useQualityRevealedWell();
   const visiblePoints = useMemo(() => scatterPoints.filter(point => visibleQualityPoint(point, revealedWell,
     isWellVisible(point.well), focusActive, selectedWellSet)), [scatterPoints, revealedWell, isWellVisible, focusActive, selectedWellSet]);
+
+  // NTC basis only on a run that has NTC wells; otherwise fit the data (unless
+  // the operator picked a mode themselves).
+  const runHasNtc = useMemo(
+    () => hasNtcWells(scatterPoints, wellTypeAssignments),
+    [scatterPoints, wellTypeAssignments]
+  );
+  const axisMode = effectiveAxisMode(storedAxisMode, axisModeChosen, runHasNtc);
 
   const inferredNtcCorner = useMemo(() => {
     // EFFECTIVE type, manual over auto -- not "manual OR auto is NTC". A well
@@ -434,7 +446,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
         y: points.map((p) => p.norm_allele2),
         mode: "markers",
         type: "scattergl",
-        name: callLabel(typeKey, t),
+        name: `${callLabel(typeKey, t)} (n=${points.length})`,
         customdata: points.map((p) => p.well),
         text: points.map((p) => {
           const normSuffix = normalizationApplied ? ` / ${normalizationLabel(labels)}` : "";
@@ -472,13 +484,14 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       type: "scatter",
       uid: 'ntc-threshold',
       name: t.chartNtcThreshold,
-      showlegend: false,
+      // A legend entry explains the corner diamond (and the edit-mode handle).
+      showlegend: true,
       hovertemplate:
         `NTC: ${labels.fam} ≤ ${effectiveNtcCorner.fam.toFixed(2)}<br>` +
         `${labels.allele2} ≤ ${effectiveNtcCorner.allele2.toFixed(2)}<extra></extra>`,
       marker: {
-        size: 13,
-        color: "#f59e0b",
+        size: editing ? NTC_HANDLE_SIZE : NTC_MARKER_SIZE,
+        color: NTC_AMBER,
         symbol: ntcCorner ? "diamond" : "diamond-open",
         line: { width: 2, color: colors.markerLineColor },
       },
@@ -486,6 +499,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       // selection used to fade it along with the data.
       ...OPAQUE_IN_BOTH_SELECTION_STATES,
     });
+    if (bnd) traces.push(boundaryLegendTrace(t.boundaryLines, editing, colors.fontColor) as unknown as Data);
 
     const xLabel = normalizationApplied
       ? normalizedLabel(labels.fam, labels, true)
@@ -515,7 +529,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
             y0: ratioOrigin.allele2,
             x1: ratioOrigin.fam + tlen * r,
             y1: ratioOrigin.allele2 + tlen * (1 - r),
-            line: { color: colors.fontColor, width: 2, dash: "dot" },
+            line: boundaryLineStyle(editing, colors.fontColor),
             layer: "above",
           };
         })
@@ -525,44 +539,20 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     // whenever the axes were tightly autoranged (raw endpoint RFU starts near
     // 3800/2330), which is what made the quadrant unreadable and its corner
     // marker look like a stray point in the middle of the cloud.
+    const pointExtents = visiblePoints.map((point) => ({ fam: point.norm_fam, allele2: point.norm_allele2 }));
     const bounds = visibleBounds(
       axisMode,
-      dataBounds(
-        visiblePoints.map((point) => ({ fam: point.norm_fam, allele2: point.norm_allele2 })),
-        effectiveNtcCorner
-      ),
+      dataBounds(pointExtents, effectiveNtcCorner),
       { xMin, xMax, yMin, yMax },
       ratioOrigin,
-      ntcAxisOffsets
+      ntcAxisOffsets,
+      // The corner stretches a fitted range only while it is being edited.
+      fitBounds(pointExtents, editing ? effectiveNtcCorner : null)
     );
-    shapes.push(
-      {
-        type: "rect",
-        x0: bounds.xMin,
-        y0: bounds.yMin,
-        x1: effectiveNtcCorner.fam,
-        y1: effectiveNtcCorner.allele2,
-        fillcolor: "rgba(245, 158, 11, 0.13)",
-        line: { width: 0 },
-        layer: "below",
-      },
-      {
-        type: "line",
-        x0: effectiveNtcCorner.fam,
-        y0: bounds.yMin,
-        x1: effectiveNtcCorner.fam,
-        y1: bounds.yMax,
-        line: { color: "#f59e0b", width: 1, dash: "dash" },
-      },
-      {
-        type: "line",
-        x0: bounds.xMin,
-        y0: effectiveNtcCorner.allele2,
-        x1: bounds.xMax,
-        y1: effectiveNtcCorner.allele2,
-        line: { color: "#f59e0b", width: 1, dash: "dash" },
-      }
-    );
+    // Quadrant and dashed edges exist only in threshold-edit mode, and the
+    // edges stop at the data rather than running to the figure edge.
+    const reach = dataBounds(pointExtents);
+    shapes.push(...(ntcThresholdShapes(editing, effectiveNtcCorner, bounds, { x: reach.xMax, y: reach.yMax }) as Partial<Shape>[]));
 
     // Selected-well number labels (FB-12): smaller dots (above) made it hard
     // to tell on screen which point a click actually landed on, so the
@@ -622,8 +612,9 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       dragmode: editing ? "zoom" : "select",
       shapes,
       annotations,
-      margin: { t: 10, r: 10, b: 60, l: 70 },
-      legend: { orientation: "h", y: -0.2 },
+      // The legend sits in a row under the axis title, never over the points.
+      margin: { t: 10, r: 10, b: 130, l: 70 },
+      legend: { orientation: "h", y: -0.2, yanchor: "top", x: 0, xanchor: "left" },
     };
 
     const config: Partial<Config> = {
@@ -814,7 +805,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     if (!data || data.length === 0) return;
 
     for (let t = 0; t < data.length; t++) {
-      if (data[t].uid === 'ntc-threshold') continue;
+      if (data[t].uid === 'ntc-threshold' || data[t].uid === 'legend-boundary') continue;
       const rawCustomdata = data[t].customdata;
       const customdata: unknown[] = Array.isArray(rawCustomdata) ? rawCustomdata : [];
       const sizes = customdata.map((w: unknown) => (typeof w === "string" && selectedWellSet.has(w) ? MARKER_SIZE_SELECTED : MARKER_SIZE));
@@ -1157,6 +1148,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
           toggle sits in the same slot in both views. */}
       {viewToggle && <div className="mb-1 xl:mb-px flex justify-end">{viewToggle}</div>}
       <ScatterViewControls
+        runHasNtc={runHasNtc}
         title={t.alleleDiscrimination}
         dataBounds={controlBounds}
         labels={controlLabels}

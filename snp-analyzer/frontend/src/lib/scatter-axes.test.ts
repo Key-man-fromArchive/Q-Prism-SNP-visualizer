@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { axisRangeLayout, dataBounds, roundBound, visibleBounds } from './scatter-axes';
+import { axisRangeLayout, dataBounds, effectiveAxisMode, fitBounds, hasNtcWells, roundBound, visibleBounds } from './scatter-axes';
 
 /** The real plate this module exists for: 1-2_admin_2026-09-03 16-14-11_
  *  783BR20183.pcrd at cycle 5. x spans 3804..11671 and y only 2331..3369, so a
@@ -78,6 +78,11 @@ describe('visibleBounds', () => {
     expect(visibleBounds('auto', data, manual)).toEqual(data);
   });
 
+  it('auto mode prefers the fitted bounds when supplied', () => {
+    const fit = { xMin: 1, xMax: 2, yMin: 3, yMax: 4 };
+    expect(visibleBounds('auto', data, manual, null, undefined, fit)).toEqual(fit);
+  });
+
   it('manual mode is exactly what the operator typed', () => {
     expect(visibleBounds('manual', data, manual)).toEqual(manual);
   });
@@ -110,11 +115,64 @@ describe('axisRangeLayout', () => {
     expect(yaxis.scaleanchor).toBeUndefined();
   });
 
-  it('auto mode ranges nothing itself', () => {
+  it('auto mode pins the fitted range it was given', () => {
     const { xaxis, yaxis } = axisRangeLayout('auto', false, bounds);
-    expect(xaxis.autorange).toBe(true);
-    expect(xaxis.rangemode).toBe('normal');
-    expect(yaxis.range).toBeUndefined();
+    expect(xaxis.autorange).toBe(false);
+    expect(xaxis.range).toEqual([0, 12000]);
+    expect(yaxis.range).toEqual([0, 3500]);
+  });
+});
+
+describe('fitBounds', () => {
+  it('pads 5% of the span and does not invent negative space', () => {
+    const b = fitBounds([{ fam: 2000, allele2: 1000 }, { fam: 4000, allele2: 3000 }]);
+    expect(b.xMin).toBeCloseTo(1900);
+    expect(b.xMax).toBeCloseTo(4100);
+    expect(b.yMin).toBeCloseTo(900);
+    expect(b.yMax).toBeCloseTo(3100);
+  });
+
+  it('includes zero only when the minimum is within 10% of the maximum', () => {
+    const near = fitBounds([{ fam: 100, allele2: 5000 }, { fam: 4000, allele2: 9000 }]);
+    expect(near.xMin).toBe(0);
+    expect(near.yMin).toBeGreaterThan(0);
+  });
+
+  it('goes negative only when a point is negative', () => {
+    const neg = fitBounds([{ fam: -50, allele2: 10 }, { fam: 1000, allele2: 500 }]);
+    expect(neg.xMin).toBeLessThan(-50);
+    expect(neg.yMin).toBeGreaterThanOrEqual(0);
+  });
+
+  it('adds the NTC corner only when asked', () => {
+    const pts = [{ fam: 2000, allele2: 2000 }, { fam: 4000, allele2: 4000 }];
+    expect(fitBounds(pts, { fam: 100, allele2: 100 }).xMin).toBe(0);
+    expect(fitBounds(pts).xMin).toBeGreaterThan(1000);
+  });
+
+  it('falls back to a unit box with no points', () => {
+    expect(fitBounds([])).toEqual({ xMin: 0, xMax: 1, yMin: 0, yMax: 1 });
+  });
+});
+
+describe('effectiveAxisMode', () => {
+  it('respects an operator choice', () => {
+    expect(effectiveAxisMode('zero', true, false)).toBe('zero');
+    expect(effectiveAxisMode('manual', true, false)).toBe('manual');
+  });
+  it('defaults to NTC basis with NTC wells and to data fit without', () => {
+    expect(effectiveAxisMode('zero', false, true)).toBe('zero');
+    expect(effectiveAxisMode('zero', false, false)).toBe('auto');
+  });
+});
+
+describe('hasNtcWells', () => {
+  it('sees manual, automatic and well-type NTC designations', () => {
+    expect(hasNtcWells([{ well: 'A1', manual_type: 'NTC', auto_cluster: null }], {})).toBe(true);
+    expect(hasNtcWells([{ well: 'A1', manual_type: null, auto_cluster: 'NTC' }], {})).toBe(true);
+    expect(hasNtcWells([{ well: 'A1', manual_type: null, auto_cluster: null }], { A1: 'NTC' })).toBe(true);
+    expect(hasNtcWells([{ well: 'A1', manual_type: 'Heterozygous', auto_cluster: 'NTC' }], {})).toBe(false);
+    expect(hasNtcWells([{ well: 'A1', manual_type: null, auto_cluster: 'Unknown' }], { A2: 'NTC' })).toBe(false);
   });
 });
 

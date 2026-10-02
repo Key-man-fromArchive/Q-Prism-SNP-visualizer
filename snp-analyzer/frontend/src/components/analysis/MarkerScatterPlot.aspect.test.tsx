@@ -33,12 +33,12 @@ function renderPlot() {
     onBoundariesPersisted={vi.fn()} />);
 }
 
-it('renders the canvas at the default 4:3 aspect', async () => {
+it('renders the canvas at the default 3:4 (portrait) aspect', async () => {
   const view = renderPlot();
   await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalled());
   const canvas = view.getByTestId('marker-scatter');
-  expect(canvas.style.getPropertyValue('--scatter-aspect-w')).toBe('4');
-  expect(canvas.style.getPropertyValue('--scatter-aspect-h')).toBe('3');
+  expect(canvas.style.getPropertyValue('--scatter-aspect-w')).toBe('3');
+  expect(canvas.style.getPropertyValue('--scatter-aspect-h')).toBe('4');
 });
 
 it('switches the canvas to 1:1 when scatterAspect changes', async () => {
