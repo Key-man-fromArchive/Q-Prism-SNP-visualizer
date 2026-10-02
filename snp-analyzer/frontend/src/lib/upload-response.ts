@@ -13,11 +13,26 @@ function basics(value: Record<string, unknown>): boolean {
   return ['session_id', 'instrument', 'allele2_dye'].every(key => typeof value[key] === 'string' && value[key].length > 0)
     && nonnegative(value.num_wells) && nonnegative(value.num_cycles) && typeof value.has_rox === 'boolean';
 }
+function optional<T>(value: unknown, check: (v: unknown) => v is T): boolean {
+  return value === undefined || value === null || check(value);
+}
+function readLabel(value: unknown): boolean {
+  return record(value) && typeof value.stage === 'string'
+    && optional(value.pcr_cycle, nonnegative) && optional(value.temperature, (v): v is number => typeof v === 'number');
+}
+function readLabels(value: unknown): value is Record<string, unknown> {
+  return record(value) && Object.values(value).every(readLabel);
+}
+/** StepOne extras are optional; only their shape is checked, never required. */
+function steponeFields(value: Record<string, unknown>): boolean {
+  return optional(value.default_cycle, nonnegative) && optional(value.read_labels, readLabels)
+    && (value.has_amplification_curve === undefined || typeof value.has_amplification_curve === 'boolean');
+}
 /** A partial 200 response is not enough to admit a session or claim upload success. */
 export function validUploadResponse(value: unknown): value is UploadResponse {
   if (!record(value) || !basics(value)) return false;
   if (value.suggested_cycle !== null && !nonnegative(value.suggested_cycle)) return false;
   if (value.background_modes !== undefined && (!Array.isArray(value.background_modes)
     || !value.background_modes.every(mode => ['none', 'pre_read', 'channel_min'].includes(mode)))) return false;
-  return groups(value.well_groups) && windows(value.data_windows);
+  return steponeFields(value) && groups(value.well_groups) && windows(value.data_windows);
 }
