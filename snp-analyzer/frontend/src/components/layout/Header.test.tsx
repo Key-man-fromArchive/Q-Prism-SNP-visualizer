@@ -53,6 +53,17 @@ it('keeps full linked identities in a keyboard disclosure and exposes the comple
   expect(screen.getByRole('button', { name: /^(ASG)$/ })).toBeDisabled();
 });
 
+it('folds name, role and logout into one user menu so the header keeps a single row', () => {
+  useAuthStore.setState({ user: { id: 'u', username: 'admin', display_name: 'Administrator', role: 'admin' } });
+  render(<Header />);
+  const trigger = screen.getByRole('button', { name: 'Administrator' });
+  expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+  expect(trigger).toHaveTextContent('admin');
+  expect(screen.queryByRole('button', { name: ko.logout })).toBeNull();
+  fireEvent.click(trigger);
+  expect(screen.getByRole('menuitem', { name: ko.logout })).toBeInTheDocument();
+});
+
 it('opens a decision dialog for a structured export mismatch and cancel prevents the stored action', async () => {
   exportFns.csv.mockRejectedValue(new ApiError('mismatch', 409, { detail: { code: 'EXPORT_CONDITION_MISMATCH' } }));
   render(<Header />);

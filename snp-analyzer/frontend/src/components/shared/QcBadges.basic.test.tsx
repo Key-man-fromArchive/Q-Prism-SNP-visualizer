@@ -33,10 +33,11 @@ beforeEach(() => {
   vi.mocked(getQc).mockResolvedValue(qc());
 });
 
-it('summarises the marker and one status word, without the QC refresh button', async () => {
+it('summarises one status word with its single cause, without the QC refresh button', async () => {
   render(<QcBadges />);
   const summary = await screen.findByTestId('ntc-status');
-  expect(summary).toHaveTextContent('QPrism1 · 검토 필요');
+  expect(summary).toHaveTextContent('검토 필요 · NTC 없음');
+  expect(summary).not.toHaveTextContent('QPrism1');
   expect(summary).not.toHaveTextContent('콜률');
   expect(screen.queryByRole('button', { name: 'QC 새로고침' })).toBeNull();
 });

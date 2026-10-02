@@ -53,8 +53,9 @@ describe('axisTitle role label', () => {
   it('prefers the dye plus the allele name over the role label', () => {
     expect(axisTitle('MT1 (VIC)', 'MT')).toBe('VIC (MT)');
   });
-  it('keeps the role label when the marker has no allele name', () => {
-    expect(axisTitle('WT (FAM)', undefined)).toBe('WT (FAM)');
+  it('writes the role label as dye (role) when the marker has no allele name', () => {
+    expect(axisTitle('WT (FAM)', undefined)).toBe('FAM (WT)');
+    expect(axisTitle('MT1 (VIC)', undefined, ' / ROX')).toBe('VIC (MT1) / ROX');
   });
 });
 

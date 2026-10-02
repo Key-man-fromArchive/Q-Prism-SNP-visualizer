@@ -38,7 +38,7 @@ async function plotted() {
     onBoundariesPersisted={vi.fn()} />);
   await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalled());
   const [traces, layout] = vi.mocked(Plotly.newPlot).mock.calls.at(-1)!.slice(1) as unknown as [Trace[], { shapes: Shape[]; xaxis: { range: number[] };
-    legend: { orientation: string; x: number; y: number; bgcolor: string }; margin: { b: number } }];
+    legend: { orientation: string; x: number; y: number; bgcolor: string }; margin: { b: number; t: number } }];
   return { traces, layout };
 }
 
@@ -66,11 +66,13 @@ it('shows the quadrant, dashed edges and the large handle while editing threshol
   expect(traces.find((t) => t.uid === 'ntc-threshold')!.marker?.size).toBe(13);
 });
 
-it('keeps a compact legend inside the top-right of the plot and only lists the call classes', async () => {
+it('keeps a compact legend on its own row above the plot area and only lists the call classes', async () => {
   const { traces, layout } = await plotted();
-  expect(layout.legend).toMatchObject({ orientation: 'h', xanchor: 'right', yanchor: 'top' });
+  expect(layout.legend).toMatchObject({ orientation: 'h', xanchor: 'right', yanchor: 'bottom' });
   expect(layout.legend.x).toBeGreaterThan(0.5);
-  expect(layout.legend.y).toBeGreaterThan(0.5);
+  // At or above the top edge of the plot area, with room reserved for it and the modebar.
+  expect(layout.legend.y).toBeGreaterThanOrEqual(1);
+  expect(layout.margin.t).toBeGreaterThanOrEqual(48);
   expect(layout.legend.bgcolor).toBeTruthy();
   expect(layout.margin.b).toBeLessThan(80);
   expect(traces.some((t) => t.name?.endsWith(' (n=2)'))).toBe(true);

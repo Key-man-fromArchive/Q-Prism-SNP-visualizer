@@ -64,7 +64,8 @@ function readToken(name: string, fallback: string): string {
 export function compactLegend(colors: { legendBg: string; fontColor: string }) {
   return {
     orientation: "h" as const,
-    x: 0.99, xanchor: "right" as const, y: 0.99, yanchor: "top" as const,
+    // Own row above the plot area; the modebar lives in the taller top margin.
+    x: 0.99, xanchor: "right" as const, y: 1, yanchor: "bottom" as const,
     bgcolor: colors.legendBg,
     font: { size: 10, color: colors.fontColor },
     itemsizing: "constant" as const,

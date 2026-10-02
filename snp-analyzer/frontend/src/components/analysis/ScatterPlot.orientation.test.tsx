@@ -54,6 +54,14 @@ it('plots FAM on x and VIC on y by default', async () => {
   expect(traces[0].y).toEqual([20]);
 });
 
+it('titles the axes with the dye alone, like every other instrument, without a unit suffix', async () => {
+  render(<ScatterPlot />);
+  await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalled());
+  const [, , layout] = lastRender();
+  expect(layout.xaxis.title.text).toBe('FAM');
+  expect(layout.yaxis.title.text).toBe('VIC');
+});
+
 it('swaps points, axis titles and the NTC corner when scatterOrientation is allele2_x', async () => {
   useSettingsStore.getState().setScatterOrientation('allele2_x');
   render(<ScatterPlot />);

@@ -71,10 +71,12 @@ function NtcWells({ data }: { data: QcResponse }) {
  *  call-rate / NTC / judgment sentence stays in expert mode and in the panel. */
 function BasicSummary({ data }: { data: QcResponse }) {
   const { t } = useI18n();
-  const marker = useNavigationStore(state => state.marker);
-  const name = data.authoritative === 'markers' ? data.markers?.find(row => row.id === marker)?.name : undefined;
-  const ok = data.ntc_check.status === 'ok' && data.judgment_status === 'verified';
-  return <>{name ? `${name} · ` : ''}{ok ? t.qcStatusOk : t.qcStatusReview}</>;
+  const ntcOk = data.ntc_check.status === 'ok';
+  const ok = ntcOk && data.judgment_status === 'verified';
+  if (ok) return <>{t.qcStatusOk}</>;
+  // One status word with its single cause; the marker is already named on the result card.
+  const cause = ntcOk ? t.qcCauseJudgment(data.judgment_status) : t.qcCauseNtc(data.ntc_check.status);
+  return <>{t.qcStatusReview} · {cause}</>;
 }
 export function QcDetails({ data }: { data: QcResponse }) {
   const { t } = useI18n();

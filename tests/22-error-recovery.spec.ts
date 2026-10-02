@@ -90,7 +90,8 @@ test('partial uploads retain unknown outcomes across tabs, never auto-navigate/r
   await page.getByRole('button', { name: /Check sessions in Project|프로젝트에서 세션 확인/ }).click();
   expect(requests).toBe(3);
   await page.screenshot({ path: test.info().outputPath('upload-recovery.png'), fullPage: true });
-  await page.getByRole('button', { name: /^(Logout|로그아웃)$/ }).click();
+  await page.locator('.header-account button[aria-haspopup="menu"]').click();
+  await page.getByRole('menuitem', { name: /^(Logout|로그아웃)$/ }).click();
   await expect(page.locator('#username')).toBeVisible();
   await expect(page.getByText('unknown.eds', { exact: true })).toHaveCount(0);
 });

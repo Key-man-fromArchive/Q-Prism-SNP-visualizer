@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
-import { AlertCircle, Check, Download, Moon, Redo2, Save, Sun, Undo2 } from "lucide-react";
+import { AlertCircle, Check, ChevronDown, Download, Moon, Redo2, Save, Sun, Undo2 } from "lucide-react";
 import { useSessionStore } from "@/stores/session-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useAuthStore } from "@/stores/auth-store";
@@ -405,20 +405,17 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
         {showFileWorkspaceTrigger && <FileWorkspaceTrigger placement="header" />}
 
         {user && (
-          <div className="header-account flex items-center flex-wrap gap-2">
-            <span className="header-username text-xs text-text" title={user.display_name || user.username}>{user.display_name || user.username}</span>
-            <span className={`text-xs px-1.5 py-0.5 rounded-full border ${
-              user.role === "admin" ? "border-primary text-primary" : "border-border text-text-muted"
-            }`}>
-              {user.role}
-            </span>
-            <button
-              onClick={handleLogout}
-              className="shrink-0 whitespace-nowrap text-xs text-text-muted hover:text-danger cursor-pointer transition-colors"
-              title={t.signOut}
-            >
-              {t.logout}
-            </button>
+          <div className="header-account">
+            <Menu
+              label={user.display_name || user.username}
+              triggerClassName="px-2.5 py-0.5 text-xs rounded-xl"
+              trigger={<>
+                <span className="header-username" title={user.display_name || user.username}>{user.display_name || user.username}</span>
+                <span className={user.role === "admin" ? "text-primary" : "text-text-muted"}>· {user.role}</span>
+                <ChevronDown size={12} aria-hidden="true" />
+              </>}
+              items={[{ key: "logout", label: t.logout, onSelect: () => void handleLogout() }]}
+            />
           </div>
         )}
 

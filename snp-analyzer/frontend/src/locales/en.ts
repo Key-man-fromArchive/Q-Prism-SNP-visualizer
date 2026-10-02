@@ -54,6 +54,8 @@ const en = {
   qcOnsetRevision: (revision: number | null) => 'Recommendation input revision: ' + (revision ?? 'unknown'),
   qcLoading: 'Loading QC…', qcLoadFailed: 'QC unavailable. Retry to verify.', qcRefresh: 'Refresh QC',
   qcStatusOk: 'OK', qcStatusReview: 'Needs review', expertMode: 'Expert mode',
+  qcCauseNtc: (s: string) => ({ warning: 'NTC warning', no_ntc: 'No NTC', insufficient: 'NTC insufficient' }[s] ?? 'NTC unknown'),
+  qcCauseJudgment: (s: string) => ({ stale: 'Inputs changed', legacy_unknown: 'Legacy judgment', missing: 'No judgment' }[s] ?? 'Judgment unknown'),
   expertModeTooltip: 'Show technical controls and full result tables',
   wellTypeNoAmplification: 'No amplification',
   ampQcTitle: 'Amplification threshold', ampQcOff: 'Amplification check off',
