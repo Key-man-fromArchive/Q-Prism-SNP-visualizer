@@ -1,10 +1,14 @@
 """Generate matplotlib chart images for PDF reports."""
 from __future__ import annotations
 import io
+from pathlib import Path
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from matplotlib import font_manager
+from matplotlib.figure import Figure
 
 
 # Non-genotype well categories. Fixed across ploidy, like the frontend's
@@ -68,43 +72,90 @@ def genotype_color(label: str, ploidy: int) -> str | None:
     return CONTROL_COLORS.get(label)
 
 
-def render_scatter_png(points: list[dict], allele2_dye: str = "VIC", width: float = 6, height: float = 4.5, ploidy: int = 2, coordinate_basis: str = "normalized") -> bytes:
+_FONT_PATH = Path(__file__).parent / "fonts" / "NanumGothic-Regular.ttf"
+_FONT_FAMILY = "NanumGothic"
+_FONT_RC = {"font.family": [_FONT_FAMILY, "DejaVu Sans"]}
+_ASPECTS = {"4:3": (6.4, 4.8), "1:1": (5.4, 5.4)}
+_WELL_LABEL_LIMIT = 48
+_font_registered = False
+
+
+def _register_font() -> None:
+    """Make the bundled NanumGothic known to matplotlib (once per process)."""
+    global _font_registered
+    if not _font_registered:
+        font_manager.fontManager.addfont(str(_FONT_PATH))
+        _font_registered = True
+
+
+def build_scatter_figure(
+    points: list[dict], allele2_dye: str = "VIC", width: float | None = None,
+    height: float | None = None, ploidy: int = 2, coordinate_basis: str = "normalized",
+    *, title: str | None = None, x_label: str | None = None, y_label: str | None = None,
+    legend_names: dict[str, str] | None = None, aspect: str | None = None,
+) -> Figure:
+    """Build the scatter figure; the caller owns and must close it.
+
+    ``legend_names`` maps canonical genotype strings to display names. Colours
+    are always looked up by the canonical string.
+    """
+    if aspect is not None and aspect not in _ASPECTS:
+        raise ValueError(f"aspect must be one of {sorted(_ASPECTS)}")
+    if aspect is not None:
+        width, height = _ASPECTS[aspect]
+    _register_font()
+    with plt.rc_context(_FONT_RC):
+        fig, ax = plt.subplots(figsize=(width or 6, height or 4.5))
+
+        groups: dict[str, list] = {}
+        for p in points:
+            groups.setdefault(p.get("effective_type", "Unknown"), []).append(p)
+
+        names = legend_names or {}
+        for gt, pts in groups.items():
+            color = genotype_color(gt, ploidy) or "#6b7280"
+            xs = [p["norm_allele2"] for p in pts]
+            ys = [p["norm_fam"] for p in pts]
+            ax.scatter(xs, ys, c=color, s=20, alpha=0.7, label=f"{names.get(gt, gt)} (n={len(pts)})",
+                       edgecolors="white", linewidth=0.3)
+
+        if len(points) <= _WELL_LABEL_LIMIT:
+            for p in points:
+                ax.annotate(str(p["well"]), (p["norm_allele2"], p["norm_fam"]), xytext=(3, 3),
+                            textcoords="offset points", fontsize=6, color="#374151")
+
+        ax.set_xlabel(x_label or f"{allele2_dye} ({coordinate_basis})", fontsize=10)
+        ax.set_ylabel(y_label or f"FAM ({coordinate_basis})", fontsize=10)
+        ax.set_title(title or "Allele Discrimination Plot", fontsize=12, fontweight="bold")
+        if groups:
+            ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0,
+                      framealpha=0.9)
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+    return fig
+
+
+def render_scatter_png(points: list[dict], allele2_dye: str = "VIC", width: float | None = None, height: float | None = None, ploidy: int = 2, coordinate_basis: str = "normalized", **options) -> bytes:
     """Render scatter plot as PNG bytes.
 
     Args:
         points: list of dicts with keys: well, norm_fam, norm_allele2, effective_type
         allele2_dye: name of second allele dye
-        width, height: figure size in inches
+        width, height: figure size in inches (overridden by ``aspect``)
+        options: ``title``, ``x_label``, ``y_label``, ``legend_names``, ``aspect``
+            ("4:3" or "1:1"); see :func:`build_scatter_figure`.
 
     Returns:
         PNG image bytes
     """
-    fig, ax = plt.subplots(figsize=(width, height))
-
-    # Group by genotype for coloring
-    groups: dict[str, list] = {}
-    for p in points:
-        gt = p.get("effective_type", "Unknown")
-        groups.setdefault(gt, []).append(p)
-
-    for gt, pts in groups.items():
-        color = genotype_color(gt, ploidy) or "#6b7280"
-        xs = [p["norm_allele2"] for p in pts]
-        ys = [p["norm_fam"] for p in pts]
-        ax.scatter(xs, ys, c=color, s=20, alpha=0.7, label=gt, edgecolors="white", linewidth=0.3)
-
-    ax.set_xlabel(f"{allele2_dye} ({coordinate_basis})", fontsize=10)
-    ax.set_ylabel(f"FAM ({coordinate_basis})", fontsize=10)
-    ax.set_title("Allele Discrimination Plot", fontsize=12, fontweight="bold")
-    ax.legend(fontsize=8, loc="upper right", framealpha=0.9)
-    ax.grid(True, alpha=0.3)
-
-    fig.tight_layout()
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150)
-    plt.close(fig)
-    buf.seek(0)
-    return buf.read()
+    fig = build_scatter_figure(points, allele2_dye, width, height, ploidy, coordinate_basis, **options)
+    try:
+        buf = io.BytesIO()
+        with plt.rc_context(_FONT_RC):
+            fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+    finally:
+        plt.close(fig)
+    return buf.getvalue()
 
 
 def render_plate_png(wells: list[dict], width: float = 7, height: float = 4, ploidy: int = 2) -> bytes:
