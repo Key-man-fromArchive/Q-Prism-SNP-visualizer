@@ -402,7 +402,8 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, unassigned
                 : isEmpty
                 ? `, ${t.wellEmptyState}`
                 : '';
-              const ariaLabel = `${wellId}${wellData?.sample_name ? `, ${wellData.sample_name}` : ''}, ${call.description}${stateSuffix}`;
+              const unassignedSuffix = isUnassigned ? `, ${t.genotypeDisplayUnassignedWells}` : '';
+              const ariaLabel = `${wellId}${wellData?.sample_name ? `, ${wellData.sample_name}` : ''}, ${call.description}${unassignedSuffix}${stateSuffix}`;
 
               return (
                 <button
