@@ -2,7 +2,7 @@
 
 - Contract ID: `qprism-stepone-markers-20261002-v1`
 - 작성일: 2026-10-02 · r6(리뷰 4차 반영: 사용자 설정 격리·거부 시험·venv 재구축·marker_id 매칭·P0 분할)
-- 상태: ACTIVE — 2026-10-02 사용자 승인으로 승격(D-8). 초안 이력은 git log 참조
+- 상태: COMPLETE — 2026-10-02 P0–P4 게이트 PASS, 로컬 main 병합 완료(fbd7915). 증거: `stepone-2026-10-02/evidence/`
 - 기준 기획서: [`stepone-2026-10-02/00-overview.md`](stepone-2026-10-02/00-overview.md) (r2)
 - baseline_commit: `55a7452` (main, v1.3.1). 루트 detached `201e0c7`에서 시작하지 않는다.
 - 실행 모드: `/auto-orchestrate --tmux --parallel 4` (Phase 안 레인 병렬, Phase 사이 직렬)
