@@ -215,11 +215,30 @@ def capture_result_snapshot(
     return filter_snapshot(snapshot, options.marker_ids)
 
 
+def _keep_wells(values: dict | None, wells: set[str]) -> dict | None:
+    """A well-keyed mapping reduced to ``wells``; ``None`` stays ``None``."""
+    return None if values is None else {w: v for w, v in values.items() if w in wells}
+
+
+def _keep_well_lists(groups: dict[str, list[str]] | None, wells: set[str]) -> dict[str, list[str]] | None:
+    """A name -> wells mapping reduced to ``wells``, dropping names left empty."""
+    if groups is None:
+        return None
+    reduced = {name: [w for w in members if w in wells] for name, members in groups.items()}
+    return {name: members for name, members in reduced.items() if members}
+
+
 def filter_snapshot(snapshot: ResultSnapshot, marker_ids: tuple[str, ...] | None) -> ResultSnapshot:
     """Restrict a captured snapshot to the selected markers' wells.
 
     ``None`` selects everything and returns the snapshot itself. Unknown ids are
     a 400. The input is never mutated; the result holds detached copies.
+
+    Every well list and well-keyed mapping on the result and the unified data is
+    restricted to the selected wells. Plate-wide statistics that are not tied to
+    a well (boundaries, offset, genotype counts, warnings) are left as captured;
+    row-based consumers must use ``snapshot_rows``, which is derived from the
+    filtered wells.
     """
     if marker_ids is None:
         return snapshot
@@ -233,13 +252,19 @@ def filter_snapshot(snapshot: ResultSnapshot, marker_ids: tuple[str, ...] | None
     wells = {well for region in context.regions for well in region.wells}
     result = snapshot.result.model_copy(deep=True)
     result.analysis_context = context
+    result.assignments = _keep_wells(result.assignments, wells)
+    result.confidences = _keep_wells(result.confidences, wells)
     if result.regions is not None:
         result.regions = [r for r in result.regions if r.id in selected]
     unified = snapshot.unified.model_copy(deep=True)
     unified.wells = [w for w in unified.wells if w in wells]
     unified.data = [d for d in unified.data if d.well in wells]
-    groups = {name: [w for w in members if w in wells] for name, members in snapshot.groups.items()}
-    groups = {name: members for name, members in groups.items() if members}
+    unified.ntc_wells = None if unified.ntc_wells is None else [w for w in unified.ntc_wells if w in wells]
+    unified.sample_names = _keep_wells(unified.sample_names, wells)
+    unified.imported_well_types = _keep_wells(unified.imported_well_types, wells)
+    unified.well_groups = _keep_well_lists(unified.well_groups, wells)
+    unified.imported_markers = _keep_well_lists(unified.imported_markers, wells)
+    groups = _keep_well_lists(snapshot.groups, wells) or {}
     return ResultSnapshot(
         snapshot.session_id, unified, result, context, snapshot.current_input_revision,
         {w: v for w, v in snapshot.overrides.items() if w in wells},

@@ -2,6 +2,7 @@
 from fastapi import HTTPException
 
 MAX_MARKER_IDS = 200
+MAX_RAW_LENGTH = 4096
 
 
 def parse_marker_ids(raw: str | None) -> tuple[str, ...] | None:
@@ -13,6 +14,8 @@ def parse_marker_ids(raw: str | None) -> tuple[str, ...] | None:
     """
     if raw is None:
         return None
+    if len(raw) > MAX_RAW_LENGTH:
+        raise HTTPException(400, "marker_ids is too long")
     ids = tuple(part.strip() for part in raw.split(","))
     if not ids or any(not marker_id for marker_id in ids):
         raise HTTPException(400, "marker_ids must be a comma-separated list of marker ids")
