@@ -307,6 +307,8 @@ def save_session(session_id: str, unified: UnifiedData, filename: str = "", user
         metadata["imported_marker_alleles"] = {
             name: labels.model_dump() for name, labels in unified.imported_marker_alleles.items()
         }
+    if unified.instrument_detail is not None:
+        metadata["instrument_detail"] = unified.instrument_detail.model_dump()
     metadata["ploidy"] = getattr(unified, "ploidy", 2)
 
     conn.execute(
@@ -861,6 +863,7 @@ def _session_row_to_entry(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         has_amplification_curve=bool(metadata.get("has_amplification_curve", True)),
         read_labels=metadata.get("read_labels"),
         imported_marker_alleles=metadata.get("imported_marker_alleles"),
+        instrument_detail=metadata.get("instrument_detail"),
     )
 
     # Load clustering results
