@@ -26,6 +26,7 @@ from app.auth import CurrentUser, check_session_access
 from app.models import MarkerRegion
 from app.routers.clustering import (
     _validate_marker_set,
+    strict_marker,
     marker_store,
     welltype_store,
 )
@@ -238,7 +239,7 @@ async def apply_layout_endpoint(layout_id: str, body: LayoutApply, current_user:
             )
 
     try:
-        incoming_markers = [MarkerRegion(**m) for m in incoming_raw]
+        incoming_markers = [strict_marker(m) for m in incoming_raw]
     except ValueError as exc:
         raise HTTPException(400, f"Layout contains an invalid marker: {exc}") from exc
     _validate_marker_set(incoming_markers, unified)

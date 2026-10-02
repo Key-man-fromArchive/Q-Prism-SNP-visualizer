@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import MutableMapping
 from pathlib import Path
+import unicodedata
 import uuid
 
 from app import asg_session, db
@@ -68,6 +69,12 @@ def create_session_from_import(
     )
 
 
+def _clean_marker_name(name: str) -> str:
+    """Drop control/invisible characters from an instrument-file name; '' if nothing is left."""
+    kept = "".join(ch for ch in name if unicodedata.category(ch) not in {"Cc", "Cf", "Zl", "Zp"})
+    return kept.strip()
+
+
 def _build_imported_marker_regions(unified: UnifiedData) -> list[dict[str, object]]:
     """Convert explicit instrument assay assignments into editable markers."""
     palette = [
@@ -81,13 +88,14 @@ def _build_imported_marker_regions(unified: UnifiedData) -> list[dict[str, objec
     imported_alleles = getattr(unified, "imported_marker_alleles", None) or {}
     for index, (name, raw_wells) in enumerate(imported_markers.items()):
         wells = [well for well in raw_wells if well in plate_wells and well not in occupied]
-        if not name.strip() or not wells:
+        clean = _clean_marker_name(name)
+        if not clean or not wells:
             continue
         occupied.update(wells)
         labels = imported_alleles.get(name) or imported_alleles.get(name.strip())
         regions.append({
             "id": f"imported-{index + 1}",
-            "name": name.strip(),
+            "name": clean,
             "wells": wells,
             "ploidy": getattr(unified, "ploidy", 2),
             "color": palette[index % len(palette)],

@@ -21,7 +21,7 @@ PPTX_MEDIA_TYPE = (
 
 
 @router.get("/api/data/{sid}/export/pptx")
-async def export_pptx(
+def export_pptx(
     sid: str,
     current_user: CurrentUser,
     use_rox: bool | None = Query(default=None),
@@ -32,7 +32,9 @@ async def export_pptx(
     marker_ids: str | None = Query(default=None),
     include_table: bool = Query(default=True),
 ) -> Response:
-    """Download a 16:9 deck, using the stored analysis conditions."""
+    """Download a 16:9 deck, using the stored analysis conditions.
+
+    Plain ``def``: rendering is CPU-bound, so FastAPI runs it in the threadpool."""
     selected = parse_marker_ids(marker_ids)
     snapshot = capture_result_snapshot(
         sid,

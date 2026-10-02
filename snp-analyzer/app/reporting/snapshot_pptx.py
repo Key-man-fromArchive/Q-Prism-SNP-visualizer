@@ -21,10 +21,12 @@ from app.reporting.charts import render_scatter_png
 from app.reporting.result_snapshot import ResultRow, ResultSnapshot, snapshot_rows
 from app.reporting.snapshot_plate import render_snapshot_plate
 from app.reporting.snapshot_presentation import (
-    axis_label,
+    MAX_LAYOUT_LABEL,
+    ReportFigure,
     coordinate_basis,
     cycle_label,
     display_genotype,
+    figure_options,
     figure_points,
     figure_title,
     marker_scope,
@@ -37,7 +39,8 @@ ROWS_PER_BLOCK = 16
 BLOCKS_PER_SLIDE = 3
 WELLS_PER_PAGE = ROWS_PER_BLOCK * BLOCKS_PER_SLIDE
 _COLUMN_WIDTHS = (0.5, 1.1, 0.95, 1.0, 0.65)
-_SAMPLE_CHARS, _MARKER_CHARS, _LAYOUT_CHARS = 18, 14, 10
+_SAMPLE_CHARS, _MARKER_CHARS, _CALL_CHARS = 18, 14, 14
+MAX_COUNT_ROWS = 10
 _SLIDE_W, _SLIDE_H = 13.333, 7.5
 _HEADER_FILL = RGBColor(0xE8, 0xEE, 0xF4)
 _TEXT = RGBColor(0x11, 0x18, 0x27)
@@ -178,35 +181,37 @@ def _marker_pages(snapshot: ResultSnapshot, rows: list[ResultRow]) -> list[_Mark
 
 def _scatter(snapshot: ResultSnapshot, page: _MarkerPage) -> bytes:
     marker = page.marker
-    points = figure_points(page.rows)
-    legend_names = {
-        genotype: display_genotype(genotype, marker, page.labels)
-        for genotype in {point["effective_type"] for point in points}
-    }
+    figure = ReportFigure(
+        _page_title(snapshot, page),
+        marker.ploidy if marker else snapshot.result.ploidy,
+        figure_points(page.rows),
+    )
     return render_scatter_png(
-        points,
+        figure.points,
         snapshot.unified.allele2_dye,
-        ploidy=marker.ploidy if marker else snapshot.result.ploidy,
+        ploidy=figure.ploidy,
         coordinate_basis=coordinate_basis(snapshot),
-        title=_page_title(snapshot, page),
-        x_label=axis_label(snapshot, "allele2", marker, page.labels),
-        y_label=axis_label(snapshot, "fam", marker, page.labels),
-        legend_names=legend_names,
+        **figure_options(snapshot, figure, marker),
     )
 
 
 def _page_title(snapshot: ResultSnapshot, page: _MarkerPage) -> str:
-    if page.marker is None:
-        return f"{page.title} · {cycle_label(snapshot, snapshot.context.cycle)}"
     return figure_title(snapshot, page.title, page.marker)
 
 
 def _call_counts(page: _MarkerPage) -> list[list[object]]:
     counts = Counter(
-        display_genotype(row.genotype, row.marker, row.allele_labels)
+        _clip(display_genotype(row.genotype, row.marker, row.allele_labels), _CALL_CHARS)
         for row in page.rows
     )
-    return [[call, count] for call, count in counts.items()]
+    shown = [[call, count] for call, count in counts.items()]
+    if len(shown) <= MAX_COUNT_ROWS:
+        return shown
+    rest = shown[MAX_COUNT_ROWS - 1 :]
+    # The last row says the list was cut and still accounts for every well.
+    return shown[: MAX_COUNT_ROWS - 1] + [
+        [f"… +{len(rest)} more calls", sum(count for _, count in rest)]
+    ]
 
 
 def _plate_map(
@@ -239,7 +244,7 @@ def _marker_slide(
     _add_table(
         slide,
         ["Allele Call", "Count"],
-        _call_counts(page)[:10],
+        _call_counts(page),
         (8.2, 1.15),
         (3.4, 1.3),
         0.26,
@@ -256,7 +261,7 @@ def _result_table_rows(rows: list[ResultRow]) -> list[list[object]]:
             row.well,
             _clip(row.sample_name, _SAMPLE_CHARS),
             _clip(row.marker.name if row.marker else "", _MARKER_CHARS),
-            display_genotype(row.genotype, row.marker, row.allele_labels),
+            _clip(display_genotype(row.genotype, row.marker, row.allele_labels), _CALL_CHARS),
             round(row.confidence * 100, 1) if row.confidence is not None else "",
         ]
         for row in rows
@@ -287,7 +292,7 @@ def build_snapshot_pptx(snapshot: ResultSnapshot, include_table: bool = True) ->
     rows = snapshot_rows(snapshot)
     pages = _marker_pages(snapshot, rows)
     layout = {
-        page.marker.marker_id: _clip(page.title, _LAYOUT_CHARS)
+        page.marker.marker_id: _clip(page.title, MAX_LAYOUT_LABEL)
         for page in pages
         if page.marker
     }

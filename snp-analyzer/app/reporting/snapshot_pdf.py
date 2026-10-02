@@ -20,12 +20,9 @@ from app.reporting.result_snapshot import ResultRow, ResultSnapshot, snapshot_ro
 from app.processing.ct_calculation import calculate_all_ct
 from app.reporting.snapshot_plate import render_snapshot_plate
 from app.reporting.snapshot_presentation import (
-    CellValue, ReportFigure, axis_label, coordinate_basis, cycle_label, display_genotype,
-    polyploid_legend, report_counts, report_figures, report_metadata, report_table,
+    MAX_LAYOUT_LABEL, CellValue, ReportFigure, coordinate_basis, cycle_label, display_genotype,
+    figure_options, polyploid_legend, report_counts, report_figures, report_metadata, report_table,
 )
-
-CANONICAL_DIPLOID = ("Allele 1 Homo", "Heterozygous", "Allele 2 Homo")
-MAX_LAYOUT_LABEL = 12
 
 FONT = "ReportNanum"
 
@@ -121,22 +118,11 @@ def _marker_by_id(snapshot: ResultSnapshot) -> dict[str, AnalysisRegionContext]:
     return {marker.marker_id: marker for marker in snapshot.context.regions}
 
 
-def _scatter_options(snapshot: ResultSnapshot, marker: AnalysisRegionContext | None) -> dict[str, object]:
-    """Allele-aware axis and legend text; empty for a marker without names."""
-    label = snapshot.marker_labels.get(marker.marker_id) if marker else None
-    labels = label.allele_labels if label else None
-    if labels is None:
-        return {}
-    legend = {g: display_genotype(g, marker, labels) for g in CANONICAL_DIPLOID} if marker.ploidy == 2 else {}
-    return {"x_label": axis_label(snapshot, "allele2", marker, labels),
-            "y_label": axis_label(snapshot, "fam", marker, labels), "legend_names": legend}
-
-
 def _figure_page(snapshot: ResultSnapshot, figure: ReportFigure,
                  marker: AnalysisRegionContext | None) -> list[Flowable]:
     png = render_scatter_png(figure.points, snapshot.unified.allele2_dye, ploidy=figure.ploidy,
                              coordinate_basis=coordinate_basis(snapshot),
-                             **_scatter_options(snapshot, marker))
+                             **figure_options(snapshot, figure, marker))
     page: list[Flowable] = [PageBreak(), paragraph(figure.title, 14), Spacer(1, 10),
                             Image(io.BytesIO(png), width=560, height=420)]
     label = snapshot.marker_labels.get(marker.marker_id) if marker else None
