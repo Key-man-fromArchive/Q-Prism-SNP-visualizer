@@ -23,7 +23,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.auth import CurrentUser, check_session_access
-from app.models import MarkerCalibration, MarkerCatalogEntry, MarkerRegion, MarkerValidation
+from app.models import AlleleLabels, MarkerCalibration, MarkerCatalogEntry, MarkerRegion, MarkerValidation
 from app.processing.genotype_vocab import validate_ploidy
 from app.routers.clustering import _validate_marker_set, marker_store
 from app.services.session_restore import restore_session
@@ -201,6 +201,16 @@ async def copy_catalog_entry(catalog_id: str, current_user: CurrentUser):
     return _row_to_entry(get_marker_catalog_entry(new_id)).model_dump()
 
 
+def _catalog_allele_labels(catalog_row: dict) -> dict | None:
+    """Allele names from the catalog bases, or None unless both are usable."""
+    try:
+        return AlleleLabels(
+            fam=catalog_row["allele1_base"], allele2=catalog_row["allele2_base"]
+        ).model_dump()
+    except ValueError:
+        return None
+
+
 @router.post("/api/data/{sid}/markers/{marker_id}/attach-catalog")
 async def attach_catalog_to_marker(
     sid: str, marker_id: str, body: AttachCatalogRequest, current_user: CurrentUser
@@ -234,6 +244,8 @@ async def attach_catalog_to_marker(
         updated["ploidy"] = catalog_row["default_ploidy"]
     if updated.get("color") is None:
         updated["color"] = catalog_row["color"]
+    if updated.get("allele_labels") is None:
+        updated["allele_labels"] = _catalog_allele_labels(catalog_row)
     updated_marker = MarkerRegion(**updated)
 
     others = [m for i, m in enumerate(markers) if i != idx]

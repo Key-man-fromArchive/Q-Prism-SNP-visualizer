@@ -62,6 +62,9 @@ def create_session_from_import(
         suggested_cycle=suggested_cycle,
         well_groups=unified.well_groups,
         background_modes=available_background_modes(unified),
+        default_cycle=getattr(unified, "default_cycle", None),
+        read_labels=getattr(unified, "read_labels", None),
+        has_amplification_curve=getattr(unified, "has_amplification_curve", True),
     )
 
 
@@ -75,11 +78,13 @@ def _build_imported_marker_regions(unified: UnifiedData) -> list[dict[str, objec
     regions: list[dict[str, object]] = []
     occupied: set[str] = set()
     imported_markers = getattr(unified, "imported_markers", None) or {}
+    imported_alleles = getattr(unified, "imported_marker_alleles", None) or {}
     for index, (name, raw_wells) in enumerate(imported_markers.items()):
         wells = [well for well in raw_wells if well in plate_wells and well not in occupied]
         if not name.strip() or not wells:
             continue
         occupied.update(wells)
+        labels = imported_alleles.get(name) or imported_alleles.get(name.strip())
         regions.append({
             "id": f"imported-{index + 1}",
             "name": name.strip(),
@@ -88,6 +93,7 @@ def _build_imported_marker_regions(unified: UnifiedData) -> list[dict[str, objec
             "color": palette[index % len(palette)],
             "threshold_config": None,
             "catalog_id": None,
+            "allele_labels": labels.model_dump() if labels else None,
         })
     return regions
 
