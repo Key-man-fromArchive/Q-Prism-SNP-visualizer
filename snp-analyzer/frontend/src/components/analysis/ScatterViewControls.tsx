@@ -217,7 +217,7 @@ export function ScatterViewControls({
     />
   );
 
-  const referenceChannelName = normalizationLabel(labels);
+  const referenceChannelName = normalizationLabel(labels, t.normalizationFallback);
 
   return (
     <div className="mb-0.5 flex flex-col gap-0.5">
@@ -281,7 +281,7 @@ export function ScatterViewControls({
 
         {/* Normalization: the toggle, which channel it divides by, and
             whether the run even has one to divide by. */}
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label={normalizationLabel(labels)}>
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label={normalizationLabel(labels, t.normalizationFallback)}>
           <label className="inline-flex items-center gap-1 text-xs text-text">
             <input
               type="checkbox"
@@ -446,7 +446,7 @@ export function ScatterViewControls({
               and editable in the expanded `ntc-axis-offsets` control just
               below, and unlike the ratio origin or the NTC quadrant it is
               rarely away from its default. */}
-          {t.analysisAdvancedSettings} · <ScatterReferenceBasis requested={useRox} applied={normalizationApplied} label={normalizationLabel(labels)} /> · {t.chartBackground(backgroundMode)}
+          {t.analysisAdvancedSettings} · <ScatterReferenceBasis requested={useRox} applied={normalizationApplied} label={normalizationLabel(labels, t.normalizationFallback)} /> · {t.chartBackground(backgroundMode)}
         </summary>
         {/* The details the one-line summary leaves out; the panel below is
             only visible once expanded. */}

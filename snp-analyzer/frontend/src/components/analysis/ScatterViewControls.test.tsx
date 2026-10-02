@@ -25,7 +25,7 @@ it.each(['en', 'ko'] as const)('summarizes inferred thresholds and unlocked axes
   // the NTC thresholds live in the expanded panel.
   expect(summary).not.toHaveTextContent('FAM ≤0.12');
   expect(summary).not.toHaveTextContent('FAM/VIC');
-  expect(within(summary).getByTestId('normalization-short')).toHaveTextContent(/^Normalization [✓✗?]$/);
+  expect(within(summary).getByTestId('normalization-short')).toHaveTextContent(language === 'en' ? /^Normalization [✓✗?]$/ : /^정규화 [✓✗?]$/);
   expect(screen.getByTestId('analysis-advanced-settings')).toHaveTextContent('FAM ≤0.12');
   expect(screen.getByTestId('analysis-advanced-settings')).toHaveTextContent('VIC ≤0.34');
   expect(screen.getByTestId('scatter-threshold-summary')).toHaveTextContent(language === 'en' ? 'Auto' : '자동');
