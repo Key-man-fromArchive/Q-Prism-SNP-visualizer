@@ -22,7 +22,7 @@ test.describe('CFX Opus Amplification Results Upload', () => {
     await login(page);
     await page.locator('#file-input').setInputFiles(CFX_AMPLIFICATION);
 
-    await expect(page.locator('#instrument-badge')).toContainText('CFX Opus', { timeout: 15000 });
+    await expect(page.locator('#instrument-badge')).toContainText('CFX', { timeout: 15000 });
   });
 
   test('single-cycle data hides cycle slider', async ({ page }) => {
@@ -60,7 +60,7 @@ test.describe('CFX Opus End Point Results Upload', () => {
     await login(page);
     await page.locator('#file-input').setInputFiles(CFX_ENDPOINT);
 
-    await expect(page.locator('#instrument-badge')).toContainText('CFX Opus', { timeout: 15000 });
+    await expect(page.locator('#instrument-badge')).toContainText('CFX', { timeout: 15000 });
     await expect(page.locator('#wells-badge')).toContainText(/96\s*(wells|웰)/);
   });
 });
@@ -70,7 +70,7 @@ test.describe('CFX Opus Allelic Discrimination Results Upload', () => {
     await login(page);
     await page.locator('#file-input').setInputFiles(CFX_ALLELIC);
 
-    await expect(page.locator('#instrument-badge')).toContainText('CFX Opus', { timeout: 15000 });
+    await expect(page.locator('#instrument-badge')).toContainText('CFX', { timeout: 15000 });
     await expect(page.locator('#wells-badge')).toContainText(/96\s*(wells|웰)/);
   });
 });

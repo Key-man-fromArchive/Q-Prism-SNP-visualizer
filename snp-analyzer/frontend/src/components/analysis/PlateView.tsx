@@ -417,7 +417,7 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAllele
               const shownCall = displayedCall(wellData, showManualTypes, showAutoCluster);
               const baseCall = callAppearance(shownCall, ploidy, dark, t);
               const call = { ...baseCall, ...callTexts(shownCall, t, baseCall, wellAlleleLabels ? wellAlleleLabels.get(wellId) : alleleLabels) };
-              const cellSize = isLargePlate ? '18px' : '28px';
+              const cellSize = isLargePlate ? '18px' : '22px';
 
               const stateSuffix = isSelected || isMultiSelected
                 ? `, ${t.wellSelectedState}`

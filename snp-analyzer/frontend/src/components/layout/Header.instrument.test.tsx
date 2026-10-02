@@ -35,6 +35,19 @@ it('says it in English too', () => {
   expect(document.getElementById('instrument-badge')).toHaveTextContent('Instrument: Applied Biosystems StepOnePlus');
 });
 
+it('uses the instrument string when the file has a vendor but no model', () => {
+  open({ vendor: 'Bio-Rad' });
+  useSessionStore.setState((s) => ({ sessionInfo: { ...s.sessionInfo!, instrument: 'Bio-Rad CFX' } }));
+  render(<Header />);
+  expect(document.getElementById('instrument-badge')).toHaveTextContent(/^분석 장비: Bio-Rad CFX$/);
+});
+
+it('prefixes the vendor when the instrument string does not carry it', () => {
+  open({ vendor: 'Acme' });
+  render(<Header />);
+  expect(document.getElementById('instrument-badge')).toHaveTextContent(/^분석 장비: Acme StepOnePlus$/);
+});
+
 it('falls back to the plain instrument string when the file declares no detail', () => {
   open(null);
   render(<Header />);
