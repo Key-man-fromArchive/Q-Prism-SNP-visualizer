@@ -1091,6 +1091,34 @@ const en = {
   workspaceCloseFile: 'Close from this workspace',
   workspaceUploadingCount: (n: number) => `Preparing ${n} file${n === 1 ? '' : 's'}… You can keep working in the current analysis.`,
   workspaceManageProjects: 'Manage sessions and projects →',
+
+  // P0-T0.3c: StepOnePlus marker allele names
+  markerAlleleFamLabel: 'Allele 1 name (FAM)',
+  markerAlleleAllele2Label: 'Allele 2 name (VIC)',
+  markerAlleleClear: 'Clear',
+
+  // P0-T0.3c: StepOne cycle labels and read names
+  steponePreRead: 'Pre-read',
+  steponeAmplification: 'Amplification',
+  steponePostRead: 'Post-read',
+  steponeReadNumber: (n: number) => `Read ${n}`,
+  steponeReadLabel: (pcr_cycle: number, temperature: number) => `PCR ${pcr_cycle} · ${temperature}°C`,
+  steponeCycleLabel: (current: number, total: number, pcr_cycle: number, temperature: number) =>
+    `Amplification ${current}/${total} · PCR ${pcr_cycle} · ${temperature}°C`,
+
+  // P0-T0.3c: Genotype display guidance (unassigned wells)
+  genotypeDisplayUnassignedWells: 'Unassigned wells',
+  genotypeDisplayUnassignedCount: (n: number) => `${n} well${n === 1 ? '' : 's'} unassigned`,
+
+  // P0-T0.3c: Export report menu and options
+  exportReportPPTX: 'PowerPoint report',
+  exportReportScatterZip: 'Report images',
+  exportReportCurrentScreen: 'Current screen image',
+  exportReportSelectMarkers: 'Select markers',
+  exportReportIncludeTable: 'Include results table',
+  exportReportPPTXTooltip: 'Export PowerPoint presentation with scatter plots and results',
+  exportReportScatterZipTooltip: 'Export marker scatter plots as PNG images',
+  exportReportSelectMarkersTooltip: 'Choose which markers to include in the export',
 };
 
 export type Translations = {

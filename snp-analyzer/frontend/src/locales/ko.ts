@@ -1055,6 +1055,34 @@ const ko: Translations = {
   workspaceCloseFile: '이번 작업에서 닫기',
   workspaceUploadingCount: (n: number) => `${n}개 파일을 준비하고 있습니다. 현재 분석 작업은 계속할 수 있습니다.`,
   workspaceManageProjects: '세션 및 프로젝트 관리 →',
+
+  // P0-T0.3c: StepOnePlus marker allele names
+  markerAlleleFamLabel: 'Allele 1 이름 (FAM)',
+  markerAlleleAllele2Label: 'Allele 2 이름 (VIC)',
+  markerAlleleClear: '초기화',
+
+  // P0-T0.3c: StepOne cycle labels and read names
+  steponePreRead: 'Pre-read',
+  steponeAmplification: 'Amplification',
+  steponePostRead: 'Post-read',
+  steponeReadNumber: (n: number) => `${n}번 판독`,
+  steponeReadLabel: (pcr_cycle: number, temperature: number) => `PCR ${pcr_cycle} · ${temperature}°C`,
+  steponeCycleLabel: (current: number, total: number, pcr_cycle: number, temperature: number) =>
+    `증폭 ${current}/${total} · PCR ${pcr_cycle} · ${temperature}°C`,
+
+  // P0-T0.3c: Genotype display guidance (unassigned wells)
+  genotypeDisplayUnassignedWells: '미지정 웰',
+  genotypeDisplayUnassignedCount: (n: number) => `웰 ${n}개 미지정`,
+
+  // P0-T0.3c: Export report menu and options
+  exportReportPPTX: 'PowerPoint 보고서',
+  exportReportScatterZip: '보고서 이미지',
+  exportReportCurrentScreen: '현재 화면 이미지',
+  exportReportSelectMarkers: '마커 선택',
+  exportReportIncludeTable: '결과표 포함',
+  exportReportPPTXTooltip: 'PowerPoint 프레젠테이션으로 내보내기 (산점도, 결과표 포함)',
+  exportReportScatterZipTooltip: '마커별 산점도를 PNG 이미지 묶음으로 내보내기',
+  exportReportSelectMarkersTooltip: '내보낼 마커를 선택하세요',
 };
 
 export default ko;
