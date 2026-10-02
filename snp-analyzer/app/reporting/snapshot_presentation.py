@@ -70,7 +70,7 @@ def axis_label(
         return f"{dye} (norm)"
     name = allele_labels.fam if axis == "fam" else allele_labels.allele2
     reference = snapshot.passive_reference_label
-    basis = f"{reference} 정규화" if snapshot.context.normalization_applied else "norm"
+    basis = f"{reference}-normalized" if snapshot.context.normalization_applied else "norm"
     return f"{dye} · {name} ({basis})"
 
 

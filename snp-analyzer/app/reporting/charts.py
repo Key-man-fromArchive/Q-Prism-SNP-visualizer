@@ -88,6 +88,11 @@ def _register_font() -> None:
         _font_registered = True
 
 
+def literal_text(text: str) -> str:
+    """Escape ``$`` so user-supplied names are never interpreted as mathtext."""
+    return text.replace("$", r"\$")
+
+
 def build_scatter_figure(
     points: list[dict], allele2_dye: str = "VIC", width: float | None = None,
     height: float | None = None, ploidy: int = 2, coordinate_basis: str = "normalized",
@@ -116,17 +121,18 @@ def build_scatter_figure(
             color = genotype_color(gt, ploidy) or "#6b7280"
             xs = [p["norm_allele2"] for p in pts]
             ys = [p["norm_fam"] for p in pts]
-            ax.scatter(xs, ys, c=color, s=20, alpha=0.7, label=f"{names.get(gt, gt)} (n={len(pts)})",
+            ax.scatter(xs, ys, c=color, s=20, alpha=0.7, label=literal_text(f"{names.get(gt, gt)} (n={len(pts)})"),
                        edgecolors="white", linewidth=0.3)
 
         if len(points) <= _WELL_LABEL_LIMIT:
             for p in points:
-                ax.annotate(str(p["well"]), (p["norm_allele2"], p["norm_fam"]), xytext=(3, 3),
+                ax.annotate(literal_text(str(p["well"])), (p["norm_allele2"], p["norm_fam"]), xytext=(3, 3),
                             textcoords="offset points", fontsize=6, color="#374151")
 
-        ax.set_xlabel(x_label or f"{allele2_dye} ({coordinate_basis})", fontsize=10)
-        ax.set_ylabel(y_label or f"FAM ({coordinate_basis})", fontsize=10)
-        ax.set_title(title or "Allele Discrimination Plot", fontsize=12, fontweight="bold")
+        ax.set_xlabel(literal_text(x_label or f"{allele2_dye} ({coordinate_basis})"), fontsize=10)
+        ax.set_ylabel(literal_text(y_label or f"FAM ({coordinate_basis})"), fontsize=10)
+        ax.set_title(literal_text(title or "Allele Discrimination Plot"), fontsize=12,
+                     fontweight="bold")
         if groups:
             ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0,
                       framealpha=0.9)
