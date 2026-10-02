@@ -10,6 +10,7 @@ from pydantic import BaseModel as _BaseModel, JsonValue
 from starlette.concurrency import run_in_threadpool
 
 from app.models import (
+    AlleleLabels,
     AnalysisContext,
     AnalysisRegionContext,
     RatioOrigin,
@@ -75,9 +76,22 @@ class MarkerUpdate(_BaseModel):
     ploidy: int | None = None
     color: str | None = None
     threshold_config: ThresholdConfig | None = None
+    # Loosely typed on purpose: a malformed value is reported as 400 by the
+    # handler (via AlleleLabels) rather than as the framework's 422.
+    allele_labels: JsonValue = None
 
 
 router = APIRouter()
+
+
+def _validated_allele_labels(raw: object) -> dict | None:
+    """Normalized ``allele_labels`` dict, or None to clear; 400 if invalid."""
+    if raw is None:
+        return None
+    try:
+        return AlleleLabels.model_validate(raw).model_dump()
+    except ValueError as exc:
+        raise HTTPException(400, f"Invalid allele_labels: {exc}") from exc
 
 # In-memory stores
 cluster_store: dict[str, ClusteringResult] = {}
@@ -725,7 +739,7 @@ async def create_markers(sid: str, body: MarkerSetCreate, current_user: CurrentU
 
 @router.put("/api/data/{sid}/markers/{marker_id}")
 async def update_marker(sid: str, marker_id: str, body: MarkerUpdate, current_user: CurrentUser):
-    """Update one marker's fields (name/wells/ploidy/color/threshold_config).
+    """Update one marker's fields (name/wells/ploidy/color/threshold_config/allele_labels).
 
     Only fields explicitly present in the request body are changed; anything
     omitted keeps the marker's current value. The merged marker is validated
@@ -739,6 +753,8 @@ async def update_marker(sid: str, marker_id: str, body: MarkerUpdate, current_us
         raise HTTPException(404, f"Marker {marker_id!r} not found")
 
     updates = body.model_dump(exclude_unset=True, exclude={"expected_input_revision"})
+    if "allele_labels" in updates:
+        updates["allele_labels"] = _validated_allele_labels(updates["allele_labels"])
     merged = {**markers[idx].model_dump(), **updates}
     updated_marker = MarkerRegion(**merged)
 
