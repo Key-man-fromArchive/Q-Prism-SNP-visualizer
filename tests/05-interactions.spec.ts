@@ -23,7 +23,7 @@ test.describe('Plate View Interaction', () => {
 
     // Detail panel should update
     const detailContent = page.locator('#detail-content');
-    await expect(detailContent).not.toContainText(/Click a well to see details|웰을 클릭하여 상세정보 확인/, { timeout: 3000 });
+    await expect(detailContent).not.toContainText(/Click a well to see details|웰을 클릭하면 상세정보를 볼 수 있습니다/, { timeout: 3000 });
     // Should have a detail table with values
     await expect(detailContent.locator('.detail-table').first()).toBeVisible();
   });

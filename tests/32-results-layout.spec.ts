@@ -37,19 +37,23 @@ test.describe('results layout and expert mode', () => {
     await expect(page.getByTestId('genotype-counts')).toBeVisible();
   });
 
-  test('keeps the legend inside the scatter and puts the counts right under the plate', async ({ page }) => {
+  test('keeps the legend on its own row above the plot and the counts above the plate', async ({ page }) => {
     const legend = await page.getByTestId('marker-scatter').evaluate(node => {
-      const layout = (node as HTMLElement & { layout?: { legend?: { x: number; y: number; xanchor: string }; margin?: { b: number } } }).layout;
-      return { legend: layout?.legend, bottom: layout?.margin?.b };
+      const layout = (node as HTMLElement & { layout?: { legend?: { x: number; y: number; xanchor: string; yanchor: string }; margin?: { b: number; t: number } } }).layout;
+      return { legend: layout?.legend, bottom: layout?.margin?.b, top: layout?.margin?.t };
     });
     expect(legend.legend?.xanchor).toBe('right');
+    expect(legend.legend?.yanchor).toBe('bottom');
     expect(legend.legend?.x).toBeGreaterThan(0.5);
-    expect(legend.legend?.y).toBeGreaterThan(0.5);
+    // At/above the plot's top edge, with a top margin tall enough to sit below the modebar.
+    expect(legend.legend?.y).toBeGreaterThanOrEqual(1);
+    expect(legend.top).toBeGreaterThanOrEqual(48);
     expect(legend.bottom).toBeLessThan(80);
 
     const plate = await page.locator('#plate-grid').boundingBox();
     const counts = await page.getByTestId('genotype-counts-card').boundingBox();
-    expect(plate && counts && counts.y >= plate.y + plate.height - 1).toBeTruthy();
+    expect(plate && counts && counts.y + counts.height <= plate.y + 1).toBeTruthy();
+    expect(counts!.y + counts!.height).toBeLessThanOrEqual(1000);
   });
 
   test('expert mode brings the technical controls back and survives a reload', async ({ page }) => {
