@@ -25,6 +25,15 @@ it('offers a swap-axes toggle next to the aspect ratio that flips the stored ori
   expect(useSettingsStore.getState().scatterOrientation).toBe('fam_x');
 });
 
+it('renders the swap-axes toggle icon-only, keeping its accessible name', () => {
+  render(<ScatterViewControls {...props} />);
+  const toggle = screen.getByTestId('scatter-swap-axes');
+  expect(toggle.textContent?.trim()).toBe('');
+  expect(toggle.getAttribute('aria-label')).toBeTruthy();
+  expect(toggle.getAttribute('title')).toBe(toggle.getAttribute('aria-label'));
+  expect(screen.getByRole('button', { name: toggle.getAttribute('aria-label')! })).toBe(toggle);
+});
+
 it('fits to data in the displayed axes when swapped', () => {
   useSettingsStore.getState().setScatterOrientation('allele2_x');
   render(<ScatterViewControls {...props} />);
