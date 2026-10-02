@@ -127,7 +127,9 @@ export function axisRangeLayout(
 
 /** Axis title `FAM · WT`; the bare dye when the marker has no allele name. `suffix` carries the normalization, e.g. ` / ROX`. */
 export function axisTitle(dye: string, alleleName: string | null | undefined, suffix = ''): string {
-  return `${alleleName ? `${dye} · ${alleleName}` : dye}${suffix}`;
+  // A role label such as `WT (FAM)` already names the allele: don't repeat it.
+  const roleName = dye.replace(/\s*\([^)]*\)\s*$/, '');
+  return `${alleleName && roleName !== alleleName ? `${dye} · ${alleleName}` : dye}${suffix}`;
 }
 
 /** Round a bound to something an operator can read in a number input without
