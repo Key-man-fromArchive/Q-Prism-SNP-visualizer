@@ -48,9 +48,27 @@ it('says the check is off when it is disabled', () => {
   expect(screen.getByTestId('amplification-qc-summary')).toHaveTextContent('Amplification check off');
 });
 
+const openControls = () => {
+  if (!screen.queryByTestId('amplification-qc-controls')) fireEvent.click(screen.getByTestId('qc-adjust'));
+};
+
+it('keeps the expert editor collapsed behind an Adjust button until it is opened, and remembers it', () => {
+  useSettingsStore.setState({ expertMode: true });
+  const first = render(<AmplificationQcSummary />);
+  expect(screen.queryByTestId('amplification-qc-controls')).toBeNull();
+  fireEvent.click(screen.getByTestId('qc-adjust'));
+  expect(screen.getByTestId('amplification-qc-controls')).toBeInTheDocument();
+  first.unmount();
+  render(<AmplificationQcSummary />);
+  expect(screen.getByTestId('amplification-qc-controls')).toBeInTheDocument();
+  fireEvent.click(screen.getByTestId('qc-adjust'));
+  expect(screen.queryByTestId('amplification-qc-controls')).toBeNull();
+});
+
 it('lets an expert switch the check off, set the fraction and type manual thresholds into the saved settings', () => {
   useSettingsStore.setState({ expertMode: true });
   render(<AmplificationQcSummary />);
+  openControls();
   fireEvent.change(screen.getByTestId('qc-fraction'), { target: { value: '0.5' } });
   fireEvent.change(screen.getByTestId('qc-fam-threshold'), { target: { value: '2.5' } });
   expect(useSettingsStore.getState().amplificationQc).toMatchObject({ fraction: 0.5, famThreshold: 2.5, allele2Threshold: null });
@@ -63,6 +81,7 @@ it('lets an expert switch the check off, set the fraction and type manual thresh
 it('keeps the fraction inside 0.05–0.9', () => {
   useSettingsStore.setState({ expertMode: true });
   render(<AmplificationQcSummary />);
+  openControls();
   fireEvent.change(screen.getByTestId('qc-fraction'), { target: { value: '5' } });
   expect(useSettingsStore.getState().amplificationQc.fraction).toBe(0.9);
   fireEvent.change(screen.getByTestId('qc-fraction'), { target: { value: '0.01' } });

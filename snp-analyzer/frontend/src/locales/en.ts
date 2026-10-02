@@ -61,7 +61,7 @@ const en = {
   ampQcTitle: 'Amplification threshold', ampQcOff: 'Amplification check off',
   ampQcSourceAuto: (fraction: string) => `auto, ${fraction} of the top 10%`,
   ampQcSourceManual: 'manual', ampQcSourceMixed: 'partly manual',
-  ampQcEnabled: 'Check amplification', ampQcFraction: 'Fraction of the top 10%',
+  ampQcAdjust: 'Adjust', ampQcEnabled: 'Check amplification', ampQcFraction: 'Fraction of the top 10%',
   ampQcThresholdInput: (channel: string) => `${channel} threshold (blank = auto)`,
   ampQcMarkerNone: 'This marker did not amplify.',
   ampQcWellNone: 'No amplification',

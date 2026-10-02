@@ -13,7 +13,7 @@ import Plotly from "plotly.js-dist-min";
 import { dosageOfLabel, defaultRatioCuts } from "@/lib/genotype";
 import { chartCategory, markerCallLabel, cycleReadText, chartPointState, chartStateText } from "@/lib/chart-semantics";
 import { useI18n } from "@/hooks/use-i18n";
-import { compactLegend, plotlyColors } from "@/lib/plotly-theme";
+import { compactLegend, LEGEND_MARGIN_TOP, PLOTLY_MODEBAR, plotlyColors } from "@/lib/plotly-theme";
 import { channelLabels } from "@/lib/channel-labels";
 import {
   axisRangeLayout, axisTitle, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode,
@@ -528,13 +528,13 @@ export function MarkerScatterPlot({
       shapes,
       // Compact legend on its own row above the plot area, below the modebar;
       // nothing is reserved under the axis title.
-      margin: { t: 52, r: 10, b: 56, l: 56 },
+      margin: { t: LEGEND_MARGIN_TOP, r: 10, b: 56, l: 56 },
       legend: compactLegend(colors),
     };
 
     const config = {
       responsive: true,
-      displayModeBar: true,
+      displayModeBar: PLOTLY_MODEBAR,
       // zoom2d/pan2d stay: picking one well out of a dense cluster needs a
       // zoom first, whichever tool a drag is bound to.
       modeBarButtonsToRemove: ["toImage", "sendDataToCloud"],
