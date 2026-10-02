@@ -6,7 +6,7 @@ import { useSessionStore } from '@/stores/session-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useNavigationStore, isResultsSurfaceActive } from '@/stores/navigation-store';
 import { useI18n } from '@/hooks/use-i18n';
-import { cycleReadText } from '@/lib/chart-semantics';
+import { cycleReadText, windowLabel } from '@/lib/chart-semantics';
 
 export function CycleControl() {
   const { t } = useI18n();
@@ -113,7 +113,7 @@ export function CycleControl() {
                 if (cycle !== undefined) chooseCycle(cycle);
               }}
             >
-              {w.name}
+              {windowLabel(w.name, t)}
             </button>
           ))}
         </div>
