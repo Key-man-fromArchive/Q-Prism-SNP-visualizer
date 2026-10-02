@@ -292,10 +292,15 @@ body.dark .panel {
      first screen. The plot takes the largest 3:4 box that fits the card width
      and the viewport height, centred when width is left over. Applies to 1:1
      and 4:3 alike. */
-  .analysis-scatter-canvas { --scatter-max-h: min(calc(100dvh - 400px), 820px); }
+  .analysis-scatter-canvas { --scatter-max-h: min(calc(100dvh - 480px), 820px); }
   [data-testid="analysis-warnings"] { max-height: 5rem; overflow: auto; }
   [data-testid="analysis-scope-selector"] { margin-top: .5rem; }
-  [data-testid="analysis-result-status"] { padding: .5rem .75rem; }
+  /* 1440x1000 budget: the status facts read as one wrapped line, and the call
+     tiles show count and name side by side, so scatter, plate and the selected
+     well summary all fit the first screen. */
+  [data-testid="analysis-result-status"] { display: flex; flex-wrap: wrap; column-gap: 1rem; padding: .25rem .75rem; margin-block: .25rem; }
+  [data-testid="genotype-counts"] > div { display: flex; align-items: baseline; justify-content: center; gap: .375rem; padding: .125rem .375rem; }
+  [data-testid="genotype-counts"] > div > div { margin-top: 0; }
 }
 @media (min-width: 768px) { :root { --workspace-gutter: 1.5rem; } }
 @media (min-width: 1280px) { .analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

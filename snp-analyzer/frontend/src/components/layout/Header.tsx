@@ -22,6 +22,7 @@ import { ApiError, logout, saveAsgResult } from "@/lib/api";
 import { analyzeCurrent } from "@/lib/analysis-actions";
 import { loadAnalysisSession } from "@/lib/analysis-session";
 import type { LinkedASGContext } from '@/types/auth';
+import type { InstrumentDetail } from '@/types/api';
 import type { Translations } from '@/locales/en';
 
 // target_type/target_id are ASG's internal linkage identifiers (e.g. "ad_hoc", "1")
@@ -112,6 +113,15 @@ function ExportMarkerPicker({ markers, selected, onToggle, onToggleAll }: Export
       ))}
     </div>
   );
+}
+
+function instrumentDetailName(detail: InstrumentDetail | null | undefined, instrument?: string): string {
+  if (!detail) return '';
+  const { vendor, model } = detail;
+  if (model) return [vendor, model].filter(Boolean).join(' ');
+  if (!vendor) return '';
+  if (!instrument) return vendor;
+  return instrument.toLowerCase().startsWith(vendor.toLowerCase()) ? instrument : `${vendor} ${instrument}`;
 }
 
 export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
@@ -325,7 +335,7 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
   };
 
   const detail = sessionInfo?.instrument_detail;
-  const detailName = [detail?.vendor, detail?.model].filter(Boolean).join(' ');
+  const detailName = instrumentDetailName(detail, sessionInfo?.instrument);
   const instrumentText = detailName ? t.instrumentChip(detailName) : sessionInfo?.instrument;
   const instrumentTitle = [detailName || sessionInfo?.instrument, detail?.software].filter(Boolean).join(' · ');
 
