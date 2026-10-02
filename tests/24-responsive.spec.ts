@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { login } from './helpers';
+import { enableExpertMode } from './expert-mode';
+
+test.beforeEach(async ({ page }) => { await enableExpertMode(page); });
 
 test.use({ baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:8402' });
 

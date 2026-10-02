@@ -2,6 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 import { login, ADMIN_USERNAME, ADMIN_PASSWORD } from './helpers';
 import en from '../snp-analyzer/frontend/src/locales/en';
 import ko from '../snp-analyzer/frontend/src/locales/ko';
+import { enableExpertMode } from './expert-mode';
+
+test.beforeEach(async ({ page }) => { await enableExpertMode(page); });
 
 const longProjectName = 'Project with an intentionally long identifier '.repeat(5).trim();
 const longCatalogName = 'Assay with a deliberately long name '.repeat(5).trim();

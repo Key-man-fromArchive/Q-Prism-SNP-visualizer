@@ -1,5 +1,8 @@
 import { expect, test, type Download } from '@playwright/test';
 import { login } from './helpers';
+import { enableExpertMode } from './expert-mode';
+
+test.beforeEach(async ({ page }) => { await enableExpertMode(page); });
 
 async function text(download: Download) {
   const stream = await download.createReadStream();

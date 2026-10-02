@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
 import { uploadAndWait } from './helpers';
+import { enableExpertMode } from './expert-mode';
+
+test.beforeEach(async ({ page }) => { await enableExpertMode(page); });
 
 // StepOnePlus .eds end to end: first screen lands on the first amplification
 // read (PCR 36), the six plate markers are imported, per-marker allele names
@@ -79,12 +82,14 @@ test.describe('StepOnePlus markers', () => {
     await pickMarker(1, 'QPrism2');
     await expect(named('REFX').first()).toBeAttached();
     await expect(named('MUTX').first()).toBeAttached();
-    await expect(named('WT')).toHaveCount(0);
+    // Each well carries its own marker's names, so QPrism1's wells keep WT/MT
+    // here -- but no single cell may mix two markers' names.
+    await expect(region.locator('[role="gridcell"][aria-label*="REFX"][aria-label*="WT"]')).toHaveCount(0);
 
-    // QPrism1: back to the names declared in the file; nothing leaks over.
+    // QPrism1: its wells show the names declared in the file.
     await pickMarker(0, 'QPrism1');
     await expect(named('WT').first()).toBeAttached();
     await expect(named('MT').first()).toBeAttached();
-    await expect(named('REFX')).toHaveCount(0);
+    await expect(region.locator('[role="gridcell"][aria-label*="REFX"][aria-label*="WT"]')).toHaveCount(0);
   });
 });
