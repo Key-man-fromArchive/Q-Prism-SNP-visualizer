@@ -4,9 +4,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
 
-from app.models import AnalysisRegionContext
+from app.models import AlleleLabels, AnalysisRegionContext
 from app.reporting.result_snapshot import ResultRow, ResultSnapshot, snapshot_rows
 
+# D-2: the one place to change the diploid call notation.
+DIPLOID_CALL_FORMAT = "{first}/{second}"
 CellValue = str | int | float | bool | None
 
 
@@ -35,22 +37,58 @@ def report_metadata(snapshot: ResultSnapshot) -> list[tuple[str, CellValue]]:
     ]
 
 
-def display_genotype(genotype: str, marker: AnalysisRegionContext | None = None) -> str:
-    """Operator-facing call text. Contract stub: P1-C applies marker allele names."""
-    return genotype
+def display_genotype(
+    genotype: str, marker: AnalysisRegionContext | None = None,
+    allele_labels: AlleleLabels | None = None,
+) -> str:
+    """Operator-facing diploid call text; canonical strings are never altered upstream."""
+    if allele_labels is None or (marker is not None and marker.ploidy != 2):
+        return genotype
+    first, second = allele_labels.fam, allele_labels.allele2
+    pairs = {"Allele 1 Homo": (first, first), "Heterozygous": (first, second),
+             "Allele 2 Homo": (second, second)}
+    if genotype not in pairs:
+        return genotype
+    return DIPLOID_CALL_FORMAT.format(first=pairs[genotype][0], second=pairs[genotype][1])
+
+
+def polyploid_legend(allele_labels: AlleleLabels | None, allele2_dye: str) -> str | None:
+    """Legend decoding the A/B letters of higher-ploidy calls."""
+    if allele_labels is None:
+        return None
+    return f"A = {allele_labels.fam} (FAM), B = {allele_labels.allele2} ({allele2_dye})"
 
 
 def axis_label(
     snapshot: ResultSnapshot, axis: Literal["fam", "allele2"],
     marker: AnalysisRegionContext | None = None,
+    allele_labels: AlleleLabels | None = None,
 ) -> str:
-    """Scatter axis title. Contract stub: P1-C applies marker allele names."""
-    return "FAM (norm)" if axis == "fam" else f"{snapshot.unified.allele2_dye} (norm)"
+    """Scatter axis title; names the allele and the normalization basis when known."""
+    dye = "FAM" if axis == "fam" else snapshot.unified.allele2_dye
+    if allele_labels is None:
+        return f"{dye} (norm)"
+    name = allele_labels.fam if axis == "fam" else allele_labels.allele2
+    reference = snapshot.passive_reference_label
+    basis = f"{reference} 정규화" if snapshot.context.normalization_applied else "norm"
+    return f"{dye} · {name} ({basis})"
 
 
 def cycle_label(snapshot: ResultSnapshot, cycle: int) -> str:
-    """Read/cycle title. Contract stub: P1-C applies the instrument's read names."""
-    return str(cycle)
+    """Read/cycle title using the instrument's read names when declared."""
+    labels = snapshot.unified.read_labels
+    label = labels.get(cycle) if labels else None
+    if label is None:
+        return str(cycle)
+    if label.stage.casefold() != "amplification":
+        return label.stage
+    reads = sorted(c for c, item in labels.items() if item.stage == label.stage)
+    parts = [f"{label.stage} {reads.index(cycle) + 1}/{len(reads)}"]
+    if label.pcr_cycle is not None:
+        parts.append(f"PCR {label.pcr_cycle}")
+    if label.temperature is not None:
+        parts.append(f"{label.temperature:g}°C")
+    return " · ".join(parts)
 
 
 def coordinate_basis(snapshot: ResultSnapshot) -> str:
@@ -92,10 +130,15 @@ def figure_points(rows: list[ResultRow]) -> list[dict[str, object]]:
 def report_figures(snapshot: ResultSnapshot, rows: list[ResultRow]) -> list[ReportFigure]:
     if not snapshot.context.regions:
         return [ReportFigure("Whole-run", snapshot.result.ploidy, figure_points(rows))]
-    return [ReportFigure(f"{marker.name} [{marker.marker_id}] / ploidy {marker.ploidy}",
+    return [ReportFigure(f"{_current_name(snapshot, marker)} [{marker.marker_id}] / ploidy {marker.ploidy}",
                          marker.ploidy, figure_points([row for row in rows
-                                                     if row.marker == marker]))
+                                                     if row.marker and row.marker.marker_id == marker.marker_id]))
             for marker in snapshot.context.regions]
+
+
+def _current_name(snapshot: ResultSnapshot, marker: AnalysisRegionContext) -> str:
+    label = snapshot.marker_labels.get(marker.marker_id)
+    return label.name if label else marker.name
 
 
 def report_counts(rows: list[ResultRow]) -> list[list[CellValue]]:
