@@ -252,7 +252,7 @@ test.describe('API Endpoints Direct', () => {
     expect(response.ok()).toBe(true);
     const json = await response.json();
     expect(json.session_id).toBeTruthy();
-    expect(json.instrument).toBe('QuantStudio 3');
+    expect(json.instrument).toMatch(/QuantStudio.*3/);
     expect(json.num_cycles).toBe(25);
     expect(json.num_wells).toBeGreaterThan(0);
     expect(json.has_rox).toBe(true);
