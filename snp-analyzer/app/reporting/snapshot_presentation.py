@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Literal
 
 from app.models import AlleleLabels, AnalysisRegionContext
+from app.reporting.filenames import safe_filename
 from app.reporting.result_snapshot import ResultRow, ResultSnapshot, snapshot_rows
 
 # D-2: the one place to change the diploid call notation.
@@ -91,6 +92,25 @@ def cycle_label(snapshot: ResultSnapshot, cycle: int) -> str:
     return " · ".join(parts)
 
 
+def figure_title(snapshot: ResultSnapshot, name: str, marker: AnalysisRegionContext | None) -> str:
+    """The one marker figure title: marker name, cycle label and a non-diploid ploidy."""
+    cycle = snapshot.context.cycle
+    labels = snapshot.unified.read_labels
+    when = cycle_label(snapshot, cycle) if labels and cycle in labels else f"Cycle {cycle}"
+    parts = [name, when]
+    if marker is not None and marker.ploidy != 2:
+        parts.append(f"{marker.ploidy}n")
+    return " · ".join(parts)
+
+
+def marker_scope(snapshot: ResultSnapshot, selected: bool) -> str | None:
+    """Filename scope: the safe marker names of a marker selection, else None (whole run)."""
+    if not selected:
+        return None
+    return "+".join(safe_filename(_current_name(snapshot, marker))
+                    for marker in snapshot.context.regions)
+
+
 def coordinate_basis(snapshot: ResultSnapshot) -> str:
     if not snapshot.context.normalization_applied:
         return "raw / post-background"
@@ -130,7 +150,7 @@ def figure_points(rows: list[ResultRow]) -> list[dict[str, object]]:
 def report_figures(snapshot: ResultSnapshot, rows: list[ResultRow]) -> list[ReportFigure]:
     if not snapshot.context.regions:
         return [ReportFigure("Whole-run", snapshot.result.ploidy, figure_points(rows))]
-    return [ReportFigure(f"{_current_name(snapshot, marker)} [{marker.marker_id}] / ploidy {marker.ploidy}",
+    return [ReportFigure(figure_title(snapshot, _current_name(snapshot, marker), marker),
                          marker.ploidy, figure_points([row for row in rows
                                                      if row.marker and row.marker.marker_id == marker.marker_id]))
             for marker in snapshot.context.regions]
