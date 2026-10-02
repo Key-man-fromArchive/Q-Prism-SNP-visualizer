@@ -209,9 +209,9 @@ export function useExports(): {
   exportPNG: (signal?: AbortSignal) => Promise<void>;
   exportPDF: (markerIds?: readonly string[]) => Promise<void>;
   exportXLSX: () => Promise<void>;
-  exportPPTX: (markerIds?: readonly string[]) => Promise<void>;
+  exportPPTX: (markerIds?: readonly string[], includeTable?: boolean) => Promise<void>;
   exportScatterZip: (markerIds?: readonly string[]) => Promise<void>;
-  exportStored: (kind: StoredExportKind, signal?: AbortSignal, markerIds?: readonly string[]) => Promise<void>;
+  exportStored: (kind: StoredExportKind, signal?: AbortSignal, markerIds?: readonly string[], includeTable?: boolean) => Promise<void>;
   printReport: () => void;
 } {
   const conditions = useCallback(() => {
