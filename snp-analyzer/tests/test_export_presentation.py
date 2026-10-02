@@ -65,7 +65,8 @@ def test_figures_keep_points_and_use_current_name(plate: SimpleNamespace) -> Non
     figures = report_figures(snapshot, snapshot_rows(snapshot))
     assert [len(f.points) for f in figures] == before
     assert all(count > 0 for count in before)
-    assert figures[0].title.startswith("RenamedAssay [")
+    assert figures[0].title.startswith("RenamedAssay · ")
+    assert "[" not in figures[0].title
 
 
 def test_marker_labels_are_deep_copies(plate: SimpleNamespace) -> None:

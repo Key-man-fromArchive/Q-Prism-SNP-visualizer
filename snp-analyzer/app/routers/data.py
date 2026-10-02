@@ -313,17 +313,25 @@ async def export_pdf(
     cycle: int | None = Query(default=None, ge=0),
     cycle_mode: CycleMode = Query(default="legacy_latest"),
     result_revision: UUID | None = Query(default=None),
+    marker_ids: str | None = Query(default=None),
 ):
     from fastapi.responses import Response
+    from app.reporting.filenames import content_disposition
     from app.reporting.result_snapshot import ExportOptions, capture_result_snapshot
     from app.reporting.snapshot_pdf import build_snapshot_pdf
+    from app.reporting.snapshot_presentation import marker_scope
+    from app.routers.export_params import parse_marker_ids
 
+    selected = parse_marker_ids(marker_ids)
     snapshot = capture_result_snapshot(
-        sid, current_user, ExportOptions(result_revision, cycle, use_rox, background, cycle_mode),
+        sid, current_user,
+        ExportOptions(result_revision, cycle, use_rox, background, cycle_mode, selected),
     )
     return Response(
         build_snapshot_pdf(snapshot), media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="snp_report_whole-run_cycle{snapshot.context.cycle}.pdf"'},
+        headers={"Content-Disposition": content_disposition(
+            f"snp_report_{marker_scope(snapshot, selected is not None) or 'whole-run'}"
+            f"_cycle{snapshot.context.cycle}.pdf")},
     )
 
 

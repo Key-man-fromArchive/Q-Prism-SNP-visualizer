@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useMemo, useState } from "react";
 import Plotly from "plotly.js-dist-min";
 import type { Data, Layout } from "plotly.js";
 import { useSessionStore } from "@/stores/session-store";
@@ -7,10 +7,10 @@ import { useDataStore } from "@/stores/data-store";
 import { getAllAmplification } from "@/lib/api";
 import { channelLabels } from "@/lib/channel-labels";
 import { plotlyColors } from "@/lib/plotly-theme";
-import { wellInfo } from "@/lib/genotype";
+import { displayGenotype, wellInfo } from "@/lib/genotype";
 import { useI18n } from "@/hooks/use-i18n";
 import { useIsDarkMode } from "@/hooks/use-dark-mode";
-import type { AmplificationResponse, BackgroundMode } from "@/types/api";
+import type { AlleleLabels, AmplificationResponse, BackgroundMode, MarkerRegion } from "@/types/api";
 
 type ColorBy = "genotype" | "wellType" | "solid";
 
@@ -32,10 +32,17 @@ type AmplificationOverlayProps = {
    *  Analysis-tab / per-marker instances keep the exact ids
    *  e2e/p4-s2-analysis-tab.spec.ts already locates. */
   idPrefix?: string;
+  /** The marker's allele names; legend and hover show `WT/MT` instead of the stored call. */
+  alleleLabels?: AlleleLabels | null;
 };
 
-export function AmplificationOverlay({ ploidyOverride, idPrefix = "" }: AmplificationOverlayProps = {}) {
+export function AmplificationOverlay({ ploidyOverride, idPrefix = "", alleleLabels }: AmplificationOverlayProps = {}) {
   const { t } = useI18n();
+  // displayGenotype only reads the allele names
+  const marker = useMemo(
+    () => (alleleLabels ? ({ allele_labels: alleleLabels } as MarkerRegion) : null),
+    [alleleLabels],
+  );
   const dark = useIsDarkMode();
   const plotRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
@@ -115,7 +122,7 @@ export function AmplificationOverlay({ ploidyOverride, idPrefix = "" }: Amplific
             ? curve.effective_type || "Unknown"
             : wellTypeAssignments[curve.well] || "Unknown";
         color = wellInfo(key, ploidy, dark).color;
-        legendLabel = key;
+        legendLabel = displayGenotype(key, marker);
         showLegend = !legendAdded.has(key);
         if (showLegend) legendAdded.add(key);
       }
@@ -151,7 +158,7 @@ export function AmplificationOverlay({ ploidyOverride, idPrefix = "" }: Amplific
       responsive: true,
       displayModeBar: false,
     });
-  }, [visible, response, channel, colorBy, ploidy, dark, wellTypeAssignments, roleLabels, allele2Dye]);
+  }, [visible, response, channel, colorBy, ploidy, dark, wellTypeAssignments, roleLabels, allele2Dye, marker]);
 
   // Cleanup on unmount
   useEffect(() => {

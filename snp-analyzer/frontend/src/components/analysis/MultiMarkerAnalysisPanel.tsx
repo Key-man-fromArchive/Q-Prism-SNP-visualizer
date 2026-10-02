@@ -230,6 +230,12 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     ? dosageTrustForMarker(selectedMarker.catalog_id, catalogById)
     : "putative";
 
+  // Wells that no marker claims: the plate shows them grey with a count.
+  const unassignedWells = useMemo(() => {
+    const claimed = new Set(markers.flatMap((m) => m.wells));
+    return scatterPoints.map((p) => p.well).filter((w) => !claimed.has(w));
+  }, [markers, scatterPoints]);
+
   const useSidebar = markers.length >= SIDEBAR_THRESHOLD;
 
   const expectedClasses = selectedMarker ? selectedMarker.ploidy + 1 : 0;
@@ -470,8 +476,9 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
               {selectedWells.length === 0 && (
                 <p data-testid="plate-view-hint" className="text-xs text-text-muted">{t.selectionHelp}</p>
               )}
-              <PlateView scopeWells={selectedMarker.wells} ploidyOverride={selectedMarker.ploidy} />
-              <WellDetailPanel ploidyOverride={selectedMarker.ploidy} />
+              <PlateView scopeWells={selectedMarker.wells} ploidyOverride={selectedMarker.ploidy}
+                alleleLabels={selectedMarker.allele_labels} unassignedWells={unassignedWells} />
+              <WellDetailPanel ploidyOverride={selectedMarker.ploidy} alleleLabels={selectedMarker.allele_labels} />
             </div>
             </div>
 
@@ -517,8 +524,8 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
             </div>
             </div>
 
-            <ResultsTable ploidyOverride={selectedMarker.ploidy} />
-            <AmplificationOverlay ploidyOverride={selectedMarker.ploidy} />
+            <ResultsTable ploidyOverride={selectedMarker.ploidy} alleleLabels={selectedMarker.allele_labels} />
+            <AmplificationOverlay ploidyOverride={selectedMarker.ploidy} alleleLabels={selectedMarker.allele_labels} />
           </>
         )}
       </div>

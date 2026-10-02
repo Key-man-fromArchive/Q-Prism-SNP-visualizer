@@ -16,7 +16,8 @@ import { useWellFilter } from '@/hooks/use-well-filter';
 import { useWellGrid } from '@/hooks/use-well-grid';
 import { useI18n } from '@/hooks/use-i18n';
 import { StatusState } from '@/components/shared/ui';
-import type { PlateWell } from '@/types/api';
+import type { AlleleLabels, PlateWell } from '@/types/api';
+import { callTexts } from './call-text';
 import { useIsDarkMode } from "@/hooks/use-dark-mode";
 import { useQualityFocus } from '@/hooks/use-quality-focus';
 
@@ -30,9 +31,12 @@ interface DragRect {
 type PlateViewProps = {
   scopeWells?: readonly string[];
   ploidyOverride?: number;
+  alleleLabels?: AlleleLabels | null;
+  /** Wells that belong to no marker: drawn grey and counted in a note. */
+  unassignedWells?: readonly string[];
 };
 
-export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
+export function PlateView({ scopeWells, ploidyOverride, alleleLabels, unassignedWells }: PlateViewProps = {}) {
   const { t } = useI18n();
   const dark = useIsDarkMode();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -122,6 +126,9 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
     }
     return map;
   }, [plateWells]);
+
+  const unassignedSet = new Set(unassignedWells);
+  const unassignedCount = plateWells.filter((w) => unassignedSet.has(w.well)).length;
 
   // Calculate well color based on type or ratio
   const getWellColor = (wellData: PlateWell | undefined): string => {
@@ -381,10 +388,13 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
               const isEmpty = !hasData;
               // Has data but excluded from plots (omitted, group-filtered, or hidden Empty)
               const isExcluded = hasData && !isWellVisible(wellId);
-              const isOutOfScope = hasData && outsideDisplayScope(wellId, scopeWells);
+              const isUnassigned = hasData && unassignedSet.has(wellId);
+              const isOutOfScope = hasData && !isUnassigned && outsideDisplayScope(wellId, scopeWells);
 
-              const wellColor = isEmpty ? '' : getWellColor(wellData);
-              const call = callAppearance(displayedCall(wellData, showManualTypes, showAutoCluster), ploidy, dark, t);
+              const wellColor = isEmpty ? '' : isUnassigned ? wellInfo(null, ploidy, dark).color : getWellColor(wellData);
+              const shownCall = displayedCall(wellData, showManualTypes, showAutoCluster);
+              const baseCall = callAppearance(shownCall, ploidy, dark, t);
+              const call = { ...baseCall, ...callTexts(shownCall, t, baseCall, alleleLabels) };
               const cellSize = isLargePlate ? '18px' : '28px';
 
               const stateSuffix = isSelected || isMultiSelected
@@ -392,7 +402,8 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
                 : isEmpty
                 ? `, ${t.wellEmptyState}`
                 : '';
-              const ariaLabel = `${wellId}${wellData?.sample_name ? `, ${wellData.sample_name}` : ''}, ${call.description}${stateSuffix}`;
+              const unassignedSuffix = isUnassigned ? `, ${t.genotypeDisplayUnassignedWells}` : '';
+              const ariaLabel = `${wellId}${wellData?.sample_name ? `, ${wellData.sample_name}` : ''}, ${call.description}${unassignedSuffix}${stateSuffix}`;
 
               return (
                 <button
@@ -401,6 +412,7 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
                   type="button"
                   role="gridcell"
                   data-well={wellId}
+                  data-unassigned={isUnassigned ? 'true' : undefined}
                   aria-label={ariaLabel}
                   aria-selected={isSelected || isMultiSelected}
                   className={`
@@ -456,7 +468,14 @@ export function PlateView({ scopeWells, ploidyOverride }: PlateViewProps = {}) {
           showAutoCluster={showAutoCluster}
           ploidy={ploidy}
           dark={dark}
+          alleleLabels={alleleLabels}
         />
+      )}
+
+      {status === "ready" && unassignedCount > 0 && (
+        <p data-testid="plate-unassigned-note" title={t.genotypeDisplayUnassignedWells} className="mt-1 text-xs text-text-muted">
+          {t.genotypeDisplayUnassignedCount(unassignedCount)}
+        </p>
       )}
 
       {/* Drag selection rectangle */}

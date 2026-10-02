@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal
 from uuid import UUID
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, computed_field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, ValidationInfo, computed_field, field_validator, model_validator
 
 
 class WellCycleData(BaseModel):
@@ -304,6 +304,21 @@ class MarkerRegion(BaseModel):
     # Operator-facing allele names for this marker; None keeps the generic
     # Allele 1 / Allele 2 wording.
     allele_labels: AlleleLabels | None = None
+
+    @field_validator("name", mode="after")
+    @classmethod
+    def clean_name_on_input(cls, value: str, info: ValidationInfo) -> str:
+        # Opt-in: input paths validate with context={"strict_marker_name": True}.
+        # Restore/import build the model without it so a stored legacy name
+        # can never make a session unloadable.
+        if not (info.context or {}).get("strict_marker_name"):
+            return value
+        value = value.strip()
+        if not value:
+            raise ValueError("Marker name must not be empty")
+        if any(unicodedata.category(ch) in {"Cc", "Cf", "Zl", "Zp"} for ch in value):
+            raise ValueError("Marker name must not contain control or invisible formatting characters")
+        return value
 
 
 # ---------------------------------------------------------------------------

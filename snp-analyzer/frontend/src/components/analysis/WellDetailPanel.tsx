@@ -8,9 +8,10 @@ import { getAmplification } from "@/lib/api";
 import { channelLabels, normalizationLabel } from "@/lib/channel-labels";
 import { callLabel } from "@/lib/chart-semantics";
 import { useRequestStatus } from "@/hooks/use-request-status";
-import type { AmplificationCurve } from "@/types/api";
+import { callTexts } from "./call-text";
+import type { AlleleLabels, AmplificationCurve } from "@/types/api";
 
-type WellDetailPanelProps = { ploidyOverride?: number };
+type WellDetailPanelProps = { ploidyOverride?: number; alleleLabels?: AlleleLabels | null };
 
 // @TASK P12-TOGGLE - Well detail panel: numeric info + P7 time-series table
 // only. The curve chart itself moved to AmplificationCurvePanel (results
@@ -20,7 +21,7 @@ type WellDetailPanelProps = { ploidyOverride?: number };
 // unit-testable) on its own; see AmplificationCurvePanel.tsx's doc comment
 // for the trade-off this makes (one duplicate GET per well selection when
 // both are mounted).
-export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
+export function WellDetailPanel({ ploidyOverride, alleleLabels }: WellDetailPanelProps = {}) {
   // `ploidyOverride` is kept in the props type for MultiMarkerAnalysisPanel's
   // existing call site (it passes the selected marker's own ploidy), but it
   // is intentionally not read below: it only ever fed the raw-ratio genotype
@@ -149,9 +150,16 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
   // @TASK P24-DETAIL-CALL
   // @SPEC docs/planning/feedback-2026-09-11/evidence/P22-CALL-LOGIC.md (finding 3)
   const effectiveCall = manualType ?? autoCluster ?? null;
+  // A call text that carries the marker's allele names; null without names.
+  const namedCall = (key: string) => {
+    const texts = callTexts(key, t, { label: key, description: key }, alleleLabels);
+    return texts.label !== key ? texts.label : null;
+  };
   let genotype = '—';
   if (effectiveCall) {
-    if (effectiveCall === "Allele 1 Homo") genotype = t.genotypeAllele1;
+    const named = namedCall(effectiveCall);
+    if (named) genotype = named;
+    else if (effectiveCall === "Allele 1 Homo") genotype = t.genotypeAllele1;
     else if (effectiveCall === "Allele 2 Homo") genotype = t.genotypeAllele2(allele2Dye ?? "Allele2");
     else if (effectiveCall === "Heterozygous") genotype = t.genotypeHeterozygous;
     else genotype = callLabel(effectiveCall, t);
@@ -208,8 +216,8 @@ export function WellDetailPanel({ ploidyOverride }: WellDetailPanelProps = {}) {
           <summary className="cursor-pointer text-xs text-primary py-0.5">{t.analysisNumericDetails}</summary>
           <p className="text-xs text-text-muted" data-testid="scatter-reading-basis">{t.scatterReferenceBasis(useRox, normalizationReported, normalizationApplied)}</p>
           <table className="detail-table w-full text-sm"><tbody>
-            {autoCluster && <tr><td className="text-text-muted pr-3 py-0.5">{t.autoCluster}</td><td>{callLabel(autoCluster, t)}</td></tr>}
-            {manualType && <tr><td className="text-text-muted pr-3 py-0.5">{t.manualType}</td><td>{callLabel(manualType, t)}</td></tr>}
+            {autoCluster && <tr><td className="text-text-muted pr-3 py-0.5">{t.autoCluster}</td><td>{namedCall(autoCluster) ?? callLabel(autoCluster, t)}</td></tr>}
+            {manualType && <tr><td className="text-text-muted pr-3 py-0.5">{t.manualType}</td><td>{namedCall(manualType) ?? callLabel(manualType, t)}</td></tr>}
             <tr>
               <td className="text-text-muted pr-3 py-0.5">{labels.fam}{normLabel}</td>
               <td>{normFam.toFixed(decimals)}</td>
