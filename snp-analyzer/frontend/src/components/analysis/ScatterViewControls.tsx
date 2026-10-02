@@ -446,13 +446,13 @@ export function ScatterViewControls({
             onClick={() => setOrientation(swapped ? "fam_x" : "allele2_x")}
             title={t.scatterSwapAxes}
             aria-label={t.scatterSwapAxes}
-            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs ${
+            className={`rounded-md border p-1.5 ${
               swapped
                 ? "border-primary bg-primary text-on-primary"
                 : "border-border bg-surface text-text hover:border-primary"
             }`}
           >
-            <ArrowLeftRight size={13} aria-hidden="true" /> {t.scatterSwapAxes}
+            <ArrowLeftRight size={14} aria-hidden="true" />
           </button>
         </div>
       </div>
