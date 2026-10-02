@@ -40,13 +40,13 @@ def test_title_axes_legend_and_well_labels_present():
     assert sorted(_texts(ax)) == sorted(p["well"] for p in _points())
 
 
-def test_legend_is_outside_the_axes():
+def test_legend_is_below_the_axes():
     fig = build_scatter_figure(_points())
     ax = fig.axes[0]
     fig.canvas.draw()
     legend_box = ax.get_legend().get_window_extent()
     axes_box = ax.get_window_extent()
-    assert legend_box.x0 >= axes_box.x1 - 1
+    assert legend_box.y1 <= axes_box.y0 + 1
 
 
 def test_color_lookup_uses_canonical_string_not_display_name():
@@ -71,6 +71,38 @@ def test_aspect_argument(aspect, ratio):
     assert w / h == pytest.approx(ratio)
     png = render_scatter_png(_points(), aspect=aspect)
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_portrait_aspect_is_three_by_four():
+    w, h = build_scatter_figure(_points(), aspect="3:4").get_size_inches()
+    assert w / h == pytest.approx(0.75)
+
+
+def test_portrait_png_keeps_three_by_four():
+    import io
+
+    from PIL import Image
+
+    with Image.open(io.BytesIO(render_scatter_png(_points(), aspect="3:4"))) as image:
+        assert image.width / image.height == pytest.approx(0.75, abs=0.02)
+
+
+def test_axes_fit_data_with_five_percent_margin_and_no_negative_space():
+    ax = build_scatter_figure(_points()).axes[0]
+    assert ax.get_ylim() == pytest.approx((0.0, 0.5 + 0.5 * 0.05))
+    assert ax.get_xlim() == pytest.approx((0.5 - 0.5 * 0.05, 1.0 + 0.5 * 0.05))
+
+
+def test_axes_extend_below_zero_only_for_negative_points():
+    points = _points()
+    points[0]["norm_fam"] = -0.2
+    assert build_scatter_figure(points).axes[0].get_ylim()[0] < -0.2
+
+
+def test_no_zone_or_boundary_artists_in_export_figure():
+    ax = build_scatter_figure(_points()).axes[0]
+    assert not ax.patches
+    assert not ax.lines
 
 
 def test_invalid_aspect_rejected():

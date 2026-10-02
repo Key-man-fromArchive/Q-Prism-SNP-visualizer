@@ -30,7 +30,7 @@ export type ScatterTool = 'select' | 'edit';
  *  explicit user choice rather than a fixed value: readers differ on
  *  whether a square or a 4:3 rectangle reads better, and picking one
  *  forecloses the other. */
-export type ScatterAspect = '4:3' | '1:1';
+export type ScatterAspect = '3:4' | '1:1' | '4:3';
 
 interface SettingsState {
   useRox: boolean;
@@ -38,6 +38,8 @@ interface SettingsState {
   axisMode: AxisMode;
   scatterTool: ScatterTool;
   scatterAspect: ScatterAspect;
+  /** True once `setAxisMode`/`setFixAxis` ran; see `defaults.axisModeChosen`. */
+  axisModeChosen: boolean;
   /** Equal data-per-pixel on both axes. A fam-fraction is an ANGLE about the
    *  ratio origin, so the radial boundary rays only look like the cuts they
    *  are when x and y are on the same scale. But raw RFU is routinely
@@ -106,7 +108,11 @@ const defaults = {
   backgroundMode: 'none' as BackgroundMode,
   axisMode: 'zero' as AxisMode,
   scatterTool: 'select' as ScatterTool,
-  scatterAspect: '4:3' as ScatterAspect,
+  // Portrait by default: a scatter reads better taller than wide (P5).
+  scatterAspect: '3:4' as ScatterAspect,
+  // Whether the operator picked `axisMode` themselves. Until they do, the plot
+  // chooses: NTC basis on a run with NTC wells, data fit on one without.
+  axisModeChosen: false,
   // See the field's own doc comment above (feedback 2026-09-11, P27):
   // was `true`; changed to `false` at SETTINGS_STORE_VERSION 1.
   lockAspect: false,
@@ -184,7 +190,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       setUseRox: (v) => set({ useRox: v }),
       setBackgroundMode: (v) => set({ backgroundMode: v }),
-      setAxisMode: (v) => set({ axisMode: v, fixAxis: v === 'manual' }),
+      setAxisMode: (v) => set({ axisMode: v, fixAxis: v === 'manual', axisModeChosen: true }),
       setScatterTool: (v) => set({ scatterTool: v }),
       setScatterAspect: (v) => set({ scatterAspect: v }),
       setLockAspect: (v) => set({ lockAspect: v }),
@@ -192,7 +198,7 @@ export const useSettingsStore = create<SettingsState>()(
         set({ xMin, xMax, yMin, yMax }),
       // The Settings-tab checkbox and the plot's mode selector are two views of
       // one decision, so each keeps the other true.
-      setFixAxis: (v) => set({ fixAxis: v, axisMode: v ? 'manual' : 'zero' }),
+      setFixAxis: (v) => set({ fixAxis: v, axisMode: v ? 'manual' : 'zero', axisModeChosen: v }),
       setXMin: (v) => set({ xMin: v }),
       setXMax: (v) => set({ xMax: v }),
       setYMin: (v) => set({ yMin: v }),

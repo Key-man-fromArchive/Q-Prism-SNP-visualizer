@@ -277,6 +277,11 @@ body.dark .panel {
      those two had ample slack after the curve chart moved out of
      .detail-panel (P12-PLOT-TOGGLE), so this is not new pressure on them. */
   .analysis-grid .panel { padding: 8px 12px; }
+  /* P5-E: the portrait 3:4 default is taller than wide, so in the two-column
+     layout cap the height by the viewport (the width max-width is derived
+     from this, keeping the ratio) so scatter, plate and summary stay in the
+     first screen. Applies to 1:1 and 4:3 alike. */
+  .analysis-scatter-canvas { --scatter-max-h: min(70vh, 640px, calc(100dvh - 520px)); }
   [data-testid="analysis-warnings"] { max-height: 5rem; overflow: auto; }
   [data-testid="analysis-scope-selector"] { margin-top: .5rem; }
   [data-testid="analysis-result-status"] { padding: .5rem .75rem; }

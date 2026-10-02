@@ -185,7 +185,7 @@ export function WellDetailPanel({ ploidyOverride, alleleLabels }: WellDetailPane
 
   const decimals = normalizationApplied ? 4 : 1;
   const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
-  const normLabel = normalizationApplied ? ` / ${normalizationLabel(labels)}` : "";
+  const normLabel = normalizationApplied ? ` / ${normalizationLabel(labels, t.normalizationFallback)}` : "";
 
   return (
     <div className="panel detail-panel">
@@ -242,7 +242,7 @@ export function WellDetailPanel({ ploidyOverride, alleleLabels }: WellDetailPane
             </tr>
             {rawRox != null && (
               <tr>
-                <td className="text-text-muted pr-3 py-0.5">{normalizationLabel(labels)} ({t.raw})</td>
+                <td className="text-text-muted pr-3 py-0.5">{normalizationLabel(labels, t.normalizationFallback)} ({t.raw})</td>
                 <td>{rawRox.toFixed(1)}</td>
               </tr>
             )}

@@ -7,7 +7,7 @@ from test_export_pptx import data_client, run  # noqa: F401  (fixtures)
 FORMATS = {"pdf": snapshot_pdf, "xlsx": snapshot_xlsx, "zip": snapshot_images, "pptx": snapshot_pptx}
 URLS = {"pdf": "export/pdf", "xlsx": "export/xlsx", "zip": "export/scatter-png.zip",
         "pptx": "export/pptx"}
-KEYS = ("title", "x_label", "y_label", "legend_names")
+KEYS = ("title", "x_label", "y_label", "legend_names", "aspect")
 
 
 def _capture(monkeypatch, module) -> list[dict]:
@@ -33,6 +33,13 @@ def test_four_outputs_receive_identical_figure_options(run: SimpleNamespace, mon
     assert all(call["title"] and call["x_label"] and call["y_label"] for call in reference)
     for name, calls in seen.items():
         assert calls == reference, name
+
+
+def test_exports_default_to_portrait_three_by_four(run: SimpleNamespace, monkeypatch) -> None:  # noqa: F811
+    calls = _capture(monkeypatch, snapshot_images)
+    run.client.get(f"/api/data/{run.sid}/export/scatter-png.zip")
+    assert calls
+    assert all(call["aspect"] == "3:4" for call in calls)
 
 
 def test_legend_lists_only_present_calls_with_display_names(run: SimpleNamespace, monkeypatch) -> None:  # noqa: F811

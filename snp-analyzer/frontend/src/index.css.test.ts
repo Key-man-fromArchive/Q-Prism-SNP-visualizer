@@ -90,3 +90,12 @@ describe('index.css brand palette (P6-S2-T1)', () => {
     expect(css).toMatch(/input\[type=["']range["']\]\s*\{[^}]*accent-color:\s*var\(--color-primary\)/);
   });
 });
+
+describe("scatter canvas viewport cap (P5-E)", () => {
+  it("bounds canvas height by the viewport in the two-column layout", () => {
+    expect(css).toMatch(/\.analysis-scatter-canvas\s*\{\s*--scatter-max-h:[^;]*100dvh[^;]*;/);
+  });
+  it("derives width from the height cap to keep the aspect ratio", () => {
+    expect(css).toMatch(/max-width:\s*calc\(var\(--scatter-max-h\)\s*\*\s*var\(--scatter-aspect-w\)/);
+  });
+});

@@ -240,19 +240,20 @@ def _marker_slide(
     )
     if legend:
         _textbox(slide, (0.4, 0.8, 12.5, 0.3), legend, 11)
-    _fit_picture(slide, _scatter(snapshot, page), (0.4, 1.15, 7.5, 6.05))
+    # Portrait 3:4 scatter fills the left half's height; counts and plate map sit on the right.
+    _fit_picture(slide, _scatter(snapshot, page), (0.4, 1.15, 5.4, 6.05))
     _add_table(
         slide,
         ["Allele Call", "Count"],
         _call_counts(page),
-        (8.2, 1.15),
+        (6.3, 1.15),
         (3.4, 1.3),
         0.26,
         10,
     )
     plate = _plate_map(rows, layout, marker.marker_id if marker else None)
     if plate:
-        _fit_picture(slide, plate, (8.2, 4.2, 4.7, 3.0))
+        _fit_picture(slide, plate, (6.3, 4.2, 6.6, 3.0))
 
 
 def _result_table_rows(rows: list[ResultRow]) -> list[list[object]]:

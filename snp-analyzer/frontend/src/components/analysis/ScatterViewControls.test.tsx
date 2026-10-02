@@ -21,9 +21,14 @@ it.each(['en', 'ko'] as const)('summarizes inferred thresholds and unlocked axes
     labels={{ fam: 'FAM', allele2: 'VIC' }} ntcCorner={null} effectiveNtcCorner={{ fam: 0.12, allele2: 0.34 }}
     onNtcCornerChange={change} normalizationApplied={false} />);
   const summary = screen.getByTestId('analysis-advanced-settings').querySelector('summary')!;
-  expect(summary).toHaveTextContent('FAM ≤0.12');
-  expect(summary).toHaveTextContent('VIC ≤0.34');
-  expect(summary).toHaveTextContent(language === 'en' ? 'Auto' : '자동');
+  // The one-line summary is the essentials only (normalization, background);
+  // the NTC thresholds live in the expanded panel.
+  expect(summary).not.toHaveTextContent('FAM ≤0.12');
+  expect(summary).not.toHaveTextContent('FAM/VIC');
+  expect(within(summary).getByTestId('normalization-short')).toHaveTextContent(language === 'en' ? /^Normalization [✓✗?]$/ : /^정규화 [✓✗?]$/);
+  expect(screen.getByTestId('analysis-advanced-settings')).toHaveTextContent('FAM ≤0.12');
+  expect(screen.getByTestId('analysis-advanced-settings')).toHaveTextContent('VIC ≤0.34');
+  expect(screen.getByTestId('scatter-threshold-summary')).toHaveTextContent(language === 'en' ? 'Auto' : '자동');
   // P4-S3-T1 followup: axis mode and lock-aspect used to be repeated here
   // too, but both are already always-visible above (axis-mode select,
   // axis-lock-aspect icon toggle) -- summarizing them again just made an
@@ -44,7 +49,7 @@ it.each(['en', 'ko'] as const)('summarizes explicit thresholds and locked axes (
     labels={{ fam: 'FAM', allele2: 'VIC' }} ntcCorner={{ fam: 0.12, allele2: 0.34 }} effectiveNtcCorner={{ fam: 0.12, allele2: 0.34 }}
     onNtcCornerChange={vi.fn()} normalizationApplied />);
   const summary = screen.getByTestId('analysis-advanced-settings').querySelector('summary')!;
-  expect(summary).toHaveTextContent(language === 'en' ? 'Explicit NTC' : '지정 NTC');
+  expect(screen.getByTestId('analysis-advanced-settings')).toHaveTextContent(language === 'en' ? 'Explicit NTC' : '지정 NTC');
   expect(summary).not.toHaveTextContent(language === 'en' ? 'Equal scales' : '동일 축');
   expect(screen.getByTestId('axis-lock-aspect')).toHaveAttribute('aria-pressed', 'true');
 });
@@ -183,7 +188,8 @@ it('reads and writes the shared scatterAspect setting from its own dropdown', ()
   useSettingsStore.getState().resetToDefaults();
   render(<ScatterViewControls {...baseProps} />);
   const select = screen.getByTestId('scatter-aspect-select');
-  expect(select).toHaveValue('4:3');
+  expect(select).toHaveValue('3:4');
+  expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['3:4', '1:1', '4:3']);
   fireEvent.change(select, { target: { value: '1:1' } });
   expect(useSettingsStore.getState().scatterAspect).toBe('1:1');
 });

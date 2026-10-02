@@ -47,18 +47,21 @@ describe('markerCallLabel', () => {
 
 describe('axisTitle role label', () => {
   it('does not repeat an allele name the role label already carries', () => {
-    expect(axisTitle('WT (FAM)', 'WT')).toBe('WT (FAM)');
-    expect(axisTitle('MT (VIC)', 'MT', ' / ROX')).toBe('MT (VIC) / ROX');
+    expect(axisTitle('WT (FAM)', 'WT')).toBe('FAM (WT)');
+    expect(axisTitle('MT (VIC)', 'MT', ' / ROX')).toBe('VIC (MT) / ROX');
   });
-  it('keeps a different allele name', () => {
-    expect(axisTitle('MT1 (VIC)', 'MT')).toBe('MT1 (VIC) · MT');
+  it('prefers the dye plus the allele name over the role label', () => {
+    expect(axisTitle('MT1 (VIC)', 'MT')).toBe('VIC (MT)');
+  });
+  it('keeps the role label when the marker has no allele name', () => {
+    expect(axisTitle('WT (FAM)', undefined)).toBe('WT (FAM)');
   });
 });
 
 describe('axisTitle', () => {
   it('pairs dye and allele name', () => {
-    expect(axisTitle('FAM', 'WT')).toBe('FAM · WT');
-    expect(axisTitle('VIC', 'MT', ' / ROX')).toBe('VIC · MT / ROX');
+    expect(axisTitle('FAM', 'WT')).toBe('FAM (WT)');
+    expect(axisTitle('VIC', 'MT', ' / ROX')).toBe('VIC (MT) / ROX');
   });
   it('keeps the bare dye without a name', () => {
     expect(axisTitle('FAM', undefined)).toBe('FAM');

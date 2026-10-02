@@ -76,7 +76,7 @@ it('includes the NTC thresholds trace in the first newPlot call, before any clus
 // P13-NTC-RACE: while investigating the corner-not-found flake, a *separate*
 // contributing bug surfaced in the E2E harness itself (not app code): the
 // trace's `name` is the localized `t.chartNtcThreshold`, and `language-store`
-// defaults to `'ko'` ("NTC 임계값"), not `'en'` ("NTC thresholds"). The spec
+// defaults to `'ko'` ("NTC 임계(모서리)"), not `'en'` ("NTC thresholds"). The spec
 // only switches to English via `if (await english.isVisible()) await
 // english.click()` -- a check with no retry, so it can silently no-op if
 // that button hasn't rendered yet at the moment it's read (e.g. right after a
@@ -100,5 +100,5 @@ it('names the NTC trace in Korean by default, matching language-store\'s default
   await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalledTimes(1));
   const [, traces] = vi.mocked(Plotly.newPlot).mock.calls[0] as [unknown, Array<{ name?: string }>];
   expect(traces.some((t) => t.name === 'NTC thresholds')).toBe(false);
-  expect(traces.some((t) => t.name === 'NTC 임계값')).toBe(true);
+  expect(traces.some((t) => t.name === 'NTC 임계(모서리)')).toBe(true);
 });

@@ -11,7 +11,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     Flowable, Image, LongTable, PageBreak, Paragraph, SimpleDocTemplate, Spacer,
-    TableStyle,
+    Table, TableStyle,
 )
 
 from app.models import AnalysisRegionContext
@@ -25,6 +25,7 @@ from app.reporting.snapshot_presentation import (
 )
 
 FONT = "ReportNanum"
+_FIGURE_W, _FIGURE_H = 330, 440  # 3:4 portrait scatter
 
 
 def report_style(size: int = 8) -> ParagraphStyle:
@@ -119,12 +120,20 @@ def _marker_by_id(snapshot: ResultSnapshot) -> dict[str, AnalysisRegionContext]:
 
 
 def _figure_page(snapshot: ResultSnapshot, figure: ReportFigure,
-                 marker: AnalysisRegionContext | None) -> list[Flowable]:
+                 marker: AnalysisRegionContext | None, rows: list[ResultRow],
+                 detail: bool) -> list[Flowable]:
     png = render_scatter_png(figure.points, snapshot.unified.allele2_dye, ploidy=figure.ploidy,
                              coordinate_basis=coordinate_basis(snapshot),
                              **figure_options(snapshot, figure, marker))
-    page: list[Flowable] = [PageBreak(), paragraph(figure.title, 14), Spacer(1, 10),
-                            Image(io.BytesIO(png), width=560, height=420)]
+    picture = Image(io.BytesIO(png), width=_FIGURE_W, height=_FIGURE_H)
+    side = _marker_detail(snapshot, rows, marker) if detail and marker is not None else []
+    body: Flowable = picture
+    if side:
+        # Portrait figure on the left, call counts and highlighted plate map on the right.
+        body = Table([[picture, side]], colWidths=[_FIGURE_W + 10, 430])
+        body.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"),
+                                  ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
+    page: list[Flowable] = [PageBreak(), paragraph(figure.title, 14), Spacer(1, 6), body]
     label = snapshot.marker_labels.get(marker.marker_id) if marker else None
     legend = polyploid_legend(label.allele_labels, snapshot.unified.allele2_dye) if label and marker.ploidy != 2 else None
     if legend:
@@ -143,10 +152,10 @@ def _marker_detail(snapshot: ResultSnapshot, rows: list[ResultRow], marker: Anal
                      for row in own)
     name = own[0].marker.name if own and own[0].marker else marker.name
     plate = render_snapshot_plate(rows, marker_layout=_plate_layout(rows), highlight_marker_id=marker.marker_id)
-    return [PageBreak(), paragraph(f"Marker detail: {name} [{marker.marker_id}]", 14), Spacer(1, 10),
+    return [paragraph(f"Marker detail: {name} [{marker.marker_id}]", 11), Spacer(1, 6),
             table(["Genotype", "Allele Call", "Count"],
-                  [[genotype, call, count] for (genotype, call), count in counts.items()], [260, 260, 120]),
-            Spacer(1, 10), Image(io.BytesIO(plate), width=520, height=303)]
+                  [[genotype, call, count] for (genotype, call), count in counts.items()], [150, 150, 60]),
+            Spacer(1, 8), Image(io.BytesIO(plate), width=400, height=233)]
 
 
 def _marker_pages(snapshot: ResultSnapshot, rows: list[ResultRow]) -> list[Flowable]:
@@ -155,9 +164,7 @@ def _marker_pages(snapshot: ResultSnapshot, rows: list[ResultRow]) -> list[Flowa
     output: list[Flowable] = []
     for figure, marker in zip(report_figures(snapshot, rows),
                               markers.values() if markers else [None], strict=True):
-        output.extend(_figure_page(snapshot, figure, marker))
-        if named and marker is not None:
-            output.extend(_marker_detail(snapshot, rows, marker))
+        output.extend(_figure_page(snapshot, figure, marker, rows, named))
     return output
 
 
