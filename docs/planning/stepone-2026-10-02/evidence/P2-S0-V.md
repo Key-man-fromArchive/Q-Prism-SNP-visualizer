@@ -10,6 +10,7 @@
 | P2-H2 | 7296326 | 80 / $0.90 |
 | P2-C3 | 6484fab | 16 / $0.19 |
 | P2-C4 | e879172 | 21 / $0.17 |
+| P2-C2 | 443541e | PARTIAL(제목·파일명 완료, 웰 라벨 겹침은 의도적으로 생략) |
 | P2-C1 | 3b70072 | PARTIAL(검증 규칙만, 연결은 P2-C3) |
 
 레인 병합 순서 E → F → G → H, 이어서 게이트 보정 C1 → C2 → C4 → C3. 병합 전 소유표 대조: E/F/G 범위 안. H 레인은 Write Scope에 없던 **새 파일 3개**(`AlleleNames.aux.test.tsx`, `AlleleNames.tables.test.tsx`, `call-text.ts`)를 만들었다 — 다른 레인과 겹치지 않는 신규 파일이라 허용. P2-C2는 제목 통일을 위해 `snapshot_pptx.py`도 수정(P2-F 종료 후, 충돌 없음) — 허용.
