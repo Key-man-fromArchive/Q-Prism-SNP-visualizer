@@ -1,10 +1,18 @@
 import { useEffect, useEffectEvent, useState } from 'react';
 import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
-import { getStatistics } from '@/lib/api';
-import { genotypeClasses } from '@/lib/genotype';
+import { getMarkers, getStatistics } from '@/lib/api';
+import { displayGenotype, genotypeClasses } from '@/lib/genotype';
 import { useI18n } from '@/hooks/use-i18n';
-import type { StatisticsResponse } from '@/types/api';
+import type { AlleleLabels, MarkerRegion, StatisticsResponse } from '@/types/api';
+
+/** Statistics cover the whole session, so names apply only when every marker agrees. */
+function sharedAlleleLabels(markers: MarkerRegion[]): AlleleLabels | null {
+  const first = markers[0]?.allele_labels;
+  if (!first) return null;
+  const same = markers.every((m) => m.allele_labels?.fam === first.fam && m.allele_labels?.allele2 === first.allele2);
+  return same ? first : null;
+}
 
 export function StatisticsTab() {
   const { t } = useI18n();
@@ -13,6 +21,7 @@ export function StatisticsTab() {
   const [stats, setStats] = useState<StatisticsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [alleleLabels, setAlleleLabels] = useState<AlleleLabels | null>(null);
   const loadErrorMessage = useEffectEvent(() => t.errLoadStatistics);
 
   useEffect(() => {
@@ -35,6 +44,21 @@ export function StatisticsTab() {
     };
 
     fetchStats();
+  }, [sessionId]);
+
+  useEffect(() => {
+    setAlleleLabels(null);
+    if (!sessionId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getMarkers(sessionId);
+        if (!cancelled) setAlleleLabels(sharedAlleleLabels(res.markers));
+      } catch {
+        // names are cosmetic: keep the stored labels
+      }
+    })();
+    return () => { cancelled = true; };
   }, [sessionId]);
 
   if (!sessionId) {
@@ -68,6 +92,13 @@ export function StatisticsTab() {
       </div>
     );
   }
+
+  // displayGenotype only reads the allele names
+  const marker = alleleLabels ? ({ allele_labels: alleleLabels } as MarkerRegion) : null;
+  const shown = (label: string) => displayGenotype(label, marker);
+  const homo1 = alleleLabels ? shown('Allele 1 Homo') : 'AA';
+  const het = alleleLabels ? shown('Heterozygous') : 'AB';
+  const homo2 = alleleLabels ? shown('Allele 2 Homo') : 'BB';
 
   const genotypeOrder = [
     ...genotypeClasses(ploidy).map((c) => c.key),
@@ -107,7 +138,7 @@ export function StatisticsTab() {
             <tbody>
               {genotypeEntries.map(({ genotype, count }) => (
                 <tr key={genotype} className="border-b border-border">
-                  <td className="py-2 px-3 text-text">{genotype}</td>
+                  <td className="py-2 px-3 text-text">{shown(genotype)}</td>
                   <td className="py-2 px-3 text-text">{count}</td>
                   <td className="py-2 px-3 text-text">
                     {((count / stats.total_wells) * 100).toFixed(1)}
@@ -155,7 +186,7 @@ export function StatisticsTab() {
                 </tbody>
               </table>
               <p className="text-text-muted text-xs mt-2">
-                AA={stats.allele_frequency.n_aa}, AB={stats.allele_frequency.n_ab}, BB={stats.allele_frequency.n_bb}
+                {homo1}={stats.allele_frequency.n_aa}, {het}={stats.allele_frequency.n_ab}, {homo2}={stats.allele_frequency.n_bb}
               </p>
             </>
           ) : (
@@ -180,17 +211,17 @@ export function StatisticsTab() {
                 </thead>
                 <tbody>
                   <tr className="border-b border-border">
-                    <td className="py-2 px-3 text-text">AA</td>
+                    <td className="py-2 px-3 text-text">{homo1}</td>
                     <td className="py-2 px-3 text-text">{stats.allele_frequency.n_aa}</td>
                     <td className="py-2 px-3 text-text">{hwe.expected_aa.toFixed(2)}</td>
                   </tr>
                   <tr className="border-b border-border">
-                    <td className="py-2 px-3 text-text">AB</td>
+                    <td className="py-2 px-3 text-text">{het}</td>
                     <td className="py-2 px-3 text-text">{stats.allele_frequency.n_ab}</td>
                     <td className="py-2 px-3 text-text">{hwe.expected_ab.toFixed(2)}</td>
                   </tr>
                   <tr>
-                    <td className="py-2 px-3 text-text">BB</td>
+                    <td className="py-2 px-3 text-text">{homo2}</td>
                     <td className="py-2 px-3 text-text">{stats.allele_frequency.n_bb}</td>
                     <td className="py-2 px-3 text-text">{hwe.expected_bb.toFixed(2)}</td>
                   </tr>

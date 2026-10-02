@@ -26,7 +26,7 @@
 // numbers side by side". A tabbed curve/value switch cannot show both at
 // once anyway, so that reason no longer applies -- sharing one selector is
 // the honest choice once the two views can't be visible simultaneously.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Plotly from "plotly.js-dist-min";
 import type { Data, Layout } from "plotly.js";
 import { useSessionStore } from "@/stores/session-store";
@@ -37,10 +37,10 @@ import { buildWellCycleValuesCsv, downloadTextFile } from "@/hooks/use-exports";
 import { cycleSetsDiffer, cycleValueMap, unionCycles } from "@/lib/well-cycle-alignment";
 import { channelLabels } from "@/lib/channel-labels";
 import { plotlyColors } from "@/lib/plotly-theme";
-import { wellInfo } from "@/lib/genotype";
+import { displayGenotype, wellInfo } from "@/lib/genotype";
 import { useI18n } from "@/hooks/use-i18n";
 import { useIsDarkMode } from "@/hooks/use-dark-mode";
-import type { AmplificationResponse } from "@/types/api";
+import type { AlleleLabels, AmplificationResponse, MarkerRegion } from "@/types/api";
 import { OverlayProcessingStatus } from "./AmplificationOverlay";
 
 type ViewMode = "curve" | "values";
@@ -52,8 +52,18 @@ type ColorBy = "genotype" | "wellType" | "solid";
 // themed brand color).
 const SOLID_COLOR = { light: "#2563eb", dark: "#3b82f6" };
 
-export function FluorescenceDataCard() {
+type FluorescenceDataCardProps = {
+  /** The marker's allele names; legend and hover show `WT/MT` instead of the stored call. */
+  alleleLabels?: AlleleLabels | null;
+};
+
+export function FluorescenceDataCard({ alleleLabels }: FluorescenceDataCardProps = {}) {
   const { t } = useI18n();
+  // displayGenotype only reads the allele names
+  const marker = useMemo(
+    () => (alleleLabels ? ({ allele_labels: alleleLabels } as MarkerRegion) : null),
+    [alleleLabels],
+  );
   const dark = useIsDarkMode();
   const plotRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -122,7 +132,7 @@ export function FluorescenceDataCard() {
             ? curve.effective_type || "Unknown"
             : wellTypeAssignments[curve.well] || "Unknown";
         color = wellInfo(key, ploidy, dark).color;
-        legendLabel = key;
+        legendLabel = displayGenotype(key, marker);
         showLegend = !legendAdded.has(key);
         if (showLegend) legendAdded.add(key);
       }
@@ -154,7 +164,7 @@ export function FluorescenceDataCard() {
     };
 
     Plotly.react(plotRef.current, traces, layout, { responsive: true, displayModeBar: false });
-  }, [expanded, view, response, channel, colorBy, ploidy, dark, wellTypeAssignments, roleLabels, allele2Dye, t]);
+  }, [expanded, view, response, channel, colorBy, ploidy, dark, wellTypeAssignments, roleLabels, allele2Dye, marker, t]);
 
   useEffect(() => {
     const plot = plotRef.current;
