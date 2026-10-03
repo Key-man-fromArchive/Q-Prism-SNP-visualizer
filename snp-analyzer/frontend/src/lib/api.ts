@@ -256,6 +256,40 @@ export async function getScatter(
   return apiFetch<ScatterResponse>(`/api/data/${sid}/scatter${query}`);
 }
 
+/** Raw min/max of the normalized signal over every read and every well, in
+ *  allele space (see `/axis-bounds`). */
+export type AxisBoundsResponse = {
+  fam: { min: number; max: number };
+  allele2: { min: number; max: number };
+  reads: number;
+};
+
+const axisBoundsCache = new Map<string, Promise<AxisBoundsResponse>>();
+
+export function clearAxisBoundsCache(): void {
+  axisBoundsCache.clear();
+}
+
+/** Plate-wide axis extent, cached per session/normalization/background so
+ *  switching read or marker never asks again. A failure is not cached. */
+export function getAxisBounds(
+  sid: string,
+  useRox: boolean,
+  background: BackgroundMode
+): Promise<AxisBoundsResponse> {
+  const key = JSON.stringify([sid, useRox, background]);
+  const cached = axisBoundsCache.get(key);
+  if (cached) return cached;
+  const request = apiFetch<AxisBoundsResponse>(
+    `/api/data/${sid}/axis-bounds${buildQuery({ use_rox: useRox, background })}`
+  ).catch((error) => {
+    axisBoundsCache.delete(key);
+    throw error;
+  });
+  axisBoundsCache.set(key, request);
+  return request;
+}
+
 export async function getPlate(
   sid: string,
   cycle?: number,
