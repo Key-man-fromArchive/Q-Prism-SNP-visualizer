@@ -22,8 +22,9 @@ import { compactLegend, LEGEND_MARGIN_TOP, PLOTLY_MODEBAR, plotlyColors } from "
 import {
   axisRangeLayout, axisTitle, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode, fitBounds,
   fromPlot, hasNtcWells, NTC_AMBER, NTC_HANDLE_SIZE, NTC_MARKER_SIZE, ntcDragRelayout, ntcThresholdShapes,
-  orientBounds, orientShape, toPlot, visibleBounds,
+  orientBounds, orientShape, plateRange, toPlot, visibleBounds,
 } from "@/lib/scatter-axes";
+import { usePlateAxisBounds } from "@/hooks/use-plate-axis-bounds";
 import { useWellFilter } from "@/hooks/use-well-filter";
 import { useQualityRevealedWell } from '@/hooks/use-quality-reveal';
 import { visibleQualityPoint } from '@/lib/quality-display';
@@ -157,6 +158,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
   const scatterTool = useSettingsStore((s) => s.scatterTool);
   const scatterAspect = useSettingsStore((s) => s.scatterAspect);
   const orientation = useSettingsStore((s) => s.scatterOrientation);
+  const plateBounds = usePlateAxisBounds(sessionId);
   const xMin = useSettingsStore((s) => s.xMin);
   const xMax = useSettingsStore((s) => s.xMax);
   const yMin = useSettingsStore((s) => s.yMin);
@@ -554,17 +556,22 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     // 3800/2330), which is what made the quadrant unreadable and its corner
     // marker look like a stray point in the middle of the cloud.
     const pointExtents = visiblePoints.map((point) => ({ fam: point.norm_fam, allele2: point.norm_allele2 }));
-    const bounds = visibleBounds(
-      axisMode,
-      dataBounds(pointExtents, effectiveNtcCorner),
-      // The manual range is typed against the DISPLAYED axes; bounds here are
-      // in allele space until the layout below.
-      orientBounds({ xMin, xMax, yMin, yMax }, orientation),
-      ratioOrigin,
-      ntcAxisOffsets,
-      // The corner stretches a fitted range only while it is being edited.
-      fitBounds(pointExtents, editing ? effectiveNtcCorner : null)
-    );
+    // The manual range is typed against the DISPLAYED axes; bounds here are
+    // in allele space until the layout below.
+    const manualBounds = orientBounds({ xMin, xMax, yMin, yMax }, orientation);
+    // `plate` scope keeps the axes fixed across reads (the server extent over
+    // every read); until it arrives, or if it fails, this read's own range.
+    const bounds = plateBounds
+      ? plateRange(axisMode, plateBounds, manualBounds, editing ? effectiveNtcCorner : null)
+      : visibleBounds(
+        axisMode,
+        dataBounds(pointExtents, effectiveNtcCorner),
+        manualBounds,
+        ratioOrigin,
+        ntcAxisOffsets,
+        // The corner stretches a fitted range only while it is being edited.
+        fitBounds(pointExtents, editing ? effectiveNtcCorner : null)
+      );
     // Quadrant and dashed edges exist only in threshold-edit mode, and the
     // edges stop at the data rather than running to the figure edge.
     const reach = dataBounds(pointExtents);
@@ -622,7 +629,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       hovermode: "closest",
       // Keep Plotly's preserved interaction state in sync with the explicit
       // NTC-origin range and its unit basis.
-      uirevision: `plate-${orientation}-${axisMode}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${ratioOrigin.fam}-${ratioOrigin.allele2}`,
+      uirevision: `plate-${orientation}-${axisMode}-${plateBounds ? "plate" : "own"}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${ratioOrigin.fam}-${ratioOrigin.allele2}`,
       // Box-select while selecting, zoom while editing thresholds -- and the
       // modebar below keeps both reachable either way, because picking one
       // well out of a dense cluster needs a zoom first.
@@ -743,6 +750,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     effectiveNtcCorner,
     ntcCorner,
     axisMode,
+    plateBounds,
     lockAspect,
     editing,
     expert,

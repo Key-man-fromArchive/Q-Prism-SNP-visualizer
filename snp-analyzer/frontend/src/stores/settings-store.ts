@@ -39,6 +39,10 @@ const SCATTER_ASPECTS: readonly ScatterAspect[] = ['fill', '4:3', '3:4'];
  *  Server exports take the same value as their `orientation` query argument. */
 export type ScatterOrientation = 'fam_x' | 'allele2_x';
 
+/** Whether the scatter axes span the whole plate (every marker, every read) or
+ *  just the marker on screen. */
+export type AxisScope = 'plate' | 'marker';
+
 interface SettingsState {
   useRox: boolean;
   backgroundMode: BackgroundMode;
@@ -46,6 +50,7 @@ interface SettingsState {
   scatterTool: ScatterTool;
   scatterAspect: ScatterAspect;
   scatterOrientation: ScatterOrientation;
+  axisScope: AxisScope;
   /** True once `setAxisMode`/`setFixAxis` ran; see `defaults.axisModeChosen`. */
   axisModeChosen: boolean;
   /** Equal data-per-pixel on both axes. A fam-fraction is an ANGLE about the
@@ -91,6 +96,7 @@ interface SettingsState {
   setScatterTool: (v: ScatterTool) => void;
   setScatterAspect: (v: ScatterAspect) => void;
   setScatterOrientation: (v: ScatterOrientation) => void;
+  setAxisScope: (v: AxisScope) => void;
   setLockAspect: (v: boolean) => void;
   setAxisRange: (r: { xMin: number; xMax: number; yMin: number; yMax: number }) => void;
   setFixAxis: (v: boolean) => void;
@@ -124,6 +130,7 @@ const defaults = {
   // Portrait by default: a scatter reads better taller than wide (P5).
   scatterAspect: 'fill' as ScatterAspect,
   scatterOrientation: 'fam_x' as ScatterOrientation,
+  axisScope: 'plate' as AxisScope,
   // Whether the operator picked `axisMode` themselves. Until they do, the plot
   // chooses: NTC basis on a run with NTC wells, data fit on one without.
   axisModeChosen: false,
@@ -180,8 +187,12 @@ const defaults = {
  *
  *  v2 -> v3 (P9 plot fill): the default scatter ratio became `fill` and the
  *  `1:1` option was removed. A stored `1:1` (or any value the picker no longer
- *  offers) is reset to `fill` once; `4:3` and `3:4` are kept. */
-const SETTINGS_STORE_VERSION = 3;
+ *  offers) is reset to `fill` once; `4:3` and `3:4` are kept.
+ *
+ *  v3 -> v4 (P11 axis scope): `axisScope` was added with default `plate` (one
+ *  axis range for every marker and read). Older payloads are set to `plate`
+ *  once so the new behaviour applies; the operator can pick `marker` after. */
+const SETTINGS_STORE_VERSION = 4;
 
 /** Coerces a stored payload with no `version` key at all -- every payload
  *  written before this file introduced versioning, including the one from
@@ -217,6 +228,7 @@ export const useSettingsStore = create<SettingsState>()(
       setScatterTool: (v) => set({ scatterTool: v }),
       setScatterAspect: (v) => set({ scatterAspect: v }),
       setScatterOrientation: (v) => set({ scatterOrientation: v }),
+      setAxisScope: (v) => set({ axisScope: v }),
       setLockAspect: (v) => set({ lockAspect: v }),
       setAxisRange: ({ xMin, xMax, yMin, yMax }) =>
         set({ xMin, xMax, yMin, yMax }),
@@ -270,6 +282,10 @@ export const useSettingsStore = create<SettingsState>()(
         if (version < 3 && !SCATTER_ASPECTS.includes(state.scatterAspect as ScatterAspect)) {
           // v2 -> v3: see SETTINGS_STORE_VERSION above.
           state.scatterAspect = 'fill';
+        }
+        if (version < 4) {
+          // v3 -> v4: see SETTINGS_STORE_VERSION above.
+          state.axisScope = 'plate';
         }
         return state as SettingsState;
       },

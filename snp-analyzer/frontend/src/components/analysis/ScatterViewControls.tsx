@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowLeftRight, Crosshair, Lock, Maximize2, MousePointer2, RotateCcw, SlidersHorizontal, Unlock } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
-import { useSettingsStore, type AxisMode, type ScatterAspect } from "@/stores/settings-store";
+import { useSettingsStore, type AxisMode, type AxisScope, type ScatterAspect } from "@/stores/settings-store";
 import { normalizationLabel } from "@/lib/channel-labels";
 import { effectiveAxisMode, orientBounds, roundBound, type AxisBounds } from "@/lib/scatter-axes";
 import type { ChannelLabels } from "@/types/api";
@@ -127,6 +127,8 @@ export function ScatterViewControls({
   const expert = useSettingsStore((s) => s.expertMode);
   const scatterTool = useSettingsStore((s) => s.scatterTool);
   const setScatterTool = useSettingsStore((s) => s.setScatterTool);
+  const axisScope = useSettingsStore((s) => s.axisScope);
+  const setAxisScope = useSettingsStore((s) => s.setAxisScope);
   const scatterAspect = useSettingsStore((s) => s.scatterAspect);
   const setScatterAspect = useSettingsStore((s) => s.setScatterAspect);
   const orientation = useSettingsStore((s) => s.scatterOrientation);
@@ -418,6 +420,21 @@ export function ScatterViewControls({
             </div>
           )}
         </div>
+
+        <div className="h-6 w-px bg-border" aria-hidden="true" />
+
+        {/* One axis range for the whole plate and every read, or the marker's own. */}
+        <select
+          data-testid="axis-scope-select"
+          aria-label={t.axisScopeLabel}
+          title={t.axisScopeLabel}
+          value={axisScope}
+          onChange={(event) => setAxisScope(event.target.value as AxisScope)}
+          className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text"
+        >
+          <option value="plate">{t.axisScopeLabel}: {t.axisScopePlate}</option>
+          <option value="marker">{t.axisScopeLabel}: {t.axisScopeMarker}</option>
+        </select>
 
         <div className="h-6 w-px bg-border" aria-hidden="true" />
 

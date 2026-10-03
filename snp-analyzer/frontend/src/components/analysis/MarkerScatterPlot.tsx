@@ -19,8 +19,9 @@ import { channelLabels } from "@/lib/channel-labels";
 import {
   axisRangeLayout, axisTitle, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode,
   fitBounds, fromPlot, hasNtcWells, NTC_AMBER, NTC_HANDLE_SIZE, NTC_MARKER_SIZE, ntcDragRelayout, ntcThresholdShapes,
-  orientBounds, orientShape, toPlot, visibleBounds,
+  orientBounds, orientShape, plateRange, toPlot, visibleBounds,
 } from "@/lib/scatter-axes";
+import { usePlateAxisBounds } from "@/hooks/use-plate-axis-bounds";
 import { updateMarker } from "@/lib/api";
 import { clearActiveChart, setActiveChart } from "@/lib/chart-export-registry";
 import { completeThresholdConfig } from "@/lib/threshold-config";
@@ -154,6 +155,7 @@ export function MarkerScatterPlot({
   const expert = useSettingsStore((s) => s.expertMode);
   const scatterAspect = useSettingsStore((s) => s.scatterAspect);
   const orientation = useSettingsStore((s) => s.scatterOrientation);
+  const plateBounds = usePlateAxisBounds(sessionId || null);
   const hasNormalizationChannel = useSessionStore((s) => s.sessionInfo?.has_rox === true);
   const readLabels = useSessionStore((s) => s.sessionInfo?.read_labels);
   const alleleNames = marker.allele_labels;
@@ -483,16 +485,21 @@ export function MarkerScatterPlot({
     const pointExtents = scopedPoints.map((p) => ({ fam: p.norm_fam, allele2: p.norm_allele2 }));
     const corner = { fam: effectiveNtc.corner.x, allele2: effectiveNtc.corner.y };
     const dataRange = dataBounds(pointExtents, corner);
-    const bounds = visibleBounds(
-      axisMode,
-      dataRange,
-      // Typed against the displayed axes; bounds stay in allele space here.
-      orientBounds({ xMin, xMax, yMin, yMax }, orientation),
-      origin,
-      ntcAxisOffsets,
-      // The corner stretches a fitted range only while it is being edited.
-      fitBounds(pointExtents, editing ? corner : null)
-    );
+    // Typed against the displayed axes; bounds stay in allele space here.
+    const manualBounds = orientBounds({ xMin, xMax, yMin, yMax }, orientation);
+    // `plate` scope: one range for every marker and read (the server extent);
+    // until it arrives, or if it fails, the marker's own range is used.
+    const bounds = plateBounds
+      ? plateRange(axisMode, plateBounds, manualBounds, editing ? corner : null)
+      : visibleBounds(
+        axisMode,
+        dataRange,
+        manualBounds,
+        origin,
+        ntcAxisOffsets,
+        // The corner stretches a fitted range only while it is being edited.
+        fitBounds(pointExtents, editing ? corner : null)
+      );
     // Quadrant and dashed edges exist only in threshold-edit mode, and the
     // edges stop at the data rather than running to the figure edge.
     const reach = dataBounds(pointExtents);
@@ -529,7 +536,7 @@ export function MarkerScatterPlot({
       // place until the marker changed.
       // Offset/origin changes must invalidate Plotly's preserved pan/zoom;
       // otherwise an explicit new range can be hidden behind the old UI state.
-      uirevision: `marker-${marker.id}-${orientation}-${axisMode}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${origin.fam}-${origin.allele2}`,
+      uirevision: `marker-${marker.id}-${orientation}-${axisMode}-${plateBounds ? "plate" : "own"}-${lockAspect ? "aspect" : "free"}-${normalizationApplied ? "normalized" : "raw"}-${ntcAxisOffsets.x}-${ntcAxisOffsets.y}-${origin.fam}-${origin.allele2}`,
       shapes,
       // Compact legend on its own row above the plot area, below the modebar;
       // nothing is reserved under the axis title.
@@ -633,6 +640,7 @@ export function MarkerScatterPlot({
     toggleWell,
     clearSelection,
     axisMode,
+    plateBounds,
     lockAspect,
     editing,
     expert,
