@@ -127,7 +127,27 @@ function fitAxis(lo: number, hi: number): [number, number] {
   return [min, hi + pad];
 }
 
-/** The mode in force. An operator's dropdown choice always wins; otherwise a
+/** The range a plot shows when its axes span the whole plate and every read
+ *  (`plate` axis scope). `plate` is the raw server extent, so the result does
+ *  not depend on the marker, the read or the per-read ratio origin: `auto`
+ *  fits the extent, `zero` anchors at 0 (negative values still win). The NTC
+ *  corner only stretches it while it is being edited. */
+export function plateRange(
+  mode: AxisMode,
+  plate: AxisBounds,
+  manual: AxisBounds,
+  editingCorner: Extent | null
+): AxisBounds {
+  if (mode === 'manual') return manual;
+  const extremes = [
+    { fam: plate.xMin, allele2: plate.yMin },
+    { fam: plate.xMax, allele2: plate.yMax },
+  ];
+  if (mode === 'auto') return fitBounds(extremes, editingCorner);
+  return visibleBounds('zero', dataBounds(extremes, editingCorner), manual);
+}
+
+/** The mode in force.An operator's dropdown choice always wins; otherwise a
  *  run with NTC wells keeps the NTC basis and one without fits the data. */
 export function effectiveAxisMode(mode: AxisMode, chosen: boolean, hasNtc: boolean): AxisMode {
   if (chosen) return mode;

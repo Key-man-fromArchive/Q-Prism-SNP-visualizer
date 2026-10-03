@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Literal
 
 from app.models import AlleleLabels, AnalysisRegionContext
+from app.processing.axis_bounds import plate_axis_bounds
 from app.reporting.filenames import safe_filename
 from app.reporting.result_snapshot import ResultRow, ResultSnapshot, snapshot_rows
 
@@ -194,7 +195,13 @@ def figure_options(snapshot: ResultSnapshot, figure: ReportFigure,
         title = f"{title}\n{legend}"
     present = {str(point["effective_type"]) for point in figure.points}
     fam_on_x = snapshot.orientation == "fam_x"
+    ranges: dict[str, object] = {}
+    bounds = plate_axis_bounds(snapshot.unified, snapshot.context.use_rox, snapshot.context.background)
+    if bounds is not None:
+        fam, allele2 = (bounds.fam_min, bounds.fam_max), (bounds.allele2_min, bounds.allele2_max)
+        ranges = {"x_range": fam if fam_on_x else allele2, "y_range": allele2 if fam_on_x else fam}
     return {
+        **ranges,
         "title": title,
         "aspect": aspect,
         "x_label": axis_label(snapshot, "fam" if fam_on_x else "allele2", marker, labels),
