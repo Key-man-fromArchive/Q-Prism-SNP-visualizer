@@ -11,7 +11,12 @@ const SUMMARY = /Amplification threshold FAM ≥ \d+\.\d{2} · VIC ≥ \d+\.\d{2
 type PlotNode = HTMLElement & { data?: { name?: string; customdata?: string[] }[] };
 
 async function pickMarker(page: Page, name: string) {
-  await page.getByTestId('marker-sidebar-card').filter({ hasText: name }).click();
+  const chip = page.getByTestId('marker-chip').filter({ hasText: name });
+  if (await chip.count()) await chip.click();
+  else {
+    const more = page.getByTestId('marker-chip-more');
+    await more.selectOption(await more.locator('option').filter({ hasText: name }).getAttribute('value') ?? '');
+  }
 }
 
 const traceNames = (page: Page) =>
