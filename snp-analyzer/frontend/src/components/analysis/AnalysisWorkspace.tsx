@@ -42,7 +42,7 @@ function availableScope(markers: MarkerRegion[], available: boolean) { return av
  * ("Whole plate" / "+ Split into markers") in place of the old dismissible
  * split-marker banner (P4-S3-T1, FB-03 §3-3) -- once >=1 marker exists, this
  * selector's spot is filled by MultiMarkerAnalysisPanel's own
- * `marker-selector-sidebar`/`marker-selector-dropdown` instead.
+ * `marker-chip-bar` instead.
  *
  * P17-MARKER-FLASH: the results panel below (Multi- or single-marker view)
  * is gated on `ready` only, never on `markersAvailable`. `markersAvailable`
@@ -138,7 +138,7 @@ export function AnalysisWorkspace() {
                 {/* P4-S3-T1 (FB-03 §3-3): always-present scope selector, in the
                     spot the dismissible split-marker banner used to occupy.
                     Once markers exist, MultiMarkerAnalysisPanel's own
-                    marker-selector-sidebar/-dropdown fills this same role. */}
+                    marker-chip-bar fills this same role. */}
                 <div
                   data-testid="analysis-scope-selector"
                   role="group"

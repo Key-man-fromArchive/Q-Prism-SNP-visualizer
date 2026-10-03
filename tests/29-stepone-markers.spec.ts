@@ -63,16 +63,15 @@ test.describe('StepOnePlus markers', () => {
       .toEqual({ fam: 'REFX', allele2: 'MUTX' });
 
     await page.locator('#tab-results').click();
-    const selector = page.getByTestId('marker-selector-sidebar').or(page.getByTestId('marker-selector-dropdown'));
-    await expect(selector).toBeVisible();
+    await expect(page.getByTestId('marker-chip-bar')).toBeVisible();
 
-    const pickMarker = async (index: number, name: string) => {
-      const sidebar = page.getByTestId('marker-sidebar-card');
-      if (await sidebar.count()) {
-        await expect(sidebar).toHaveCount(6);
-        await sidebar.nth(index).click();
-      } else {
-        await page.getByTestId('marker-selector-dropdown').selectOption({ label: name });
+    // Chips that do not fit sit behind "More", so pick by name from whichever holds it.
+    const pickMarker = async (_index: number, name: string) => {
+      const chip = page.getByTestId('marker-chip').filter({ hasText: name });
+      if (await chip.count()) await chip.click();
+      else {
+        const more = page.getByTestId('marker-chip-more');
+        await more.selectOption(await more.locator('option').filter({ hasText: name }).getAttribute('value') ?? '');
       }
     };
     const region = page.getByTestId('results-scroll-region');

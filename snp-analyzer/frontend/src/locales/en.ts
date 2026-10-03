@@ -858,6 +858,10 @@ const en = {
   // Analysis surface — per-marker results (P4-S2)
   wsAnalysisListTitle: 'Per-marker results',
   wsAnalysisSelectMarkerLabel: 'Select marker',
+  markerChipMore: 'More',
+  markerChipCalled: 'Calls available',
+  markerChipNone: 'No amplification',
+  markerChipPending: 'Not analysed yet',
   wsAnalysisWellsCount: (n: number) => `${n} well(s)`,
   wsAnalysisExpectedClasses: (n: number) => `Up to ${n} dosage classes expected`,
   wsAnalysisObservedClasses: (n: number) => `${n} observed`,

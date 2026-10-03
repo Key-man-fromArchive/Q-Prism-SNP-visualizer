@@ -301,8 +301,9 @@ test('NTC jumps select another marker, preserve same-URL well history, and clear
     await expect(page.getByTestId('quality-navigation-notice')).toContainText('input revision');
   };
   await jump('A2');
-  const markerValue = await page.getByTestId('marker-selector-dropdown').inputValue();
-  await expect(page.getByTestId('marker-selector-dropdown').locator('option:checked')).toHaveText(/Marker B/);
+  const selectedMarker = page.getByTestId('marker-chip').and(page.locator('[aria-selected="true"]'));
+  const markerValue = await selectedMarker.textContent();
+  await expect(selectedMarker).toContainText('Marker B');
   const firstUrl = page.url();
   await jump('B2');
   expect(page.url()).toBe(firstUrl);
@@ -311,7 +312,7 @@ test('NTC jumps select another marker, preserve same-URL well history, and clear
   await expect(page.locator('#plate-grid [data-well="A2"]')).toBeFocused();
   await page.goForward();
   await expect(page.locator('#plate-grid [data-well="B2"]')).toBeFocused();
-  await expect(page.getByTestId('marker-selector-dropdown')).toHaveValue(markerValue);
+  await expect(selectedMarker).toHaveText(markerValue!);
   await page.waitForTimeout(450);
   expect(posts).toEqual([]);
   await page.screenshot({ path: test.info().outputPath('ntc-marker-history.png'), fullPage: true });

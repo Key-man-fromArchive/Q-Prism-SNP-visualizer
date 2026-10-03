@@ -23,7 +23,7 @@ test('multi-marker 384 review keeps long context and warnings inside bounded reg
     await page.getByTestId('assign-button').click();
   }
   await page.locator('#tab-results').click();
-  await expect(page.getByTestId('marker-selector-sidebar')).toBeVisible();
+  await expect(page.getByTestId('marker-chip-bar')).toBeVisible();
   await page.getByTestId('multi-analyze-current').click();
   await expect(page.getByTestId('marker-scatter').locator('.scatterlayer .point').first()).toBeVisible();
   // Presentation-only 384 geometry and warning fixture; saved scientific calls/context remain unchanged.
@@ -42,8 +42,10 @@ test('multi-marker 384 review keeps long context and warnings inside bounded reg
   });
   await page.reload();
   await expect(page.locator('#plate-grid [role="gridcell"]')).toHaveCount(384);
-  await expect(page.getByTestId('marker-selector-sidebar')).toContainText(names[0]);
-  expect((await page.getByTestId('marker-selector-sidebar').boundingBox())!.height).toBeLessThanOrEqual(512);
+  // One row: the first chip is shown, the rest may sit behind "More", and the bar stays a single line.
+  await expect(page.getByTestId('marker-chip-bar')).toContainText(names[0]);
+  expect((await page.getByTestId('marker-chip-row').boundingBox())!.height).toBeLessThanOrEqual(64);
+  expect((await page.getByTestId('marker-chip-row').boundingBox())!.width).toBeLessThanOrEqual(1440);
   await expect(page.getByTestId('marker-warnings')).toContainText('Synthetic warning');
   await expect.poll(() => page.getByTestId('marker-warnings').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   // The 384 plate is sized to fit this width, so it no longer has to overflow; the region
