@@ -254,10 +254,10 @@ describe('ASG linked context label', () => {
 
   it('shows the human-readable marker_id for an ad_hoc link and hides the raw type/id', () => {
     useAuthStore.setState({ linkedContext: {
-      target_type: 'ad_hoc', target_id: 'RAWID1', context: { tag_alias: '', marker_id: 'Ad hoc SNP Analyze' }, scope: [], expires_at: null,
+      target_type: 'ad_hoc', target_id: 'RAWID1', context: { tag_alias: '', marker_id: 'Ad hoc Cluster Caller' }, scope: [], expires_at: null,
     } });
     render(<Header />);
-    expect(screen.getAllByText('Ad hoc SNP Analyze')).toHaveLength(2);
+    expect(screen.getAllByText('Ad hoc Cluster Caller')).toHaveLength(2);
     assertRawValueHiddenEverywhere('ad_hoc');
     assertRawValueHiddenEverywhere('RAWID1');
   });

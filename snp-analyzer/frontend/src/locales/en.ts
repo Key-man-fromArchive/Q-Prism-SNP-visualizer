@@ -272,7 +272,7 @@ const en = {
   exportStoredPngUnavailable: 'PNG must be rendered for the stored view; reanalyze current conditions first.',
 
   // Login
-  loginTitle: 'SNP Discrimination Analyzer',
+  loginTitle: 'Q-prism® Cluster Caller',
   loginSubtitle: 'Sign in to continue',
   username: 'Username',
   password: 'Password',
@@ -751,7 +751,7 @@ const en = {
   qcAmplitude: 'Amplitude',
   noFlaggedWells: 'No wells flagged — signal quality looks good.',
   asgLaunchTitle: 'Session expired or login required',
-  asgLaunchMessage: 'Open SNP Analyze from an ASG Designer marker, design result, or order item.',
+  asgLaunchMessage: 'Open Q-prism® Cluster Caller again from ASG Designer — the Tools menu, or a marker in Marker Manager.',
   asgLaunchExpiredNote: 'Your session may have expired after being away for a while.',
   backToAsgDesigner: 'Back to ASG Designer',
 

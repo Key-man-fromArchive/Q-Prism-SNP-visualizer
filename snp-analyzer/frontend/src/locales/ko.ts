@@ -262,7 +262,7 @@ const ko: Translations = {
   exportStoredPngUnavailable: 'PNG는 저장된 보기를 렌더링해야 합니다. 먼저 현재 조건을 재분석하세요.',
 
   // Login
-  loginTitle: 'SNP 판별 분석기',
+  loginTitle: 'Q-prism® Cluster Caller',
   loginSubtitle: '계속하려면 로그인하세요',
   username: '사용자명',
   password: '비밀번호',
@@ -732,7 +732,7 @@ const ko: Translations = {
   qcAmplitude: '진폭',
   noFlaggedWells: '플래그된 웰이 없습니다 — 신호 품질이 양호합니다.',
   asgLaunchTitle: '세션이 만료되었거나 로그인이 필요합니다',
-  asgLaunchMessage: 'ASG Designer의 마커, 디자인 결과 또는 주문 항목에서 SNP 분석을 다시 열어주세요.',
+  asgLaunchMessage: 'ASG Designer의 도구 메뉴나 마커 관리자의 마커에서 Q-prism® Cluster Caller를 다시 열어주세요.',
   asgLaunchExpiredNote: '오랫동안 자리를 비우면 세션이 만료될 수 있습니다.',
   backToAsgDesigner: 'ASG Designer로 돌아가기',
 

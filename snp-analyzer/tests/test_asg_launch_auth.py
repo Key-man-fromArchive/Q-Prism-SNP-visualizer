@@ -86,7 +86,7 @@ class ASGLaunchAuthTest(unittest.TestCase):
             target=ASGLaunchContext(
                 target_type="ad_hoc",
                 target_id="78",
-                context={"marker_id": "Ad hoc SNP Analyze", "tag_alias": ""},
+                context={"marker_id": "Ad hoc Cluster Caller", "tag_alias": ""},
             ),
             scope=["snp:read", "snp:upload"],
         )
