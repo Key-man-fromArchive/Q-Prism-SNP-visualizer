@@ -28,7 +28,7 @@ beforeEach(() => {
   });
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() });
-  for (const fn of [exportPdf, exportPptx, exportScatterZip, exportXlsx]) vi.mocked(fn).mockResolvedValue(new Blob(['x']));
+  for (const fn of [exportPdf, exportPptx, exportScatterZip, exportXlsx]) vi.mocked(fn).mockResolvedValue({ blob: new Blob(['x']) });
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 

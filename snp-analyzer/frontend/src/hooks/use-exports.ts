@@ -9,6 +9,7 @@ import Plotly from 'plotly.js-dist-min';
 import { getActiveChart, type ActiveChart } from '@/lib/chart-export-registry';
 import { cycleValueMap, unionCycles, type WellCycleCurve } from '@/lib/well-cycle-alignment';
 import type { BackgroundMode } from '@/types/api';
+import type { DownloadedFile } from '@/lib/download-filename';
 
 // The legacy fallback: exactly what shipped before per-chart sizing existed,
 // used whenever the element hasn't been laid out (0-size, disconnected, or
@@ -248,10 +249,12 @@ export function useExports(): {
       backgroundMode: context.background, revision: context.result_revision };
   }, [conditions]);
 
-  const saveBlob = useCallback((blob: Blob, current: ReturnType<typeof conditions>, filename: string, signal?: AbortSignal) => {
+  // The server's filename wins; `fallbackName` is the legacy client-side name.
+  const saveBlob = useCallback((file: DownloadedFile, current: ReturnType<typeof conditions>, fallbackName: string, signal?: AbortSignal) => {
     if (signal?.aborted) return;
     if (!stillOwns(current)) return;
-    const url = window.URL.createObjectURL(blob);
+    const filename = file.filename ?? fallbackName;
+    const url = window.URL.createObjectURL(file.blob);
     try {
       if (signal?.aborted || !stillOwns(current)) return;
       const a = document.createElement('a');

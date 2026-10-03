@@ -131,15 +131,15 @@ it.each(['stale', 'legacy'] as const)('RED/GREEN: blocks stored export for a %s 
 });
 
 it('RED/GREEN: cancellation during a deferred stored blob prevents the download click', async () => {
-  let resolve!: (value: Blob) => void;
-  vi.mocked(exportCsv).mockReturnValue(new Promise<Blob>(done => { resolve = done; }));
+  let resolve!: (value: { blob: Blob }) => void;
+  vi.mocked(exportCsv).mockReturnValue(new Promise<{ blob: Blob }>(done => { resolve = done; }));
   const click = vi.spyOn(HTMLAnchorElement.prototype, 'click');
   const controller = new AbortController();
   const { result: hook } = renderHook(() => useExports());
   const exporting = hook.current.exportStored('csv', controller.signal);
   await vi.waitFor(() => expect(exportCsv).toHaveBeenCalled());
   controller.abort();
-  resolve(new Blob(['whole-run']));
+  resolve({ blob: new Blob(['whole-run']) });
   await exporting;
   expect(click).not.toHaveBeenCalled();
 });
@@ -182,7 +182,7 @@ it('RED/GREEN: cancellation and session replacement clear stored-PNG restore sup
 });
 
 it('downloads and revokes a current whole-run CSV only while the export owner is current', async () => {
-  vi.mocked(exportCsv).mockResolvedValue(new Blob(['whole-run']));
+  vi.mocked(exportCsv).mockResolvedValue({ blob: new Blob(['whole-run']) });
   const create = vi.fn(() => 'blob:result');
   const revoke = vi.fn();
   Object.assign(URL, { createObjectURL: create, revokeObjectURL: revoke });
@@ -344,8 +344,8 @@ function stubDownload(): void {
 }
 
 it('RED/GREEN: PPTX and report-image zip send the live conditions and the marker selection', async () => {
-  vi.mocked(exportPptx).mockResolvedValue(new Blob(['p']));
-  vi.mocked(exportScatterZip).mockResolvedValue(new Blob(['z']));
+  vi.mocked(exportPptx).mockResolvedValue({ blob: new Blob(['p']) });
+  vi.mocked(exportScatterZip).mockResolvedValue({ blob: new Blob(['z']) });
   stubDownload();
   const { result: hook } = renderHook(() => useExports());
   await hook.current.exportPPTX(['m1', 'm2']);
@@ -355,7 +355,7 @@ it('RED/GREEN: PPTX and report-image zip send the live conditions and the marker
 });
 
 it('RED/GREEN: PPTX forwards includeTable=false live and on the stored retry', async () => {
-  vi.mocked(exportPptx).mockResolvedValue(new Blob(['p']));
+  vi.mocked(exportPptx).mockResolvedValue({ blob: new Blob(['p']) });
   stubDownload();
   const { result: hook } = renderHook(() => useExports());
   await hook.current.exportPPTX(undefined, false);
@@ -365,7 +365,7 @@ it('RED/GREEN: PPTX forwards includeTable=false live and on the stored retry', a
 });
 
 it('RED/GREEN: PDF forwards the marker selection', async () => {
-  vi.mocked(exportPdf).mockResolvedValue(new Blob(['p']));
+  vi.mocked(exportPdf).mockResolvedValue({ blob: new Blob(['p']) });
   stubDownload();
   const { result: hook } = renderHook(() => useExports());
   await hook.current.exportPDF(['m2']);
@@ -373,12 +373,24 @@ it('RED/GREEN: PDF forwards the marker selection', async () => {
 });
 
 it('RED/GREEN: stored pptx/zip export uses the stored conditions and keeps the marker selection', async () => {
-  vi.mocked(exportPptx).mockResolvedValue(new Blob(['p']));
-  vi.mocked(exportScatterZip).mockResolvedValue(new Blob(['z']));
+  vi.mocked(exportPptx).mockResolvedValue({ blob: new Blob(['p']) });
+  vi.mocked(exportScatterZip).mockResolvedValue({ blob: new Blob(['z']) });
   stubDownload();
   const { result: hook } = renderHook(() => useExports());
   await hook.current.exportStored('pptx', undefined, ['m3']);
   expect(exportPptx).toHaveBeenCalledWith('run-a', false, 'none', 40, 'rev-a', ['m3'], undefined);
   await hook.current.exportStored('zip', undefined, ['m3']);
   expect(exportScatterZip).toHaveBeenCalledWith('run-a', false, 'none', 40, 'rev-a', ['m3']);
+});
+
+it('RED/GREEN: saves under the server filename, falling back to the legacy name', async () => {
+  const names: string[] = [];
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { names.push(this.download); });
+  vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() });
+  vi.mocked(exportPdf).mockResolvedValueOnce({ blob: new Blob(['p']), filename: 'rs123_report.pdf' });
+  vi.mocked(exportPdf).mockResolvedValueOnce({ blob: new Blob(['p']) });
+  const { result: hook } = renderHook(() => useExports());
+  await hook.current.exportPDF();
+  await hook.current.exportPDF();
+  expect(names).toEqual(['rs123_report.pdf', 'snp-report-run-a.pdf']);
 });

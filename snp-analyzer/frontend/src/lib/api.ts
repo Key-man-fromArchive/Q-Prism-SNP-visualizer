@@ -1,4 +1,5 @@
 import type { ScatterOrientation } from '@/stores/settings-store';
+import { filenameFromDisposition, type DownloadedFile } from '@/lib/download-filename';
 import type {
   BackgroundMode,
   UploadResponse,
@@ -198,9 +199,14 @@ function responseError(res: Response, payload: unknown): ApiError {
 }
 
 async function blobFetch(url: string): Promise<Blob> {
+  return (await fileFetch(url)).blob;
+}
+
+async function fileFetch(url: string): Promise<DownloadedFile> {
   const res = await fetch(apiUrl(url), { credentials: 'same-origin' });
   if (!res.ok) throw responseError(res, await readErrorPayload(res));
-  return res.blob();
+  const filename = filenameFromDisposition(res.headers.get('Content-Disposition'));
+  return { blob: await res.blob(), ...(filename ? { filename } : {}) };
 }
 
 async function importFetch<T>(url: string, init: RequestInit, structuredStatuses: Set<number>): Promise<T> {
@@ -295,9 +301,9 @@ export async function exportPdf(
   resultRevision?: string,
   markerIds?: readonly string[],
   orientation?: ScatterOrientation
-): Promise<Blob> {
+): Promise<DownloadedFile> {
   const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds, orientation });
-  return blobFetch(`/api/data/${sid}/export/pdf${query}`);
+  return fileFetch(`/api/data/${sid}/export/pdf${query}`);
 }
 
 export async function exportXlsx(
@@ -308,9 +314,9 @@ export async function exportXlsx(
   resultRevision?: string,
   markerIds?: readonly string[],
   orientation?: ScatterOrientation
-): Promise<Blob> {
+): Promise<DownloadedFile> {
   const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds, orientation });
-  return blobFetch(`/api/data/${sid}/export/xlsx${query}`);
+  return fileFetch(`/api/data/${sid}/export/xlsx${query}`);
 }
 
 export async function getProtocol(sid: string): Promise<ProtocolResponse> {
@@ -638,9 +644,9 @@ export async function exportCsv(
   background?: BackgroundMode,
   resultRevision?: string,
   markerIds?: readonly string[]
-): Promise<Blob> {
+): Promise<DownloadedFile> {
   const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds });
-  return blobFetch(`/api/data/${sid}/export/csv${query}`);
+  return fileFetch(`/api/data/${sid}/export/csv${query}`);
 }
 
 export async function exportPptx(
@@ -652,9 +658,9 @@ export async function exportPptx(
   markerIds?: readonly string[],
   includeTable?: boolean,
   orientation?: ScatterOrientation
-): Promise<Blob> {
+): Promise<DownloadedFile> {
   const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds, includeTable, orientation });
-  return blobFetch(`/api/data/${sid}/export/pptx${query}`);
+  return fileFetch(`/api/data/${sid}/export/pptx${query}`);
 }
 
 export async function exportScatterZip(
@@ -665,9 +671,9 @@ export async function exportScatterZip(
   resultRevision?: string,
   markerIds?: readonly string[],
   orientation?: ScatterOrientation
-): Promise<Blob> {
+): Promise<DownloadedFile> {
   const query = exportQuery({ cycle, useRox, background, resultRevision, markerIds, orientation });
-  return blobFetch(`/api/data/${sid}/export/scatter-png.zip${query}`);
+  return fileFetch(`/api/data/${sid}/export/scatter-png.zip${query}`);
 }
 
 // ============================================================================
