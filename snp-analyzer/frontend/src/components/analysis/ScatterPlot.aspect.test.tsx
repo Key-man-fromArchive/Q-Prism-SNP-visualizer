@@ -45,22 +45,23 @@ beforeEach(() => {
   vi.mocked(Plotly.newPlot).mockImplementation(async (node) => { Object.assign(node, { on: vi.fn() }); });
 });
 
-it('renders the canvas at the default 3:4 (portrait) aspect', async () => {
+it('fills the card by default: no fixed ratio variables', async () => {
   const view = render(<ScatterPlot />);
   await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalled());
   const canvas = view.container.querySelector('.analysis-scatter-canvas') as HTMLElement;
-  expect(canvas.style.getPropertyValue('--scatter-aspect-w')).toBe('3');
-  expect(canvas.style.getPropertyValue('--scatter-aspect-h')).toBe('4');
+  expect(canvas.dataset.scatterAspect).toBe('fill');
+  expect(canvas.style.getPropertyValue('--scatter-aspect-w')).toBe('');
 });
 
-it('switches the canvas to 1:1 when scatterAspect changes', async () => {
+it('switches the canvas to 4:3 when scatterAspect changes', async () => {
   const view = render(<ScatterPlot />);
   await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalled());
-  act(() => useSettingsStore.getState().setScatterAspect('1:1'));
+  act(() => useSettingsStore.getState().setScatterAspect('4:3'));
   const canvas = view.container.querySelector('.analysis-scatter-canvas') as HTMLElement;
   await waitFor(() => {
-    expect(canvas.style.getPropertyValue('--scatter-aspect-w')).toBe('1');
-    expect(canvas.style.getPropertyValue('--scatter-aspect-h')).toBe('1');
+    expect(canvas.dataset.scatterAspect).toBe('4:3');
+    expect(canvas.style.getPropertyValue('--scatter-aspect-w')).toBe('4');
+    expect(canvas.style.getPropertyValue('--scatter-aspect-h')).toBe('3');
   });
 });
 
@@ -68,16 +69,16 @@ it('forces a Plotly resize after the initial mount when the aspect toggles', asy
   render(<ScatterPlot />);
   await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalledTimes(1));
   expect(Plotly.Plots.resize).not.toHaveBeenCalled();
-  act(() => useSettingsStore.getState().setScatterAspect('1:1'));
+  act(() => useSettingsStore.getState().setScatterAspect('4:3'));
   await waitFor(() => expect(Plotly.Plots.resize).toHaveBeenCalledTimes(1));
   // A plain re-render pass (no aspect change) must not double-fire it.
-  act(() => useSettingsStore.getState().setScatterAspect('1:1'));
+  act(() => useSettingsStore.getState().setScatterAspect('4:3'));
   expect(Plotly.Plots.resize).toHaveBeenCalledTimes(1);
 });
 
 it('does not force a resize before the initial Plotly.newPlot has resolved', () => {
   vi.mocked(Plotly.newPlot).mockImplementation(() => new Promise(() => {})); // never resolves
   render(<ScatterPlot />);
-  act(() => useSettingsStore.getState().setScatterAspect('1:1'));
+  act(() => useSettingsStore.getState().setScatterAspect('4:3'));
   expect(Plotly.Plots.resize).not.toHaveBeenCalled();
 });

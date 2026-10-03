@@ -100,4 +100,10 @@ describe("scatter canvas viewport cap (P5-E)", () => {
   it("derives width from the height cap to keep the aspect ratio", () => {
     expect(css).toMatch(/max-width:\s*calc\(var\(--scatter-max-h\)\s*\*\s*var\(--scatter-aspect-w\)/);
   });
+  it("fill mode drops the ratio and takes the measured height at full width", () => {
+    const block = css.match(/\.analysis-scatter-canvas\[data-scatter-aspect="fill"\]\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(block).toMatch(/aspect-ratio:\s*auto/);
+    expect(block).toMatch(/height:\s*var\(--scatter-max-h\)/);
+    expect(block).toMatch(/max-width:\s*none/);
+  });
 });

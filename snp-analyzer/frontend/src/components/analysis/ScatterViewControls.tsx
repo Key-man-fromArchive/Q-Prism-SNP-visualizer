@@ -99,7 +99,7 @@ export type ScatterViewControlsProps = {
   ratioOrigin?: { note: string; fam: number; allele2: number } | null;
 };
 
-const SCATTER_ASPECTS: ScatterAspect[] = ["3:4", "1:1", "4:3"];
+const SCATTER_ASPECTS: ScatterAspect[] = ["fill", "4:3", "3:4"];
 
 const AXIS_MODES: AxisMode[] = ["zero", "auto", "manual"];
 
@@ -434,7 +434,7 @@ export function ScatterViewControls({
           >
             {SCATTER_ASPECTS.map((aspect) => (
               <option key={aspect} value={aspect}>
-                {aspect}
+                {aspect === "fill" ? t.scatterAspectFill : aspect}
               </option>
             ))}
           </select>

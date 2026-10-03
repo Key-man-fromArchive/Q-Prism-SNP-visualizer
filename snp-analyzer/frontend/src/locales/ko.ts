@@ -946,6 +946,7 @@ const ko: Translations = {
   axisLockAspect: 'x/y 배율 동일',
   axisSettingsButton: '축 설정…',
   scatterAspectLabel: '종횡비',
+  scatterAspectFill: '꽉 채움',
   scatterSwapAxes: '축 바꾸기',
   normalizationChannelLabel: '기준 채널',
   normalizationChannelUnavailable: '이 런에는 기준 채널이 없습니다',
