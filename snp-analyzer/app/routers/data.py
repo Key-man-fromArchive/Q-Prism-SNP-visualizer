@@ -8,6 +8,7 @@ from app.models import (
     AmplificationCurve,
     ProtocolStep,
 )
+from app.processing.axis_bounds import plate_axis_bounds
 from app.processing.background import BackgroundMode
 from app.processing.cycle_selection import CycleMode, resolve_cycle
 from app.processing.normalize import (
@@ -49,6 +50,26 @@ async def suggest_cycle(sid: str, current_user: CurrentUser):
     from app.processing.ntc_detection import compute_cycle_suggestion
 
     return compute_cycle_suggestion(unified)
+
+
+@router.get("/api/data/{sid}/axis-bounds")
+async def axis_bounds(
+    sid: str,
+    current_user: CurrentUser,
+    use_rox: bool = Query(default=True),
+    background: BackgroundMode = Query(default="none"),
+):
+    """Min/max of every normalized read on the plate, for fixed scatter axes."""
+    check_session_access(sid, current_user)
+    unified = _get_session(sid)
+    bounds = plate_axis_bounds(unified, use_rox, background)
+    if bounds is None:
+        raise HTTPException(400, "Session has no readings")
+    return {
+        "fam": {"min": bounds.fam_min, "max": bounds.fam_max},
+        "allele2": {"min": bounds.allele2_min, "max": bounds.allele2_max},
+        "reads": bounds.reads,
+    }
 
 
 @router.get("/api/data/{sid}/scatter")
