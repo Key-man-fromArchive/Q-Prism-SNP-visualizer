@@ -973,6 +973,7 @@ const en = {
   axisLockAspect: 'Equal x/y scale',
   axisSettingsButton: 'Axis settings…',
   scatterAspectLabel: 'Aspect ratio',
+  scatterAspectFill: 'Fill',
   scatterSwapAxes: 'Swap axes',
   normalizationChannelLabel: 'Reference channel',
   normalizationChannelUnavailable: 'No reference channel in this run',

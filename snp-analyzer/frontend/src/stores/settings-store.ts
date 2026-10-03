@@ -30,7 +30,9 @@ export type ScatterTool = 'select' | 'edit';
  *  explicit user choice rather than a fixed value: readers differ on
  *  whether a square or a 4:3 rectangle reads better, and picking one
  *  forecloses the other. */
-export type ScatterAspect = '3:4' | '1:1' | '4:3';
+export type ScatterAspect = 'fill' | '4:3' | '3:4';
+
+const SCATTER_ASPECTS: readonly ScatterAspect[] = ['fill', '4:3', '3:4'];
 
 /** Which allele sits on the scatter's x axis. `fam_x` (default) is FAM on x and
  *  VIC/HEX on y; `allele2_x` is the StepOne orientation (VIC/HEX on x, FAM on y).
@@ -120,7 +122,7 @@ const defaults = {
   axisMode: 'zero' as AxisMode,
   scatterTool: 'select' as ScatterTool,
   // Portrait by default: a scatter reads better taller than wide (P5).
-  scatterAspect: '3:4' as ScatterAspect,
+  scatterAspect: 'fill' as ScatterAspect,
   scatterOrientation: 'fam_x' as ScatterOrientation,
   // Whether the operator picked `axisMode` themselves. Until they do, the plot
   // chooses: NTC basis on a run with NTC wells, data fit on one without.
@@ -174,8 +176,12 @@ const defaults = {
  *
  *  v1 -> v2 (P7 expert mode): the threshold-edit tool is expert-only, so a
  *  stored `scatterTool: 'edit'` would leave a basic-mode user in a drag mode
- *  with no control to leave it. It is reset to `select` once. */
-const SETTINGS_STORE_VERSION = 2;
+ *  with no control to leave it. It is reset to `select` once.
+ *
+ *  v2 -> v3 (P9 plot fill): the default scatter ratio became `fill` and the
+ *  `1:1` option was removed. A stored `1:1` (or any value the picker no longer
+ *  offers) is reset to `fill` once; `4:3` and `3:4` are kept. */
+const SETTINGS_STORE_VERSION = 3;
 
 /** Coerces a stored payload with no `version` key at all -- every payload
  *  written before this file introduced versioning, including the one from
@@ -260,6 +266,10 @@ export const useSettingsStore = create<SettingsState>()(
         if (version < 2) {
           // v1 -> v2: see SETTINGS_STORE_VERSION above.
           state.scatterTool = 'select';
+        }
+        if (version < 3 && !SCATTER_ASPECTS.includes(state.scatterAspect as ScatterAspect)) {
+          // v2 -> v3: see SETTINGS_STORE_VERSION above.
+          state.scatterAspect = 'fill';
         }
         return state as SettingsState;
       },

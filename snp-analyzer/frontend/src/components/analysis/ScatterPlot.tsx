@@ -80,7 +80,8 @@ const MAX_WELL_LABELS = 8;
 // the canvas is bound by width so the ratio always holds, and the ratio
 // itself comes from here rather than a fixed value (FB-04 §3-1, D-6).
 function scatterAspectVars(aspect: ScatterAspect): CSSProperties {
-  const [w, h] = aspect === "1:1" ? [1, 1] : aspect === "4:3" ? [4, 3] : [3, 4];
+  if (aspect === "fill") return {};
+  const [w, h] = aspect === "4:3" ? [4, 3] : [3, 4];
   return { "--scatter-aspect-w": w, "--scatter-aspect-h": h } as CSSProperties;
 }
 
@@ -630,7 +631,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       annotations,
       // The legend is a compact row above the plot area, below the modebar, so
       // it never covers data or tools (nothing is reserved under the axis).
-      margin: { t: LEGEND_MARGIN_TOP, r: 10, b: 60, l: 70 },
+      margin: { t: LEGEND_MARGIN_TOP, r: 8, b: 48, l: 54 },
       legend: compactLegend(colors),
     };
 
@@ -1186,7 +1187,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
           onApply: handleDosageMaxApply,
         }}
       />
-      <div ref={canvasRef} className="relative analysis-scatter-canvas" style={scatterAspectVars(scatterAspect)}>
+      <div ref={canvasRef} className="relative analysis-scatter-canvas" data-scatter-aspect={scatterAspect} style={scatterAspectVars(scatterAspect)}>
         <div
           id="scatter-plot"
           data-visible-wells={visiblePoints.length}
