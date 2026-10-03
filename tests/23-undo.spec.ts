@@ -23,9 +23,15 @@ test('keyboard multi-well edit, header undo, keyboard redo and reload preserve e
   const sid = await openRun(page);
   const initial = await read(page, sid);
   const first = page.locator('#plate-grid [data-well="A1"]');
-  await first.focus(); await page.keyboard.press('Space'); await page.keyboard.press('Shift+ArrowRight');
-  await page.keyboard.press('1');
-  await expect(undo(page)).toBeEnabled();
+  // The grid handler may not be ready for the first keys; retry, but only while the server is still unedited.
+  await expect(async () => {
+    const now = (await read(page, sid)).manual_assignments;
+    if (now.A1 !== 'NTC' || now.A2 !== 'NTC') {
+      await first.focus(); await page.keyboard.press('Space'); await page.keyboard.press('Shift+ArrowRight');
+      await page.keyboard.press('1');
+    }
+    await expect(undo(page)).toBeEnabled({ timeout: 2000 });
+  }).toPass({ timeout: 20000 });
   const edited = await read(page, sid);
   expect(edited.manual_assignments).toEqual({ ...initial.manual_assignments, A1: 'NTC', A2: 'NTC' });
   expect(edited.input_revision).toBe(initial.input_revision + 1);

@@ -54,13 +54,14 @@ test.describe('StepOnePlus markers', () => {
     // The edit is persisted server-side, not just in local state.
     const sid = new URL(page.url()).searchParams.get('session');
     expect(sid).toBeTruthy();
-    const saved = await page.evaluate(async id => {
-      const res = await fetch(`/api/data/${id}/markers`);
-      return res.json();
-    }, sid);
-    const markers = Array.isArray(saved) ? saved : saved.markers;
-    expect(markers.find((m: { name: string }) => m.name === 'QPrism2').allele_labels)
-      .toEqual({ fam: 'REFX', allele2: 'MUTX' });
+    await expect.poll(async () => {
+      const saved = await page.evaluate(async id => {
+        const res = await fetch(`/api/data/${id}/markers`);
+        return res.json();
+      }, sid);
+      const markers = Array.isArray(saved) ? saved : saved.markers;
+      return markers.find((m: { name: string }) => m.name === 'QPrism2')?.allele_labels;
+    }).toEqual({ fam: 'REFX', allele2: 'MUTX' });
 
     await page.locator('#tab-results').click();
     await expect(page.getByTestId('marker-chip-bar')).toBeVisible();

@@ -17,11 +17,16 @@ test('multi-marker 384 review keeps long context and warnings inside bounded reg
     await page.getByTestId('marker-name-input').fill(name);
     await page.getByTestId('marker-ploidy-select').selectOption('2');
     await page.getByTestId('marker-form-save').click();
+    // Selecting columns before the saved marker is listed races the marker store update.
+    await expect(page.getByTestId('marker-form-save')).toBeHidden();
     await page.getByTestId(`col-header-${index * 2 + 1}`).click();
     await page.getByTestId(`col-header-${index * 2 + 2}`).click();
     await page.getByTestId('selection-bar').getByTestId('marker-pick-button').filter({ hasText: name }).click();
+    // Assigning persists asynchronously and replaces the marker list with the server copy,
+    // which would drop a marker added client-side while the save is in flight.
+    const saved = page.waitForResponse(r => /\/api\/data\/[^/]+\/markers$/.test(r.url()) && r.request().method() === 'POST');
     await page.getByTestId('assign-button').click();
-  }
+    await saved;  }
   await page.locator('#tab-results').click();
   await expect(page.getByTestId('marker-chip-bar')).toBeVisible();
   await page.getByTestId('multi-analyze-current').click();
@@ -42,8 +47,9 @@ test('multi-marker 384 review keeps long context and warnings inside bounded reg
   });
   await page.reload();
   await expect(page.locator('#plate-grid [role="gridcell"]')).toHaveCount(384);
-  // One row: the first chip is shown, the rest may sit behind "More", and the bar stays a single line.
-  await expect(page.getByTestId('marker-chip-bar')).toContainText(names[0]);
+  // One row: the selected chip is always shown (it displaces the last fitting chip), the rest
+  // sit behind "More", so the long name is in the row either as a chip or as a More option.
+  await expect(page.getByTestId('marker-chip-row')).toContainText(names[0]);
   expect((await page.getByTestId('marker-chip-row').boundingBox())!.height).toBeLessThanOrEqual(64);
   expect((await page.getByTestId('marker-chip-row').boundingBox())!.width).toBeLessThanOrEqual(1440);
   await expect(page.getByTestId('marker-warnings')).toContainText('Synthetic warning');

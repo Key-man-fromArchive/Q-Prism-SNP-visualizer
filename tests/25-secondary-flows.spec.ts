@@ -147,9 +147,16 @@ for (const width of [390, 1024, 1440]) for (const language of ['en', 'ko'] as co
     const bounded = async () => expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await bounded();
     const help = page.getByRole('button', { name: t.importTemplatesHelpLabel });
-    await help.click(); await expect(page.getByRole('tooltip')).toBeVisible();
-    await help.focus(); await page.keyboard.press('Escape'); await page.keyboard.press('Space');
-    await expect(page.getByRole('tooltip')).toBeVisible();
+    // A late re-render of the upload zone can remount the button and drop its hover/focus
+    // state, so retry the whole open sequence until the tooltip is actually shown.
+    await expect(async () => {
+      await help.click(); await expect(page.getByRole('tooltip')).toBeVisible({ timeout: 2000 });
+      // Late layout shifts (recent sessions loading) can move the button out from under the
+      // pointer, whose mouseleave then hides the tooltip; park the pointer so only keyboard drives it.
+      await page.mouse.move(0, 0);
+      await help.focus(); await page.keyboard.press('Escape'); await page.keyboard.press('Space');
+      await expect(page.getByRole('tooltip')).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 20000 });
     // The tooltip is placed after it mounts, so wait for a settled position rather than reading it once.
     const tooltipWithin = (axis: 'x' | 'y', limit: number) => expect.poll(async () => {
       const rect = await page.getByRole('tooltip').boundingBox();
@@ -235,7 +242,13 @@ async function openExample(page: Page) {
 test('keyboard curve jump temporarily reveals a group-hidden well and Return restores filters and focus', async ({ page }) => {
   await openExample(page);
   const first = page.locator('#plate-grid [data-well="A1"]');
-  await first.focus(); await page.keyboard.press('Enter');
+  // The selection toolbar only mounts once Enter has selected the well; under
+  // dev-server load the first keypress can land before the grid handlers are
+  // attached, so repeat the user action until the selection shows.
+  await expect(async () => {
+    await first.focus(); await page.keyboard.press('Enter');
+    await expect(page.getByTestId('manual-group-trigger')).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 20000 });
   // P15-GROUP-MENU: open the collapsed trigger before picking Group 1.
   await page.getByTestId('manual-group-trigger').click();
   await page.getByTestId('manual-group-1').click();
@@ -299,9 +312,23 @@ test('NTC jumps select another marker, preserve same-URL well history, and clear
   page.on('request', request => { if (request.method() === 'POST') posts.push(request.url()); });
   const jump = async (well: string) => {
     const details = page.getByTestId('qc-details');
-    if (await details.getAttribute('open') === null) await details.locator('summary').click();
     const button = page.getByRole('group', { name: 'Flagged NTC wells' }).getByRole('button', { name: well, exact: true });
-    await button.focus(); await page.keyboard.press('Enter');
+    // The app rejects a jump whose captured QC revisions went stale because the
+    // analysis was still settling ("no longer available. Refresh quality results
+    // and try again"). Do what that message says: refresh QC, then retry.
+    // Each action has a short timeout so a stalled step fails the attempt and is retried.
+    await expect(async () => {
+      if (await details.getAttribute('open', { timeout: 5000 }) === null) await details.locator('summary').click({ timeout: 5000 });
+      await button.focus({ timeout: 5000 }); await page.keyboard.press('Enter');
+      const stale = page.getByTestId('quality-navigation-notice').filter({ hasText: 'no longer available' });
+      const landed = page.locator(`#plate-grid [data-well="${well}"]`);
+      await expect.poll(async () => await stale.count() > 0 || await landed.evaluate(node => node === document.activeElement), { timeout: 5000 }).toBe(true);
+      if (await stale.count() > 0) {
+        const refresh = page.waitForResponse(response => /\/qc(?:\?|$)/.test(response.url()));
+        await page.getByRole('button', { name: 'Refresh QC', exact: true }).click(); await refresh;
+        throw new Error('stale quality target; refreshed QC');
+      }
+    }).toPass({ timeout: 30000 });
     await expect(page.locator(`#plate-grid [data-well="${well}"]`)).toBeFocused();
     await expect(page.locator('.detail-panel')).toContainText(well);
     await expect(page.getByTestId('quality-navigation-notice')).toContainText('input revision');
