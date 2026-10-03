@@ -108,6 +108,37 @@ def _fitted_limits(values: list[float]) -> tuple[float, float] | None:
     return (max(low - pad, 0.0) if low >= 0 else low - pad), high + pad
 
 
+# (dx, dy, ha, va) in points, tried in order: upper-right first, then the other corners and sides.
+_LABEL_SLOTS = (
+    (3, 3, "left", "bottom"), (3, -3, "left", "top"), (-3, 3, "right", "bottom"), (-3, -3, "right", "top"),
+    (0, 6, "center", "bottom"), (0, -6, "center", "top"), (6, 0, "left", "center"), (-6, 0, "right", "center"),
+    (9, 9, "left", "bottom"), (9, -9, "left", "top"), (-9, 9, "right", "bottom"), (-9, -9, "right", "top"),
+)
+
+
+def _place_well_labels(fig: Figure, ax, points: list[dict], x_key: str, y_key: str) -> None:
+    """Annotate each point with its well, never letting two labels overlap.
+
+    Collisions are tested in display coordinates. A label that collides at one slot
+    moves to the next; one that fits nowhere is dropped (the point itself stays).
+    Points are visited in input order and slots in a fixed order, so output is deterministic.
+    """
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    placed = []
+    for p in points:
+        text = literal_text(str(p["well"]))
+        for dx, dy, ha, va in _LABEL_SLOTS:
+            label = ax.annotate(text, (p[x_key], p[y_key]), xytext=(dx, dy), textcoords="offset points",
+                                fontsize=6, color="#374151", ha=ha, va=va)
+            box = label.get_window_extent(renderer).expanded(1.05, 1.1)
+            if any(box.overlaps(other) for other in placed):
+                label.remove()
+                continue
+            placed.append(box)
+            break
+
+
 def build_scatter_figure(
     points: list[dict], allele2_dye: str = "VIC", width: float | None = None,
     height: float | None = None, ploidy: int = 2, coordinate_basis: str = "normalized",
@@ -152,11 +183,6 @@ def build_scatter_figure(
             ax.scatter(xs, ys, c=color, s=20, alpha=0.7, label=literal_text(f"{names.get(gt, gt)} (n={len(pts)})"),
                        edgecolors="white", linewidth=0.3, zorder=2)
 
-        if len(points) <= _WELL_LABEL_LIMIT:
-            for p in points:
-                ax.annotate(literal_text(str(p["well"])), (p[x_key], p[y_key]), xytext=(3, 3),
-                            textcoords="offset points", fontsize=6, color="#374151")
-
         fam_default, allele2_default = f"FAM ({coordinate_basis})", f"{allele2_dye} ({coordinate_basis})"
         fam_on_x = orientation == "fam_x"
         ax.set_xlabel(literal_text(x_label or (fam_default if fam_on_x else allele2_default)), fontsize=10)
@@ -174,6 +200,8 @@ def build_scatter_figure(
                       ncol=2, framealpha=0.9)
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
+        if len(points) <= _WELL_LABEL_LIMIT:
+            _place_well_labels(fig, ax, points, x_key, y_key)
     return fig
 
 

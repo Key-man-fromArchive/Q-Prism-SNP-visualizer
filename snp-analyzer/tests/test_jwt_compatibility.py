@@ -115,7 +115,7 @@ def test_asg_mode_rejects_local_and_accepts_matching_claim(
 
 
 def test_runtime_dependency_migration() -> None:
-    assert version("PyJWT") == "2.13.0"
+    assert version("PyJWT") == "2.15.0"
     assert version("python-multipart") == "0.0.32"
     for package in ("python-jose", "ecdsa"):
         with pytest.raises(PackageNotFoundError):
