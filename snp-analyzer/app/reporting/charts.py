@@ -145,8 +145,13 @@ def build_scatter_figure(
     *, title: str | None = None, x_label: str | None = None, y_label: str | None = None,
     legend_names: dict[str, str] | None = None, aspect: str | None = None,
     orientation: str = "fam_x",
+    x_range: tuple[float, float] | None = None, y_range: tuple[float, float] | None = None,
 ) -> Figure:
     """Build the scatter figure; the caller owns and must close it.
+
+    ``x_range``/``y_range`` are raw (min, max) data bounds for the horizontal and
+    vertical axis; the usual margin is added. Passing the plate-wide range to every
+    marker's figure keeps their axes identical. Default: fit the given points.
 
     ``legend_names`` maps canonical genotype strings to display names. Colours
     are always looked up by the canonical string. ``orientation`` is ``fam_x``
@@ -189,8 +194,8 @@ def build_scatter_figure(
         ax.set_ylabel(literal_text(y_label or (allele2_default if fam_on_x else fam_default)), fontsize=10)
         ax.set_title(literal_text(title or "Allele Discrimination Plot"), fontsize=12,
                      fontweight="bold")
-        xlim = _fitted_limits([p[x_key] for p in points])
-        ylim = _fitted_limits([p[y_key] for p in points])
+        xlim = _fitted_limits(list(x_range) if x_range else [p[x_key] for p in points])
+        ylim = _fitted_limits(list(y_range) if y_range else [p[y_key] for p in points])
         if xlim and ylim:
             ax.set_xlim(*xlim)
             ax.set_ylim(*ylim)
