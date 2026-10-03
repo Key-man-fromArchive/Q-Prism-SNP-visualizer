@@ -191,8 +191,8 @@ it('reads and writes the shared scatterAspect setting from its own dropdown', ()
   useSettingsStore.getState().resetToDefaults();
   render(<ScatterViewControls {...baseProps} />);
   const select = screen.getByTestId('scatter-aspect-select');
-  expect(select).toHaveValue('3:4');
-  expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['3:4', '1:1', '4:3']);
-  fireEvent.change(select, { target: { value: '1:1' } });
-  expect(useSettingsStore.getState().scatterAspect).toBe('1:1');
+  expect(select).toHaveValue('fill');
+  expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Fill', '4:3', '3:4']);
+  fireEvent.change(select, { target: { value: '4:3' } });
+  expect(useSettingsStore.getState().scatterAspect).toBe('4:3');
 });

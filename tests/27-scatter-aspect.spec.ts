@@ -1,13 +1,10 @@
-// P4-S1-T1 (FB-04): the allele-discrimination plot was 300px tall on a 1920px
-// screen because index.css declared .analysis-scatter-canvas twice inside the
-// same 1280px media query — max-height:300px and height:360px both applied, and
-// the cap won. Ratio is now bound by WIDTH (max-width derived from the height
-// cap), so it holds instead of being sliced off. jsdom cannot measure layout,
-// so this is the only place the fix is actually verified.
+// P4-S1-T1 (FB-04) / P9: the allele-discrimination plot is bound by WIDTH for the
+// fixed ratios (4:3, 3:4) and fills the card for the default `fill`. jsdom cannot
+// measure layout, so this is the only place the CSS is actually verified.
 import { test, expect } from '@playwright/test';
 import { login } from './helpers';
 
-test('scatter canvas honours the chosen aspect ratio at 1920x911', async ({ page }) => {
+test('scatter canvas fills the card by default and honours 4:3 / 3:4 / legacy 1:1 at 1920x911', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 911 });
   await login(page);
   await page.locator('#example-select').selectOption('2');
@@ -17,25 +14,40 @@ test('scatter canvas honours the chosen aspect ratio at 1920x911', async ({ page
 
   const read = async () => {
     const b = await canvas.boundingBox();
-    return { w: Math.round(b!.width), h: Math.round(b!.height), ratio: +(b!.width / b!.height).toFixed(3) };
+    const parent = await canvas.evaluate((el) => el.parentElement!.getBoundingClientRect().width);
+    return { w: Math.round(b!.width), h: Math.round(b!.height), ratio: +(b!.width / b!.height).toFixed(3), parent: Math.round(parent) };
   };
-  // The default is portrait 3:4 (P5).
+  const setAspect = async (scatterAspect: string, version: number) => {
+    await page.evaluate(([value, v]) => {
+      const raw = localStorage.getItem('snp-analyzer-settings');
+      const s = raw ? JSON.parse(raw) : { state: {}, version: 0 };
+      s.state = { ...s.state, scatterAspect: value };
+      s.version = v;
+      localStorage.setItem('snp-analyzer-settings', JSON.stringify(s));
+    }, [scatterAspect, version] as const);
+    await page.reload();
+    await page.locator('#tab-results').click();
+    await expect(canvas).toBeVisible();
+  };
+
+  const fill = await read();
+  console.log('ASPECT fill →', JSON.stringify(fill));
+  expect(fill.w).toBeGreaterThanOrEqual(fill.parent - 40);
+  expect(fill.h).toBeGreaterThanOrEqual(320);
+
+  await setAspect('3:4', 3);
   const three4 = await read();
   console.log('ASPECT 3:4 →', JSON.stringify(three4));
-
-  await page.evaluate(() => {
-    const raw = localStorage.getItem('snp-analyzer-settings');
-    const s = raw ? JSON.parse(raw) : { state: {}, version: 0 };
-    s.state = { ...s.state, scatterAspect: '1:1' };
-    localStorage.setItem('snp-analyzer-settings', JSON.stringify(s));
-  });
-  await page.reload();
-  await page.locator('#tab-results').click();
-  await expect(canvas).toBeVisible();
-  const one1 = await read();
-  console.log('ASPECT 1:1 →', JSON.stringify(one1));
-
   expect(Math.abs(three4.ratio - 3 / 4)).toBeLessThan(0.05);
-  expect(three4.h).toBeGreaterThanOrEqual(360);
-  expect(Math.abs(one1.ratio - 1)).toBeLessThan(0.05);
+
+  await setAspect('4:3', 3);
+  const four3 = await read();
+  console.log('ASPECT 4:3 →', JSON.stringify(four3));
+  expect(Math.abs(four3.ratio - 4 / 3)).toBeLessThan(0.05);
+
+  // A stored 1:1 from the previous settings version migrates to fill.
+  await setAspect('1:1', 2);
+  await expect(page.getByTestId('scatter-aspect-select')).toHaveValue('fill');
+  const migrated = await read();
+  expect(migrated.w).toBeGreaterThanOrEqual(migrated.parent - 40);
 });

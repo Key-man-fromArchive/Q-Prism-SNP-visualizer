@@ -10,9 +10,24 @@ beforeEach(() => {
   useSettingsStore.getState().resetToDefaults();
 });
 
-it('defaults scatterAspect to 3:4 (portrait)', () => {
-  expect(useSettingsStore.getState().scatterAspect).toBe('3:4');
+it('defaults scatterAspect to fill', () => {
+  expect(useSettingsStore.getState().scatterAspect).toBe('fill');
 });
+
+// v2 -> v3: the 1:1 option was removed and the default became fill, so a stored
+// 1:1 (or any value the picker no longer offers) falls back to fill, while the
+// two remaining ratios survive.
+it.each([['1:1', 'fill'], ['bogus', 'fill'], ['4:3', '4:3'], ['3:4', '3:4']])(
+  'migrates stored scatterAspect %s to %s',
+  async (stored, expected) => {
+    window.localStorage.setItem(
+      'snp-analyzer-settings',
+      JSON.stringify({ state: { scatterAspect: stored }, version: 2 })
+    );
+    await useSettingsStore.persist.rehydrate();
+    expect(useSettingsStore.getState().scatterAspect).toBe(expected);
+  }
+);
 
 it('tracks whether the operator picked the axis mode', () => {
   expect(useSettingsStore.getState().axisModeChosen).toBe(false);
@@ -22,17 +37,17 @@ it('tracks whether the operator picked the axis mode', () => {
   expect(useSettingsStore.getState().axisModeChosen).toBe(false);
 });
 
-it('setScatterAspect switches to 1:1 and back', () => {
-  useSettingsStore.getState().setScatterAspect('1:1');
-  expect(useSettingsStore.getState().scatterAspect).toBe('1:1');
+it('setScatterAspect switches between options', () => {
+  useSettingsStore.getState().setScatterAspect('3:4');
+  expect(useSettingsStore.getState().scatterAspect).toBe('3:4');
   useSettingsStore.getState().setScatterAspect('4:3');
   expect(useSettingsStore.getState().scatterAspect).toBe('4:3');
 });
 
-it('resetToDefaults restores 3:4 after it was changed', () => {
-  useSettingsStore.getState().setScatterAspect('1:1');
+it('resetToDefaults restores fill after it was changed', () => {
+  useSettingsStore.getState().setScatterAspect('4:3');
   useSettingsStore.getState().resetToDefaults();
-  expect(useSettingsStore.getState().scatterAspect).toBe('3:4');
+  expect(useSettingsStore.getState().scatterAspect).toBe('fill');
 });
 
 // applyPreset (src/components/settings/apply-preset.ts, out of this task's
@@ -42,7 +57,7 @@ it('resetToDefaults restores 3:4 after it was changed', () => {
 // scatterAspect key at all) must not disturb the default.
 it('leaves scatterAspect at its default when an unrelated (legacy-shaped) partial update is applied', () => {
   useSettingsStore.setState({ useRox: false, fixAxis: true, xMin: 1, xMax: 5 });
-  expect(useSettingsStore.getState().scatterAspect).toBe('3:4');
+  expect(useSettingsStore.getState().scatterAspect).toBe('fill');
 });
 
 // zustand's persist `merge` defaults to `{ ...currentState, ...persistedState }`.
@@ -55,7 +70,7 @@ it('models persist merge of a legacy payload without scatterAspect: default surv
   const currentState = useSettingsStore.getState();
   const legacyPersisted = { useRox: false, ntcThreshold: 0.2 } as Partial<typeof currentState>;
   const merged = { ...currentState, ...legacyPersisted };
-  expect(merged.scatterAspect).toBe('3:4');
+  expect(merged.scatterAspect).toBe('fill');
 });
 
 // P27-LOCK-DEFAULT (feedback-2026-09-11): raw RFU is routinely ~4-8x wider in
@@ -94,7 +109,7 @@ it('migration leaves unrelated persisted settings untouched', async () => {
         lockAspect: true,
         xMin: 42,
         xMax: 999,
-        scatterAspect: '1:1',
+        scatterAspect: '4:3',
         ntcThreshold: 0.33,
       },
     })
@@ -103,7 +118,7 @@ it('migration leaves unrelated persisted settings untouched', async () => {
   const state = useSettingsStore.getState();
   expect(state.xMin).toBe(42);
   expect(state.xMax).toBe(999);
-  expect(state.scatterAspect).toBe('1:1');
+  expect(state.scatterAspect).toBe('4:3');
   expect(state.ntcThreshold).toBe(0.33);
 });
 

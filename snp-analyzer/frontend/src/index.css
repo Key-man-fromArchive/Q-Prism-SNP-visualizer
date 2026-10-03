@@ -238,6 +238,13 @@ body.dark .panel {
   min-height: 320px; /* guards against a 0-height Plotly mount */
   margin-inline: auto;
 }
+/* P9: `fill` (default) sets no ratio variables: the canvas takes the card's
+   full width and the remaining viewport height measured by scatter-fit. */
+.analysis-scatter-canvas[data-scatter-aspect="fill"] {
+  aspect-ratio: auto;
+  height: var(--scatter-max-h);
+  max-width: none;
+}
 .analysis-advanced-settings > div { max-height: 18rem; overflow: auto; }
 .well-detail-expanded { max-height: 22rem; overflow: auto; }
 /* P7-VALUES (FB-06 Q-1), folded into FluorescenceDataCard by P10: the

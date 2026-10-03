@@ -70,7 +70,8 @@ const MARKER_SIZE_SELECTED = 12;
 // Feeds `.analysis-scatter-canvas`'s `aspect-ratio` (index.css, P4-S1-T1);
 // see the sibling copy in ScatterPlot.tsx for the rationale.
 function scatterAspectVars(aspect: ScatterAspect): CSSProperties {
-  const [w, h] = aspect === "1:1" ? [1, 1] : aspect === "4:3" ? [4, 3] : [3, 4];
+  if (aspect === "fill") return {};
+  const [w, h] = aspect === "4:3" ? [4, 3] : [3, 4];
   return { "--scatter-aspect-w": w, "--scatter-aspect-h": h } as CSSProperties;
 }
 
@@ -532,7 +533,7 @@ export function MarkerScatterPlot({
       shapes,
       // Compact legend on its own row above the plot area, below the modebar;
       // nothing is reserved under the axis title.
-      margin: { t: LEGEND_MARGIN_TOP, r: 10, b: 56, l: 56 },
+      margin: { t: LEGEND_MARGIN_TOP, r: 8, b: 44, l: 46 },
       legend: compactLegend(colors),
     };
 
@@ -848,6 +849,7 @@ export function MarkerScatterPlot({
         data-visible-wells={scopedPoints.length}
         ref={plotRef}
         className="analysis-scatter-canvas"
+        data-scatter-aspect={scatterAspect}
         style={{ width: "100%", ...scatterAspectVars(scatterAspect) }}
       />
     </div>
