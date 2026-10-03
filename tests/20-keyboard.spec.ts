@@ -21,11 +21,15 @@ async function mock384Geometry(page: Page) {
 }
 
 async function tabTo(page: Page, selector: string) {
+  // Do not start tabbing until the target is rendered; Tab order is computed from the DOM at press time.
+  await expect(page.locator(selector).first()).toBeAttached();
+  const seen: string[] = [];
   for (let i = 0; i < 100; i++) {
     if (await page.locator(selector).evaluateAll(nodes => nodes.includes(document.activeElement!))) return;
     await page.keyboard.press('Tab');
+    seen.push(await page.evaluate(() => { const e = document.activeElement as HTMLElement; return `${e?.tagName}#${e?.id}${e?.dataset?.well ?? ''}`; }));
   }
-  throw new Error(`Keyboard cannot reach ${selector}`);
+  throw new Error(`Keyboard cannot reach ${selector}; focus order ${seen.join(' > ')}`);
 }
 
 for (const wells of [96, 384]) test(`keyboard-only ${wells}-well tabs, grids, headers, menus, help and native editing`, async ({ page }) => {
@@ -34,6 +38,8 @@ for (const wells of [96, 384]) test(`keyboard-only ${wells}-well tabs, grids, he
   if (wells === 384) await mock384Geometry(page);
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
+  // Tab only once the first screen is rendered (dev server can be slow under load).
+  await expect(page.locator('#username')).toBeVisible({ timeout: 30000 });
   await tabTo(page, '#username');
   await page.keyboard.type('temporary');
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');

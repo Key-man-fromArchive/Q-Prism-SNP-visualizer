@@ -5,6 +5,8 @@ export const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'StrongerOperato
 
 export async function login(page: Page) {
   await page.goto('/');
+  // The dev server can take well over 10s to serve the first screen under load.
+  await expect(page.locator('#username')).toBeVisible({ timeout: 30000 });
   await page.locator('#username').fill(ADMIN_USERNAME);
   await page.locator('#password').fill(ADMIN_PASSWORD);
   // Language-independent: E2E contexts may inherit either Korean or English.
