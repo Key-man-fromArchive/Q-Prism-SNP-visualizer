@@ -833,6 +833,10 @@ const ko: Translations = {
   // Analysis surface — per-marker results (P4-S2)
   wsAnalysisListTitle: '마커별 결과',
   wsAnalysisSelectMarkerLabel: '마커 선택',
+  markerChipMore: '더보기',
+  markerChipCalled: '판정 있음',
+  markerChipNone: '증폭 없음',
+  markerChipPending: '분석 전',
   wsAnalysisWellsCount: (n: number) => `웰 ${n}개`,
   wsAnalysisExpectedClasses: (n: number) => `대립유전자 수 클래스 최대 ${n}개`,
   wsAnalysisObservedClasses: (n: number) => `관측 ${n}개`,

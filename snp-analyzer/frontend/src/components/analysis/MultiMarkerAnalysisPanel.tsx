@@ -28,6 +28,8 @@ import { dosageTrustForMarker } from "@/lib/marker-catalog";
 import { analysisWarningTexts } from "@/lib/analysis-warnings";
 import { qcConfigFromSettings, useNoAmplificationWells } from "@/lib/amplification-qc";
 import { AmplificationQcSummary } from "./AmplificationQcSummary";
+import { MarkerChipBar } from "./MarkerChipBar";
+import type { MarkerChipState } from "@/lib/marker-chip";
 import { MarkerScatterPlot } from "./MarkerScatterPlot";
 import { AmplificationCurvePanel } from "./AmplificationCurvePanel";
 import { CycleControl } from "./CycleControl";
@@ -39,8 +41,6 @@ import { AmplificationOverlay } from "./AmplificationOverlay";
 import { AnalysisCardHeader } from "./AnalysisCardHeader";
 import { GenotypeSummary } from "./GenotypeSummary";
 import { usePlotViewToggle } from "@/hooks/use-plot-view-toggle";
-
-const SIDEBAR_THRESHOLD = 4; // >=4 markers -> sidebar; <=3 -> dropdown (Q8)
 
 // The backend keys ploidy=2 genotype_counts by short diploid codes for
 // backward compatibility (AA/BB/AB), unlike ploidy>2 (full dosage strings
@@ -253,8 +253,6 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     return map;
   }, [markers, selectedMarker]);
 
-  const useSidebar = markers.length >= SIDEBAR_THRESHOLD;
-
   const expectedClasses = selectedMarker ? selectedMarker.ploidy + 1 : 0;
   const countsEntries = useMemo(() => {
     if (!selectedRegion?.genotype_counts) return [];
@@ -266,6 +264,11 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     ? selectedMarker.wells.filter((w) => noAmplification.has(w)
       && [null, undefined, "Undetermined"].includes(selectedRegion?.assignments?.[w])).length
     : 0;
+  const chipState = (m: MarkerRegion): MarkerChipState => {
+    if (m.wells.length > 0 && m.wells.every((w) => noAmplification.has(w))) return "none";
+    return regionsById[m.id] ? "called" : "pending";
+  };
+  const chipWarnings = (m: MarkerRegion) => regionsById[m.id]?.warnings ?? [];
   const markerNotAmplified = !!selectedMarker && selectedMarker.wells.length > 0
     && selectedMarker.wells.every((w) => noAmplification.has(w));
   const summaryEntries = selectedMarker
@@ -306,73 +309,12 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
         </button>
       </div>
       </div>
-      <div
-        className={`grid items-start grid-cols-1 gap-4 p-4 sm:p-6 ${
-          useSidebar ? "xl:grid-cols-[11rem_minmax(0,1fr)]" : ""
-        }`}
-      >
-      {/* Marker selector */}
-      <div className={`panel ${useSidebar ? "xl:sticky xl:top-28" : "flex flex-wrap items-center gap-3"}`}>
-        <h3 className={`text-sm font-semibold text-text ${useSidebar ? "mb-3" : ""}`}>
-          {t.wsAnalysisListTitle}
-        </h3>
-
-        {!useSidebar && (
-          <select
-            data-testid="marker-selector-dropdown"
-            aria-label={t.wsAnalysisSelectMarkerLabel}
-            value={selectedMarkerId ?? ""}
-            onChange={(e) => setSelectedMarkerId(e.target.value)}
-            className="w-full max-w-sm border border-border rounded-md px-2 py-1.5 text-sm bg-surface text-text"
-          >
-            {markers.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        )}
-
-        {useSidebar && (
-          <div data-testid="marker-selector-sidebar" className="flex flex-col gap-2">
-            {markers.map((m) => {
-              const region = regionsById[m.id];
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  data-testid="marker-sidebar-card"
-                  onClick={() => setSelectedMarkerId(m.id)}
-                  className="text-left border border-border bg-bg rounded-md p-2.5 cursor-pointer"
-                  style={
-                    selectedMarkerId === m.id
-                      ? { boxShadow: "0 0 0 2px var(--color-primary) inset" }
-                      : undefined
-                  }
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="inline-block w-2.5 h-2.5 rounded-sm"
-                      style={{ background: m.color ?? MARKER_PALETTE[0] }}
-                    />
-                    <span className="font-semibold text-sm text-text flex-1 truncate">
-                      {m.name}
-                    </span>
-                    {region?.warnings && region.warnings.length > 0 && (
-                      <span title={region.warnings.join(", ")} className="text-warning">
-                        <AlertTriangle size={13} aria-hidden="true" />
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
+      <div className="grid grid-cols-1 items-start gap-4 p-4 sm:p-6">
       {/* Selected marker's results */}
       <div className="flex flex-col gap-4">
+        {/* One-row marker picker above the scatter card, same for every marker count. */}
+        <MarkerChipBar markers={markers} selectedId={selectedMarkerId} onSelect={setSelectedMarkerId}
+          statusOf={chipState} warningsOf={chipWarnings} />
         {error && (
           <div className="px-3 py-2 rounded-md text-sm text-danger bg-danger/10">{error}</div>
         )}

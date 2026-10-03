@@ -41,7 +41,7 @@ test.describe('P17: results panel survives a marker refetch', () => {
 
     // Once the refetch resolves, the panel switches to the per-marker view
     // and the badge clears.
-    await expect(page.getByTestId('marker-selector-sidebar').or(page.getByTestId('marker-selector-dropdown'))).toBeVisible();
+    await expect(page.getByTestId('marker-chip-bar')).toBeVisible();
     await expect(page.getByTestId('marker-refresh-indicator')).toBeHidden();
   });
 

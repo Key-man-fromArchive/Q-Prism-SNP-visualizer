@@ -269,7 +269,6 @@ body.dark .panel {
   .detail-panel #detail-content > table > tbody { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .25rem .5rem; }
   .detail-panel #detail-content > table tr { display: flex; flex-wrap: wrap; gap: .25rem; }
   .detail-panel #detail-content > table td { overflow-wrap: anywhere; }
-  [data-testid="marker-selector-sidebar"] { max-height: 32rem; overflow: auto; }
   [data-testid="marker-warnings"] { max-height: 5rem; overflow: auto; }
   .analysis-review-stack [data-testid="plate-scroll-region"] { max-height: none; overflow-x: auto; overflow-y: hidden; }
   .analysis-context-summary-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; padding: .5rem 1.5rem 0; }
