@@ -76,7 +76,7 @@ for (const width of [390, 1024, 1440]) for (const language of ['en', 'ko'] as co
     await page.route('**/api/compare/stats**', route => route.fulfill({ json: { run1: compareStatsRun('run-a'), run2: compareStatsRun('run-b'), correlation: { fam_r: null, allele2_r: 0.875, n_matched_wells: 8 } } }));
 
     await login(page);
-    const bounded = async () => expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const bounded = async () => expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.locator('#example-select').selectOption('2');
     await expect(page.locator('#tab-library')).toBeVisible();
 
@@ -144,21 +144,27 @@ for (const width of [390, 1024, 1440]) for (const language of ['en', 'ko'] as co
     await page.locator('#password').press('Enter');
     await expect(page.locator('#file-input')).toBeAttached();
     await expect(page.getByTestId('quick-start-steps')).toBeVisible();
-    const bounded = async () => expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const bounded = async () => expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await bounded();
     const help = page.getByRole('button', { name: t.importTemplatesHelpLabel });
     await help.click(); await expect(page.getByRole('tooltip')).toBeVisible();
     await help.focus(); await page.keyboard.press('Escape'); await page.keyboard.press('Space');
     await expect(page.getByRole('tooltip')).toBeVisible();
-    const box = await page.getByRole('tooltip').boundingBox();
-    expect(box!.x).toBeGreaterThanOrEqual(0); expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+    // The tooltip is placed after it mounts, so wait for a settled position rather than reading it once.
+    const tooltipWithin = (axis: 'x' | 'y', limit: number) => expect.poll(async () => {
+      const rect = await page.getByRole('tooltip').boundingBox();
+      if (!rect) return false;
+      const start = axis === 'x' ? rect.x : rect.y;
+      return start >= 0 && start + (axis === 'x' ? rect.width : rect.height) <= limit;
+    }).toBe(true);
+    await tooltipWithin('x', width);
     await page.keyboard.press('Escape'); await expect(page.getByRole('tooltip')).toHaveCount(0);
     await expect(help).toBeFocused();
     if (width === 390) {
       await page.setViewportSize({ width, height: 360 });
       await help.scrollIntoViewIfNeeded(); await help.press('Space');
-      const shortBox = await page.getByRole('tooltip').boundingBox();
-      expect(shortBox!.y).toBeGreaterThanOrEqual(0); expect(shortBox!.y + shortBox!.height).toBeLessThanOrEqual(360);
+      await expect(page.getByRole('tooltip')).toBeVisible();
+      await tooltipWithin('y', 360);
       await page.keyboard.press('Escape'); await expect(help).toBeFocused();
       await page.setViewportSize({ width, height: 700 });
     }
@@ -203,7 +209,7 @@ for (const width of [390, 1024, 1440]) for (const language of ['en', 'ko'] as co
     await bounded();
     const region = page.getByRole('region', { name: t.pcrProtocolSteps });
     await region.focus(); await expect(region).toBeFocused();
-    if (width === 390) expect(await region.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+    if (width === 390) await expect.poll(() => region.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath('protocol.png'), fullPage: true });
   });
 }

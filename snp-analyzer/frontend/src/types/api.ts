@@ -967,10 +967,22 @@ export type ProjectResponse = {
   sessions: SessionListItem[];
 };
 
+/** Allele names as the project summary reports them; either side may be unnamed. */
+export type ProjectAlleleLabels = { fam: string | null; allele2: string | null };
+
+export type ProjectSummaryMarker = {
+  marker_id: string;
+  name: string;
+  allele_labels: ProjectAlleleLabels | null;
+};
+
 export type ProjectSummaryResponse = {
   project_id: string;
   project_name: string;
   plates: Array<{
+    /** The plate's single shared name set; null when unnamed or the markers differ. */
+    allele_labels?: ProjectAlleleLabels | null;
+    markers?: ProjectSummaryMarker[];
     session_id: string;
     instrument: string;
     num_wells: number;
