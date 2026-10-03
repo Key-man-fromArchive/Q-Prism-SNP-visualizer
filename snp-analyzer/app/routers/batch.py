@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from app.auth import CurrentUser, check_project_access, check_session_access
 from app.config import is_asg_launch_mode
-from app.db import get_db
+from app.db import get_db, load_marker_regions
 from app.processing.genotype import count_genotypes, get_effective_types
 from app.processing.quality import score_all_wells
 from app.routers.clustering import cluster_store, welltype_store
@@ -324,6 +324,18 @@ async def remove_session_from_project(project_id: str, sid: str, current_user: C
 # Batch summary endpoint
 # ---------------------------------------------------------------------------
 
+def _marker_label_fields(sid: str) -> dict:
+    """Per-plate ``allele_labels`` (shared value, else None) and the per-marker list."""
+    regions = load_marker_regions(sid)
+    markers = [
+        {"marker_id": r["id"], "name": r["name"], "allele_labels": r.get("allele_labels")}
+        for r in regions
+    ]
+    values = [m["allele_labels"] for m in markers]
+    shared = values[0] if values and values[0] and all(v == values[0] for v in values) else None
+    return {"allele_labels": shared, "markers": markers}
+
+
 @router.get("/api/projects/{project_id}/summary")
 async def project_summary(project_id: str, current_user: CurrentUser):
     """Batch summary: per-plate genotype counts, quality scores, cross-plate concordance."""
@@ -348,6 +360,8 @@ async def project_summary(project_id: str, current_user: CurrentUser):
                 "unknown_count": 0,
                 "mean_quality": 0.0,
                 "raw_filename": db_info.get(sid, ""),
+                "allele_labels": None,
+                "markers": [],
                 "missing": True,
             })
             continue
@@ -387,6 +401,7 @@ async def project_summary(project_id: str, current_user: CurrentUser):
             "unknown_count": unknown_count,
             "mean_quality": mean_quality,
             "raw_filename": db_info.get(sid, ""),
+            **_marker_label_fields(sid),
         })
 
         # Collect genotypes per well for concordance

@@ -149,3 +149,28 @@ def test_default_call_keeps_legacy_labels():
     ax = build_scatter_figure(_points(), allele2_dye="HEX").axes[0]
     assert ax.get_xlabel() == "FAM (normalized)"
     assert ax.get_ylabel() == "HEX (normalized)"
+
+
+def _clustered_points():
+    # A tight clump so the default offsets collide, plus two isolated points.
+    pts = [{"well": f"A{i + 1}", "norm_fam": 0.50 + 0.002 * (i % 6), "norm_allele2": 0.50 + 0.002 * (i // 6),
+            "effective_type": "Heterozygous"} for i in range(30)]
+    pts.append({"well": "B1", "norm_fam": 0.1, "norm_allele2": 0.9, "effective_type": "Allele 1 Homo"})
+    pts.append({"well": "B2", "norm_fam": 0.9, "norm_allele2": 0.1, "effective_type": "Allele 2 Homo"})
+    return pts
+
+
+def test_well_labels_never_overlap():
+    fig = build_scatter_figure(_clustered_points())
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    boxes = [t.get_window_extent(renderer) for t in fig.axes[0].texts]
+    assert len(boxes) >= 3
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1:]:
+            assert not a.overlaps(b), (a, b)
+    assert {"B1", "B2"} <= {t.get_text() for t in fig.axes[0].texts}
+
+
+def test_label_placement_is_deterministic():
+    assert render_scatter_png(_clustered_points()) == render_scatter_png(_clustered_points())
