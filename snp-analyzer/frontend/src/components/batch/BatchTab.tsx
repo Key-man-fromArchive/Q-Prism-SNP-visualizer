@@ -3,7 +3,7 @@ import { UploadJobSummary } from '@/components/upload/UploadJobSummary';
 import { SessionEmptyState, SessionRecoveryFeedback } from '@/components/upload/SessionRecoveryFeedback';
 import { SessionCalendar } from './SessionCalendar';
 import { useRecentSessions } from '@/hooks/use-recent-sessions';
-import { projectGenotypeCounts } from './project-summary';
+import { plateAlleleLabels, projectGenotypeCounts, projectGenotypeNames } from './project-summary';
 import { projectCsv, projectDownloadName } from './project-export';
 import { readProject } from './project-read';
 import { ArrowLeft, Clock, Download, Files, FileX, X } from 'lucide-react';
@@ -726,6 +726,7 @@ function ProjectWorkspace({ onLoadSession }: BatchTabProps) {
             <tbody>
               {summary.plates.map((plate) => {
                 const fn = plate.raw_filename || sessionFilenameMap[plate.session_id] || '';
+                const names = projectGenotypeNames(plateAlleleLabels(plate));
                 const isActive = activeSessionId === plate.session_id;
                 const detailChecked = checkedDetailSessions.has(plate.session_id);
                 return (
@@ -748,9 +749,12 @@ function ProjectWorkspace({ onLoadSession }: BatchTabProps) {
                     </td>
                     <td className="py-2 px-3 text-text">{plate.instrument}</td>
                     <td className="py-2 px-3 text-text">{plate.num_wells}</td>
-                    <td className="py-2 px-3 text-text">{projectGenotypeCounts(plate).AA || 0}</td>
-                    <td className="py-2 px-3 text-text">{projectGenotypeCounts(plate).AB || 0}</td>
-                    <td className="py-2 px-3 text-text">{projectGenotypeCounts(plate).BB || 0}</td>
+                    {(['AA', 'AB', 'BB'] as const).map((call, index) => (
+                      <td key={call} className="py-2 px-3 text-text">
+                        {projectGenotypeCounts(plate)[call]}
+                        {names && <span className="ml-1 text-xs text-text-muted">{names[index]}</span>}
+                      </td>
+                    ))}
                     <td className="py-2 px-3 text-text">{projectGenotypeCounts(plate).NTC || 0}</td>
                     <td className="py-2 px-3 text-text">{projectGenotypeCounts(plate).Unknown || 0}</td>
                     <td className={`py-2 px-3 font-medium ${getQualityColor(plate.mean_quality || 0)}`}>
