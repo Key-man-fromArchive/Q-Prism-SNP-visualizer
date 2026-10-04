@@ -1,4 +1,4 @@
-import { MoreHorizontal } from 'lucide-react';
+import { FlaskConical, MoreHorizontal } from 'lucide-react';
 import { useI18n } from '@/hooks/use-i18n';
 import { Menu, type MenuItem } from '@/components/shared/ui';
 import { navigateTabs } from '@/lib/tab-keyboard';
@@ -127,7 +127,8 @@ export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdm
           items={overflowItems}
         />
       )}
-      {/* P13-FE: a real switch at the row's right end, visible on every tab. */}
+      {/* P13-FE: a real switch at the row's right end, visible on every tab.
+          Boxed and accent-coloured so it doesn't read as stray tab text. */}
       <button
         type="button"
         role="switch"
@@ -135,11 +136,16 @@ export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdm
         aria-checked={expertMode}
         title={t.expertModeTooltip}
         onClick={() => setExpertMode(!expertMode)}
-        className="ml-auto mr-3 inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 border-none bg-transparent px-1 text-[13px] font-medium text-text sm:text-sm"
+        className={`ml-auto mr-3 my-1 inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 rounded-full border px-3 text-[13px] font-medium transition-colors sm:text-sm ${
+          expertMode
+            ? 'border-accent bg-accent/10 text-accent font-semibold ring-1 ring-accent/30'
+            : 'border-border bg-bg text-text hover:border-accent/60'
+        }`}
       >
+        <FlaskConical size={14} aria-hidden="true" className="shrink-0" />
         <span
           aria-hidden="true"
-          className={`relative inline-block h-5 w-9 shrink-0 rounded-full transition-colors ${expertMode ? 'bg-primary' : 'bg-text-muted/40'}`}
+          className={`relative inline-block h-5 w-9 shrink-0 rounded-full transition-colors ${expertMode ? 'bg-accent' : 'bg-text-muted/60'}`}
         >
           <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${expertMode ? 'left-[18px]' : 'left-0.5'}`} />
         </span>
