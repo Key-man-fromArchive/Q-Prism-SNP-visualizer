@@ -192,7 +192,7 @@ const ko: Translations = {
   manualGroupSaveFailed: '웰 그룹을 저장하지 못했습니다.',
 
   // Header
-  appTitle: 'Q-prism® Cluster Caller',
+  appTitle: 'Q-Prism® Cluster Caller',
   heroSubtitle: 'SNP 판별 · 대립유전자 클러스터링',
   heroTagline: 'SNP의 비밀을 밝히다',
   poweredBy: 'Powered by Invirustech',
@@ -262,7 +262,7 @@ const ko: Translations = {
   exportStoredPngUnavailable: 'PNG는 저장된 보기를 렌더링해야 합니다. 먼저 현재 조건을 재분석하세요.',
 
   // Login
-  loginTitle: 'Q-prism® Cluster Caller',
+  loginTitle: 'Q-Prism® Cluster Caller',
   loginSubtitle: '계속하려면 로그인하세요',
   username: '사용자명',
   password: '비밀번호',
@@ -321,11 +321,11 @@ const ko: Translations = {
   imwIssueMissingRole: (role: string) => `필수 역할이 지정되지 않음: ${role}`,
   imwIssueDuplicateRole: (role: string, channels: string) => `${role} 역할이 여러 채널에 지정됨: ${channels}`,
   importTemplatesTitle: '가져오기 양식',
-  importTemplatesDescription: 'Q-prism 양식을 내려받아 작성한 뒤, 여기로 업로드해 미리보기와 매핑을 진행하세요.',
+  importTemplatesDescription: 'Q-Prism 양식을 내려받아 작성한 뒤, 여기로 업로드해 미리보기와 매핑을 진행하세요.',
   importTemplatesHelpLabel: '가져오기 양식 도움말',
   importTemplatesHelp: 'qPCR 소프트웨어가 직접 지원되는 원시 파일을 내보내지 못하더라도 웰별·사이클별 형광값을 내보낼 수 있으면 이 양식을 사용하세요. 각 양식은 업로드 후 채널 역할과 WT/MT 매핑을 확인하는 단계로 이어집니다.',
   templateRdes: 'RDES 증폭 TSV',
-  templateRdesHelp: '가장 권장되는 Q-prism 표준 양식입니다. 웰, 사이클, 염료, 역할(WT/MT/normalization), 샘플, 타깃, RFU 컬럼을 명시해 장비 종류와 무관하게 안정적으로 매핑할 수 있습니다.',
+  templateRdesHelp: '가장 권장되는 Q-Prism 표준 양식입니다. 웰, 사이클, 염료, 역할(WT/MT/normalization), 샘플, 타깃, RFU 컬럼을 명시해 장비 종류와 무관하게 안정적으로 매핑할 수 있습니다.',
   templateGenericLong: '일반 long CSV',
   templateGenericLongHelp: '각 행이 하나의 웰-사이클-채널 측정값인 형식입니다. 예: A1, cycle 12, FAM, RFU 1532처럼 염료/채널이 행으로 반복되는 장비 export에 적합합니다.',
   templateGenericWide: '일반 wide CSV',
@@ -732,7 +732,7 @@ const ko: Translations = {
   qcAmplitude: '진폭',
   noFlaggedWells: '플래그된 웰이 없습니다 — 신호 품질이 양호합니다.',
   asgLaunchTitle: '세션이 만료되었거나 로그인이 필요합니다',
-  asgLaunchMessage: 'ASG Designer의 도구 메뉴나 마커 관리자의 마커에서 Q-prism® Cluster Caller를 다시 열어주세요.',
+  asgLaunchMessage: 'ASG Designer의 도구 메뉴나 마커 관리자의 마커에서 Q-Prism® Cluster Caller를 다시 열어주세요.',
   asgLaunchExpiredNote: '오랫동안 자리를 비우면 세션이 만료될 수 있습니다.',
   backToAsgDesigner: 'ASG Designer로 돌아가기',
   asgSaveTooltip: 'ASG Designer에 결과 저장',

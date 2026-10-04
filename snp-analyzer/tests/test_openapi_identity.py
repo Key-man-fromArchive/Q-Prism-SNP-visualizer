@@ -48,4 +48,4 @@ def test_openapi_title_matches_the_product_name(tmp_path):
         env.stop()
 
     assert response.status_code == 200
-    assert response.json()["info"]["title"] == "Q-prism® Cluster Caller"
+    assert response.json()["info"]["title"] == "Q-Prism® Cluster Caller"

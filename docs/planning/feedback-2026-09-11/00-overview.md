@@ -169,3 +169,5 @@ Gemini는 문서 내부 논리는 평가했으나 코드 대조 검증을 FB-04�
 [`docs/planning/06-tasks.md`](../06-tasks.md) — Contract ID `qprism-feedback-20260911-v1`, 7 Phase / 25 태스크.
 
 2026-09-11 정본 승격 완료. 이전 계약은 `docs/planning/archive/06-tasks-ux-followup-20260907.md`에 보관.
+
+> **2026-10-04 변경 — 대문자 P로 재통일.** 워드마크 로고와 실물 제품(키트 프로토콜·포스터·시약명)이 모두 `Q-Prism®`이라, 표기를 `Q-Prism® Cluster Caller`로 바꿨다. 근거는 `brand-identity-reference.md` 말미의 정정 노트.

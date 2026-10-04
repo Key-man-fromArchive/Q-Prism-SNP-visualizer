@@ -364,9 +364,9 @@ export function UploadZone({ onGoToProject }: UploadZoneProps) {
           is gone (App.tsx), but UploadZone is also rendered standalone in
           tests, so the hero re-checks `sessionId` itself rather than
           relying only on the parent's mount/unmount. The wide logo already
-          carries the wordmark (and its rendered "Q-Prism®" capitalization
-          doesn't match this app's own "Q-prism®" text -- see brand
-          reference appendix), so no product-name text sits next to it;
+          carries the wordmark ("Q-Prism®", the spelling the app text follows
+          since 2026-10-04 -- see brand reference), so no product-name text
+          sits next to it;
           only a functional descriptor + the brand tagline do. */}
       {!sessionId && (
         <div className="mb-6 flex flex-col items-center gap-5 rounded-xl border border-border bg-surface px-6 py-5 sm:flex-row sm:items-center">

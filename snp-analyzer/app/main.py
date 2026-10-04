@@ -119,7 +119,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Q-prism® Cluster Caller",
+    title="Q-Prism® Cluster Caller",
     lifespan=lifespan,
     root_path=SNP_ROOT_PATH,
 )

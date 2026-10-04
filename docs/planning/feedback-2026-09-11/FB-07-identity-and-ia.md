@@ -293,3 +293,5 @@ export function plotlyColors() {
 | ~~**D-5**~~ | **해결 (2026-09-11)** — 전면 재편(3-1-a) 채택. 실측 영향: 루트 E2E 20개 중 7개 스펙(25곳), 프론트 e2e 23곳, 단위 1개 파일(`TabNavigation.keyboard.test.tsx`). 대부분 기계적 치환이며 초안의 "대량 수정"은 과장이었다. |
 | — | `설정` 탭 강등 동의 여부 |
 | — | SEO/canonical 변경 허용 범위 |
+
+> **2026-10-04 변경 — 대문자 P로 재통일.** 워드마크 로고와 실물 제품(키트 프로토콜·포스터·시약명)이 모두 `Q-Prism®`이라, 표기를 `Q-Prism® Cluster Caller`로 바꿨다. 근거는 `brand-identity-reference.md` 말미의 정정 노트.
