@@ -2,6 +2,7 @@ import { MoreHorizontal } from 'lucide-react';
 import { useI18n } from '@/hooks/use-i18n';
 import { Menu, type MenuItem } from '@/components/shared/ui';
 import { navigateTabs } from '@/lib/tab-keyboard';
+import { useSettingsStore } from '@/stores/settings-store';
 import type { NavigationTab } from '@/stores/navigation-store';
 
 // Single source of truth for the top-level tab ids lives in navigation-store.ts
@@ -51,6 +52,8 @@ const tabs: Tab[] = [
 
 export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdmin = false }: TabNavigationProps) {
   const { t } = useI18n();
+  const expertMode = useSettingsStore((s) => s.expertMode);
+  const setExpertMode = useSettingsStore((s) => s.setExpertMode);
   const tabLabels: Record<TabId, string> = {
     plate: t.tabPlate,
     rawdata: t.tabRawdata,
@@ -124,6 +127,24 @@ export function TabNavigation({ activeTab, onTabChange, hasSession = true, isAdm
           items={overflowItems}
         />
       )}
+      {/* P13-FE: a real switch at the row's right end, visible on every tab. */}
+      <button
+        type="button"
+        role="switch"
+        data-testid="expert-mode-toggle"
+        aria-checked={expertMode}
+        title={t.expertModeTooltip}
+        onClick={() => setExpertMode(!expertMode)}
+        className="ml-auto mr-3 inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 border-none bg-transparent px-1 text-[13px] font-medium text-text sm:text-sm"
+      >
+        <span
+          aria-hidden="true"
+          className={`relative inline-block h-5 w-9 shrink-0 rounded-full transition-colors ${expertMode ? 'bg-primary' : 'bg-text-muted/40'}`}
+        >
+          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${expertMode ? 'left-[18px]' : 'left-0.5'}`} />
+        </span>
+        <span className="whitespace-nowrap">{t.expertMode}</span>
+      </button>
     </nav>
   );
 }

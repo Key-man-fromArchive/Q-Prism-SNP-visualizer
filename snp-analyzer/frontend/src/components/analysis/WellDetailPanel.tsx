@@ -9,6 +9,7 @@ import { channelLabels, normalizationLabel } from "@/lib/channel-labels";
 import { callLabel } from "@/lib/chart-semantics";
 import { useRequestStatus } from "@/hooks/use-request-status";
 import { callTexts } from "./call-text";
+import { WellCycleChart } from "./WellCycleChart";
 import { markNoAmplification, useNoAmplificationWells } from "@/lib/amplification-qc";
 import type { AlleleLabels, AmplificationCurve } from "@/types/api";
 
@@ -55,6 +56,7 @@ export function WellDetailPanel({ ploidyOverride, alleleLabels }: WellDetailPane
   // caught a well change but not a normalization/background change on the
   // same well.
   const [curve, setCurve] = useState<{ data: AmplificationCurve; key: string } | null>(null);
+  const [openTick, setOpenTick] = useState(0);
 
   // Find point data for selected well
   const storedPoint = selectedWell
@@ -215,7 +217,7 @@ export function WellDetailPanel({ ploidyOverride, alleleLabels }: WellDetailPane
               </tr>
           </tbody>
         </table>
-        <details className="well-detail-expanded">
+        <details className="well-detail-expanded" onToggle={(e) => { if (e.currentTarget.open) setOpenTick((n) => n + 1); }}>
           <summary className="cursor-pointer text-xs text-primary py-0.5">{t.analysisNumericDetails}</summary>
           <p className="text-xs text-text-muted" data-testid="scatter-reading-basis">{t.scatterReferenceBasis(useRox, normalizationReported, normalizationApplied)}</p>
           <table className="detail-table w-full text-sm"><tbody>
@@ -282,6 +284,15 @@ export function WellDetailPanel({ ploidyOverride, alleleLabels }: WellDetailPane
             ) : curve && curve.key === fetchKey && (
               <div style={{ marginTop: "12px" }}>
                 <p className="text-xs font-semibold text-text-muted mb-1">{t.wellTimeSeriesTitle}</p>
+                <WellCycleChart
+                  curve={curve.data}
+                  famLabel={labels.fam}
+                  allele2Label={labels.allele2}
+                  cycleLabel={t.axisCycle}
+                  currentCycle={currentCycle}
+                  windows={sessionInfo?.data_windows}
+                  visibleTick={openTick}
+                />
                 <div
                   data-testid="well-timeseries-scroll-region"
                   role="region"

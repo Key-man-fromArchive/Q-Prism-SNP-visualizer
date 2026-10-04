@@ -55,9 +55,9 @@ it('hides the selection toolbar until wells are selected and keeps group tools e
   expect(screen.getByTestId('manual-group-trigger')).toBeInTheDocument();
 });
 
-it('offers the scatter/curve switch only in expert mode', () => {
+it('offers the scatter/curve switch in basic mode too', () => {
   const { result } = renderHook(() => usePlotViewToggle());
-  expect(result.current.toggle).toBeNull();
+  expect(result.current.toggle).not.toBeNull();
   expect(result.current.view).toBe('scatter');
   act(() => useSettingsStore.getState().setExpertMode(true));
   expect(result.current.toggle).not.toBeNull();
