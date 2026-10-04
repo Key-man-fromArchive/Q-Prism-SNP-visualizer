@@ -10,6 +10,7 @@ import { useNavigationStore } from '@/stores/navigation-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useDataStore } from '@/stores/data-store';
+import { chartCategory } from '@/lib/chart-semantics';
 
 vi.mock('plotly.js-dist-min', () => ({ default: { newPlot: vi.fn(), react: vi.fn(), purge: vi.fn() } }));
 vi.mock('./ScatterViewControls', () => ({ ScatterViewControls: () => null }));
@@ -18,7 +19,7 @@ const marker = { id: 'm1', name: 'M1', wells: ['A1'], ploidy: 2 };
 const point = { well: 'A1', sample_name: null, raw_fam: 1, raw_allele2: 2, raw_rox: null, norm_fam: 1, norm_allele2: 2, auto_cluster: null, manual_type: null };
 const point2 = { ...point, well: 'A2', raw_fam: 2, norm_fam: 2 };
 
-it('renders dark NTC with a non-color symbol and visible outline', async () => {
+it('keeps the LIGHT NTC outline (symbol + light-palette stroke) in dark mode: the results plot is a white sheet', async () => {
   document.body.classList.add('dark');
   useDataStore.setState({ wellTypeAssignments: { A1: 'NTC' } });
   useDataStore.setState({ roxOutlierWells: ['A1'] });
@@ -28,8 +29,19 @@ it('renders dark NTC with a non-color symbol and visible outline', async () => {
       points={[{ ...point, manual_type: 'NTC' }]} scatterProvenance={{ cycle: 20, useRox: false, backgroundMode: 'none' }} onBoundariesPersisted={vi.fn()} />);
     await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalled());
     expect(vi.mocked(Plotly.newPlot).mock.calls.at(-1)?.[1]).toEqual(expect.arrayContaining([
-      expect.objectContaining({ customdata: ['A1'], marker: expect.objectContaining({ symbol: 'cross', line: expect.objectContaining({ color: '#f4f4f5', width: [3] }) }) }),
+      expect.objectContaining({ customdata: ['A1'], marker: expect.objectContaining({ symbol: 'cross', line: expect.objectContaining({ color: chartCategory('NTC', 2, false).stroke, width: [3] }) }) }),
     ]));
+  } finally { document.body.classList.remove('dark'); }
+});
+
+it('keeps a white paper/plot background and dark font in dark mode', async () => {
+  document.body.classList.add('dark');
+  try {
+    render(<MarkerScatterPlot sessionId="run-a" marker={marker} region={undefined}
+      points={[point]} scatterProvenance={{ cycle: 20, useRox: false, backgroundMode: 'none' }} onBoundariesPersisted={vi.fn()} />);
+    await waitFor(() => expect(Plotly.newPlot).toHaveBeenCalled());
+    const layout = vi.mocked(Plotly.newPlot).mock.calls.at(-1)?.[2] as { paper_bgcolor: string; plot_bgcolor: string; font: { color: string } };
+    expect(layout).toMatchObject({ paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff', font: { color: '#16211f' } });
   } finally { document.body.classList.remove('dark'); }
 });
 

@@ -11,6 +11,8 @@ import { useLanguageStore } from '@/stores/language-store';
 import { useCurveViewStore } from '@/stores/curve-view-store';
 import { getAmplification } from '@/lib/api';
 import en from '@/locales/en';
+import ko from '@/locales/ko';
+import { wellInfo } from '@/lib/genotype';
 
 vi.mock('plotly.js-dist-min', () => ({ default: { react: vi.fn(), purge: vi.fn(), Plots: { resize: vi.fn() }, relayout: vi.fn(), restyle: vi.fn() } }));
 vi.mock('@/lib/api', () => ({ getAmplification: vi.fn() }));
@@ -201,6 +203,38 @@ it('colours by call when asked, naming unassigned wells, and disables the call b
   fireEvent.click(screen.getByTestId('curve-colour-basis-call'));
   await waitFor(() => expect(Plotly.react).toHaveBeenCalledTimes(drawn + 1));
   expect(lastTraces().map((tr) => tr.name).some((n) => n.includes(en.wellTypeUnassigned))).toBe(true);
+});
+
+it('states the active colour basis in one caption, with the real channel labels', async () => {
+  selectMany(['A1', 'A2']);
+  render(<AmplificationCurvePanel active />);
+  await waitFor(() => expect(Plotly.react).toHaveBeenCalledTimes(1));
+  expect(screen.getByTestId('curve-colour-caption')).toHaveTextContent(en.curveColourCaption('channel', 'FAM', 'VIC'));
+  act(() => useDataStore.setState({ scatterPoints: [{ well: 'A1', manual_type: null, auto_cluster: 'AA' }] as never }));
+  fireEvent.click(screen.getByTestId('curve-colour-basis-call'));
+  await waitFor(() => expect(screen.getByTestId('curve-colour-caption')).toHaveTextContent(en.curveColourCaption('call', 'FAM', 'VIC')));
+  fireEvent.click(screen.getByTestId('curve-colour-basis-well'));
+  await waitFor(() => expect(screen.getByTestId('curve-colour-caption')).toHaveTextContent('Colour: well'));
+  expect(screen.getAllByTestId('curve-colour-caption')).toHaveLength(1);
+  expect(ko.curveColourCaption('channel', 'FAM', 'VIC')).toBe('색: 채널 (FAM 실선 · VIC 점선)');
+  expect(ko.curveColourCaption('call', 'FAM', 'VIC')).toBe('색: 콜 (플레이트와 동일한 색)');
+  expect(ko.curveColourCaption('well', 'FAM', 'VIC')).toBe('색: 웰');
+});
+
+it('stays a white sheet with the LIGHT palette in dark mode', async () => {
+  document.body.classList.add('dark');
+  try {
+    selectMany(['A1', 'A2']);
+    render(<AmplificationCurvePanel active />);
+    await waitFor(() => expect(Plotly.react).toHaveBeenCalledTimes(1));
+    expect(lastLayout()).toMatchObject({ paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff', font: { color: '#16211f' }, legend: { bgcolor: 'rgba(255,255,255,0.8)' } });
+    act(() => useDataStore.setState({ scatterPoints: [{ well: 'A1', manual_type: null, auto_cluster: 'AA' }] as never }));
+    const drawn = vi.mocked(Plotly.react).mock.calls.length;
+    fireEvent.click(screen.getByTestId('curve-colour-basis-call'));
+    await waitFor(() => expect(Plotly.react).toHaveBeenCalledTimes(drawn + 1));
+    const light = wellInfo('AA', 2, false).color;
+    expect(lastTraces().some((tr) => tr.line.color === light)).toBe(true);
+  } finally { document.body.classList.remove('dark'); }
 });
 
 it('offers the well colour basis only for 12 wells or fewer', async () => {

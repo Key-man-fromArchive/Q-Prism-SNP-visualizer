@@ -46,7 +46,8 @@ const ko: Translations = {
   curveNoCurveWells: (n: number) => `${n}개 웰은 곡선 데이터 없음`,
   curveManyOverlap: '선이 많이 겹칩니다. 콜 색 기준을 쓰거나 웰을 줄여 비교하세요.',
   curveHoverEmphasisHint: '웰 24개 이하 선택 시 마우스를 올린 웰이 강조됩니다',
-  curveLineShapeNote: '실선: 첫 번째 채널 · 점선: 두 번째 채널',
+  curveColourCaption: (basis: 'channel' | 'call' | 'well', fam: string, allele2: string) =>
+    basis === 'channel' ? `색: 채널 (${fam} 실선 · ${allele2} 점선)` : basis === 'call' ? '색: 콜 (플레이트와 동일한 색)' : '색: 웰',
   curveSummary: (wells: number, missing: number, groups: string) => `웰 ${wells}개 표시${missing > 0 ? `, 곡선 없음 ${missing}개` : ''}${groups ? `: ${groups}` : ''}`,
   wellsSelectedCompare: (n: number) => `웰 ${n}개 선택됨 — 곡선 보기에서 비교`,
   scatterReferenceBasis: (requested: boolean, reported: boolean, applied: boolean) => `산점도 측정값 — 참조 정규화 요청: ${requested ? '예' : '아니오'}; 실제 적용: ${reported ? applied ? '예' : '아니오 (리포터 스케일)' : '미확인'}.`,

@@ -93,3 +93,26 @@ export function plotlyColors() {
     selectedLineColor: readToken("--color-plot-selected-line", fallback.selectedLineColor),
   };
 }
+
+/**
+ * Fixed light set for the results screen's large plot "sheet", which stays
+ * white in dark mode too. Never reads body tokens (they are dark when
+ * body.dark is set). Keep in sync with the LIGHT values in index.css
+ * (`:root`: --color-surface, --color-text, --color-plot-*); note
+ * fontColor is the index.css --color-text (#16211f), not the jsdom
+ * FALLBACK above (#1a1a2e).
+ */
+const LIGHT_PLOT = {
+  paper_bgcolor: "#ffffff",
+  plot_bgcolor: "#ffffff",
+  fontColor: "#16211f",
+  gridColor: "#e5e7eb",
+  lineColor: "#e5e7eb",
+  legendBg: "rgba(255,255,255,0.8)",
+  markerLineColor: "#ffffff",
+  selectedLineColor: "#000000",
+} as const;
+
+export function lightPlotColors(): { -readonly [K in keyof typeof LIGHT_PLOT]: string } {
+  return { ...LIGHT_PLOT };
+}

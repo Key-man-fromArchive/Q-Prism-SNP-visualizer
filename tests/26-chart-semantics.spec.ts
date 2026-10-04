@@ -17,6 +17,9 @@ async function expectCategories(page: Page) {
   expect(new Set(traces.map(trace => trace.symbol)).size).toBe(traces.length);
   expect(new Set(traces.map(trace => trace.color)).size).toBeGreaterThan(2);
   for (const trace of traces) expect(trace.opacity).toBe(1);
+  // The results plot is a white sheet in dark mode as well as light.
+  expect(await plot.evaluate(node => (node as HTMLElement & { layout?: { paper_bgcolor?: string; plot_bgcolor?: string } }).layout))
+    .toMatchObject({ paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff' });
   expect(traces.some(trace => trace.symbol === 'cross')).toBe(true);
 }
 

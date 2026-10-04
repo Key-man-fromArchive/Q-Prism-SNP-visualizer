@@ -15,7 +15,7 @@ import { dosageOfLabel, defaultRatioCuts } from "@/lib/genotype";
 import { useScatterFit } from "@/lib/scatter-fit";
 import { chartCategory, markerCallLabel, cycleReadText, chartPointState, chartStateText } from "@/lib/chart-semantics";
 import { useI18n } from "@/hooks/use-i18n";
-import { compactLegend, LEGEND_MARGIN_TOP, PLOTLY_MODEBAR, plotlyColors } from "@/lib/plotly-theme";
+import { compactLegend, LEGEND_MARGIN_TOP, PLOTLY_MODEBAR, lightPlotColors } from "@/lib/plotly-theme";
 import { channelLabels } from "@/lib/channel-labels";
 import {
   axisRangeLayout, axisTitle, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode,
@@ -38,7 +38,6 @@ import { useSettingsStore } from "@/stores/settings-store";
 import type { ScatterAspect } from "@/stores/settings-store";
 import { useSessionStore } from "@/stores/session-store";
 import { useAuthStore } from "@/stores/auth-store";
-import { useIsDarkMode } from "@/hooks/use-dark-mode";
 import { ScatterViewControls } from "./ScatterViewControls";
 import type {
   ChannelLabels,
@@ -111,9 +110,6 @@ export function MarkerScatterPlot({
   active = true,
   viewToggle,
 }: MarkerScatterPlotProps) {
-  // Dosage colours have their own dark steps, so the traces are rebuilt on a
-  // theme change rather than only recoloured in the layout.
-  const dark = useIsDarkMode();
   const origin = ratioOrigin ?? ZERO_ORIGIN;
   const originRef = useRef(origin);
   useEffect(() => {
@@ -389,7 +385,7 @@ export function MarkerScatterPlot({
       return a.localeCompare(b);
     });
 
-    const colors = plotlyColors();
+    const colors = lightPlotColors();
     const namedMarker = { allele_labels: alleleNames };
     const thresholdLabels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
     const traces: Record<string, unknown>[] = [];
@@ -399,7 +395,7 @@ export function MarkerScatterPlot({
     const cornerAt = toPlot({ fam: effectiveNtc.corner.x, allele2: effectiveNtc.corner.y }, orientation);
     for (const typeKey of order) {
       const pts = typeGroups.get(typeKey)!;
-      const info = chartCategory(typeKey, ploidy, dark);
+      const info = chartCategory(typeKey, ploidy, false);
       traces.push({
         x: pts.map((p) => at(p).x),
         y: pts.map((p) => at(p).y),
@@ -423,7 +419,7 @@ export function MarkerScatterPlot({
           symbol: info.symbol,
           opacity: info.opacity,
           line: {
-            width: pts.map((p) => chartPointState(selectedWellSet.has(p.well), roxOutlierWells.includes(p.well), dark).width),
+            width: pts.map((p) => chartPointState(selectedWellSet.has(p.well), roxOutlierWells.includes(p.well), false).width),
             color: info.stroke,
           },
         },
@@ -660,7 +656,6 @@ export function MarkerScatterPlot({
     yMin,
     yMax,
     ntcAxisOffsets,
-    dark,
     sessionId,
     scatterProvenance,
     dropSelectionOutline,
@@ -866,7 +861,7 @@ export function MarkerScatterPlot({
         data-visible-wells={scopedPoints.length}
         ref={plotRef}
         data-well-context
-        className="analysis-scatter-canvas"
+        className="analysis-scatter-canvas bg-white rounded-lg overflow-hidden"
         data-scatter-aspect={scatterAspect}
         style={{ width: "100%", ...scatterAspectVars(scatterAspect) }}
       />

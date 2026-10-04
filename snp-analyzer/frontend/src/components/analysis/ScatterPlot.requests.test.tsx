@@ -12,6 +12,7 @@ import { getActiveChart } from '@/lib/chart-export-registry';
 import Plotly from 'plotly.js-dist-min';
 import type { ScatterResponse } from '@/types/api';
 import { useNavigationStore } from '@/stores/navigation-store';
+import { chartCategory } from '@/lib/chart-semantics';
 
 vi.mock('plotly.js-dist-min', () => ({ default: { newPlot: vi.fn().mockResolvedValue(undefined), react: vi.fn(), purge: vi.fn(), restyle: vi.fn() } }));
 vi.mock('@/lib/api', () => ({ getScatter: vi.fn(), runClustering: vi.fn() }));
@@ -54,7 +55,7 @@ beforeEach(() => {
   useDataStore.setState({ scatterPoints: [], wellTypeAssignments: {} });
   useNavigationStore.setState({ qualityTarget: null, qualityLease: null, qualityNavigating: false });
 });
-it('renders dark NTC with a non-color symbol and visible outline', async () => {
+it('keeps the LIGHT NTC outline (symbol + light-palette stroke) in dark mode: the results plot is a white sheet', async () => {
   document.body.classList.add('dark');
   useSettingsStore.setState({ showManualTypes: true, showBoundaryLines: false });
   useDataStore.setState({ plateWells: [{ well: 'A1', row: 0, col: 0, norm_fam: 1, norm_allele2: 2, ratio: null, sample_name: null, auto_cluster: null, manual_type: 'NTC' }] });
@@ -63,8 +64,21 @@ it('renders dark NTC with a non-color symbol and visible outline', async () => {
   try {
     render(<ScatterPlot />);
     await waitFor(() => expect([...vi.mocked(Plotly.newPlot).mock.calls, ...vi.mocked(Plotly.react).mock.calls].flatMap(call => call[1] ?? [])).toEqual(expect.arrayContaining([
-      expect.objectContaining({ customdata: ['A1'], marker: expect.objectContaining({ symbol: 'cross', line: expect.objectContaining({ color: '#f4f4f5' }) }) }),
+      expect.objectContaining({ customdata: ['A1'], marker: expect.objectContaining({ symbol: 'cross', line: expect.objectContaining({ color: chartCategory('NTC', 2, false).stroke }) }) }),
     ])));
+  } finally { document.body.classList.remove('dark'); }
+});
+
+it('keeps a white paper/plot background and dark font in dark mode', async () => {
+  document.body.classList.add('dark');
+  vi.mocked(Plotly.newPlot).mockImplementation(async node => { Object.assign(node, { on: vi.fn() }); });
+  useDataStore.setState({ plateWells: [{ well: 'A1', row: 0, col: 0, norm_fam: 1, norm_allele2: 2, ratio: null, sample_name: null, auto_cluster: null, manual_type: 'NTC' }] });
+  vi.mocked(getScatter).mockResolvedValue({ ...response('HEX'), points: [{ well: 'A1', sample_name: null, raw_fam: 1, raw_allele2: 2, raw_rox: null, norm_fam: 1, norm_allele2: 2, auto_cluster: null, manual_type: 'NTC' }] });
+  try {
+    render(<ScatterPlot />);
+    await waitFor(() => expect(vi.mocked(Plotly.newPlot).mock.calls.length + vi.mocked(Plotly.react).mock.calls.length).toBeGreaterThan(0));
+    const layout = [...vi.mocked(Plotly.newPlot).mock.calls, ...vi.mocked(Plotly.react).mock.calls].at(-1)?.[2] as { paper_bgcolor: string; plot_bgcolor: string; font: { color: string } };
+    expect(layout).toMatchObject({ paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff', font: { color: '#16211f' } });
   } finally { document.body.classList.remove('dark'); }
 });
 

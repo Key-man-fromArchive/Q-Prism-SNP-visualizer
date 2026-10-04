@@ -37,7 +37,7 @@ import { useCurveViewStore } from "@/stores/curve-view-store";
 import { getAmplification } from "@/lib/api";
 import { channelLabels } from "@/lib/channel-labels";
 import { callAppearance, cycleReadText } from "@/lib/chart-semantics";
-import { plotlyColors } from "@/lib/plotly-theme";
+import { lightPlotColors } from "@/lib/plotly-theme";
 import { wellInfo } from "@/lib/genotype";
 import { callForWell } from "@/lib/well-call";
 import { markNoAmplification, useNoAmplificationWells } from "@/lib/amplification-qc";
@@ -46,7 +46,6 @@ import {
   type ColourBasis, type CurveChannels, type TraceMeta,
 } from "@/lib/amplification-traces";
 import { useRequestStatus } from "@/hooks/use-request-status";
-import { useIsDarkMode } from "@/hooks/use-dark-mode";
 import { StatusState } from "@/components/shared/ui";
 import { callTexts } from "./call-text";
 import type { AlleleLabels, AmplificationResponse } from "@/types/api";
@@ -133,7 +132,6 @@ function Segmented<V extends string>({ label, value, options, onChange, testId }
 
 export function AmplificationCurvePanel({ active, viewToggle, bare = false, callOf, alleleLabelsOf, ploidyOverride }: AmplificationCurvePanelProps) {
   const { t } = useI18n();
-  const dark = useIsDarkMode();
   const plotRef = useRef<HTMLDivElement>(null);
   const plotInitRef = useRef(false);
   const hoverBoundRef = useRef(false);
@@ -292,7 +290,7 @@ export function AmplificationCurvePanel({ active, viewToggle, bare = false, call
       res.allele2_dye || allele2Dye
     );
     const callName = (call: string, well: string) => {
-      const appearance = callTexts(call, t, callAppearance(call, ploidy, dark, t), alleleLabelsOf?.(well));
+      const appearance = callTexts(call, t, callAppearance(call, ploidy, false, t), alleleLabelsOf?.(well));
       return appearance.label || appearance.description;
     };
     return {
@@ -305,11 +303,11 @@ export function AmplificationCurvePanel({ active, viewToggle, bare = false, call
         channelNames: labels,
         callOf: wellCall,
         callName,
-        callColor: (call) => wellInfo(call, ploidy, dark).color,
+        callColor: (call) => wellInfo(call, ploidy, false).color,
         texts: { unassigned: t.wellTypeUnassigned, cycle: t.axisCycle },
       }),
     };
-  }, [data, fetchKey, roleLabels, allele2Dye, channels, basis, yScale, wellCall, alleleLabelsOf, ploidy, dark, t]);
+  }, [data, fetchKey, roleLabels, allele2Dye, channels, basis, yScale, wellCall, alleleLabelsOf, ploidy, t]);
 
   const tracesRef = useRef<{ traces: NonNullable<typeof built>["result"]["traces"]; mode: string }>({ traces: [], mode: "single" });
 
@@ -322,7 +320,7 @@ export function AmplificationCurvePanel({ active, viewToggle, bare = false, call
     const firstCycles = data?.res.curves[0]?.cycles ?? [];
     tracesRef.current = { traces: result.traces, mode: result.mode };
 
-    const c = plotlyColors();
+    const c = lightPlotColors();
     // Endpoint-only runs (D-9): the x positions are reads, not PCR cycles, so name them.
     const readTicks = sessionInfo?.has_amplification_curve === false && sessionInfo.read_labels
       ? firstCycles.map((cycle) => cycleReadText(cycle, sessionInfo.read_labels, t) ?? String(cycle))
@@ -360,7 +358,7 @@ export function AmplificationCurvePanel({ active, viewToggle, bare = false, call
         if (tracesRef.current.mode === "per-well") void Plotly.restyle(el, emphasisRestyle(tracesRef.current.traces, null) as never);
       });
     }
-  }, [built, data, yScale, t, sessionInfo, dark]);
+  }, [built, data, yScale, t, sessionInfo]);
 
   // The cycle line only moves; the curves are not refetched or redrawn.
   useEffect(() => {
@@ -382,13 +380,13 @@ export function AmplificationCurvePanel({ active, viewToggle, bare = false, call
     for (const curve of data.res.curves) {
       const call = wellCall(curve.well);
       const name = call === null ? t.wellTypeUnassigned : (() => {
-        const appearance = callTexts(call, t, callAppearance(call, ploidy, dark, t), alleleLabelsOf?.(curve.well));
+        const appearance = callTexts(call, t, callAppearance(call, ploidy, false, t), alleleLabelsOf?.(curve.well));
         return appearance.label || appearance.description;
       })();
       counts.set(name, (counts.get(name) ?? 0) + 1);
     }
     return [...counts].map(([name, n]) => `${name} ${n}`).join(", ");
-  }, [data, fetchKey, hasCallData, wellCall, alleleLabelsOf, ploidy, dark, t]);
+  }, [data, fetchKey, hasCallData, wellCall, alleleLabelsOf, ploidy, t]);
 
   const multi = wells.length >= 2;
   const channelOptions: SegmentedOption<CurveChannels>[] = [
@@ -460,7 +458,7 @@ export function AmplificationCurvePanel({ active, viewToggle, bare = false, call
         </div>
         <p className="text-xs text-text-muted mb-1" data-testid="curve-reading-basis">{t.referenceBasisUnknown}</p>
         <div className="mb-1 flex flex-wrap gap-x-3 text-xs text-text-muted">
-          {multi && <span>{t.curveLineShapeNote}</span>}
+          {multi && <span data-testid="curve-colour-caption">{t.curveColourCaption(basis, built?.labels.fam ?? "FAM", built?.labels.allele2 ?? "Allele 2")}</span>}
           {status === "ready" && missingWells > 0 && <span data-testid="curve-missing-wells">{t.curveNoCurveWells(missingWells)}</span>}
           {status === "ready" && yScale === "log" && hidden > 0 && <span data-testid="curve-hidden-nonpositive">{t.curveHiddenNonPositive(hidden)}</span>}
           {wells.length > OVERLAP_NOTE_WELLS && <span data-testid="curve-overlap-note">{t.curveManyOverlap}</span>}
@@ -474,6 +472,7 @@ export function AmplificationCurvePanel({ active, viewToggle, bare = false, call
           <div
             id="amplification-plot"
             ref={attachPlot}
+            className="bg-white rounded-lg overflow-hidden"
             style={{ width: "100%", height: "100%" }}
           />
           {overlay && (

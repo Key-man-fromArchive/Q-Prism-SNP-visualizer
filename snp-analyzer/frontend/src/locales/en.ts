@@ -47,7 +47,8 @@ const en = {
   curveNoCurveWells: (n: number) => `${n} well${n === 1 ? ' has' : 's have'} no curve data`,
   curveManyOverlap: 'Many lines overlap; use the call colouring or select fewer wells to compare.',
   curveHoverEmphasisHint: 'Hovering a well highlights it when 24 wells or fewer are selected',
-  curveLineShapeNote: 'Solid line: first channel · dashed line: second channel',
+  curveColourCaption: (basis: 'channel' | 'call' | 'well', fam: string, allele2: string) =>
+    basis === 'channel' ? `Colour: channel (${fam} solid · ${allele2} dashed)` : basis === 'call' ? 'Colour: call (same colours as the plate)' : 'Colour: well',
   curveSummary: (wells: number, missing: number, groups: string) => `${wells} well${wells === 1 ? '' : 's'} shown${missing > 0 ? `, ${missing} without curve data` : ''}${groups ? `: ${groups}` : ''}`,
   wellsSelectedCompare: (n: number) => `${n} wells selected — compare them in the curve view`,
   scatterReferenceBasis: (requested: boolean, reported: boolean, applied: boolean) => `Scatter readings — reference normalization requested: ${requested ? 'yes' : 'no'}; actually applied: ${reported ? applied ? 'yes' : 'no (reporter scale)' : 'unknown'}.`,

@@ -19,7 +19,7 @@ import { AnalysisCardHeader } from "./AnalysisCardHeader";
 import { WELL_TYPE_INFO } from "@/lib/constants";
 import { genotypeClasses, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
 import { chartCategory, callLabel, cycleReadText, chartPointState, chartStateText } from "@/lib/chart-semantics";
-import { compactLegend, LEGEND_MARGIN_TOP, PLOTLY_MODEBAR, plotlyColors } from "@/lib/plotly-theme";
+import { compactLegend, LEGEND_MARGIN_TOP, PLOTLY_MODEBAR, lightPlotColors } from "@/lib/plotly-theme";
 import {
   axisRangeLayout, axisTitle, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode, fitBounds,
   fromPlot, hasNtcWells, NTC_AMBER, NTC_HANDLE_SIZE, NTC_MARKER_SIZE, ntcDragRelayout, ntcThresholdShapes,
@@ -30,7 +30,6 @@ import { useWellFilter } from "@/hooks/use-well-filter";
 import { useQualityRevealedWell } from '@/hooks/use-quality-reveal';
 import { visibleQualityPoint } from '@/lib/quality-display';
 import { useI18n } from "@/hooks/use-i18n";
-import { useIsDarkMode } from "@/hooks/use-dark-mode";
 import { StatusState } from "@/components/shared/ui";
 import { ScatterViewControls } from "./ScatterViewControls";
 import type { ScatterPoint } from "@/types/api";
@@ -137,9 +136,6 @@ type ScatterPlotProps = {
 
 export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}) {
   const { t } = useI18n();
-  // The dosage palette has its own dark steps, so a theme change has to rebuild
-  // the traces -- the chrome-only relayout below cannot repaint markers.
-  const dark = useIsDarkMode();
   const plotRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
@@ -435,7 +431,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       typeGroups.get(type)!.push(point);
     }
 
-    const colors = plotlyColors();
+    const colors = lightPlotColors();
     const decimals = normalizationApplied ? 4 : 1;
     const traces: Data[] = [];
     const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
@@ -449,14 +445,14 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     // then unassigned. WELL_TYPE_INFO keeps only the fixed control types here;
     // the diploid genotype trio comes from genotypeClasses so ploidy drives it.
     const diploidGeno = new Set(["Allele 1 Homo", "Allele 2 Homo", "Heterozygous"]);
-    const genoKeys = genotypeClasses(ploidy, dark).map((c) => c.key);
+    const genoKeys = genotypeClasses(ploidy, false).map((c) => c.key);
     const controlKeys = Object.keys(WELL_TYPE_INFO).filter((k) => !diploidGeno.has(k));
     const typeOrder = [...genoKeys, ...controlKeys, "Unassigned"];
     for (const typeKey of typeOrder) {
       const points = typeGroups.get(typeKey);
       if (!points || points.length === 0) continue;
 
-      const info = chartCategory(typeKey, ploidy, dark);
+      const info = chartCategory(typeKey, ploidy, false);
 
       traces.push({
         x: points.map((p) => at(p).x),
@@ -488,7 +484,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
           color: info.color,
           symbol: info.symbol,
           opacity: info.opacity,
-          line: { width: points.map(p => chartPointState(selectedWellSet.has(p.well), roxOutlierWells.includes(p.well), dark).width), color: info.stroke },
+          line: { width: points.map(p => chartPointState(selectedWellSet.has(p.well), roxOutlierWells.includes(p.well), false).width), color: info.stroke },
         },
         ...OPAQUE_IN_BOTH_SELECTION_STATES,
       });
@@ -769,7 +765,6 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
     sessionId,
     fetchKey,
     currentCycle,
-    dark,
     dropSelectionOutline,
   ]);
 
@@ -846,8 +841,8 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       const rawCustomdata = data[t].customdata;
       const customdata: unknown[] = Array.isArray(rawCustomdata) ? rawCustomdata : [];
       const sizes = customdata.map((w: unknown) => (typeof w === "string" && selectedWellSet.has(w) ? MARKER_SIZE_SELECTED : MARKER_SIZE));
-      const lineWidths = customdata.map((w: unknown) => chartPointState(selectedWellSet.has(String(w)), roxOutlierWells.includes(String(w)), dark).width);
-      const lineColors = chartPointState(false, false, dark).stroke;
+      const lineWidths = customdata.map((w: unknown) => chartPointState(selectedWellSet.has(String(w)), roxOutlierWells.includes(String(w)), false).width);
+      const lineColors = chartPointState(false, false, false).stroke;
 
       Plotly.restyle(plotRef.current!, {
         "marker.size": [sizes],
@@ -855,26 +850,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
         "marker.line.color": [lineColors],
       }, [t]);
     }
-  }, [selectedWells, selectedWellSet, scatterPoints, roxOutlierWells, dark]);
-
-  // Listen for dark mode changes to update Plotly layout
-  useEffect(() => {
-    const handler = () => {
-      if (!plotRef.current || !initialized.current) return;
-      const c = plotlyColors();
-      Plotly.relayout(plotRef.current, {
-        paper_bgcolor: c.paper_bgcolor,
-        plot_bgcolor: c.plot_bgcolor,
-        "font.color": c.fontColor,
-        "xaxis.gridcolor": c.gridColor,
-        "xaxis.zerolinecolor": c.lineColor,
-        "yaxis.gridcolor": c.gridColor,
-        "yaxis.zerolinecolor": c.lineColor,
-      });
-    };
-    window.addEventListener("dark-mode-changed", handler);
-    return () => window.removeEventListener("dark-mode-changed", handler);
-  }, []);
+  }, [selectedWells, selectedWellSet, scatterPoints, roxOutlierWells]);
 
   // The amber corner controls an explicit lower-left NTC quadrant. Keep live
   // dragging out of React state (and therefore out of the expensive Plotly
@@ -1204,7 +1180,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
           onApply: handleDosageMaxApply,
         }}
       />
-      <div ref={canvasRef} className="relative analysis-scatter-canvas" data-scatter-aspect={scatterAspect} style={scatterAspectVars(scatterAspect)}>
+      <div ref={canvasRef} className="relative analysis-scatter-canvas bg-white rounded-lg overflow-hidden" data-scatter-aspect={scatterAspect} style={scatterAspectVars(scatterAspect)}>
         <div
           id="scatter-plot"
           data-visible-wells={visiblePoints.length}

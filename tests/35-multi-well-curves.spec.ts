@@ -284,7 +284,9 @@ test.describe('multi-well amplification curves (QuantStudio, single-marker view)
   test('screenshots: three wells in light and dark, expert switch off and on', async ({ page }) => {
     await selectWells(page, ['A5', 'B6', 'G6']);
     await expect.poll(() => plottedWells(page)).toEqual(['A5', 'B6', 'G6']);
-    const lightPaper = (await layout(page)).paper;
+    // The plot slot is a white sheet in both themes; the caption names the colour basis.
+    expect((await layout(page)).paper).toBe('#ffffff');
+    await expect(page.getByTestId('curve-colour-caption')).toHaveText(/^Colour: channel \(.+ solid · .+ dashed\)$/);
     await page.screenshot({ path: shot('curves-3-wells-light.png') });
     await expect(page.getByTestId('expert-mode-toggle')).toHaveAttribute('aria-checked', 'false');
     await page.screenshot({ path: shot('expert-off.png'), fullPage: true });
@@ -296,9 +298,26 @@ test.describe('multi-well amplification curves (QuantStudio, single-marker view)
     await page.locator('body').click({ position: { x: 5, y: 5 } });
     await page.keyboard.press('d');
     await expect(page.locator('body')).toHaveClass(/dark/);
-    await expect.poll(async () => (await layout(page)).paper).not.toBe(lightPaper);
+    // Dark mode themes the chrome, NOT the plot: still a white sheet with a dark font.
+    await expect.poll(async () => (await layout(page)).paper).toBe('#ffffff');
+    const darkLayout = await page.locator('#amplification-plot').evaluate((node) => {
+      const l = (node as PlotNode).layout as { plot_bgcolor?: string; font?: { color?: string } };
+      return { plot: l.plot_bgcolor, font: l.font?.color };
+    });
+    expect(darkLayout).toEqual({ plot: '#ffffff', font: '#16211f' });
     await expect.poll(() => plottedWells(page)).toEqual(['A5', 'B6', 'G6']);
     await page.screenshot({ path: shot('curves-3-wells-dark.png') });
+
+    // The scatter plot stays a white sheet in dark mode too.
+    await page.getByTestId('plot-view-scatter').click();
+    const scatterPlot = page.locator('#scatter-plot, [data-testid="marker-scatter"]');
+    await expect(scatterPlot).toBeVisible();
+    await expect(page.locator('body')).toHaveClass(/dark/);
+    await expect.poll(() => scatterPlot.evaluate((node) => {
+      const l = (node as PlotNode).layout as { paper_bgcolor?: string; plot_bgcolor?: string; font?: { color?: string } } | undefined;
+      return l ? { paper: l.paper_bgcolor, plot: l.plot_bgcolor, font: l.font?.color } : null;
+    })).toEqual({ paper: '#ffffff', plot: '#ffffff', font: '#16211f' });
+    await page.screenshot({ path: shot('scatter-dark-light-sheet.png') });
   });
 });
 
