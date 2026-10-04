@@ -228,12 +228,15 @@ async def amplification_data(
 
     all_normalized = normalize(unified, use_rox=use_rox, background=background)
 
+    # Group by well once (as /amplification/all does) instead of rescanning
+    # every point per requested well.
+    well_data: dict[str, list] = {}
+    for p in all_normalized:
+        well_data.setdefault(p.well, []).append(p)
+
     curves = []
     for well in well_list:
-        well_points = sorted(
-            [p for p in all_normalized if p.well == well],
-            key=lambda p: p.cycle,
-        )
+        well_points = sorted(well_data.get(well, []), key=lambda p: p.cycle)
         if well_points:
             curves.append(
                 AmplificationCurve(
