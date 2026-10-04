@@ -7,6 +7,7 @@
 // to ONE marker's wells/ploidy/assignments instead of the whole-plate
 // global stores. ScatterPlot.tsx itself is left untouched (still used by
 // the single-marker default view) to avoid regressing S0/S1.
+import { HOVER_WELL_ATTRIBUTE } from "@/hooks/use-well-context-menu";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Plotly from "plotly.js-dist-min";
@@ -588,6 +589,14 @@ export function MarkerScatterPlot({
         };
         if (!gd || !gd.on || eventsBound.current) return;
         eventsBound.current = true;
+        // Plotly points have no `data-well`; mirror the hovered well onto the
+        // container so a right-click on a point can target it.
+        gd.on("plotly_hover", (data) => {
+          const well = data?.points?.[0]?.customdata;
+          if (well) gd.setAttribute(HOVER_WELL_ATTRIBUTE, well);
+        });
+        gd.on("plotly_unhover", () => gd.removeAttribute(HOVER_WELL_ATTRIBUTE));
+
         // ctrl/meta toggles, shift unions, plain replaces -- the same
         // modifiers PlateView already honors. One box at a time cannot express
         // a scattered set of wells, so a new box used to erase the last one.
@@ -856,6 +865,7 @@ export function MarkerScatterPlot({
         data-testid="marker-scatter"
         data-visible-wells={scopedPoints.length}
         ref={plotRef}
+        data-well-context
         className="analysis-scatter-canvas"
         data-scatter-aspect={scatterAspect}
         style={{ width: "100%", ...scatterAspectVars(scatterAspect) }}

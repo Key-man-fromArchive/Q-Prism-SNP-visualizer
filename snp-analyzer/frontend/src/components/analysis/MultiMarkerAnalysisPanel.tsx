@@ -41,6 +41,8 @@ import { AmplificationOverlay } from "./AmplificationOverlay";
 import { AnalysisCardHeader } from "./AnalysisCardHeader";
 import { GenotypeSummary } from "./GenotypeSummary";
 import { usePlotViewToggle } from "@/hooks/use-plot-view-toggle";
+import { useWellContextMenu } from "@/hooks/use-well-context-menu";
+import { WellTypePopup } from "./WellTypePopup";
 
 // The backend keys ploidy=2 genotype_counts by short diploid codes for
 // backward compatibility (AA/BB/AB), unlike ploidy>2 (full dosage strings
@@ -88,6 +90,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   // results screen (ResultsPlotToggle.tsx), sharing its state/buttons via
   // this hook rather than duplicating them.
   const { view: plotView, toggle: plotToggle } = usePlotViewToggle();
+  const wellMenu = useWellContextMenu();
   const expert = useSettingsStore((s) => s.expertMode);
   const sessionId = useSessionStore((s) => s.sessionId);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
@@ -292,7 +295,7 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
   }
 
   return (
-    <div>
+    <div onContextMenu={wellMenu.onContextMenu}>
       <div className="analysis-primary-toolbar sticky top-0 z-20 border-b border-border bg-surface">
       <CycleControl />
       <div className="flex flex-wrap items-center justify-end gap-3 px-6 py-1">
@@ -452,6 +455,16 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
         )}
       </div>
       </div>
+      {wellMenu.position && wellMenu.wells.length > 0 && (
+        <WellTypePopup
+          wells={wellMenu.wells}
+          position={wellMenu.position}
+          onAssign={wellMenu.onAssign}
+          onClose={wellMenu.close}
+          alleleLabels={selectedMarker?.allele_labels}
+        />
+      )}
+      <p role="status" aria-live="polite">{wellMenu.message}</p>
     </div>
   );
 }

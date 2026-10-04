@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { AnalysisTab } from './AnalysisTab';
 import { bulkSetWellTypes, runClustering, suggestCycle } from '@/lib/api';
@@ -20,7 +20,7 @@ vi.mock('@/lib/api', async original => ({
 vi.mock('./CycleControl', () => ({ CycleControl: () => null }));
 vi.mock('./ScatterPlot', () => ({ ScatterPlot: () => null }));
 vi.mock('./AmplificationCurvePanel', () => ({ AmplificationCurvePanel: () => null }));
-vi.mock('./PlateView', () => ({ PlateView: () => null }));
+vi.mock('./PlateView', () => ({ PlateView: () => <div data-testid="plate-stub" data-well-context /> }));
 vi.mock('./WellDetailPanel', () => ({ WellDetailPanel: () => null }));
 vi.mock('./ResultsTable', () => ({ ResultsTable: () => null }));
 vi.mock('./AmplificationOverlay', () => ({ AmplificationOverlay: () => null }));
@@ -57,15 +57,22 @@ it('returns the current profile to AUTO without manual cuts when boundary mode i
 
 it('passes the validated popup type and selected wells to the API', async () => {
   render(<AnalysisTab />);
-  fireEvent.contextMenu(document.body);
+  fireEvent.contextMenu(screen.getByTestId('plate-stub'));
   fireEvent.click(screen.getByRole('button', { name: 'Assign valid type' }));
   await waitFor(() => expect(bulkSetWellTypes).toHaveBeenCalledWith('synthetic-assignment', { A1: 'NTC', A2: 'NTC' }, 0));
   await waitFor(() => expect(useSelectionStore.getState().selectedWells).toEqual([]));
 });
+it('keeps the browser menu outside the plate and scatter even with a selection', () => {
+  const { container } = render(<AnalysisTab />);
+  const event = createEvent.contextMenu(container.firstElementChild!, { cancelable: true });
+  fireEvent(container.firstElementChild!, event);
+  expect(event.defaultPrevented).toBe(false);
+  expect(screen.queryByRole('button', { name: 'Assign valid type' })).toBeNull();
+});
 it('retains the popup and selection and announces a rejected assignment', async () => {
   vi.mocked(bulkSetWellTypes).mockRejectedValueOnce(new Error('offline'));
   render(<AnalysisTab />);
-  fireEvent.contextMenu(document.body);
+  fireEvent.contextMenu(screen.getByTestId('plate-stub'));
   fireEvent.click(screen.getByRole('button', { name: 'Assign valid type' }));
   await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Manual change failed'));
   expect(screen.getByRole('button', { name: 'Assign valid type' })).toBeVisible();
@@ -74,7 +81,7 @@ it('retains the popup and selection and announces a rejected assignment', async 
 
 it('blocks invalid popup input before the API and preserves the selection', async () => {
   render(<AnalysisTab />);
-  fireEvent.contextMenu(document.body);
+  fireEvent.contextMenu(screen.getByTestId('plate-stub'));
   fireEvent.click(screen.getByRole('button', { name: 'Assign invalid type' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Assign invalid type' })).toBeVisible());
   expect(bulkSetWellTypes).not.toHaveBeenCalled();

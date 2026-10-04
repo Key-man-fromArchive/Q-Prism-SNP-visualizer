@@ -1,3 +1,4 @@
+import { HOVER_WELL_ATTRIBUTE } from "@/hooks/use-well-context-menu";
 import { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Plotly from "plotly.js-dist-min";
@@ -676,6 +677,14 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
         initialized.current = true;
         publishExport(el);
 
+        // Plotly points have no `data-well`; mirror the hovered well onto the
+        // container so a right-click on a point can target it.
+        el.on("plotly_hover", (data: PlotMouseEvent) => {
+          const well = textCustomdata(data?.points?.[0]?.customdata);
+          if (well) el.setAttribute(HOVER_WELL_ATTRIBUTE, well);
+        });
+        el.on("plotly_unhover", () => el.removeAttribute(HOVER_WELL_ATTRIBUTE));
+
         // Selection modifiers, matching PlateView: ctrl/meta toggles one well
         // or unions a box into the current selection, shift unions, and a
         // plain drag replaces. The scatter can only box ONE rectangle at a
@@ -1200,6 +1209,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
           id="scatter-plot"
           data-visible-wells={visiblePoints.length}
           ref={plotRef}
+          data-well-context
           style={{ width: "100%", height: "100%" }}
         />
         {overlay && (

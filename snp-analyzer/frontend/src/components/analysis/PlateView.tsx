@@ -307,6 +307,7 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAllele
   return (
     <div
       className="panel plate-panel select-none"
+      data-well-context
       ref={panelRef}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { AlertTriangle, Ruler, Target } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSessionStore } from "@/stores/session-store";
@@ -26,18 +26,15 @@ import { GroupManager } from "./GroupManager";
 import { WellSelectionToolbar } from "./WellSelectionToolbar";
 import { Callout } from "@/components/shared/ui";
 import { gradedAnalysisWarnings } from "@/lib/analysis-warnings";
-import { parseWellType } from "@/lib/well-type-input";
 import { useWellTypeAssignments } from "@/hooks/use-well-type-assignments";
 import { useCurrentAnalysisRequest } from '@/hooks/use-current-analysis-request';
-import { useKeyboardAssignment } from '@/hooks/use-keyboard-assignment';
+import { useWellContextMenu } from '@/hooks/use-well-context-menu';
 
 export function AnalysisTab() {
   const { t } = useI18n();
-  const { assign, message: assignmentMessage } = useKeyboardAssignment();
   const sessionId = useSessionStore((s) => s.sessionId);
   const wellGroups = useSessionStore((s) => s.wellGroups);
   const setWellGroups = useSessionStore((s) => s.setWellGroups);
-  const clearSelection = useSelectionStore((s) => s.clearSelection);
   const selectedWells = useSelectionStore((s) => s.selectedWells);
   const expert = useSettingsStore((s) => s.expertMode);
   const showEmptyWells = useSettingsStore((s) => s.showEmptyWells);
@@ -84,49 +81,7 @@ export function AnalysisTab() {
 
   const [showGroupManager, setShowGroupManager] = useState(false);
 
-  const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
-  const [popupWells, setPopupWells] = useState<string[]>([]);
-
-  // Show popup when multiple wells are selected (right-click or multi-select)
-  useEffect(() => {
-    const handleContextMenu = (e: MouseEvent) => {
-      let wells = useSelectionStore.getState().selectedWells;
-      // If nothing is selected, right-clicking directly on a well targets it
-      // (so a single well can be omitted without selecting it first).
-      if (wells.length === 0) {
-        const el = (e.target as HTMLElement).closest('[data-well]');
-        const wellId = el?.getAttribute('data-well');
-        if (wellId) wells = [wellId];
-      }
-      if (wells.length > 0) {
-        e.preventDefault();
-        setPopupPos({ x: e.clientX, y: e.clientY });
-        setPopupWells(wells);
-      }
-    };
-
-    document.addEventListener("contextmenu", handleContextMenu);
-    return () => document.removeEventListener("contextmenu", handleContextMenu);
-  }, []);
-
-  const handleAssignType = useCallback(
-    async (wellType: string) => {
-      if (!sessionId || popupWells.length === 0) return;
-      const assignment = parseWellType(wellType);
-      if (!assignment) return;
-      const succeeded = await assign(assignment, popupWells);
-      if (!succeeded) return;
-      setPopupPos(null);
-      setPopupWells([]);
-      if (useSelectionStore.getState().selectedWells.join('|') === popupWells.join('|')) clearSelection();
-    },
-    [sessionId, popupWells, clearSelection, assign]
-  );
-
-  const handleClosePopup = useCallback(() => {
-    setPopupPos(null);
-    setPopupWells([]);
-  }, []);
+  const wellMenu = useWellContextMenu();
 
   // Fetch merged well groups (parsed + manual) when session changes
   useEffect(() => {
@@ -314,7 +269,7 @@ export function AnalysisTab() {
       </div>
 
       {/* Shared responsive foundation defines the 1280px two-column breakpoint. */}
-      <div className="analysis-grid grid gap-4 p-4 sm:px-6">
+      <div className="analysis-grid grid gap-4 p-4 sm:px-6" onContextMenu={wellMenu.onContextMenu}>
         {/* Results plot area - top left: scatter/curve toggle (FB-12) */}
         <ResultsPlotToggle />
 
@@ -361,15 +316,15 @@ export function AnalysisTab() {
       </div>}
 
       {/* Well Type Popup */}
-      {popupPos && popupWells.length > 0 && (
+      {wellMenu.position && wellMenu.wells.length > 0 && (
         <WellTypePopup
-          wells={popupWells}
-          position={popupPos}
-          onAssign={handleAssignType}
-          onClose={handleClosePopup}
+          wells={wellMenu.wells}
+          position={wellMenu.position}
+          onAssign={wellMenu.onAssign}
+          onClose={wellMenu.close}
         />
       )}
-      <p role="status" aria-live="polite">{assignmentMessage}</p>
+      <p role="status" aria-live="polite">{wellMenu.message}</p>
 
       {/* Group Manager Dialog */}
       {showGroupManager && sessionId && (
