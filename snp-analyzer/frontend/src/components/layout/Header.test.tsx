@@ -224,7 +224,7 @@ it.each(['session', 'cycle', 'rox', 'mutation'])('discards pending ASG save afte
   vi.mocked(saveAsgResult).mockReturnValue(new Promise((_resolve, fail) => { reject = fail; }));
   render(<Header />);
   fireEvent.click(screen.getByRole('button', { name: 'ASG' }));
-  expect(screen.getByRole('button', { name: 'Saving' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '저장 중' })).toBeDisabled();
   act(() => {
     if (change === 'session') useSessionStore.setState({ sessionId: 'run-b' });
     else if (change === 'cycle') useSelectionStore.setState({ currentCycle: 21 });

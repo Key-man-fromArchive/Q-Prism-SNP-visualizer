@@ -735,6 +735,12 @@ const ko: Translations = {
   asgLaunchMessage: 'ASG Designer의 도구 메뉴나 마커 관리자의 마커에서 Q-prism® Cluster Caller를 다시 열어주세요.',
   asgLaunchExpiredNote: '오랫동안 자리를 비우면 세션이 만료될 수 있습니다.',
   backToAsgDesigner: 'ASG Designer로 돌아가기',
+  asgSaveTooltip: 'ASG Designer에 결과 저장',
+  asgSaveUnavailable: '저장하려면 ASG Designer의 도구 메뉴나 마커 관리자의 마커에서 Q-Prism® Cluster Caller를 다시 열어주세요.',
+  asgSaving: '저장 중',
+  asgSaved: '저장됨',
+  asgSaveFailed: 'ASG Designer에 결과를 저장하지 못했습니다.',
+  asgSaveWaitForAnalysis: '진행 중인 분석이 끝난 뒤 저장해 주세요.',
 
   // 가져오기 매핑 마법사
   imwImportMapping: '가져오기 매핑',

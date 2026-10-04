@@ -341,7 +341,7 @@ test.describe('P5 ASG mounted-path compatibility', () => {
     await expect(saveButton).toHaveAttribute('title', /synthetic ASG transport unavailable/);
     await expect(saveButton).toBeEnabled();
     await saveButton.click();
-    await expect(saveButton).toContainText('Saved');
+    await expect(saveButton).toContainText('저장됨');
     expect(saveAttempts).toBe(2);
   });
 });

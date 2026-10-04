@@ -166,7 +166,7 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const { asgSaveState, setAsgSaveState, asgAnalysisId, setAsgAnalysisId, asgSaveError, setAsgSaveError } = useAsgSavePresentation(sessionId, currentCycle, useRox);
   const asgSaveTitle = asgSaveError || asgAnalysisId || (
-    canSaveToAsg ? "Save result to ASG Designer" : "Open from an ASG marker, design result, or order item to save"
+    canSaveToAsg ? t.asgSaveTooltip : t.asgSaveUnavailable
   );
   const asgResultRevision = useRef(0);
   const mismatchToken = useRef(0);
@@ -217,7 +217,7 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
     setAsgSaveState("saving");
     setAsgSaveError(null);
     try {
-      if (analysisPending) throw new Error("Wait for the active analysis before saving");
+      if (analysisPending) throw new Error(t.asgSaveWaitForAnalysis);
       // An absent store value occurs during the initial legacy-compatible shell;
       // a known legacy result is rejected server-side with structured 409.
       const result = await saveAsgResult(sessionId, currentCycle ?? undefined, useRox, backgroundMode, resultRevision);
@@ -226,7 +226,7 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
       setAsgSaveState("saved");
     } catch (err) {
       if (saveRevision !== asgResultRevision.current) return;
-      const message = err instanceof Error ? err.message : "Failed to save ASG result";
+      const message = err instanceof Error ? err.message : t.asgSaveFailed;
       setAsgSaveError(message);
       setAsgSaveState("error");
     }
@@ -406,7 +406,7 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
                 ) : (
                   <Save size={13} aria-hidden="true" />
                 )}
-                <span>{asgSaveState === "saving" ? "Saving" : asgSaveState === "saved" ? "Saved" : "ASG"}</span>
+                <span>{asgSaveState === "saving" ? t.asgSaving : asgSaveState === "saved" ? t.asgSaved : "ASG"}</span>
               </Button>
             )}
           </div>

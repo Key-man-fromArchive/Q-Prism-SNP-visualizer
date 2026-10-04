@@ -754,6 +754,12 @@ const en = {
   asgLaunchMessage: 'Open Q-prism® Cluster Caller again from ASG Designer — the Tools menu, or a marker in Marker Manager.',
   asgLaunchExpiredNote: 'Your session may have expired after being away for a while.',
   backToAsgDesigner: 'Back to ASG Designer',
+  asgSaveTooltip: 'Save result to ASG Designer',
+  asgSaveUnavailable: 'To save, open Q-Prism® Cluster Caller again from ASG Designer — the Tools menu, or a marker in Marker Manager.',
+  asgSaving: 'Saving',
+  asgSaved: 'Saved',
+  asgSaveFailed: 'Could not save the result to ASG Designer.',
+  asgSaveWaitForAnalysis: 'Wait for the running analysis to finish before saving.',
 
   // Import mapping wizard
   imwImportMapping: 'Import mapping',
