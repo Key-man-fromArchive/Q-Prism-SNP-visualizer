@@ -39,6 +39,7 @@ export function WellDetailPanel({ ploidyOverride, alleleLabels }: WellDetailPane
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
   const selectedWell = useSelectionStore((s) => s.selectedWell);
   const currentCycle = useSelectionStore((s) => s.currentCycle);
+  const selectedCount = useSelectionStore((s) => s.selectedWells.length);
   const scatterPoints = useDataStore((s) => s.scatterPoints);
   const allele2Dye = useDataStore((s) => s.allele2Dye);
   const roleLabels = useDataStore((s) => s.channelLabels);
@@ -106,8 +107,8 @@ export function WellDetailPanel({ ploidyOverride, alleleLabels }: WellDetailPane
       <div className="panel detail-panel">
         <h3 className="text-sm font-semibold mb-1 text-text">{t.wellDetails}</h3>
         <div id="detail-content">
-          <p className="placeholder text-sm text-text-muted">
-            {t.clickWellToSee}
+          <p className="placeholder text-sm text-text-muted" data-testid="well-detail-multi-note">
+            {selectedCount >= 2 ? t.wellsSelectedCompare(selectedCount) : t.clickWellToSee}
           </p>
         </div>
       </div>

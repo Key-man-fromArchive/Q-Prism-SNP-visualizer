@@ -199,3 +199,17 @@ it('marks the fixed 0.9 small-region confidence ceiling instead of showing it as
   expect(confidenceCell?.textContent).toBe('≥90%');
   expect(confidenceCell?.textContent).not.toBe('90%');
 });
+
+// @TASK MULTI-CURVE-T3 - several wells: point the user at the curve view (text only)
+for (const language of ['en', 'ko'] as const) {
+  it(`tells the user to compare several selected wells in the curve view ${language}`, () => {
+    const t = language === 'en' ? en : ko;
+    useLanguageStore.getState().setLanguage(language);
+    useSessionStore.setState({ sessionId: null, sessionInfo: null });
+    useSelectionStore.setState({ selectedWell: null, selectedWells: ['A1', 'A2', 'A3'] });
+    render(<WellDetailPanel />);
+    expect(screen.getByTestId('well-detail-multi-note')).toHaveTextContent(t.wellsSelectedCompare(3));
+    act(() => useSelectionStore.setState({ selectedWells: [] }));
+    expect(screen.getByTestId('well-detail-multi-note')).toHaveTextContent(t.clickWellToSee);
+  });
+}

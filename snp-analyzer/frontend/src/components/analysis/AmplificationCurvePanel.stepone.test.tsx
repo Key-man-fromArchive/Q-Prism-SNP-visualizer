@@ -8,7 +8,7 @@ import { useDataStore } from '@/stores/data-store';
 import { useLanguageStore } from '@/stores/language-store';
 import { getAmplification } from '@/lib/api';
 
-vi.mock('plotly.js-dist-min', () => ({ default: { react: vi.fn(), purge: vi.fn(), Plots: { resize: vi.fn() } } }));
+vi.mock('plotly.js-dist-min', () => ({ default: { react: vi.fn(), purge: vi.fn(), Plots: { resize: vi.fn() }, relayout: vi.fn(), restyle: vi.fn() } }));
 vi.mock('@/lib/api', () => ({ getAmplification: vi.fn() }));
 
 const readLabels = {

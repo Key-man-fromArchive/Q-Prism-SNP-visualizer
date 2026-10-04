@@ -304,10 +304,11 @@ export async function getAmplification(
   sid: string,
   wells: string[],
   useRox?: boolean,
-  background?: BackgroundMode
+  background?: BackgroundMode,
+  signal?: AbortSignal
 ): Promise<AmplificationResponse> {
   const query = buildQuery({ wells: wells.join(','), use_rox: useRox, background });
-  return apiFetch<AmplificationResponse>(`/api/data/${sid}/amplification${query}`);
+  return apiFetch<AmplificationResponse>(`/api/data/${sid}/amplification${query}`, signal ? { signal } : undefined);
 }
 
 export async function getAllAmplification(

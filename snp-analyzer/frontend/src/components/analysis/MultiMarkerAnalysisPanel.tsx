@@ -32,6 +32,7 @@ import { MarkerChipBar } from "./MarkerChipBar";
 import type { MarkerChipState } from "@/lib/marker-chip";
 import { MarkerScatterPlot } from "./MarkerScatterPlot";
 import { AmplificationCurvePanel } from "./AmplificationCurvePanel";
+import { callForWell } from "@/lib/well-call";
 import { CycleControl } from "./CycleControl";
 import { PlateView } from "./PlateView";
 import { WellSelectionToolbar } from "./WellSelectionToolbar";
@@ -256,6 +257,14 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
     return map;
   }, [markers, selectedMarker]);
 
+  // Curve view: a well's call is the selected marker's assignment (wells outside
+  // it have none and draw as unassigned); its call name is that marker's allele names.
+  const curveCallOf = useMemo(() => {
+    const assignments = selectedRegion?.assignments ?? null;
+    return (well: string) => callForWell(well, { assignments });
+  }, [selectedRegion]);
+  const curveAlleleLabelsOf = useCallback((well: string) => wellAlleleLabels.get(well), [wellAlleleLabels]);
+
   const expectedClasses = selectedMarker ? selectedMarker.ploidy + 1 : 0;
   const countsEntries = useMemo(() => {
     if (!selectedRegion?.genotype_counts) return [];
@@ -403,6 +412,9 @@ export function MultiMarkerAnalysisPanel({ markers }: MultiMarkerAnalysisPanelPr
                     <AmplificationCurvePanel
                       active={plotView === "curve"}
                       bare
+                      callOf={curveCallOf}
+                      alleleLabelsOf={curveAlleleLabelsOf}
+                      ploidyOverride={selectedMarker.ploidy}
                     />
                   </div>
                 </>
