@@ -10,7 +10,8 @@ import { useAnalysisStore } from '@/stores/analysis-store';
 import { getPlate } from '@/lib/api';
 import { WELL_TYPE_INFO } from '@/lib/constants';
 import { wellInfo, dosageOfLabel } from '@/lib/genotype';
-import { callAppearance, displayedCall, outsideDisplayScope } from '@/lib/chart-semantics';
+import { callAppearance, outsideDisplayScope } from '@/lib/chart-semantics';
+import { callForWell } from '@/lib/well-call';
 import { PlateLegend } from './PlateLegend';
 import { NO_AMPLIFICATION, markNoAmplification, useNoAmplificationWells } from '@/lib/amplification-qc';
 import { useWellFilter } from '@/hooks/use-well-filter';
@@ -415,7 +416,7 @@ export function PlateView({ scopeWells, ploidyOverride, alleleLabels, wellAllele
               const isOutOfScope = hasData && !isUnassigned && outsideDisplayScope(wellId, scopeWells);
 
               const wellColor = isEmpty ? '' : isUnassigned ? wellInfo(null, ploidy, dark).color : getWellColor(wellData);
-              const shownCall = displayedCall(wellData, showManualTypes, showAutoCluster);
+              const shownCall = callForWell(wellId, { points: wellMap, showManualTypes, showAutoCluster });
               const baseCall = callAppearance(shownCall, ploidy, dark, t);
               const call = { ...baseCall, ...callTexts(shownCall, t, baseCall, wellAlleleLabels ? wellAlleleLabels.get(wellId) : alleleLabels) };
               const cellSize = isLargePlate ? '18px' : '22px';
