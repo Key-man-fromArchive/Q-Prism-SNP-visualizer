@@ -8,7 +8,7 @@ const FIXTURE = path.join(__dirname, 'fixtures', 'stepone', 'stepone-partial-nam
 
 const EXPERT_ONLY = [
   'scatter-tool-edit', 'scatter-use-rox', 'axis-mode', 'analysis-advanced-settings',
-  'plot-view-curve', 'multi-analyze-recommended', 'marker-observed-classes', 'marker-ntc-note',
+  'multi-analyze-recommended', 'marker-observed-classes', 'marker-ntc-note',
 ];
 
 test.describe('results layout and expert mode', () => {
@@ -24,7 +24,10 @@ test.describe('results layout and expert mode', () => {
   const expertToggle = (page: Page) => page.getByTestId('expert-mode-toggle');
 
   test('hides technical controls and the full grid by default', async ({ page }) => {
-    await expect(expertToggle(page)).toHaveAttribute('aria-pressed', 'false');
+    await expect(expertToggle(page)).toHaveAttribute('aria-checked', 'false');
+    // The expert switch sits in the tab row, and the scatter/curve switch is for everyone.
+    await expect(page.getByRole('switch', { name: 'Expert mode' })).toBeVisible();
+    await expect(page.getByTestId('plot-view-curve')).toBeVisible();
     for (const id of EXPERT_ONLY) await expect(page.getByTestId(id), id).toHaveCount(0);
     await expect(page.getByTestId('results-scroll-region')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Refresh QC' })).toHaveCount(0);
@@ -58,14 +61,14 @@ test.describe('results layout and expert mode', () => {
 
   test('expert mode brings the technical controls back and survives a reload', async ({ page }) => {
     await expertToggle(page).click();
-    await expect(expertToggle(page)).toHaveAttribute('aria-pressed', 'true');
+    await expect(expertToggle(page)).toHaveAttribute('aria-checked', 'true');
     for (const id of ['scatter-tool-edit', 'scatter-use-rox', 'axis-mode', 'analysis-advanced-settings',
       'plot-view-curve', 'multi-analyze-recommended', 'marker-observed-classes']) {
       await expect(page.getByTestId(id), id).toBeVisible();
     }
     await expect(page.getByTestId('results-scroll-region')).toBeVisible();
     await page.reload();
-    await expect(expertToggle(page)).toHaveAttribute('aria-pressed', 'true');
+    await expect(expertToggle(page)).toHaveAttribute('aria-checked', 'true');
     await expertToggle(page).click();
     await expect(page.getByTestId('results-scroll-region')).toHaveCount(0);
   });
