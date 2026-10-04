@@ -10,6 +10,7 @@ import en from '@/locales/en';
 import ko from '@/locales/ko';
 import { useSettingsStore } from '@/stores/settings-store';
 vi.mock('@/lib/api', () => ({ getAmplification: vi.fn() }));
+vi.mock('plotly.js-dist-min', () => ({ default: { react: vi.fn(), purge: vi.fn(), Plots: { resize: vi.fn() } } }));
 beforeEach(() => vi.clearAllMocks());
 for (const language of ['en', 'ko'] as const) for (const call of ['Positive Control', 'Unknown', 'AABB']) {
   it(`localizes detail and recorded call labels without changing calls ${language}/${call}`, () => {

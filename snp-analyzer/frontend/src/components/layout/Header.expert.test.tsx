@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { Header } from './Header';
 import { useSessionStore } from '@/stores/session-store';
@@ -18,22 +18,6 @@ beforeEach(() => {
   useSettingsStore.setState({ expertMode: false });
   useSessionStore.setState({ sessionId: 's', sessionInfo: { session_id: 's', instrument: 'StepOnePlus', allele2_dye: 'VIC',
     num_wells: 96, num_cycles: 7, has_rox: true, data_windows: null, suggested_cycle: 0, well_groups: null } });
-});
-
-it('has an expert-mode toggle that flips the persisted setting', () => {
-  render(<Header />);
-  const toggle = screen.getByTestId('expert-mode-toggle');
-  expect(toggle).toHaveTextContent('전문가 모드');
-  expect(toggle).toHaveAttribute('aria-pressed', 'false');
-  fireEvent.click(toggle);
-  expect(useSettingsStore.getState().expertMode).toBe(true);
-  expect(screen.getByTestId('expert-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
-});
-
-it('labels the toggle in English', () => {
-  useLanguageStore.getState().setLanguage('en');
-  render(<Header />);
-  expect(screen.getByTestId('expert-mode-toggle')).toHaveTextContent('Expert mode');
 });
 
 it('keeps the well count chip but drops the cycle count chip', () => {

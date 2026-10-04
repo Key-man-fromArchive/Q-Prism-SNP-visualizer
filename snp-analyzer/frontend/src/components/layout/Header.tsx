@@ -133,8 +133,6 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
   const currentCycle = navigationCycle ?? legacyCycle;
   const useRox = useSettingsStore((s) => s.useRox);
   const backgroundMode = useSettingsStore((s) => s.backgroundMode);
-  const expertMode = useSettingsStore((s) => s.expertMode);
-  const setExpertMode = useSettingsStore((s) => s.setExpertMode);
   const resultRevision = useAnalysisStore((s) => s.result?.analysis_context?.result_revision);
   const analysisPending = useAnalysisStore((s) => s.pending);
   const { isDark, toggle: toggleDarkMode } = useDarkMode();
@@ -429,18 +427,6 @@ export function Header({ showFileWorkspaceTrigger = true }: HeaderProps = {}) {
           </div>
         )}
 
-        <button
-          type="button"
-          data-testid="expert-mode-toggle"
-          aria-pressed={expertMode}
-          title={t.expertModeTooltip}
-          onClick={() => setExpertMode(!expertMode)}
-          className={`text-xs border rounded-xl px-2.5 py-0.5 cursor-pointer transition-colors ${
-            expertMode ? "border-primary text-primary" : "border-border text-text-muted hover:text-primary hover:border-primary"
-          }`}
-        >
-          {t.expertMode}
-        </button>
         <button
           onClick={() => setLanguage(language === "en" ? "ko" : "en")}
           title={language === "en" ? "한국어로 전환" : "Switch to English"}
