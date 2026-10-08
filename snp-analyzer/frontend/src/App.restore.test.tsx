@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { writeViewCache } from '@/lib/session-view-cache';
-import { asgLaunch, getAuthConfig, getSessionInfo, runClustering } from '@/lib/api';
+import { asgLaunch, asgLaunchCookie, getAuthConfig, getMe, getSessionInfo, runClustering } from '@/lib/api';
 const info = { session_id: 's', instrument: 'test', allele2_dye: 'VIC', num_wells: 1, num_cycles: 3,
   cycles: [0, 10, 40], has_rox: true, data_windows: null, suggested_cycle: 40, well_groups: null,
   input_revision: 0, analysis_status: 'completed', analysis_pending: false };
@@ -59,6 +59,20 @@ it('strips ASG credentials while preserving prefix/hash and never renders a secr
   expect(location.href).not.toContain('secret');
   expect(location.pathname).toBe('/prefix/');
   expect(location.hash).toBe('#anchor');
+});
+it('direct visit in asg_launch mode shows the ASG launch screen, not a password form, after the bootstrap 401s', async () => {
+  useAuthStore.getState().clearAuth(); useAuthStore.getState().setLoading(true);
+  useAuthStore.getState().setAuthMode('local');
+  vi.mocked(getAuthConfig).mockResolvedValue({ auth_mode: 'asg_launch', asg_home_url: '/designer/' });
+  // api.ts clears auth on every 401, which bumps the auth generation mid-bootstrap.
+  const unauthorized = () => { useAuthStore.getState().clearAuth(); return Promise.reject(Object.assign(new Error('401'), { status: 401 })); };
+  vi.mocked(asgLaunchCookie).mockImplementation(unauthorized);
+  vi.mocked(getMe).mockImplementation(unauthorized);
+  render(<App />);
+  expect(await screen.findByRole('link', { name: /ASG/ })).toHaveAttribute('href', '/designer/');
+  expect(document.querySelector('input[type="password"]')).toBeNull();
+  expect(useAuthStore.getState().authMode).toBe('asg_launch');
+  expect(useAuthStore.getState().isAuthenticated).toBe(false);
 });
 it('StrictMode exchanges a token once and a late launch cannot revive a logged-out owner', async () => {
   useAuthStore.getState().clearAuth(); useAuthStore.getState().setLoading(true);

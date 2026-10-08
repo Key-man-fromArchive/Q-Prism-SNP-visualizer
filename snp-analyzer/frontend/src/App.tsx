@@ -94,11 +94,21 @@ export default function App() {
     bootstrap.current ??= { generation: useAuthStore.getState().generation, promise: bootstrapAuth(consumeLaunchToken()) };
     const request = bootstrap.current;
     void request.promise.then(({ config, login, launchFailed }) => {
-      if (cancelled || useAuthStore.getState().generation !== request.generation) return;
+      if (cancelled) return;
+      // Server configuration, not user-owned state: apply it even when the
+      // bootstrap's own 401 (api.ts clears auth on 401) bumped the generation.
+      // Gating it too left authMode at 'local', so an asg_launch deployment
+      // showed a password form whose login endpoint is disabled.
       setAuthMode(config.auth_mode);
       if (config.asg_home_url) setAsgHomeUrl(config.asg_home_url);
-      if (login) { setUser(login.user); setLinkedContext(login.linked_context ?? null); }
-      else { clearAuth(); setLaunchError(launchFailed); }
+      if (!login) {
+        setLaunchError(launchFailed);
+        if (!useAuthStore.getState().isAuthenticated) useAuthStore.getState().setLoading(false);
+        return;
+      }
+      // A login that resolves after a logout/user change must not revive it.
+      if (useAuthStore.getState().generation !== request.generation) return;
+      setUser(login.user); setLinkedContext(login.linked_context ?? null);
     });
     return () => { cancelled = true; };
   }, [setUser, setAuthMode, setLinkedContext, clearAuth]);
