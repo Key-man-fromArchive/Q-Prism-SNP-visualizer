@@ -20,6 +20,7 @@ import xml.etree.ElementTree as ET
 from app.models import UnifiedData, WellCycleData, DataWindow
 from app.parsers.errors import EdsNoMeasurementData
 from app.parsers.instrument_detail import read_eds_instrument_detail
+from app.parsers.stepone_images import has_scan_images
 from app.parsers.eds_common import (
     ROW_LABELS,
     STAGE_LABELS,
@@ -84,13 +85,18 @@ def parse_eds(file_path: str) -> UnifiedData:
             from app.parsers.stepone_eds import parse_stepone_eds
 
             return parse_stepone_eds(zf, names)
+        if not mc_path and _is_stepone_experiment(zf, names) and has_scan_images(names):
+            # Saved without analysis: compute the signals from the scans.
+            from app.parsers.stepone_eds import parse_stepone_eds
+
+            return parse_stepone_eds(zf, names)
         if not mc_path:
             if _is_stepone_experiment(zf, names):
                 # A StepOne experiment without the measured reads: the run was
                 # saved before it finished, or this is the setup/template file.
                 raise EdsNoMeasurementData(
                     "This StepOne .eds file contains no measured fluorescence data "
-                    "(multicomponent_data.txt). Upload the file saved after the run finished."
+                    "(no multicomponent_data.txt and no scan images). Upload the file saved after the run finished."
                 )
             raise EdsNoMeasurementData(
                 "This .eds file does not contain multicomponentdata.xml.\n"

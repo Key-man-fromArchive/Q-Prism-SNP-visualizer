@@ -28,6 +28,7 @@ from app.parsers.eds_common import (
     well_index_to_id,
 )
 from app.parsers.instrument_detail import read_eds_instrument_detail
+from app.parsers.stepone_images import compute_signals
 
 DYES = ("FAM", "ROX", "VIC")
 PLATE_ROWS, PLATE_COLS = 8, 12
@@ -335,22 +336,32 @@ def _plate_metadata(
     return samples, markers or None
 
 
+INSTRUMENT_ANALYSED = "StepOnePlus (raw)"
+INSTRUMENT_FROM_IMAGES = "StepOnePlus (raw, computed from scan images)"
+
+
 def parse_stepone_eds(zf: zipfile.ZipFile, names: list[str]) -> UnifiedData:
-    """Parse an opened StepOnePlus ``.eds`` archive (``multicomponent_data.txt``)."""
+    """Parse an opened StepOnePlus ``.eds`` archive.
+
+    The signals come from ``multicomponent_data.txt`` when StepOne Software
+    saved one, else they are computed from the scan images the same way.
+    """
     exp_path = _find_file(names, "experiment.xml")
     tc_path = _find_file(names, "tcprotocol.xml")
     mc_path = _find_file(names, "multicomponent_data.txt")
-    if not exp_path or not tc_path or not mc_path:
-        raise ValueError(
-            "This StepOne .eds file is missing experiment.xml, tcprotocol.xml "
-            "or multicomponent_data.txt."
-        )
+    if not exp_path or not tc_path:
+        raise ValueError("This StepOne .eds file is missing experiment.xml or tcprotocol.xml.")
     exp_xml = zf.read(exp_path)
     _check_instrument(exp_xml)
     tc_xml = zf.read(tc_path)
     plan = plan_reads(tc_xml)
 
-    records = parse_multicomponent_text(_read_text(zf, mc_path))
+    if mc_path:
+        records = parse_multicomponent_text(_read_text(zf, mc_path))
+        instrument = INSTRUMENT_ANALYSED
+    else:
+        records = compute_signals(zf, names, DYES, PLATE_ROWS, PLATE_COLS)
+        instrument = INSTRUMENT_FROM_IMAGES
     wells, reads = _validate_records(records)
     if len(plan) != len(reads):
         raise ValueError(
@@ -364,7 +375,7 @@ def parse_stepone_eds(zf: zipfile.ZipFile, names: list[str]) -> UnifiedData:
     amp = next((w for w in windows if w.name == "Amplification"), None)
 
     return UnifiedData(
-        instrument="StepOnePlus (raw)",
+        instrument=instrument,
         allele2_dye="VIC",
         wells=sorted(well_ids, key=_well_sort_key),
         cycles=list(range(1, len(reads) + 1)),
