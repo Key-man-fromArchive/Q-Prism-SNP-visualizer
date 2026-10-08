@@ -7,7 +7,8 @@ export function RecoveryNotice({ reason, onRetry }: { reason: RecoveryReason | n
   if (!reason) return null;
   const text = { unauthorized: t.recoveryUnauthorized, forbidden: t.recoveryForbidden,
     not_found: t.recoveryNotFound, network: t.recoveryNetwork, server: t.recoveryServer,
-    invalid: t.recoveryInvalid, response_lost: t.recoveryUnknown }[reason];
+    invalid: t.recoveryInvalid, response_lost: t.recoveryUnknown,
+    unreadable: t.recoveryUnreadable, no_measurement_data: t.recoveryNoMeasurementData }[reason];
   return <div role="alert" className="my-2 text-sm text-danger">
     <p>{text}</p>
     {reason === 'unauthorized' ? <button type="button" onClick={() => useAuthStore.getState().clearAuth()}>{t.recoverySignIn}</button>

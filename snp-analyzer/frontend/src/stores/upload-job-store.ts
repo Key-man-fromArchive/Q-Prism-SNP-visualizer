@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 
 export type UploadStage = 'queued' | 'packaging' | 'uploading' | 'success' | 'failed' | 'unknown';
-export type RecoveryReason = 'unauthorized' | 'forbidden' | 'not_found' | 'network' | 'server' | 'invalid' | 'response_lost';
+export type RecoveryReason = 'unauthorized' | 'forbidden' | 'not_found' | 'network' | 'server' | 'invalid' | 'response_lost'
+  | 'unreadable' | 'no_measurement_data';
 export type UploadJob = Readonly<{
   id: string; batch: number; filename: string; stage: UploadStage;
   reason: RecoveryReason | null; sessionId: string | null;

@@ -1,3 +1,4 @@
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -13,13 +14,21 @@ from app.config import (
 )
 from app.models import UploadPreviewRequiredResponse, UploadResponse
 from app.parsers.detector import detect_and_parse
+from app.parsers.errors import UploadParseError
 from app.parsers.registry import PREVIEW_REQUIRED_EXTENSIONS, requires_preview_for_extension
 from app.services.import_session import create_session_from_import
 
 router = APIRouter()
 
+logger = logging.getLogger(__name__)
+
 # In-memory session store: session_id -> UnifiedData
 sessions: dict = {}
+
+
+def _log_rejection(user_id, filename: str, reason: str) -> None:
+    """One line per rejected upload: who, which file name, why. Never file content."""
+    logger.warning("Upload rejected: user=%s file=%r reason=%s", user_id, filename, reason.replace("\n", " ")[:300])
 
 
 def _validate_upload_metadata(file: UploadFile) -> str:
@@ -61,7 +70,11 @@ async def _write_upload_to_temp(file: UploadFile, ext: str) -> str:
 
 @router.post("/api/upload", response_model=UploadResponse | UploadPreviewRequiredResponse)
 async def upload_file(current_user: CurrentUser, file: UploadFile = File(...)):
-    ext = _validate_upload_metadata(file)
+    try:
+        ext = _validate_upload_metadata(file)
+    except HTTPException as exc:
+        _log_rejection(current_user.user_id, file.filename or "", str(exc.detail))
+        raise
 
     if requires_preview_for_extension(file.filename or ""):
         return UploadPreviewRequiredResponse(
@@ -77,11 +90,17 @@ async def upload_file(current_user: CurrentUser, file: UploadFile = File(...)):
     try:
         tmp_path = await _write_upload_to_temp(file, ext)
         unified = detect_and_parse(tmp_path, original_filename=file.filename or "")
-    except HTTPException:
+    except HTTPException as exc:
+        _log_rejection(current_user.user_id, file.filename or "", str(exc.detail))
         raise
     except Exception as e:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
+        _log_rejection(current_user.user_id, file.filename or "", f"{type(e).__name__}: {e}")
+        if isinstance(e, UploadParseError):
+            # Structured so the UI can explain the cause instead of a generic
+            # "request rejected"; `message` keeps the old text for any reader.
+            raise HTTPException(400, {"code": e.code, "message": f"Failed to parse file: {e}"})
         raise HTTPException(400, f"Failed to parse file: {e}")
 
     try:

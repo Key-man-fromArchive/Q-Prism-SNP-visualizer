@@ -235,6 +235,8 @@ const en = {
   recoveryNetwork: 'The response could not be confirmed. Check your connection.',
   recoveryServer: 'The server could not complete this request.',
   recoveryInvalid: 'The request was rejected. Check the selected file or input.',
+  recoveryUnreadable: 'The file could not be read, so nothing was sent. It may be open in another program such as StepOne Software, or be a network-drive or cloud file. Close the program or copy the file to this PC, then select it again.',
+  recoveryNoMeasurementData: 'This .eds file contains no measured fluorescence data. Check that it was saved after the run finished (setup and template files cannot be analysed).',
   recoveryUnknown: 'Upload outcome is unknown. Check the session list before selecting this file again; it may already have been saved.',
   recoverySignIn: 'Sign in again',
   recoveryRetry: 'Retry list refresh',

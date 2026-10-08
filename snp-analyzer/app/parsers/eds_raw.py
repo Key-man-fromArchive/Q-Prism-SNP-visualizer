@@ -18,6 +18,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 from app.models import UnifiedData, WellCycleData, DataWindow
+from app.parsers.errors import EdsNoMeasurementData
 from app.parsers.instrument_detail import read_eds_instrument_detail
 from app.parsers.eds_common import (
     ROW_LABELS,
@@ -62,6 +63,16 @@ def _instrument_label(detail, num_wells: int) -> str:
     return "QuantStudio 3 (raw)" if num_wells == 96 else f"QuantStudio (raw, {num_wells}-well)"
 
 
+def _is_stepone_experiment(zf: zipfile.ZipFile, names: list[str]) -> bool:
+    """QuantStudio archives share the apldbio/sds layout; only the instrument
+    type in experiment.xml tells a StepOne run apart."""
+    exp_path = _find_file(names, "experiment.xml")
+    if not exp_path or zf.getinfo(exp_path).file_size > 5 * 1024 * 1024:
+        return False
+    text = zf.read(exp_path).decode("utf-8", "replace").lower()
+    return "<instrumenttypeid>stepone" in text
+
+
 def parse_eds(file_path: str) -> UnifiedData:
     """Parse a QuantStudio .eds raw instrument file."""
     with zipfile.ZipFile(file_path, "r") as zf:
@@ -74,7 +85,14 @@ def parse_eds(file_path: str) -> UnifiedData:
 
             return parse_stepone_eds(zf, names)
         if not mc_path:
-            raise ValueError(
+            if _is_stepone_experiment(zf, names):
+                # A StepOne experiment without the measured reads: the run was
+                # saved before it finished, or this is the setup/template file.
+                raise EdsNoMeasurementData(
+                    "This StepOne .eds file contains no measured fluorescence data "
+                    "(multicomponent_data.txt). Upload the file saved after the run finished."
+                )
+            raise EdsNoMeasurementData(
                 "This .eds file does not contain multicomponentdata.xml.\n"
                 "It may be corrupted or from an unsupported instrument."
             )

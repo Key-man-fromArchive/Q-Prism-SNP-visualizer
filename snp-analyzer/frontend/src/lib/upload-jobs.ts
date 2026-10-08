@@ -1,4 +1,5 @@
 import { ApiError, uploadFile } from './api';
+import { readableCopy } from './read-upload-file';
 import { recoveryReason } from './recovery-reason';
 import { validUploadResponse } from './upload-response';
 import { useAuthStore } from '@/stores/auth-store';
@@ -37,7 +38,7 @@ async function uploadOne(ticket: UploadTicket, file: File, index: number, onForm
   const store = useUploadJobStore.getState();
   store.update(ticket, index, { stage: 'uploading' });
   try {
-    const response = await uploadFile(file);
+    const response = await uploadFile(await readableCopy(file));
     if (!current(ticket)) return null;
     if (!validUploadResponse(response)) {
       store.update(ticket, index, { stage: 'unknown', reason: 'response_lost' });

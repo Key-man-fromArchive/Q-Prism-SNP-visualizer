@@ -19,6 +19,8 @@ import { useI18n } from '@/hooks/use-i18n';
 import { useSessionStore } from '@/stores/session-store';
 import { useFileWorkspaceStore } from '@/stores/file-workspace-store';
 import { MAX_FILES_PER_DROP, MAX_TOTAL_MB, uploadLimitViolation } from '@/lib/upload-jobs';
+import { readableCopy } from '@/lib/read-upload-file';
+import { recoveryReason } from '@/lib/recovery-reason';
 import type {
   ImportPreview,
   SessionListItem,
@@ -180,7 +182,7 @@ export function FileWorkspaceDrawer({ onOpenSession, onGoToProject }: FileWorksp
         }
 
         try {
-          const info = await uploadFile(item.file);
+          const info = await uploadFile(await readableCopy(item.file));
           registerUploadedSession(info);
           updateQueue(item.id, { status: 'success', sessionId: info.session_id });
         } catch (error) {
@@ -194,13 +196,18 @@ export function FileWorkspaceDrawer({ onOpenSession, onGoToProject }: FileWorksp
           throw error;
         }
       } catch (error) {
+        // The two causes the user can act on get a plain explanation instead
+        // of the server's English parser text or a bare "Failed to fetch".
+        const reason = recoveryReason(error);
+        const explained = reason === 'unreadable' ? t.recoveryUnreadable
+          : reason === 'no_measurement_data' ? t.recoveryNoMeasurementData : null;
         updateQueue(item.id, {
           status: 'error',
-          error: error instanceof Error ? error.message : t.uploadFailed,
+          error: explained ?? (error instanceof Error ? error.message : t.uploadFailed),
         });
       }
     },
-    [registerUploadedSession, t.uploadFailed, updateQueue],
+    [registerUploadedSession, t.uploadFailed, t.recoveryUnreadable, t.recoveryNoMeasurementData, updateQueue],
   );
 
   const scheduleQueueItem = useCallback(

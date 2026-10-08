@@ -67,3 +67,23 @@ describe('uploadLimitViolation', () => {
     expect(uploadLimitViolation([big])).toBe('total_too_large');
   });
 });
+it('a file the browser cannot read fails definitely as unreadable and is never sent', async () => {
+  const locked = new File(['synthetic'], 'locked.eds');
+  vi.spyOn(locked, 'arrayBuffer').mockRejectedValue(new DOMException('in use', 'NotReadableError'));
+  expect(await runUploadJobs([locked])).toBeNull();
+  expect(uploadFile).not.toHaveBeenCalled();
+  expect(useUploadJobStore.getState().jobs.map(job => [job.stage, job.reason])).toEqual([['failed', 'unreadable']]);
+});
+it('an .eds without measured reads fails with its own reason, not a generic rejection', async () => {
+  vi.mocked(uploadFile).mockRejectedValueOnce(new ApiError('Failed to parse file: x', 400,
+    { detail: { code: 'eds_no_measurement_data', message: 'Failed to parse file: x' } }));
+  expect(await runUploadJobs([new File(['synthetic'], 'run.eds')])).toBeNull();
+  expect(useUploadJobStore.getState().jobs.map(job => [job.stage, job.reason])).toEqual([['failed', 'no_measurement_data']]);
+});
+it('sends the bytes it read, under the original name', async () => {
+  vi.mocked(uploadFile).mockResolvedValueOnce(info);
+  await runUploadJobs([new File(['synthetic-bytes'], 'plate.eds')]);
+  const sent = vi.mocked(uploadFile).mock.calls[0][0];
+  expect(sent.name).toBe('plate.eds');
+  expect(await sent.text()).toBe('synthetic-bytes');
+});

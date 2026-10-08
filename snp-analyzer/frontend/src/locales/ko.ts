@@ -225,6 +225,8 @@ const ko: Translations = {
   recoveryNetwork: '응답을 확인하지 못했습니다. 네트워크 연결을 확인하세요.',
   recoveryServer: '서버가 요청을 처리하지 못했습니다.',
   recoveryInvalid: '요청이 거부되었습니다. 선택한 파일이나 입력을 확인하세요.',
+  recoveryUnreadable: '파일을 읽을 수 없어 전송하지 않았습니다. StepOne Software 등 다른 프로그램에서 열려 있거나 네트워크 드라이브·클라우드 파일일 수 있습니다. 프로그램을 닫거나 내 PC로 복사한 뒤 다시 선택하세요.',
+  recoveryNoMeasurementData: '이 .eds 파일에는 측정된 형광 데이터가 없습니다. 런이 끝난 뒤 저장된 파일인지 확인하세요(실험 설정·템플릿 파일은 분석할 수 없습니다).',
   recoveryUnknown: '업로드 결과를 확인할 수 없습니다. 이미 저장되었을 수 있으므로 파일을 다시 선택하기 전에 세션 목록을 확인하세요.',
   recoverySignIn: '다시 로그인',
   recoveryRetry: '목록 새로고침 재시도',

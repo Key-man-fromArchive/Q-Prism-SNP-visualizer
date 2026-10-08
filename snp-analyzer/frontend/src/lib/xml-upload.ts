@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import { uploadFile } from './api';
+import { readableCopy } from './read-upload-file';
 import { recoveryReason } from './recovery-reason';
 import { validUploadResponse } from './upload-response';
 import { useAuthStore } from '@/stores/auth-store';
@@ -8,13 +9,14 @@ import { useUploadJobStore, type UploadStage, type RecoveryReason } from '@/stor
 import type { UploadResponse } from '@/types/api';
 
 function failureReason(dispatched: boolean, error: unknown): RecoveryReason {
-  return dispatched ? recoveryReason(error) : 'invalid';
+  if (dispatched) return recoveryReason(error);
+  return recoveryReason(error) === 'unreadable' ? 'unreadable' : 'invalid';
 }
 
 async function packageXml(files: readonly File[], current: () => boolean): Promise<File | null> {
   const zip = new JSZip();
   for (const file of files) {
-    const data = await file.arrayBuffer();
+    const data = await (await readableCopy(file)).arrayBuffer();
     if (!current()) return null;
     zip.file(file.name, data);
   }
