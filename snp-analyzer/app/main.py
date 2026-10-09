@@ -1,9 +1,11 @@
 import json
+import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 
 from app.processing.background import BackgroundModeError
 from fastapi.staticfiles import StaticFiles
@@ -124,12 +126,27 @@ async def lifespan(app: FastAPI):
 # by _early_refusal while asg_launch mode is active.
 _DOCS_PATHS = frozenset({"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"})
 _STATE_CHANGING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
-_CSP_REPORT_ONLY = (
+# The page loads only its own bundle; Plotly needs inline styles and data/blob
+# images. Browsers send what the policy stops to CSP_REPORT_PATH, which logs it.
+# SNP_CSP_MODE=report-only sends the same policy without enforcing it.
+CSP_REPORT_PATH = "/api/csp-report"
+_CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; "
     "worker-src 'self' blob:; object-src 'none'; base-uri 'self'; "
-    "frame-ancestors 'none'; form-action 'self'"
+    "frame-ancestors 'none'; form-action 'self'; "
+    f"report-uri {SNP_ROOT_PATH}{CSP_REPORT_PATH}"
 )
+_CSP_REPORT_MAX_BYTES = 16 * 1024
+_CSP_REPORTS_PER_MINUTE = 30
+_csp_report_log: list[float] = []
+logger = logging.getLogger(__name__)
+
+
+def _csp_header_name() -> str:
+    if os.environ.get("SNP_CSP_MODE", "").strip().lower() == "report-only":
+        return "Content-Security-Policy-Report-Only"
+    return "Content-Security-Policy"
 
 app = FastAPI(
     title="Q-Prism® Cluster Caller",
@@ -182,7 +199,7 @@ async def add_security_headers(request, call_next):
     response = _early_refusal(request)
     if response is None:
         response = await call_next(request)
-    response.headers.setdefault("Content-Security-Policy-Report-Only", _CSP_REPORT_ONLY)
+    response.headers.setdefault(_csp_header_name(), _CSP)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "same-origin")
@@ -223,6 +240,32 @@ app.include_router(feedback.router)
 app.include_router(version.router)
 app.include_router(export_pptx.router)
 app.include_router(export_images.router)
+
+
+@app.post(CSP_REPORT_PATH, status_code=204, include_in_schema=False)
+async def csp_report(request: Request) -> Response:
+    """Log what the page's content policy stopped (at most 30 reports a minute)."""
+    body = b""
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > _CSP_REPORT_MAX_BYTES:
+            return Response(status_code=204)
+    now = time.monotonic()
+    _csp_report_log[:] = [t for t in _csp_report_log if now - t < 60]
+    if len(_csp_report_log) >= _CSP_REPORTS_PER_MINUTE:
+        return Response(status_code=204)
+    _csp_report_log.append(now)
+    try:
+        report = json.loads(body or b"{}")
+        report = report.get("csp-report", report) if isinstance(report, dict) else {}
+    except ValueError:
+        report = {}
+    fields = ("effective-directive", "violated-directive", "blocked-uri", "source-file", "line-number")
+    logger.warning(
+        "Content policy report: %s",
+        {k: str(report.get(k, ""))[:200] for k in fields if report.get(k) is not None},
+    )
+    return Response(status_code=204)
 
 # Serve React build (default) or legacy static (USE_LEGACY=1)
 use_legacy = os.environ.get("USE_LEGACY", "").strip().lower() in ("1", "true", "yes")

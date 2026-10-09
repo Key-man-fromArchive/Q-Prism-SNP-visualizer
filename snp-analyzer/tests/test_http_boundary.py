@@ -106,15 +106,49 @@ def test_cookie_secure_setting_true_applies_on_plain_http(env):
 # --- Response headers -------------------------------------------------------
 
 @pytest.mark.parametrize("path", ["/", "/api/version"])
-def test_content_security_policy_report_only_is_present(env, path):
+def test_content_security_policy_is_enforced(env, path):
     from app.main import app
 
     with _asg_mode(), TestClient(app) as client:
         response = client.get(path)
-    policy = response.headers["content-security-policy-report-only"]
+    policy = response.headers["content-security-policy"]
     assert "default-src 'self'" in policy
     assert "frame-ancestors 'none'" in policy
+    assert "report-uri" in policy and policy.rstrip().endswith("/api/csp-report")
+    assert "content-security-policy-report-only" not in response.headers
+
+
+def test_content_security_policy_can_be_sent_report_only(env):
+    from app.main import app
+
+    with _asg_mode(), patch.dict(os.environ, {"SNP_CSP_MODE": "report-only"}), TestClient(app) as client:
+        response = client.get("/")
+    assert "default-src 'self'" in response.headers["content-security-policy-report-only"]
     assert "content-security-policy" not in response.headers
+
+
+def test_content_policy_reports_are_logged_briefly(env, caplog):
+    import app.main as main
+
+    main._csp_report_log.clear()
+    report = {"csp-report": {"violated-directive": "script-src", "blocked-uri": "inline", "document-uri": "x"}}
+    with _asg_mode(), TestClient(main.app) as client, caplog.at_level("WARNING"):
+        response = client.post(
+            "/api/csp-report", json=report, headers={"Content-Type": "application/csp-report"}
+        )
+        oversized = client.post("/api/csp-report", content=b"x" * (main._CSP_REPORT_MAX_BYTES + 1))
+    assert response.status_code == 204 and oversized.status_code == 204
+    assert "script-src" in caplog.text and "document-uri" not in caplog.text
+
+
+def test_content_policy_reports_are_rate_limited(env, caplog):
+    import app.main as main
+
+    main._csp_report_log.clear()
+    with _asg_mode(), TestClient(main.app) as client, caplog.at_level("WARNING"):
+        for _ in range(main._CSP_REPORTS_PER_MINUTE + 5):
+            client.post("/api/csp-report", json={"csp-report": {"blocked-uri": "inline"}})
+    assert caplog.text.count("Content policy report") == main._CSP_REPORTS_PER_MINUTE
 
 
 # --- Same-origin check on state-changing calls ------------------------------
