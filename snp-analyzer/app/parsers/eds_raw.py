@@ -16,7 +16,6 @@ Data hierarchy in .eds:
 
 import io
 import zipfile
-from typing import BinaryIO
 
 from app.models import UnifiedData, WellCycleData, DataWindow
 from app.parsers.errors import EdsNoMeasurementData

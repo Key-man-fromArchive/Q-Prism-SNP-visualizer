@@ -139,7 +139,7 @@ def test_only_old_unattached_feedback_attachments_are_removed(fresh_db):
 # ---------------------------------------------------------------------------
 
 
-def test_expired_raw_copies_are_removed_but_sessions_stay(raw_file_client):
+def test_expired_raw_copies_are_removed_but_sessions_stay(raw_file_client):  # noqa: F811 -- pytest fixture
     rc = raw_file_client
     expired = _upload_bytes(rc.client, b"old bytes", filename="old.xls")["session_id"]
     kept = _upload_bytes(rc.client, b"new bytes", filename="new.xls")["session_id"]
@@ -350,7 +350,7 @@ def test_default_cap_is_one_thousand(monkeypatch):
     assert max_sessions_per_user() == 1000
 
 
-def test_upload_at_the_cap_is_refused_before_parsing(raw_file_client, monkeypatch):
+def test_upload_at_the_cap_is_refused_before_parsing(raw_file_client, monkeypatch):  # noqa: F811 -- pytest fixture
     rc = raw_file_client
     monkeypatch.setenv("SNP_MAX_SESSIONS_PER_USER", "3")
     _insert_sessions(rc, 3)
@@ -371,7 +371,7 @@ def test_upload_at_the_cap_is_refused_before_parsing(raw_file_client, monkeypatc
     )
 
 
-def test_cap_counts_each_user_separately_and_frees_up_after_delete(raw_file_client, monkeypatch):
+def test_cap_counts_each_user_separately_and_frees_up_after_delete(raw_file_client, monkeypatch):  # noqa: F811 -- pytest fixture
     rc = raw_file_client
     monkeypatch.setenv("SNP_MAX_SESSIONS_PER_USER", "2")
     _insert_sessions(rc, 2, user_id="someone-else")
@@ -391,7 +391,7 @@ def test_cap_counts_each_user_separately_and_frees_up_after_delete(raw_file_clie
     _upload_bytes(rc.client, b"fits again")
 
 
-def test_import_preview_and_parse_and_examples_respect_the_cap(raw_file_client, monkeypatch):
+def test_import_preview_and_parse_and_examples_respect_the_cap(raw_file_client, monkeypatch):  # noqa: F811 -- pytest fixture
     rc = raw_file_client
     monkeypatch.setenv("SNP_MAX_SESSIONS_PER_USER", "1")
     _insert_sessions(rc, 1)
@@ -520,7 +520,7 @@ def test_legacy_ui_files_and_switch_are_gone():
     assert "USE_LEGACY" not in (app_dir / "main.py").read_text()
 
 
-def test_old_static_paths_are_not_served(raw_file_client):
+def test_old_static_paths_are_not_served(raw_file_client):  # noqa: F811 -- pytest fixture
     client = raw_file_client.client
     for path in ("/js/app.js", "/css/style.css", "/js/scatter.js"):
         response = client.get(path)
