@@ -13,6 +13,7 @@ import type { CSSProperties, ReactNode } from "react";
 import Plotly from "plotly.js-dist-min";
 import { dosageOfLabel, defaultRatioCuts } from "@/lib/genotype";
 import { useScatterFit } from "@/lib/scatter-fit";
+import { plotlyText } from "@/lib/plotly-text";
 import { chartCategory, markerCallLabel, cycleReadText, chartPointState, chartStateText } from "@/lib/chart-semantics";
 import { useI18n } from "@/hooks/use-i18n";
 import { compactLegend, LEGEND_MARGIN_TOP, PLOTLY_MODEBAR, lightPlotColors } from "@/lib/plotly-theme";
@@ -401,12 +402,12 @@ export function MarkerScatterPlot({
         y: pts.map((p) => at(p).y),
         mode: "markers",
         type: "scattergl",
-        name: `${markerCallLabel(typeKey, t, namedMarker)} (n=${pts.length})`,
+        name: `${plotlyText(markerCallLabel(typeKey, t, namedMarker))} (n=${pts.length})`,
         customdata: pts.map((p) => p.well),
         text: pts.map(
           (p) =>
-            `<b>${t.chartWellAddress}: ${p.well}</b>${p.sample_name ? " (" + p.sample_name + ")" : ""}<br>` +
-            `${t.chartCall}: ${markerCallLabel(typeKey, t, namedMarker)}<br>${chartStateText(selectedWellSet.has(p.well), roxOutlierWells.includes(p.well), t)}`
+            `<b>${t.chartWellAddress}: ${plotlyText(p.well)}</b>${p.sample_name ? " (" + plotlyText(p.sample_name) + ")" : ""}<br>` +
+            `${t.chartCall}: ${plotlyText(markerCallLabel(typeKey, t, namedMarker))}<br>${chartStateText(selectedWellSet.has(p.well), roxOutlierWells.includes(p.well), t)}`
         ),
         hoverinfo: "text",
         hovertemplate: "%{text}<extra></extra>",
@@ -443,8 +444,8 @@ export function MarkerScatterPlot({
       // an expert-mode element, like the boundary lines.
       showlegend: expert,
       hovertemplate:
-        `${t.chartNtcThreshold}: ${thresholdLabels.fam} ≤ ${effectiveNtc.corner.x.toFixed(2)}<br>` +
-        `${thresholdLabels.allele2} ≤ ${effectiveNtc.corner.y.toFixed(2)}<extra></extra>`,
+        `${t.chartNtcThreshold}: ${plotlyText(thresholdLabels.fam)} ≤ ${effectiveNtc.corner.x.toFixed(2)}<br>` +
+        `${plotlyText(thresholdLabels.allele2)} ≤ ${effectiveNtc.corner.y.toFixed(2)}<extra></extra>`,
       marker: {
         size: editing ? NTC_HANDLE_SIZE : NTC_MARKER_SIZE,
         color: NTC_AMBER,
@@ -506,8 +507,8 @@ export function MarkerScatterPlot({
     const labels = channelLabels({ channel_labels: roleLabels ?? undefined }, allele2Dye);
     const suffix = normalizationApplied && labels.normalization ? ` / ${labels.normalization}` : "";
     const axes = axisRangeLayout(axisMode, lockAspect, orientBounds(bounds, orientation));
-    const famTitle = axisTitle(labels.fam, alleleNames?.fam, suffix);
-    const allele2Title = axisTitle(labels.allele2, alleleNames?.allele2, suffix);
+    const famTitle = plotlyText(axisTitle(labels.fam, alleleNames?.fam, suffix));
+    const allele2Title = plotlyText(axisTitle(labels.allele2, alleleNames?.allele2, suffix));
     const [xTitle, yTitle] = orientation === "allele2_x" ? [allele2Title, famTitle] : [famTitle, allele2Title];
     const layout: Record<string, unknown> = {
       xaxis: {

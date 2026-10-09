@@ -158,3 +158,34 @@ describe('384 wells x 45 cycles', () => {
     expect(ms).toBeLessThan(1000);
   });
 });
+
+describe('chart text shows names literally', () => {
+  const NAME = '<b>x</b> %{y}';
+  const ESCAPED = '&lt;b&gt;x&lt;/b&gt; &#37;{y}';
+
+  it('escapes well, call and channel names in hover text and legend names', () => {
+    const r = buildMultiWellTraces(input(
+      [curve('A<1'), curve('A2')],
+      { channelNames: { fam: 'F<AM', allele2: 'V&IC' }, callOf: () => 'AA', callName: () => NAME, colourBasis: 'call' },
+    ));
+    const t = traces(r);
+    expect(t[0].text?.[0]).toBe(`A&lt;1 · ${ESCAPED} · F&lt;AM · Cycle 10 · 0.1`);
+    expect(t.map((x) => x.name)).toContain(`F&lt;AM · ${ESCAPED} (2)`);
+    expect(t.map((x) => x.name)).toContain(`V&amp;IC · ${ESCAPED} (2)`);
+    // The group list that React renders keeps the name as written.
+    expect(r.groups[0].name).toContain(NAME);
+  });
+
+  it('escapes names in single-well and merged traces', () => {
+    const single = traces(buildMultiWellTraces(input([curve('A1')], { channelNames: { fam: '<i>F</i>', allele2: '%{x}' } })));
+    expect(single.map((x) => x.name)).toEqual(['&lt;i&gt;F&lt;/i&gt;', '&#37;{x}']);
+    const merged = traces(buildMultiWellTraces(input(many(HOVER_EMPHASIS_MAX + 1), { colourBasis: 'call', callOf: () => 'AA', callName: () => NAME })));
+    expect(merged.every((x) => x.name.startsWith('FAM · ' + ESCAPED) || x.name.startsWith('VIC · ' + ESCAPED))).toBe(true);
+    expect(merged[0].text?.[0]).toContain(ESCAPED);
+  });
+
+  it('leaves ordinary names unchanged', () => {
+    const r = buildMultiWellTraces(input([curve('A1'), curve('A2')], { callName: () => 'Allele 1 (≤ 3) / 표본', colourBasis: 'call', callOf: () => 'AA' }));
+    expect(traces(r)[0].text?.[0]).toBe('A1 · Allele 1 (≤ 3) / 표본 · FAM · Cycle 10 · 0.1');
+  });
+});

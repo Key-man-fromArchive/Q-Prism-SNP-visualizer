@@ -19,6 +19,7 @@ import { AnalysisCardHeader } from "./AnalysisCardHeader";
 import { WELL_TYPE_INFO } from "@/lib/constants";
 import { genotypeClasses, labelByRatio, defaultRatioCuts } from "@/lib/genotype";
 import { chartCategory, callLabel, cycleReadText, chartPointState, chartStateText } from "@/lib/chart-semantics";
+import { plotlyText } from "@/lib/plotly-text";
 import { compactLegend, LEGEND_MARGIN_TOP, PLOTLY_MODEBAR, lightPlotColors } from "@/lib/plotly-theme";
 import {
   axisRangeLayout, axisTitle, boundaryLegendTrace, boundaryLineStyle, dataBounds, effectiveAxisMode, fitBounds,
@@ -459,20 +460,24 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
         y: points.map((p) => at(p).y),
         mode: "markers",
         type: "scattergl",
-        name: `${callLabel(typeKey, t)} (n=${points.length})`,
+        name: `${plotlyText(callLabel(typeKey, t))} (n=${points.length})`,
         customdata: points.map((p) => p.well),
         text: points.map((p) => {
-          const normSuffix = normalizationApplied ? ` / ${normalizationLabel(labels, t.normalizationFallback)}` : "";
+          const normText = plotlyText(normalizationLabel(labels, t.normalizationFallback));
+          const normSuffix = normalizationApplied ? ` / ${normText}` : "";
+          const famText = plotlyText(labels.fam);
+          const allele2Text = plotlyText(labels.allele2);
+          const callText = plotlyText(callLabel(typeKey, t));
           return (
-            `<b>${t.chartWellAddress}: ${p.well}</b>${p.sample_name ? " (" + p.sample_name + ")" : ""}<br>${t.chartCall}: ${callLabel(typeKey, t)}<br>` +
-            `${labels.fam}${normSuffix}: ${p.norm_fam.toFixed(decimals)}<br>` +
-            `${labels.allele2}${normSuffix}: ${p.norm_allele2.toFixed(decimals)}` +
+            `<b>${t.chartWellAddress}: ${plotlyText(p.well)}</b>${p.sample_name ? " (" + plotlyText(p.sample_name) + ")" : ""}<br>${t.chartCall}: ${callText}<br>` +
+            `${famText}${normSuffix}: ${p.norm_fam.toFixed(decimals)}<br>` +
+            `${allele2Text}${normSuffix}: ${p.norm_allele2.toFixed(decimals)}` +
             (normalizationApplied
-              ? `<br>${t.raw} ${labels.fam}: ${p.raw_fam.toFixed(1)}<br>${t.raw} ${labels.allele2}: ${p.raw_allele2.toFixed(1)}`
+              ? `<br>${t.raw} ${famText}: ${p.raw_fam.toFixed(1)}<br>${t.raw} ${allele2Text}: ${p.raw_allele2.toFixed(1)}`
               : "") +
-            (p.raw_rox != null ? `<br>${normalizationLabel(labels, t.normalizationFallback)}:${p.raw_rox.toFixed(1)}` : "") +
-            (p.auto_cluster ? `<br>${t.chartAutoCall}: ${callLabel(p.auto_cluster, t)}` : "") +
-            (p.manual_type ? `<br>${t.chartManualCall}: ${callLabel(p.manual_type, t)}` : "") +
+            (p.raw_rox != null ? `<br>${normText}:${p.raw_rox.toFixed(1)}` : "") +
+            (p.auto_cluster ? `<br>${t.chartAutoCall}: ${plotlyText(callLabel(p.auto_cluster, t))}` : "") +
+            (p.manual_type ? `<br>${t.chartManualCall}: ${plotlyText(callLabel(p.manual_type, t))}` : "") +
             (p.confidence != null ? `<br>${t.confidence}: ${Math.round(p.confidence * 100)}%` : "") +
             `<br>${chartStateText(selectedWellSet.has(p.well), roxOutlierWells.includes(p.well), t)}`
           );
@@ -501,8 +506,8 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       // like the boundary lines it is an expert-mode element.
       showlegend: expert,
       hovertemplate:
-        `NTC: ${labels.fam} ≤ ${effectiveNtcCorner.fam.toFixed(2)}<br>` +
-        `${labels.allele2} ≤ ${effectiveNtcCorner.allele2.toFixed(2)}<extra></extra>`,
+        `NTC: ${plotlyText(labels.fam)} ≤ ${effectiveNtcCorner.fam.toFixed(2)}<br>` +
+        `${plotlyText(labels.allele2)} ≤ ${effectiveNtcCorner.allele2.toFixed(2)}<extra></extra>`,
       marker: {
         size: editing ? NTC_HANDLE_SIZE : NTC_MARKER_SIZE,
         color: NTC_AMBER,
@@ -517,8 +522,8 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
 
     // Same title shape as the per-marker plot; only the normalization is noted.
     const titleSuffix = normalizationApplied ? ` / ${normalizationLabel(labels, t.normalizationFallback)}` : "";
-    const famTitle = axisTitle(labels.fam, null, titleSuffix);
-    const allele2Title = axisTitle(labels.allele2, null, titleSuffix);
+    const famTitle = plotlyText(axisTitle(labels.fam, null, titleSuffix));
+    const allele2Title = plotlyText(axisTitle(labels.allele2, null, titleSuffix));
     const [xLabel, yLabel] = orientation === "allele2_x" ? [allele2Title, famTitle] : [famTitle, allele2Title];
 
     const axisTitleFont = { size: 14, color: colors.fontColor };
@@ -592,7 +597,7 @@ export function ScatterPlot({ active = true, viewToggle }: ScatterPlotProps = {}
       return [{
         x: at(point).x,
         y: at(point).y,
-        text: well,
+        text: plotlyText(well),
         showarrow: false,
         yshift: 14,
         // Same tokens the legend uses (plotly-theme.ts), so the label reads

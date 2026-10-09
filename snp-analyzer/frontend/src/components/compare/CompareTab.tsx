@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
 import { channelLabels } from '@/lib/channel-labels';
 import { plotlyColors } from '@/lib/plotly-theme';
+import { plotlyText } from "@/lib/plotly-text";
 
 export function CompareTab() {
   const owner = useAuthStore(s => s.generation);
@@ -40,12 +41,12 @@ function CompareWorkspace() {
     const trace1: Data = {
       type: 'scattergl',
       mode: 'markers',
-      name: `${t.runA} ${names?.[0]}`,
+      name: `${t.runA} ${plotlyText(String(names?.[0] ?? ""))}`,
       x: run1.points.map((p) => p.norm_fam),
       y: run1.points.map((p) => p.norm_allele2),
       text: run1.points.map(
         (p) =>
-          `Well: ${p.well}<br>${run1Labels.fam}: ${p.norm_fam.toFixed(2)}<br>${run1Labels.allele2}: ${p.norm_allele2.toFixed(2)}`
+          `Well: ${plotlyText(p.well)}<br>${plotlyText(run1Labels.fam)}: ${p.norm_fam.toFixed(2)}<br>${plotlyText(run1Labels.allele2)}: ${p.norm_allele2.toFixed(2)}`
       ),
       hoverinfo: 'text',
       marker: {
@@ -58,12 +59,12 @@ function CompareWorkspace() {
     const trace2: Data = {
       type: 'scattergl',
       mode: 'markers',
-      name: `${t.runB} ${names?.[1]}`,
+      name: `${t.runB} ${plotlyText(String(names?.[1] ?? ""))}`,
       x: run2.points.map((p) => p.norm_fam),
       y: run2.points.map((p) => p.norm_allele2),
       text: run2.points.map(
         (p) =>
-          `Well: ${p.well}<br>${run2Labels.fam}: ${p.norm_fam.toFixed(2)}<br>${run2Labels.allele2}: ${p.norm_allele2.toFixed(2)}`
+          `Well: ${plotlyText(p.well)}<br>${plotlyText(run2Labels.fam)}: ${p.norm_fam.toFixed(2)}<br>${plotlyText(run2Labels.allele2)}: ${p.norm_allele2.toFixed(2)}`
       ),
       hoverinfo: 'text',
       marker: {
@@ -76,12 +77,12 @@ function CompareWorkspace() {
     const c = plotlyColors();
     const layout: Partial<Layout> = {
       xaxis: {
-        title: { text: run1Labels.fam },
+        title: { text: plotlyText(run1Labels.fam) },
         gridcolor: c.gridColor,
         zerolinecolor: c.lineColor,
       },
       yaxis: {
-        title: { text: run1Labels.allele2 },
+        title: { text: plotlyText(run1Labels.allele2) },
         gridcolor: c.gridColor,
         zerolinecolor: c.lineColor,
       },

@@ -6,6 +6,7 @@ import Plotly from "plotly.js-dist-min";
 import type { Data, Layout, Shape } from "plotly.js";
 import { plotlyColors } from "@/lib/plotly-theme";
 import type { AmplificationCurve, DataWindow } from "@/types/api";
+import { plotlyText } from "@/lib/plotly-text";
 
 type WellCycleChartProps = {
   curve: AmplificationCurve;
@@ -30,8 +31,8 @@ export function WellCycleChart({ curve, famLabel, allele2Label, cycleLabel, curr
     const node = ref.current;
     if (!node) return;
     const traces: Data[] = [
-      { x: curve.cycles, y: curve.norm_fam, name: famLabel, mode: "lines", line: { color: "#2563eb", width: 2 } },
-      { x: curve.cycles, y: curve.norm_allele2, name: allele2Label, mode: "lines", line: { color: "#dc2626", width: 2 } },
+      { x: curve.cycles, y: curve.norm_fam, name: plotlyText(famLabel), mode: "lines", line: { color: "#2563eb", width: 2 } },
+      { x: curve.cycles, y: curve.norm_allele2, name: plotlyText(allele2Label), mode: "lines", line: { color: "#dc2626", width: 2 } },
     ];
     const c = plotlyColors();
     const shapes: Partial<Shape>[] = (windows ?? []).map((w, i) => ({
@@ -49,7 +50,7 @@ export function WellCycleChart({ curve, famLabel, allele2Label, cycleLabel, curr
       );
     }
     const layout: Partial<Layout> = {
-      xaxis: { title: { text: cycleLabel, standoff: 4 }, gridcolor: c.gridColor, automargin: true },
+      xaxis: { title: { text: plotlyText(cycleLabel), standoff: 4 }, gridcolor: c.gridColor, automargin: true },
       yaxis: { gridcolor: c.gridColor, automargin: true },
       paper_bgcolor: c.paper_bgcolor,
       plot_bgcolor: c.plot_bgcolor,

@@ -42,6 +42,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useIsDarkMode } from "@/hooks/use-dark-mode";
 import type { AlleleLabels, AmplificationResponse, MarkerRegion } from "@/types/api";
 import { OverlayProcessingStatus } from "./AmplificationOverlay";
+import { plotlyText } from "@/lib/plotly-text";
 
 type ViewMode = "curve" | "values";
 type ColorBy = "genotype" | "wellType" | "solid";
@@ -132,7 +133,7 @@ export function FluorescenceDataCard({ alleleLabels }: FluorescenceDataCardProps
             ? curve.effective_type || "Unknown"
             : wellTypeAssignments[curve.well] || "Unknown";
         color = wellInfo(key, ploidy, dark).color;
-        legendLabel = displayGenotype(key, marker);
+        legendLabel = plotlyText(displayGenotype(key, marker));
         showLegend = !legendAdded.has(key);
         if (showLegend) legendAdded.add(key);
       }
@@ -145,11 +146,11 @@ export function FluorescenceDataCard({ alleleLabels }: FluorescenceDataCardProps
         showlegend: showLegend,
         line: { color, width: 1 },
         opacity: 0.6,
-        hovertemplate: `${curve.well}<br>Cycle %{x}<br>RFU %{y:.3f}<extra>${legendLabel}</extra>`,
+        hovertemplate: `${plotlyText(curve.well)}<br>Cycle %{x}<br>RFU %{y:.3f}<extra>${legendLabel}</extra>`,
       });
     }
 
-    const channelLabel = channel === "fam" ? labels.fam : labels.allele2;
+    const channelLabel = plotlyText(channel === "fam" ? labels.fam : labels.allele2);
     const c = plotlyColors();
     const layout: Partial<Layout> = {
       title: { text: `${t.amplificationDataTitle} — ${channelLabel}`, font: { size: 14, color: c.fontColor } },

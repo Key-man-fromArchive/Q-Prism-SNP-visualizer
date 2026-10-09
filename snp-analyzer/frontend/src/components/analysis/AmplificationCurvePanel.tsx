@@ -49,6 +49,7 @@ import { useRequestStatus } from "@/hooks/use-request-status";
 import { StatusState } from "@/components/shared/ui";
 import { callTexts } from "./call-text";
 import type { AlleleLabels, AmplificationResponse } from "@/types/api";
+import { plotlyText } from "@/lib/plotly-text";
 
 /** Past this many wells the lines overlap too much to tell apart. */
 const OVERLAP_NOTE_WELLS = 200;
@@ -323,7 +324,7 @@ export function AmplificationCurvePanel({ active, viewToggle, bare = false, call
     const c = lightPlotColors();
     // Endpoint-only runs (D-9): the x positions are reads, not PCR cycles, so name them.
     const readTicks = sessionInfo?.has_amplification_curve === false && sessionInfo.read_labels
-      ? firstCycles.map((cycle) => cycleReadText(cycle, sessionInfo.read_labels, t) ?? String(cycle))
+      ? firstCycles.map((cycle) => plotlyText(cycleReadText(cycle, sessionInfo.read_labels, t) ?? String(cycle)))
       : null;
     const layout: Partial<Layout> = {
       xaxis: readTicks

@@ -9,6 +9,7 @@
 // null-separated segments so Plotly keeps a handful of traces.
 import type { Data } from 'plotly.js';
 import type { AmplificationCurve } from '@/types/api';
+import { plotlyText } from '@/lib/plotly-text';
 
 export const HOVER_EMPHASIS_MAX = 24;
 export const WELL_COLOUR_MAX = 12;
@@ -87,7 +88,7 @@ function hoverText(
   well: string, call: string, channel: string, cycle: number, value: number | null, cycleWord: string,
 ): string {
   const v = value === null ? '' : ` · ${Number(value.toPrecision(5))}`;
-  return `${well} · ${call} · ${channel} · ${cycleWord} ${cycle}${v}`;
+  return `${plotlyText(well)} · ${plotlyText(call)} · ${plotlyText(channel)} · ${plotlyText(cycleWord)} ${cycle}${v}`;
 }
 
 function singleWellTraces(input: MultiWellTraceInput, curve: AmplificationCurve): MultiWellTraces {
@@ -98,7 +99,7 @@ function singleWellTraces(input: MultiWellTraceInput, curve: AmplificationCurve)
     return {
       x: s.x,
       y: s.y,
-      name: input.channelNames[channel],
+      name: plotlyText(input.channelNames[channel]),
       line: { color: channel === 'fam' ? FAM_COLOR : ALLELE2_COLOR, width: 2 },
       meta: { well: curve.well, channel, group: channel } satisfies TraceMeta,
     } as Data;
@@ -195,7 +196,7 @@ export function buildMultiWellTraces(input: MultiWellTraceInput): MultiWellTrace
           x: s.x, y: s.y, text,
           line: { color, width: 1.5, dash },
           showlegend: firstOfGroup,
-          name: group.name,
+          name: plotlyText(group.name),
           meta: { well: r.curve.well, channel, group: g.key } satisfies TraceMeta,
         } as Data);
       } else {
@@ -212,7 +213,7 @@ export function buildMultiWellTraces(input: MultiWellTraceInput): MultiWellTrace
     ? perWellTraces.map((tr) => {
         const meta = (tr as { meta: TraceMeta }).meta;
         const g = groups.get(meta.group)!;
-        return { ...tr, name: `${g.name}${basis === 'well' ? '' : ` (${g.wells})`}` } as Data;
+        return { ...tr, name: `${plotlyText(g.name)}${basis === 'well' ? '' : ` (${g.wells})`}` } as Data;
       })
     : orderedGroups.map((g) => {
         const channel: ChannelKey = basis === 'well' ? 'fam' : g.key.startsWith('allele2') ? 'allele2' : 'fam';
@@ -222,7 +223,7 @@ export function buildMultiWellTraces(input: MultiWellTraceInput): MultiWellTrace
           marker: { size: 8, opacity: 0, color: g.color },
           hovertemplate: '%{text}<extra></extra>',
           line: { color: g.color, width: 1, dash: channel === 'allele2' ? 'dash' : 'solid' },
-          name: `${g.name} (${g.wells})`,
+          name: `${plotlyText(g.name)} (${g.wells})`,
           legendgroup: g.key,
           connectgaps: false,
           meta: { well: null, channel, group: g.key } satisfies TraceMeta,

@@ -11,6 +11,7 @@ import { displayGenotype, wellInfo } from "@/lib/genotype";
 import { useI18n } from "@/hooks/use-i18n";
 import { useIsDarkMode } from "@/hooks/use-dark-mode";
 import type { AlleleLabels, AmplificationResponse, BackgroundMode, MarkerRegion } from "@/types/api";
+import { plotlyText } from "@/lib/plotly-text";
 
 type ColorBy = "genotype" | "wellType" | "solid";
 
@@ -122,7 +123,7 @@ export function AmplificationOverlay({ ploidyOverride, idPrefix = "", alleleLabe
             ? curve.effective_type || "Unknown"
             : wellTypeAssignments[curve.well] || "Unknown";
         color = wellInfo(key, ploidy, dark).color;
-        legendLabel = displayGenotype(key, marker);
+        legendLabel = plotlyText(displayGenotype(key, marker));
         showLegend = !legendAdded.has(key);
         if (showLegend) legendAdded.add(key);
       }
@@ -135,11 +136,11 @@ export function AmplificationOverlay({ ploidyOverride, idPrefix = "", alleleLabe
         showlegend: showLegend,
         line: { color, width: 1 },
         opacity: 0.6,
-        hovertemplate: `${curve.well}<br>Cycle %{x}<br>RFU %{y:.3f}<extra>${legendLabel}</extra>`,
+        hovertemplate: `${plotlyText(curve.well)}<br>Cycle %{x}<br>RFU %{y:.3f}<extra>${legendLabel}</extra>`,
       });
     }
 
-    const channelLabel = channel === "fam" ? labels.fam : labels.allele2;
+    const channelLabel = plotlyText(channel === "fam" ? labels.fam : labels.allele2);
 
     const c = plotlyColors();
     const layout: Partial<Layout> = {
