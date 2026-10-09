@@ -603,6 +603,77 @@ _MARKER_CATALOG_COLUMNS = (
 )
 
 
+def _user_preset_row_to_dict(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "builtin": False,
+        "settings": json.loads(row["settings_json"]),
+    }
+
+
+def list_user_presets(owner_user_id: str) -> list[dict]:
+    """Presets saved by one user, oldest first."""
+    rows = get_db().execute(
+        "SELECT id, name, settings_json FROM user_presets WHERE owner_user_id = ? "
+        "ORDER BY created_at, rowid",
+        (owner_user_id,),
+    ).fetchall()
+    return [_user_preset_row_to_dict(r) for r in rows]
+
+
+def get_user_preset(preset_id: str, owner_user_id: str) -> dict | None:
+    """One preset, only if it belongs to ``owner_user_id``."""
+    row = get_db().execute(
+        "SELECT id, name, settings_json FROM user_presets WHERE id = ? AND owner_user_id = ?",
+        (preset_id, owner_user_id),
+    ).fetchone()
+    return _user_preset_row_to_dict(row) if row else None
+
+
+def insert_user_preset(
+    preset_id: str, owner_user_id: str, name: str, settings: dict, max_per_user: int
+) -> bool:
+    """Insert a preset unless the user already holds ``max_per_user``.
+
+    The count check and the insert are one statement, so concurrent requests
+    cannot both slip under the limit. Returns False when the limit is reached."""
+    conn = get_db()
+    cur = conn.execute(
+        "INSERT INTO user_presets (id, owner_user_id, name, settings_json) "
+        "SELECT ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM user_presets WHERE owner_user_id = ?) < ?",
+        (preset_id, owner_user_id, name, json.dumps(settings), owner_user_id, max_per_user),
+    )
+    conn.commit()
+    return cur.rowcount == 1
+
+
+def update_user_preset(
+    preset_id: str, owner_user_id: str, name: str | None, settings: dict | None
+) -> bool:
+    """Update a preset owned by ``owner_user_id``; False if there is no such preset."""
+    conn = get_db()
+    cur = conn.execute(
+        "UPDATE user_presets SET name = COALESCE(?, name), "
+        "settings_json = COALESCE(?, settings_json), updated_at = datetime('now') "
+        "WHERE id = ? AND owner_user_id = ?",
+        (name, json.dumps(settings) if settings is not None else None, preset_id, owner_user_id),
+    )
+    conn.commit()
+    return cur.rowcount == 1
+
+
+def delete_user_preset(preset_id: str, owner_user_id: str) -> bool:
+    """Delete a preset owned by ``owner_user_id``; False if there is no such preset."""
+    conn = get_db()
+    cur = conn.execute(
+        "DELETE FROM user_presets WHERE id = ? AND owner_user_id = ?",
+        (preset_id, owner_user_id),
+    )
+    conn.commit()
+    return cur.rowcount == 1
+
+
 def _marker_catalog_row_to_dict(row: sqlite3.Row) -> dict:
     result = {col: row[col] for col in _MARKER_CATALOG_COLUMNS}
     result["calibration"] = json.loads(row["calibration_json"]) if row["calibration_json"] else {}

@@ -152,6 +152,22 @@ CREATE TABLE IF NOT EXISTS saved_layouts (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
+-- Assay presets saved by users. Each preset belongs to exactly ONE user
+-- (the user who saved it); built-in presets live in code and never in this
+-- table. Rows persist with the database, so they survive a restart or a
+-- container recreation. db_schema.sql is re-run on every startup, so this
+-- CREATE covers both fresh and existing databases.
+CREATE TABLE IF NOT EXISTS user_presets (
+    id TEXT PRIMARY KEY,
+    owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    settings_json TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_presets_owner ON user_presets (owner_user_id);
+
 -- Projects table (replaces projects.json)
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
