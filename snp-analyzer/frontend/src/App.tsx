@@ -35,8 +35,6 @@ import { KeyboardHelpOverlay } from "@/components/shared/KeyboardHelpOverlay";
 import { useWorkspaceLocation } from '@/hooks/use-workspace-location';
 import { WorkspaceRestoreNotice } from '@/components/shared/WorkspaceRestoreNotice';
 
-const ASG_LAUNCH_TOKEN_STORAGE_KEY = "__asg_launch_token";
-
 function workspaceVisibility(ready: boolean, session: string | null, projectOnly: boolean) {
   return { upload: ready && !session && !projectOnly, panels: ready && Boolean(session || projectOnly) };
 }
@@ -51,12 +49,6 @@ function isWorkspaceTab(tab: NavigationTab): boolean {
 const semanticOwnTabs: readonly NavigationTab[] = [...workspaceTabs, 'references', 'users'];
 function ownsSemanticsElsewhere(tab: NavigationTab): boolean {
   return semanticOwnTabs.includes(tab);
-}
-
-declare global {
-  interface Window {
-    __ASG_LAUNCH_TOKEN__?: string;
-  }
 }
 
 export default function App() {
@@ -91,7 +83,10 @@ export default function App() {
   // StrictMode replay shares the exchange; logout/user changes invalidate every subscriber.
   useEffect(() => {
     let cancelled = false;
-    bootstrap.current ??= { generation: useAuthStore.getState().generation, promise: bootstrapAuth(consumeLaunchToken()) };
+    if (!bootstrap.current) {
+      removeLaunchTokenFromUrl();
+      bootstrap.current = { generation: useAuthStore.getState().generation, promise: bootstrapAuth() };
+    }
     const request = bootstrap.current;
     void request.promise.then(({ config, login, launchFailed }) => {
       if (cancelled) return;
@@ -267,40 +262,12 @@ export default function App() {
   );
 }
 
-function readLaunchTokenFromUrl(): string | null {
-  const queryToken = new URLSearchParams(window.location.search).get("token");
-  if (queryToken) return queryToken;
-
-  const hash = window.location.hash.startsWith("#")
-    ? window.location.hash.slice(1)
-    : window.location.hash;
-  return new URLSearchParams(hash).get("token");
-}
-
-function consumeLaunchToken(): string | null {
-  const urlToken = readLaunchTokenFromUrl();
-  if (urlToken) {
-    removeLaunchTokenFromUrl();
-    return urlToken;
-  }
-
-  try {
-    const storedToken = window.sessionStorage.getItem(ASG_LAUNCH_TOKEN_STORAGE_KEY);
-    if (storedToken) {
-      window.sessionStorage.removeItem(ASG_LAUNCH_TOKEN_STORAGE_KEY);
-      return storedToken;
-    }
-  } catch {
-    // sessionStorage may be unavailable in restricted browser contexts.
-  }
-
-  const fallbackToken = window.__ASG_LAUNCH_TOKEN__ ?? null;
-  delete window.__ASG_LAUNCH_TOKEN__;
-  return fallbackToken;
-}
-
+// ASG hands the launch over in a cookie. A `token` left in an old link is
+// never used; it is only taken out of the address bar.
 function removeLaunchTokenFromUrl() {
   const url = new URL(window.location.href);
+  const hasHashToken = url.hash ? new URLSearchParams(url.hash.slice(1)).has("token") : false;
+  if (!url.searchParams.has("token") && !hasHashToken) return;
   url.searchParams.delete("token");
   if (url.hash) {
     const hashParams = new URLSearchParams(url.hash.slice(1));

@@ -1,18 +1,27 @@
-import { asgLaunch, asgLaunchCookie, getAuthConfig, getMe } from './api';
+import { asgLaunchCookie, getAuthConfig, getMe } from './api';
 import type { AuthConfigResponse, LoginResponse } from '@/types/auth';
 
 type BootstrapResult = { config: AuthConfigResponse; login: LoginResponse | null; launchFailed: boolean };
-async function authenticate(config: AuthConfigResponse, token: string | null): Promise<LoginResponse> {
-  if (config.auth_mode !== 'asg_launch') return getMe();
-  if (token) return asgLaunch(token);
-  try { return await asgLaunchCookie(); }
-  catch { return getMe(); }
+type Attempt = { login: LoginResponse | null; launchFailed: boolean };
+
+function statusOf(error: unknown): number | undefined {
+  return typeof error === 'object' && error !== null && 'status' in error ? Number((error as { status: unknown }).status) : undefined;
+}
+// A 401 from the launch cookie route only means no launch is pending (a direct
+// visit); any other failure is a launch that ASG started and SNP could not finish.
+async function authenticate(config: AuthConfigResponse): Promise<Attempt> {
+  if (config.auth_mode !== 'asg_launch') return { login: await getMe(), launchFailed: false };
+  let launchFailed = false;
+  try { return { login: await asgLaunchCookie(), launchFailed }; }
+  catch (error) { launchFailed = statusOf(error) !== 401; }
+  try { return { login: await getMe(), launchFailed: false }; }
+  catch { return { login: null, launchFailed }; }
 }
 /** Return no error body or credential. A mounted subscriber decides whether the result is still owned. */
-export async function bootstrapAuth(token: string | null): Promise<BootstrapResult> {
+export async function bootstrapAuth(): Promise<BootstrapResult> {
   let config: AuthConfigResponse = { auth_mode: 'local' };
   try {
     config = await getAuthConfig();
-    return { config, login: await authenticate(config, token), launchFailed: false };
-  } catch { return { config, login: null, launchFailed: token !== null }; }
+    return { config, ...(await authenticate(config)) };
+  } catch { return { config, login: null, launchFailed: false }; }
 }

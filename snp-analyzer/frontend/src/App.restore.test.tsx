@@ -8,13 +8,13 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { writeViewCache } from '@/lib/session-view-cache';
-import { asgLaunch, asgLaunchCookie, getAuthConfig, getMe, getSessionInfo, runClustering } from '@/lib/api';
+import { asgLaunchCookie, getAuthConfig, getMe, getSessionInfo, runClustering } from '@/lib/api';
 const info = { session_id: 's', instrument: 'test', allele2_dye: 'VIC', num_wells: 1, num_cycles: 3,
   cycles: [0, 10, 40], has_rox: true, data_windows: null, suggested_cycle: 40, well_groups: null,
   input_revision: 0, analysis_status: 'completed', analysis_pending: false };
 vi.mock('@/lib/api', () => ({
   getVersion: vi.fn(async () => ({ version: '1.0.0', commit: '', built_at: '' })),
-  getAuthConfig: vi.fn(() => new Promise(() => {})), getMe: vi.fn(), asgLaunch: vi.fn(), asgLaunchCookie: vi.fn(),
+  getAuthConfig: vi.fn(() => new Promise(() => {})), getMe: vi.fn(), asgLaunchCookie: vi.fn(),
   getCluster: vi.fn(async () => ({ algorithm: 'auto', cycle: 40, assignments: {} })),
   getMarkers: vi.fn(async () => ({ markers: [] })), getPloidy: vi.fn(async () => ({ ploidy: 2 })),
   getSessionInfo: vi.fn(async () => info), runClustering: vi.fn(),
@@ -52,9 +52,11 @@ it('strips ASG credentials while preserving prefix/hash and never renders a secr
   useAuthStore.getState().clearAuth(); useAuthStore.getState().setLoading(true);
   history.replaceState(null, '', '/prefix/?token=secret&session=s#anchor');
   vi.mocked(getAuthConfig).mockResolvedValue({ auth_mode: 'asg_launch', asg_home_url: '/designer/' });
-  vi.mocked(asgLaunch).mockRejectedValue(new Error('request failed token=secret'));
+  vi.mocked(asgLaunchCookie).mockRejectedValue(new Error('request failed token=secret'));
+  vi.mocked(getMe).mockRejectedValue(Object.assign(new Error('401'), { status: 401 }));
   render(<App />);
   await screen.findByRole('link', { name: /ASG/ });
+  expect(asgLaunchCookie).toHaveBeenCalledWith();
   expect(document.body.textContent).not.toContain('secret');
   expect(location.href).not.toContain('secret');
   expect(location.pathname).toBe('/prefix/');
@@ -74,14 +76,14 @@ it('direct visit in asg_launch mode shows the ASG launch screen, not a password 
   expect(useAuthStore.getState().authMode).toBe('asg_launch');
   expect(useAuthStore.getState().isAuthenticated).toBe(false);
 });
-it('StrictMode exchanges a token once and a late launch cannot revive a logged-out owner', async () => {
+it('StrictMode exchanges a launch once and a late launch cannot revive a logged-out owner', async () => {
   useAuthStore.getState().clearAuth(); useAuthStore.getState().setLoading(true);
   history.replaceState(null, '', '/?token=secret');
   vi.mocked(getAuthConfig).mockResolvedValue({ auth_mode: 'asg_launch' });
   let done!: (value: ASGLaunchResponse) => void;
-  vi.mocked(asgLaunch).mockReturnValue(new Promise(resolve => { done = resolve; }));
+  vi.mocked(asgLaunchCookie).mockReturnValue(new Promise(resolve => { done = resolve; }));
   render(<StrictMode><App /></StrictMode>);
-  await waitFor(() => expect(asgLaunch).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(asgLaunchCookie).toHaveBeenCalledTimes(1));
   act(() => useAuthStore.getState().clearAuth());
   await act(async () => done({ user: { id: 'late', username: 'late', role: 'user', display_name: null },
     linked_context: { target_type: 'run', target_id: 'synthetic', context: {}, scope: [], expires_at: null } }));

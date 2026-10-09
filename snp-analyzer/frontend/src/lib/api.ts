@@ -990,14 +990,6 @@ export async function getAuthConfig(): Promise<AuthConfigResponse> {
   return apiFetch<AuthConfigResponse>('/api/auth/config');
 }
 
-export async function asgLaunch(token: string): Promise<ASGLaunchResponse> {
-  return apiFetch<ASGLaunchResponse>('/api/auth/asg-launch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token }),
-  });
-}
-
 export async function asgLaunchCookie(): Promise<ASGLaunchResponse> {
   return apiFetch<ASGLaunchResponse>('/api/auth/asg-launch-cookie', {
     method: 'POST',

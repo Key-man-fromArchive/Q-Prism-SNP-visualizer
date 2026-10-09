@@ -62,10 +62,10 @@ function syntheticAuthResponse(
       auth_mode: mode.startsWith('asg-') ? 'asg_launch' : 'local',
       asg_home_url: `${MOUNT}/designer/`,
     };
-  } else if (strippedPath === '/api/auth/asg-launch' && request.method === 'POST' && mode === 'asg-denial') {
+  } else if (strippedPath === '/api/auth/asg-launch-cookie' && request.method === 'POST' && mode === 'asg-denial') {
     status = 403;
     body = { detail: 'synthetic launch rejected' };
-  } else if (strippedPath === '/api/auth/asg-launch' && request.method === 'POST' && mode === 'asg-success') {
+  } else if (strippedPath === '/api/auth/asg-launch-cookie' && request.method === 'POST' && mode === 'asg-success') {
     status = 200;
     body = {
       user: { id: 'synthetic-asg-user', username: 'synthetic@example.test', display_name: 'Synthetic ASG', role: 'user' },
@@ -268,7 +268,7 @@ test.describe('P5 ASG mounted-path compatibility', () => {
     await asgContext.close();
   });
 
-  test('exchanges an ASG launch once, restores URL state, and removes the launch token', async ({ page }, testInfo) => {
+  test('exchanges an ASG launch once, restores URL state, and drops a token left in the link', async ({ page }, testInfo) => {
     const requests: string[] = [];
     const consoleMessages: string[] = [];
     page.on('request', request => requests.push(request.url()));
@@ -277,9 +277,10 @@ test.describe('P5 ASG mounted-path compatibility', () => {
 
     await page.context().setExtraHTTPHeaders({ 'x-p5-auth-mode': 'asg-success' });
     page.on('request', request => {
-      if (request.url().endsWith('/api/auth/asg-launch') && request.method() === 'POST') {
+      if (request.url().endsWith('/api/auth/asg-launch-cookie') && request.method() === 'POST') {
         launchPosts += 1;
-        expect(request.postDataJSON()).toEqual({ token: LAUNCH_TOKEN });
+        // The launch rides on the cookie ASG set; a token left in the link is never sent.
+        expect(request.postData() ?? '').not.toContain(LAUNCH_TOKEN);
       }
     });
 
