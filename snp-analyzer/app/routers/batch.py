@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.auth import CurrentUser, check_project_access, check_session_access
 from app.config import is_asg_launch_mode
@@ -27,6 +27,9 @@ router = APIRouter()
 # Pydantic models
 # ---------------------------------------------------------------------------
 
+MAX_SESSION_IDS_PER_REQUEST = 200
+
+
 class Project(BaseModel):
     id: str
     name: str
@@ -37,16 +40,16 @@ class Project(BaseModel):
 
 class ProjectCreate(BaseModel):
     name: str
-    session_ids: list[str] = []
+    session_ids: list[str] = Field(default_factory=list, max_length=MAX_SESSION_IDS_PER_REQUEST)
 
 
 class ProjectUpdate(BaseModel):
     name: str | None = None
-    session_ids: list[str] | None = None
+    session_ids: list[str] | None = Field(default=None, max_length=MAX_SESSION_IDS_PER_REQUEST)
 
 
 class BulkSessionsRequest(BaseModel):
-    session_ids: list[str]
+    session_ids: list[str] = Field(max_length=MAX_SESSION_IDS_PER_REQUEST)
 
 
 # ---------------------------------------------------------------------------

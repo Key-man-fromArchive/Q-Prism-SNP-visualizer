@@ -20,16 +20,23 @@ def fix_cfx_xlsx(input_path: str) -> str:
     fd, fixed_path = tempfile.mkstemp(suffix=".xlsx", prefix="cfx_fixed_")
     os.close(fd)
 
-    with zipfile.ZipFile(input_path, "r") as zin:
-        with zipfile.ZipFile(fixed_path, "w", zipfile.ZIP_DEFLATED) as zout:
-            for info in zin.infolist():
-                data = zin.read(info.filename)
-                new_name = info.filename.replace("\\", "/")
-                if new_name.lower() == "[content_types].xml":
-                    new_name = "[Content_Types].xml"
-                if new_name in FILENAME_FIXES:
-                    new_name = FILENAME_FIXES[new_name]
-                zout.writestr(new_name, data)
+    try:
+        with zipfile.ZipFile(input_path, "r") as zin:
+            with zipfile.ZipFile(fixed_path, "w", zipfile.ZIP_DEFLATED) as zout:
+                for info in zin.infolist():
+                    data = zin.read(info.filename)
+                    new_name = info.filename.replace("\\", "/")
+                    if new_name.lower() == "[content_types].xml":
+                        new_name = "[Content_Types].xml"
+                    if new_name in FILENAME_FIXES:
+                        new_name = FILENAME_FIXES[new_name]
+                    zout.writestr(new_name, data)
+    except BaseException:
+        try:
+            os.unlink(fixed_path)
+        except OSError:
+            pass
+        raise
 
     return fixed_path
 

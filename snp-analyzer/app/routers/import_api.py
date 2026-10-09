@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import logging
 import os
+import threading
 import time
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
@@ -13,12 +15,18 @@ from app.auth import CurrentUser
 from app.import_errors import ImportErrorCode, ImportValidationError, make_issue
 from app.import_models import AssayModeId, ImportPreview, ImportRun, MappingConfig, ValidationIssue
 from app.models import UploadResponse
+from app.parsers.generic_table import table_read_scope
 from app.parsers.registry import ParserContract, build_default_parser_registry
 from app.routers import upload
 from app.services.import_session import create_session_from_import
+from app.upload_limits import UNREADABLE_FILE_DETAIL, run_parse_limited
 
 
 PREVIEW_TTL_SECONDS = 30 * 60
+# Live previews kept per user; a newer one replaces that user's oldest.
+MAX_PREVIEWS_PER_USER = 10
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 parser_registry = build_default_parser_registry()
@@ -35,6 +43,7 @@ class PreviewRecord:
 
 
 preview_store: dict[str, PreviewRecord] = {}
+_preview_store_lock = threading.Lock()
 
 
 class ImportParseRequest(BaseModel):
@@ -42,46 +51,77 @@ class ImportParseRequest(BaseModel):
     mapping: MappingConfig
 
 
+def _preview_blocking(path: Path, filename: str):
+    """Blocking part of a preview: sniff the file and build the preview.
+
+    Runs in a worker thread. On any failure the spooled file is removed.
+    """
+    try:
+        with table_read_scope():
+            parser = parser_registry.match(path, filename)
+            if parser is None:
+                raise HTTPException(status_code=400, detail="Unsupported import content")
+            return parser, parser.preview(path, filename)
+    except BaseException:
+        _remove_file(path)
+        raise
+
+
+def _keep_preview(parser, preview: ImportPreview, path: Path, filename: str, user_id: str) -> ImportPreview:
+    """Register a built preview so it can be parsed later (event loop only)."""
+    try:
+        preview_id = _new_preview_id()
+        preview.preview_id = preview_id
+        _store_preview(
+            PreviewRecord(
+                preview_id=preview_id,
+                owner_user_id=user_id,
+                file_path=path,
+                filename=filename,
+                parser_id=parser.parser_id,
+                expires_at=time.time() + PREVIEW_TTL_SECONDS,
+            )
+        )
+        return preview
+    except BaseException:
+        _remove_file(path)
+        raise
+
+
 @router.post("/api/import/preview", response_model=ImportPreview)
 async def import_preview(current_user: CurrentUser, file: UploadFile = File(...)) -> ImportPreview | JSONResponse:
     _cleanup_expired_previews()
+    filename = file.filename or ""
     ext = upload._validate_upload_metadata(file)
-    tmp_path = ""
     try:
         tmp_path = await upload._write_upload_to_temp(file, ext)
-        path = Path(tmp_path)
-        parser = parser_registry.match(path, file.filename or "")
-        if parser is None:
-            _remove_file(path)
-            raise HTTPException(status_code=400, detail="Unsupported import content")
-
-        preview = parser.preview(path, file.filename or "")
-        preview_id = _new_preview_id()
-        preview.preview_id = preview_id
-        preview_store[preview_id] = PreviewRecord(
-            preview_id=preview_id,
-            owner_user_id=current_user.user_id,
-            file_path=path,
-            filename=file.filename or "",
-            parser_id=parser.parser_id,
-            expires_at=time.time() + PREVIEW_TTL_SECONDS,
-        )
-        return preview
     except HTTPException:
         raise
+    except Exception:
+        logger.exception("Import preview could not be read: user=%s file=%r", current_user.user_id, filename)
+        raise HTTPException(status_code=400, detail=UNREADABLE_FILE_DETAIL)
+
+    try:
+        parser, preview = await run_parse_limited(_preview_blocking, Path(tmp_path), filename)
+        return _keep_preview(parser, preview, Path(tmp_path), filename, current_user.user_id)
+    except HTTPException:
+        _remove_file(Path(tmp_path))
+        raise
     except ImportValidationError as exc:
-        if tmp_path:
-            _remove_file(Path(tmp_path))
         return _validation_error_response(exc.issues)
-    except Exception as exc:
-        if tmp_path:
-            _remove_file(Path(tmp_path))
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail=f"Failed to preview import: {exc}")
+    except Exception:
+        logger.exception("Import preview could not be read: user=%s file=%r", current_user.user_id, filename)
+        raise HTTPException(status_code=400, detail=UNREADABLE_FILE_DETAIL)
 
 
-@router.post("/api/import/parse", response_model=UploadResponse)
-async def import_parse(current_user: CurrentUser, request: ImportParseRequest) -> UploadResponse | JSONResponse:
-    record = _get_preview_for_parse(request.preview_id, current_user.user_id)
+def _parse_blocking(record: PreviewRecord, request: ImportParseRequest):
+    """Blocking part of an import: parse with the mapping (worker thread).
+
+    Returns the unified run, or a JSONResponse for a mapping the analysis
+    cannot take.
+    """
     parser = _parser_by_id(record.parser_id)
     if parser is None:
         _delete_preview(record.preview_id)
@@ -103,7 +143,7 @@ async def import_parse(current_user: CurrentUser, request: ImportParseRequest) -
                     ),
                 },
             )
-        unified = parser.to_unified(import_run)
+        return parser.to_unified(import_run)
     except ImportValidationError as exc:
         return _validation_error_response(exc.issues)
     except ValueError as exc:
@@ -116,10 +156,18 @@ async def import_parse(current_user: CurrentUser, request: ImportParseRequest) -
             ]
         )
 
+
+@router.post("/api/import/parse", response_model=UploadResponse)
+async def import_parse(current_user: CurrentUser, request: ImportParseRequest) -> UploadResponse | JSONResponse:
+    record = _get_preview_for_parse(request.preview_id, current_user.user_id)
+    unified = await run_parse_limited(_parse_blocking, record, request)
+    if isinstance(unified, JSONResponse):
+        return unified
+    user_id = current_user.user_id
     response = create_session_from_import(
         unified=unified,
         filename=record.filename,
-        user_id=current_user.user_id,
+        user_id=user_id,
         session_store=upload.sessions,
         # record.file_path still exists on disk -- _delete_preview() below
         # removes it right after (P32 raw-file storage copies it first).
@@ -161,6 +209,16 @@ def _validation_error_response(issues: list[ValidationIssue]) -> JSONResponse:
             "issues": [issue.model_dump(mode="json") for issue in issues],
         },
     )
+
+
+def _store_preview(record: PreviewRecord) -> None:
+    """Add ``record``, dropping the owner's oldest previews beyond the cap."""
+    with _preview_store_lock:
+        preview_store[record.preview_id] = record
+        owned = [r for r in preview_store.values() if r.owner_user_id == record.owner_user_id]
+        owned.sort(key=lambda r: (r.expires_at, r is record))
+        for stale in owned[: max(0, len(owned) - MAX_PREVIEWS_PER_USER)]:
+            _delete_preview(stale.preview_id)
 
 
 def _cleanup_expired_previews() -> None:

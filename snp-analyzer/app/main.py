@@ -14,6 +14,7 @@ from app.routers import export_pptx, export_images
 from app.routers import auth_router, users
 from app.auth_security import assert_auth_configuration
 from app.config import SNP_ROOT_PATH, is_asg_launch_mode
+from app.upload_limits import UploadBoundaryMiddleware
 
 
 def _ensure_admin():
@@ -168,6 +169,12 @@ def _early_refusal(request):
     ):
         return JSONResponse({"detail": "Cross-site request refused"}, status_code=403)
     return None
+
+
+# Registered before the header middleware below so that it sits inside it: the
+# cross-site refusal runs first and the sign-in / size answers still get the
+# standard response headers.
+app.add_middleware(UploadBoundaryMiddleware)
 
 
 @app.middleware("http")
