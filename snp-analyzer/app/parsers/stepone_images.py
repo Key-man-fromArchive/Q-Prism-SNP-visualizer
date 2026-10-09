@@ -30,7 +30,9 @@ FILTERS = ("BLUE", "GREEN", "YELLOW", "RED")
 ROI_PIXELS = 55
 ROI_OFFSET = 27
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
+MAX_SCAN_BYTES = 128 * 1024 * 1024
 MAX_INI_BYTES = 8 * 1024 * 1024
+MAX_TIFF_TAGS = 256
 
 _IMAGE_NAME = re.compile(
     r"(?:^|/)images/stage(\d+)-cycle(\d+)-point(\d+)-(blue|green|yellow|red)\.tiff?$",
@@ -40,6 +42,7 @@ _IMAGE_NAME = re.compile(
 # TIFF tags used by the instrument's uncompressed grey-scale scans.
 _WIDTH, _HEIGHT, _BITS, _COMPRESSION = 256, 257, 258, 259
 _STRIP_OFFSETS, _STRIP_BYTES = 273, 279
+_USED_TAGS = {_WIDTH, _HEIGHT, _BITS, _COMPRESSION, _STRIP_OFFSETS, _STRIP_BYTES}
 _TYPE_SIZES = {3: ("H", 2), 4: ("I", 4)}
 
 
@@ -92,7 +95,11 @@ def _filter_grids(text: str, section: str, filename: str, shape) -> np.ndarray:
 
 
 def _decode_tiff(data: bytes) -> np.ndarray:
-    """Pixels of an uncompressed 16-bit single-channel TIFF as ``(height, width)``."""
+    """Pixels of an uncompressed 16-bit single-channel TIFF as ``(height, width)``.
+
+    Every count and offset in the header is checked against the file itself,
+    so the pixels never take more memory than the file they came from.
+    """
     if data[:4] == b"II*\x00":
         order = "<"
     elif data[:4] == b"MM\x00*":
@@ -102,14 +109,20 @@ def _decode_tiff(data: bytes) -> np.ndarray:
     try:
         (ifd,) = struct.unpack_from(order + "I", data, 4)
         (count,) = struct.unpack_from(order + "H", data, ifd)
+        if count > MAX_TIFF_TAGS:
+            raise ValueError("scan image TIFF header is not a scan header")
         tags: dict[int, list[int]] = {}
         for i in range(count):
             tag, typ, n, value_at = struct.unpack_from(order + "HHI4s", data, ifd + 2 + 12 * i)
-            if typ not in _TYPE_SIZES:
+            if tag not in _USED_TAGS or typ not in _TYPE_SIZES or n == 0:
                 continue
             code, size = _TYPE_SIZES[typ]
-            source = value_at if n * size <= 4 else data
-            start = 0 if n * size <= 4 else struct.unpack(order + "I", value_at)[0]
+            if n * size <= 4:
+                source, start = value_at, 0
+            else:
+                source, start = data, struct.unpack(order + "I", value_at)[0]
+                if start + n * size > len(data):
+                    raise struct.error
             tags[tag] = list(struct.unpack_from(f"{order}{n}{code}", source, start))
     except struct.error:
         raise ValueError("scan image TIFF header is truncated") from None
@@ -117,12 +130,23 @@ def _decode_tiff(data: bytes) -> np.ndarray:
     if tags.get(_BITS, [0])[0] != 16 or tags.get(_COMPRESSION, [1])[0] != 1:
         raise ValueError("scan image is not an uncompressed 16-bit TIFF")
     offsets, sizes = tags.get(_STRIP_OFFSETS, []), tags.get(_STRIP_BYTES, [])
-    if not width or not height or len(offsets) != len(sizes):
+    if not width or not height or not offsets or len(offsets) != len(sizes):
         raise ValueError("scan image TIFF has no pixel data")
-    pixels = b"".join(data[o : o + s] for o, s in zip(offsets, sizes))
-    if len(pixels) < width * height * 2:
+    if len(offsets) > height:
+        raise ValueError("scan image TIFF has more strips than rows")
+    needed = width * height * 2
+    if needed > len(data):
         raise ValueError("scan image TIFF is truncated")
-    return np.frombuffer(pixels, dtype=order + "u2", count=width * height).reshape(height, width)
+    pixels = bytearray()
+    for offset, size in zip(offsets, sizes):
+        if offset + size > len(data):
+            raise ValueError("scan image TIFF is truncated")
+        pixels += data[offset : offset + min(size, needed - len(pixels))]
+        if len(pixels) == needed:
+            break
+    if len(pixels) < needed:
+        raise ValueError("scan image TIFF is truncated")
+    return np.frombuffer(bytes(pixels), dtype=order + "u2").reshape(height, width)
 
 
 def _scan_reads(names: list[str]) -> list[dict[str, str]]:
@@ -185,6 +209,9 @@ def compute_signals(
     starts = {f: np.floor(peaks[:, :, i]).astype(int) - ROI_OFFSET for i, f in enumerate(FILTERS)}
 
     scans = _scan_reads(names)
+    total = sum(zf.getinfo(files[f]).file_size for files in scans for f in FILTERS)
+    if total > MAX_SCAN_BYTES:
+        raise ValueError("scan images are too large")
     raw = np.zeros((len(scans), rows, cols, len(FILTERS)))
     for r, files in enumerate(scans):
         for i, f in enumerate(FILTERS):

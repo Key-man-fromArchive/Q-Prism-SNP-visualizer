@@ -31,21 +31,22 @@ NORM = {"FAM": 1.7583334, "ROX": 1.0, "VIC": 0.8565865}
 BACKGROUND = 56000.0
 
 
-def _tiff(pixels: np.ndarray) -> bytes:
+def _tiff(pixels: np.ndarray, **override) -> bytes:
     height, width = pixels.shape
     body = pixels.astype("<u2").tobytes()
-    entries = [
-        (256, 3, 1, width),
-        (257, 3, 1, height),
-        (258, 3, 1, 16),
-        (259, 3, 1, 1),
-        (262, 3, 1, 1),
-        (273, 4, 1, 8),
-        (278, 3, 1, height),
-        (279, 4, 1, len(body)),
-    ]
-    ifd = struct.pack("<H", len(entries)) + b"".join(
-        struct.pack("<HHII", *e) for e in entries
+    tags = {
+        256: (3, 1, width),
+        257: (3, 1, height),
+        258: (3, 1, 16),
+        259: (3, 1, 1),
+        262: (3, 1, 1),
+        273: (4, 1, 8),
+        278: (3, 1, height),
+        279: (4, 1, len(body)),
+    }
+    tags.update({int(k[1:]): v for k, v in override.items()})
+    ifd = struct.pack("<H", len(tags)) + b"".join(
+        struct.pack("<HHII", tag, *entry) for tag, entry in sorted(tags.items())
     ) + b"\x00\x00\x00\x00"
     return b"II*\x00" + struct.pack("<I", 8 + len(body)) + body + ifd
 
@@ -192,6 +193,71 @@ def test_tiff_decoder_reads_both_byte_orders():
     assert np.array_equal(_decode_tiff(bytes(big)), pixels)
     with pytest.raises(ValueError, match="not a TIFF"):
         _decode_tiff(b"GIF89a" + little[6:])
+
+
+def _strips(count: int, offset: int, size: int) -> bytes:
+    """Pixels plus ``count`` strips that all point at ``offset``."""
+    pixels = np.arange(24, dtype=np.uint16).reshape(2, 12)
+    body = pixels.astype("<u2").tobytes()
+    table_at = 8 + len(body)
+    table = struct.pack(f"<{count}I", *[offset] * count) + struct.pack(f"<{count}I", *[size] * count)
+    tags = {
+        256: (3, 1, 12), 257: (3, 1, 2), 258: (3, 1, 16), 259: (3, 1, 1),
+        273: (4, count, table_at), 279: (4, count, table_at + 4 * count),
+    }
+    ifd_at = table_at + len(table)
+    ifd = struct.pack("<H", len(tags)) + b"".join(
+        struct.pack("<HHII", tag, *entry) for tag, entry in sorted(tags.items())
+    ) + b"\x00\x00\x00\x00"
+    return b"II*\x00" + struct.pack("<I", ifd_at) + body + table + ifd
+
+
+def test_tiff_decoder_reads_repeated_strips_once():
+    pixels = np.arange(24, dtype=np.uint16).reshape(2, 12)
+    assert np.array_equal(_decode_tiff(_strips(2, 8, 48)), pixels)
+    with pytest.raises(ValueError, match="more strips than rows"):
+        _decode_tiff(_strips(3, 8, 48))
+
+
+@pytest.mark.parametrize(
+    "override, message",
+    [
+        ({"t256": (3, 1, 60000), "t257": (3, 1, 60000)}, "truncated"),
+        ({"t273": (4, 1, 1 << 30)}, "truncated"),
+        ({"t279": (4, 1 << 28, 8)}, "truncated"),
+        ({"t273": (4, 0, 8)}, "no pixel data"),
+        ({"t256": (3, 0, 0)}, "no pixel data"),
+        ({"t258": (3, 1, 8)}, "uncompressed 16-bit"),
+    ],
+)
+def test_tiff_decoder_checks_the_header_against_the_file(override, message):
+    pixels = np.arange(24, dtype=np.uint16).reshape(2, 12)
+    with pytest.raises(ValueError, match=message):
+        _decode_tiff(_tiff(pixels, **override))
+
+
+def test_tiff_decoder_rejects_an_oversized_tag_table():
+    data = bytearray(_tiff(np.zeros((2, 12), dtype=np.uint16)))
+    ifd = struct.unpack_from("<I", data, 4)[0]
+    struct.pack_into("<H", data, ifd, 0xFFFF)
+    with pytest.raises(ValueError):
+        _decode_tiff(bytes(data))
+
+
+def test_tiff_decoder_fails_cleanly_on_damaged_files():
+    good = _tiff(np.arange(12 * 40, dtype=np.uint16).reshape(40, 12))
+    rng = np.random.default_rng(20261009)
+    for _ in range(10_000):
+        data = bytearray(good)
+        for at in rng.integers(0, len(data), size=int(rng.integers(1, 8))):
+            data[at] = int(rng.integers(0, 256))
+        if rng.random() < 0.2:
+            data = data[: int(rng.integers(0, len(data)))]
+        try:
+            pixels = _decode_tiff(bytes(data))
+        except ValueError:
+            continue
+        assert pixels.nbytes <= len(data)
 
 
 _RAW = os.environ.get("QPRISM_STEPONE_RAW_EDS")
