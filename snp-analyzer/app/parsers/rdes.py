@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 from pathlib import Path
 
 from app.assays.registry import validate_mapping_config
@@ -18,17 +17,19 @@ from app.import_models import (
 )
 from app.models import UnifiedData
 from app.parsers.generic_table import (
-    MAX_IMPORT_ROWS,
     _build_import_run,
     _infer_assay_mode,
     _parse_rfu,
     _parse_well,
     _raise_for_mapping_issues,
     _raise_if_issues,
+    _read_delimited_matrix,
+    _row_limit,
     _to_duplex_unified,
 )
 
 
+_RDES_LIMIT_CONFIG = MappingConfig(assay_mode=AssayModeId.WT_MT, channel_roles={"preview": ImportRole.UNKNOWN})
 _STRICT_RDES_HEADERS = {"well", "sample", "sample type", "target", "target type", "dye", "cq"}
 
 
@@ -172,13 +173,10 @@ class QPrismRDESParser:
 
 
 def _read_rdes(file_path: Path) -> tuple[list[str], list[dict[str, str]]]:
-    text = file_path.read_text(encoding="utf-8-sig")
-    matrix = list(csv.reader(text.splitlines(), delimiter="\t"))
+    matrix = _read_delimited_matrix(file_path, "\t", _row_limit(_RDES_LIMIT_CONFIG))
     if not matrix:
         raise_import_error(ImportErrorCode.UNSUPPORTED_CONTENT)
     headers = [header.strip().lower() for header in matrix[0]]
-    if len(matrix) - 1 > MAX_IMPORT_ROWS:
-        raise_import_error(ImportErrorCode.FILE_LIMIT_EXCEEDED)
     if not _STRICT_RDES_HEADERS.issubset(set(headers)):
         raise_import_error(ImportErrorCode.MISSING_FIELD)
 

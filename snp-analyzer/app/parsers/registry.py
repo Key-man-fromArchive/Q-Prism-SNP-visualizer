@@ -57,11 +57,14 @@ class ParserRegistry:
         self._specs.sort(key=lambda item: (item.tier, item.parser_id))
 
     def match(self, file_path: Path, original_filename: str = "") -> ParserContract | None:
-        for spec in self._specs:
-            if not spec.matches_extension(file_path, original_filename):
-                continue
-            if spec.parser.sniff(file_path, original_filename):
-                return spec.parser
+        from app.parsers.generic_table import table_read_scope
+
+        with table_read_scope():
+            for spec in self._specs:
+                if not spec.matches_extension(file_path, original_filename):
+                    continue
+                if spec.parser.sniff(file_path, original_filename):
+                    return spec.parser
         return None
 
     def specs(self) -> tuple[ParserSpec, ...]:

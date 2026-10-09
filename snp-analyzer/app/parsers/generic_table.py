@@ -4,6 +4,9 @@ import csv
 import math
 import re
 import zipfile
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +34,11 @@ MAX_IMPORT_SHEETS = 20
 MAX_IMPORT_WELLS = 384
 MAX_IMPORT_CYCLES = 200
 MAX_IMPORT_CHANNELS = 16
+MAX_IMPORT_COLUMNS = 1024
+MAX_IMPORT_CELLS = 5_000_000
+MAX_IMPORT_LINE_CHARS = 1_000_000
+MAX_IMPORT_PREAMBLE_ROWS = 1000
+_SNIFF_SAMPLE_CHARS = 4096
 
 _WELL_RE = re.compile(r"^([A-Z]+)([1-9][0-9]*)$")
 _GENERIC_LONG_HEADERS = {"well", "cycle", "dye", "role", "rfu", "sample", "target", "sample_type"}
@@ -272,9 +280,10 @@ class GenericWideParser(GenericTableParser):
     ) -> ImportRun:
         if mapping_config is None:
             raise_import_error(ImportErrorCode.MAPPING_CONFIG_REQUIRED)
-        table = _read_table(file_path, mapping_config)
-        _validate_required_headers(table.headers, _GENERIC_WIDE_HEADERS)
-        return super().parse(file_path, original_filename, mapping_config)
+        with table_read_scope():
+            table = _read_table(file_path, mapping_config)
+            _validate_required_headers(table.headers, _GENERIC_WIDE_HEADERS)
+            return super().parse(file_path, original_filename, mapping_config)
 
 
 class _Table:
@@ -303,6 +312,54 @@ def _minimal_config() -> MappingConfig:
     return MappingConfig(assay_mode=AssayModeId.WT_MT, channel_roles={"preview": ImportRole.UNKNOWN})
 
 
+# Tables are read row by row and stop at the row limit. Within a table_read_scope()
+# (one sniff pass), the raw matrix is read once and shared between parsers.
+_TABLE_CACHE: ContextVar[dict[Any, Any] | None] = ContextVar("import_table_cache", default=None)
+
+
+@contextmanager
+def table_read_scope() -> Iterator[None]:
+    """Share raw table reads between parsers for the duration of one call."""
+    if _TABLE_CACHE.get() is not None:
+        yield
+        return
+    token = _TABLE_CACHE.set({})
+    try:
+        yield
+    finally:
+        _TABLE_CACHE.reset(token)
+
+
+def _cached(key: tuple[Any, ...], loader: Any) -> Any:
+    cache = _TABLE_CACHE.get()
+    if cache is None:
+        return loader()
+    if key in cache:
+        hit = cache[key]
+        if isinstance(hit, BaseException):
+            raise hit
+        return hit
+    try:
+        value = cache[key] = loader()
+    except ImportValidationError as exc:
+        cache[key] = exc
+        raise
+    return value
+
+
+def _file_key(file_path: Path) -> tuple[str, int, int]:
+    stat = file_path.stat()
+    return (str(file_path), stat.st_mtime_ns, stat.st_size)
+
+
+def _row_limit(config: MappingConfig) -> int:
+    """Maximum number of raw rows (header and preamble included) a table may hold."""
+    header_index = config.header_row or 0
+    first_data_index = config.first_data_row if config.first_data_row is not None else header_index + 1
+    preamble = min(max(first_data_index, header_index + 1), MAX_IMPORT_PREAMBLE_ROWS)
+    return preamble + MAX_IMPORT_ROWS
+
+
 def _read_table(file_path: Path, config: MappingConfig) -> _Table:
     suffix = file_path.suffix.lower()
     if suffix == ".xlsx":
@@ -311,16 +368,123 @@ def _read_table(file_path: Path, config: MappingConfig) -> _Table:
 
 
 def _read_delimited_table(file_path: Path, config: MappingConfig) -> _Table:
-    text = file_path.read_text(encoding="utf-8-sig")
-    sample = text[:4096]
-    delimiter = config.delimiter or _detect_delimiter(sample, file_path.suffix)
-    rows = list(csv.reader(text.splitlines(), delimiter=delimiter))
+    delimiter = _resolve_delimiter(file_path, config.delimiter)
+    rows = _read_delimited_matrix(file_path, delimiter, _row_limit(config))
     if not rows:
         raise_import_error(ImportErrorCode.UNSUPPORTED_CONTENT)
     return _table_from_matrix(rows, config, delimiter=delimiter, sheet_name=file_path.name)
 
 
+def _resolve_delimiter(file_path: Path, configured: str | None) -> str:
+    if configured:
+        return configured
+
+    def load() -> str:
+        with file_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            sample = handle.read(_SNIFF_SAMPLE_CHARS)
+        return _detect_delimiter(sample, file_path.suffix)
+
+    return _cached(("delimiter", *_file_key(file_path)), load)
+
+
+def _read_delimited_matrix(file_path: Path, delimiter: str, row_limit: int) -> list[list[str]]:
+    """Read delimited text as a row matrix, enforcing row, column, cell and line limits."""
+    return _cached(
+        ("delimited", *_file_key(file_path), delimiter, row_limit),
+        lambda: _load_delimited_matrix(file_path, delimiter, row_limit),
+    )
+
+
+def _bounded_lines(handle: Any) -> Iterator[str]:
+    while True:
+        line = handle.readline(MAX_IMPORT_LINE_CHARS + 1)
+        if not line:
+            return
+        if len(line) > MAX_IMPORT_LINE_CHARS and not line.endswith(("\n", "\r")):
+            raise_import_error(ImportErrorCode.FILE_LIMIT_EXCEEDED)
+        yield line
+
+
+def _load_delimited_matrix(file_path: Path, delimiter: str, row_limit: int) -> list[list[str]]:
+    matrix: list[list[str]] = []
+    cells = 0
+    try:
+        with file_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            for row in csv.reader(_bounded_lines(handle), delimiter=delimiter):
+                if len(matrix) >= row_limit or len(row) > MAX_IMPORT_COLUMNS:
+                    raise_import_error(ImportErrorCode.FILE_LIMIT_EXCEEDED)
+                cells += len(row)
+                if cells > MAX_IMPORT_CELLS:
+                    raise_import_error(ImportErrorCode.FILE_LIMIT_EXCEEDED)
+                matrix.append(row)
+    except csv.Error as exc:
+        if "field larger than field limit" in str(exc):
+            raise_import_error(ImportErrorCode.FILE_LIMIT_EXCEEDED)
+        raise_import_error(ImportErrorCode.UNSUPPORTED_CONTENT, message=str(exc))
+    return matrix
+
+
 def _read_xlsx_table(file_path: Path, config: MappingConfig) -> _Table:
+    matrix, sheet_name = _read_xlsx_matrix(file_path, _row_limit(config))
+    return _table_from_matrix(matrix, config, delimiter=",", sheet_name=sheet_name)
+
+
+def _read_xlsx_matrix(file_path: Path, row_limit: int) -> tuple[list[list[str]], str]:
+    return _cached(
+        ("xlsx", *_file_key(file_path), row_limit),
+        lambda: _load_xlsx_matrix(file_path, row_limit),
+    )
+
+
+def _stream_sheet_rows(workbook: Any, worksheet: Any, row_limit: int) -> list[list[str]]:
+    """Read a sheet's cells as stored, ignoring its declared dimension.
+
+    Only cells present in the file are visited; missing rows between stored rows are
+    counted against the row limit without being materialised.
+    """
+    from openpyxl.worksheet._reader import WorkSheetParser
+
+    matrix: list[list[str]] = []
+    cells = 0
+    counter = 1
+    source = worksheet._get_source()
+    try:
+        parser = WorkSheetParser(
+            source,
+            worksheet._shared_strings,
+            data_only=workbook.data_only,
+            epoch=workbook.epoch,
+            date_formats=workbook._date_formats,
+            timedelta_formats=workbook._timedelta_formats,
+        )
+        for index, stored in parser.parse():
+            if index < counter:
+                continue
+            if len(matrix) + (index - counter) >= row_limit:
+                raise_import_error(ImportErrorCode.FILE_LIMIT_EXCEEDED)
+            matrix.extend([] for _ in range(index - counter))
+            counter = index + 1
+            row: list[str] = []
+            for cell in stored:
+                value = cell["value"]
+                if value is None or value == "":
+                    continue
+                column = cell["column"]
+                if column > MAX_IMPORT_COLUMNS:
+                    raise_import_error(ImportErrorCode.FILE_LIMIT_EXCEEDED)
+                if len(row) < column:
+                    row.extend([""] * (column - len(row)))
+                row[column - 1] = str(value)
+            cells += len(row)
+            if cells > MAX_IMPORT_CELLS:
+                raise_import_error(ImportErrorCode.FILE_LIMIT_EXCEEDED)
+            matrix.append(row)
+    finally:
+        source.close()
+    return matrix
+
+
+def _load_xlsx_matrix(file_path: Path, row_limit: int) -> tuple[list[list[str]], str]:
     if not zipfile.is_zipfile(file_path):
         raise_import_error(ImportErrorCode.UNSUPPORTED_CONTENT, message="XLSX file is not a valid ZIP archive.")
     try:
@@ -334,14 +498,12 @@ def _read_xlsx_table(file_path: Path, config: MappingConfig) -> _Table:
     try:
         if len(workbook.sheetnames) > MAX_IMPORT_SHEETS:
             raise_import_error(ImportErrorCode.FILE_LIMIT_EXCEEDED)
-        worksheet = workbook[workbook.sheetnames[0]]
-        matrix = [
-            ["" if value is None else str(value) for value in row]
-            for row in worksheet.iter_rows(values_only=True)
-        ]
+        sheet_name = workbook.sheetnames[0]
+        worksheet = workbook[sheet_name]
+        matrix = _stream_sheet_rows(workbook, worksheet, row_limit)
     finally:
         workbook.close()
-    return _table_from_matrix(matrix, config, delimiter=",", sheet_name=workbook.sheetnames[0])
+    return matrix, sheet_name
 
 
 def _table_from_matrix(
