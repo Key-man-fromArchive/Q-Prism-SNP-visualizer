@@ -31,8 +31,16 @@ import xml.etree.ElementTree as ET
 
 from app.models import UnifiedData, WellCycleData, ProtocolStep, DataWindow
 from app.parsers.instrument_detail import cfx_instrument_label, pcrd_instrument_detail
+from app.parsers.safe_xml import (
+    check_plate_dims,
+    check_read_count,
+    check_zip_directory,
+    parse_xml_bytes,
+    read_member,
+)
 
 WELL_ROWS = "ABCDEFGH"
+_MAX_CHANNELS = 16
 def _load_pcrd_password() -> bytes | None:
     """Load PCRD decryption key from secret file or env var."""
     for path in ("/app/secrets/pcrd-pw.txt", "pcrd-pw.txt"):
@@ -67,6 +75,7 @@ def parse_pcrd(file_path: str) -> UnifiedData:
 
     rows = int(plate_setup.get("rows", "8"))
     cols = int(plate_setup.get("columns", "12"))
+    check_plate_dims(rows, cols, "This .pcrd file")
 
     if rows != 8 or cols != 12:
         raise ValueError(
@@ -178,15 +187,16 @@ def _extract_xml(file_path: str) -> ET.Element:
             "The .pcrd format requires a decryption key to parse.\n"
             "Set the PCRD_PASSWORD environment variable and restart the server."
         )
+    check_zip_directory(file_path)
     with zipfile.ZipFile(file_path, "r") as zf:
         names = zf.namelist()
         if not names:
             raise ValueError("Empty .pcrd archive — no files inside.")
-        xml_bytes = zf.read(names[0], pwd=_PCRD_PASSWORD)
+        xml_bytes = read_member(zf, names[0], "The .pcrd data", pwd=_PCRD_PASSWORD)
     # Strip BOM if present
     if xml_bytes[:3] == b"\xef\xbb\xbf":
         xml_bytes = xml_bytes[3:]
-    return ET.fromstring(xml_bytes)
+    return parse_xml_bytes(xml_bytes, "The .pcrd data")
 
 
 def _parse_dye_layers(plate_setup: ET.Element) -> tuple[
@@ -312,6 +322,8 @@ def _parse_protocol(root: ET.Element) -> list[ProtocolStep]:
         elif elem.tag == "GotoStep":
             target = int(elem.get("optionGotoStep", "0"))
             count = int(elem.get("optionGotoCycle", "0"))
+            if target < 0 or count < 0:
+                raise ValueError("The protocol in this .pcrd file has a repeat step that is out of range.")
             raw_steps.append({
                 "type": "goto",
                 "target": target,
@@ -473,7 +485,9 @@ def _parse_plate_reads(
 
     results: list[dict] = []
 
-    for pr_elem in prdv.findall("plateRead"):
+    plate_reads = prdv.findall("plateRead")
+    check_read_count(len(plate_reads), "This .pcrd file")
+    for pr_elem in plate_reads:
         inner = pr_elem.find("PlateRead")
         if inner is None:
             continue
@@ -486,6 +500,8 @@ def _parse_plate_reads(
         cycle = int(hdr_elem.findtext("Cycle", "0"))
         ch_count = int(hdr_elem.findtext("ChCount", "6"))
         num_cols = int(hdr_elem.findtext("NumCols", "12"))
+        if not 1 <= ch_count <= _MAX_CHANNELS or not 1 <= num_cols <= 12:
+            raise ValueError("A plate read in this .pcrd file declares an unsupported channel or column count.")
 
         data_elem = inner.find("Data/PAr")
         if data_elem is None or not data_elem.text:

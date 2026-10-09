@@ -12,6 +12,7 @@ from app.config import (
     MAX_ZIP_UNCOMPRESSED_BYTES,
 )
 from app.models import UnifiedData
+from app.parsers.safe_xml import check_zip_directory
 
 # QuantStudio valid file types (by header columns)
 QS_VALID_HEADERS = {
@@ -80,6 +81,7 @@ def _handle_eds(file_path: str) -> UnifiedData:
             "This .eds file appears to be corrupted (not a valid ZIP archive).\n"
             "Try re-exporting from QuantStudio or StepOne Software."
         )
+    check_zip_directory(file_path)
     with zipfile.ZipFile(file_path, "r") as zf:
         _validate_zip_archive(zf)
     return parse_eds(file_path)
@@ -94,6 +96,7 @@ def _handle_pcrd(file_path: str) -> UnifiedData:
             "This .pcrd file appears to be corrupted (not a valid ZIP archive).\n"
             "Try re-exporting from CFX Maestro."
         )
+    check_zip_directory(file_path)
     with zipfile.ZipFile(file_path, "r") as zf:
         _validate_zip_archive(zf)
     return parse_pcrd(file_path)
@@ -132,6 +135,7 @@ def _handle_zip(file_path: str, filename: str) -> UnifiedData:
         )
 
     # Quick check: does this ZIP contain any CFX XML patterns?
+    check_zip_directory(file_path)
     with zipfile.ZipFile(file_path, "r") as zf:
         _validate_zip_archive(zf)
         names = zf.namelist()
@@ -248,6 +252,41 @@ def _raise_qs_error(file_type: str, headers: set[str]):
     )
 
 
+MAX_XLSX_SHEET_ROWS = 200_000
+MAX_XLSX_SHEET_COLS = 1000
+
+
+class _WorkbookTooLarge(ValueError):
+    pass
+
+
+def _read_cfx_workbook_outline(path: str) -> tuple[list[str], list]:
+    """Sheet names and the FAM sheet's first row, from one read-only load.
+
+    Refuses a workbook whose declared sheet dimensions exceed what an
+    instrument export holds, before any row is read.
+    """
+    import openpyxl
+
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    try:
+        sheet_names = list(wb.sheetnames)
+        for ws in wb.worksheets:
+            rows, cols = ws.max_row or 0, ws.max_column or 0
+            if rows > MAX_XLSX_SHEET_ROWS or cols > MAX_XLSX_SHEET_COLS:
+                raise _WorkbookTooLarge(
+                    f"Sheet '{ws.title}' is larger than an instrument export can be "
+                    f"({rows} rows x {cols} columns)"
+                )
+        headers: list = []
+        if "FAM" in sheet_names:
+            first = next(wb["FAM"].iter_rows(min_row=1, max_row=1, values_only=True), ())
+            headers = list(first)
+        return sheet_names, headers
+    finally:
+        wb.close()
+
+
 def _handle_cfx_opus(file_path: str, filename: str) -> UnifiedData:
     """Handle CFX Opus .xlsx files with smart detection."""
     from app.parsers.cfx_opus import parse_cfx_opus, parse_cfx_endpoint, parse_cfx_allelic
@@ -258,6 +297,7 @@ def _handle_cfx_opus(file_path: str, filename: str) -> UnifiedData:
             "This .xlsx file appears to be corrupted (not a valid ZIP archive).\n"
             "Try re-exporting from CFX Maestro."
         )
+    check_zip_directory(file_path)
     with zipfile.ZipFile(file_path, "r") as zf:
         _validate_zip_archive(zf)
 
@@ -268,14 +308,12 @@ def _handle_cfx_opus(file_path: str, filename: str) -> UnifiedData:
         fixed_path = fix_cfx_xlsx(file_path)
         work_path = fixed_path
 
+    # Load the workbook once, streaming, and read only what detection needs.
     try:
-        import openpyxl
-        wb = openpyxl.load_workbook(work_path, data_only=True)
-        sheet_names = wb.sheetnames
-        wb.close()
+        sheet_names, fam_headers = _read_cfx_workbook_outline(work_path)
+    except _WorkbookTooLarge:
+        raise
     except Exception:
-        if fixed_path and os.path.exists(fixed_path):
-            os.remove(fixed_path)
         raise ValueError(
             "Could not read this .xlsx file.\n"
             "If this is from CFX Opus/Maestro, the file may be corrupted."
@@ -288,43 +326,26 @@ def _handle_cfx_opus(file_path: str, filename: str) -> UnifiedData:
 
     # 1. Check for Quantification Amplification Results (FAM/HEX/ROX wide format with Cycle column)
     if has_dye_sheets:
-        # Peek at FAM sheet to determine format
-        fixed_path2 = None
-        if needs_fixing(file_path):
-            fixed_path2 = fix_cfx_xlsx(file_path)
-            peek_path = fixed_path2
-        else:
-            peek_path = file_path
+        headers = fam_headers
 
-        try:
-            import openpyxl
-            wb = openpyxl.load_workbook(peek_path, data_only=True)
-            fam_ws = wb["FAM"]
-            headers = [cell.value for cell in fam_ws[1]]
-            wb.close()
+        # Wide format: [None, 'Cycle', 'A1', 'A2', ...]
+        if headers and len(headers) > 2 and headers[1] == "Cycle":
+            return parse_cfx_opus(file_path)
 
-            # Wide format: [None, 'Cycle', 'A1', 'A2', ...]
-            if headers and len(headers) > 2 and headers[1] == "Cycle":
-                return parse_cfx_opus(file_path)
+        # Long format with End RFU: [None, 'Well', 'Fluor', 'Target', 'Content', 'Sample', 'End RFU', ...]
+        headers_str = [str(h).upper() if h else "" for h in headers]
+        if "WELL" in headers_str and "END RFU" in headers_str:
+            return parse_cfx_endpoint(file_path)
 
-            # Long format with End RFU: [None, 'Well', 'Fluor', 'Target', 'Content', 'Sample', 'End RFU', ...]
-            headers_str = [str(h).upper() if h else "" for h in headers]
-            if "WELL" in headers_str and "END RFU" in headers_str:
-                return parse_cfx_endpoint(file_path)
-
-            # Plate view format (Melt Curve, Quantification Plate View) - NOT usable
-            # These have column headers as numbers 1-12 for plate columns
-            if any(isinstance(h, (int, float)) and h in range(1, 13) for h in headers):
-                file_type = _identify_cfx_file(filename, sheet_names)
-                _raise_cfx_error(file_type or "Plate View", sheet_names, filename)
-
-            # Unknown dye-sheet format
+        # Plate view format (Melt Curve, Quantification Plate View) - NOT usable
+        # These have column headers as numbers 1-12 for plate columns
+        if any(isinstance(h, (int, float)) and h in range(1, 13) for h in headers):
             file_type = _identify_cfx_file(filename, sheet_names)
-            _raise_cfx_error(file_type, sheet_names, filename)
+            _raise_cfx_error(file_type or "Plate View", sheet_names, filename)
 
-        finally:
-            if fixed_path2 and os.path.exists(fixed_path2):
-                os.remove(fixed_path2)
+        # Unknown dye-sheet format
+        file_type = _identify_cfx_file(filename, sheet_names)
+        _raise_cfx_error(file_type, sheet_names, filename)
 
     # 2. Check for Allelic Discrimination Results (ADSheet)
     if "ADSheet" in sheet_names:

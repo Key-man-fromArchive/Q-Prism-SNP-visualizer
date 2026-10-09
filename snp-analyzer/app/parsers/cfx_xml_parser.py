@@ -12,17 +12,24 @@ XML structure:
   - ADSheet: <Well>, <Sample>, <Call>, <Type>, <RFU1>, <RFU2>
   - EndPoint: <Well>, <Fluor>, <Target>, <Content>, <End_RFU>, ...
 
-No external dependencies — uses stdlib xml.etree.ElementTree and zipfile.
+Uses zipfile and the bounded XML reader in safe_xml.
 """
 
 import os
 import re
 import tempfile
 import zipfile
-import xml.etree.ElementTree as ET
 
 from app.models import UnifiedData, WellCycleData, DataWindow
 from app.parsers.instrument_detail import cfx_instrument_label, cfx_xml_export_detail
+from app.parsers.safe_xml import (
+    MAX_PLATE_WELLS,
+    XmlRefused,
+    check_read_count,
+    check_size,
+    check_zip_directory,
+    parse_xml_file,
+)
 
 _RUN_INFORMATION = re.compile(r"run(?:_x0020_|[ _])information\.xml$", re.IGNORECASE)
 
@@ -33,8 +40,10 @@ def _identity(xml_files: dict[str, str]) -> dict:
     path = xml_files.get("run_information")
     if path:
         try:
-            detail = cfx_xml_export_detail(ET.parse(path).getroot())
-        except ET.ParseError:
+            detail = cfx_xml_export_detail(parse_xml_file(path, "The run information export"))
+        except XmlRefused as exc:
+            if exc.kind != "malformed":
+                raise
             detail = None
     return {"instrument": cfx_instrument_label(detail), "instrument_detail": detail}
 
@@ -58,9 +67,13 @@ _PATTERNS = {
 
 def parse_cfx_xml_zip(zip_path: str) -> UnifiedData:
     """Parse a ZIP file containing CFX Opus XML exports."""
+    check_zip_directory(zip_path)
     extract_dir = tempfile.mkdtemp(prefix="cfx_xml_")
     try:
         with zipfile.ZipFile(zip_path, "r") as zf:
+            for info in zf.infolist():
+                if info.filename.lower().endswith(".xml"):
+                    check_size(info.file_size, f"The export file {info.filename}")
             zf.extractall(extract_dir)
 
         xml_files = _find_xml_files(extract_dir)
@@ -121,21 +134,27 @@ def _parse_amplification_xml(filepath: str) -> tuple[str, list[int], dict[str, l
     Returns (dye_name, sorted_cycles, {well: [rfu_per_cycle]}).
     Wells in amp XML use A1 format (no zero-padding).
     """
-    tree = ET.parse(filepath)
-    root = tree.getroot()
+    root = parse_xml_file(filepath, "The amplification export")
     dye = root.tag  # "FAM", "HEX", "VIC", or "ROX"
 
     wells: list[str] = []
     cycles: list[int] = []
     data: dict[str, list[float]] = {}
 
-    for i, row in enumerate(root.findall("Row")):
+    rows = root.findall("Row")
+    check_read_count(len(rows), "The amplification export")
+    for i, row in enumerate(rows):
         cycle = int(row.find("Cycle").text)
         cycles.append(cycle)
 
         if i == 0:
             # First row: discover well tags (everything except Cycle)
             wells = [child.tag for child in row if child.tag != "Cycle"]
+            if len(wells) > MAX_PLATE_WELLS:
+                raise ValueError(
+                    f"The amplification export lists {len(wells)} wells; "
+                    f"plates of up to {MAX_PLATE_WELLS} wells are supported"
+                )
             data = {w: [] for w in wells}
 
         for well in wells:
@@ -151,11 +170,12 @@ def _parse_adsheet_xml(filepath: str) -> list[dict]:
     Returns list of {well, sample, call, type, rfu1, rfu2}.
     Well IDs are zero-padded (A01) — normalized here.
     """
-    tree = ET.parse(filepath)
-    root = tree.getroot()
+    root = parse_xml_file(filepath, "The allelic discrimination export")
 
     results = []
-    for row in root.findall("Row"):
+    rows = root.findall("Row")
+    _check_row_count(len(rows), "The allelic discrimination export")
+    for row in rows:
         well = _normalize_well(row.find("Well").text)
         sample_elem = row.find("Sample")
         call_elem = row.find("Call")
@@ -177,11 +197,12 @@ def _parse_endpoint_xml(filepath: str) -> dict[str, dict]:
 
     Returns {well: {fluor, target, content, end_rfu, sample_type}}.
     """
-    tree = ET.parse(filepath)
-    root = tree.getroot()
+    root = parse_xml_file(filepath, "The end point export")
 
     wells = {}
-    for row in root.findall("Row"):
+    rows = root.findall("Row")
+    _check_row_count(len(rows), "The end point export")
+    for row in rows:
         well = _normalize_well(row.find("Well").text)
         content_elem = row.find("Content")
         target_elem = row.find("Target")
@@ -337,6 +358,13 @@ def _assemble_tier3(xml_files: dict[str, str]) -> UnifiedData:
 
 
 # --- Utilities ---
+
+def _check_row_count(count: int, what: str) -> None:
+    """One row per well (or per well and dye): bounded by the largest plate format."""
+    limit = MAX_PLATE_WELLS * 4
+    if count > limit:
+        raise ValueError(f"{what} lists {count} rows; at most {limit} are supported")
+
 
 def _normalize_well(well: str) -> str:
     """A01 -> A1, H12 -> H12."""

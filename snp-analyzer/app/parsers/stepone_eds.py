@@ -13,7 +13,7 @@ left silently yields plausible but wrong numbers, so a test pins this.
 """
 
 import math
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # element types only; parsing goes through safe_xml
 import zipfile
 from dataclasses import dataclass
 
@@ -22,12 +22,19 @@ from pydantic import ValidationError
 from app.models import AlleleLabels, DataWindow, ReadLabel, UnifiedData, WellCycleData
 from app.parsers.eds_common import (
     _find_file,
+    _parse_plate_dims,
     _parse_plate_metadata,
     _parse_protocol,
     _well_sort_key,
     well_index_to_id,
 )
 from app.parsers.instrument_detail import read_eds_instrument_detail
+from app.parsers.safe_xml import (
+    MAX_AUX_XML_BYTES,
+    check_members,
+    parse_xml_bytes,
+    read_member,
+)
 from app.parsers.stepone_images import compute_signals
 
 DYES = ("FAM", "ROX", "VIC")
@@ -195,7 +202,7 @@ def plan_reads(tc_xml: bytes) -> list[_Read]:
     """Reads in acquisition order: Pre-read, one per collecting cycling step, Post-read."""
     plan: list[_Read] = []
     pcr_done = 0
-    for stage in ET.fromstring(tc_xml).findall("TCStage"):
+    for stage in parse_xml_bytes(tc_xml, "The protocol document", MAX_AUX_XML_BYTES).findall("TCStage"):
         flag = stage.findtext("StageFlag", "")
         collecting = [
             s
@@ -239,7 +246,7 @@ def _windows(plan: list[_Read]) -> list[DataWindow]:
 
 
 def _check_instrument(exp_xml: bytes) -> None:
-    root = ET.fromstring(exp_xml)
+    root = parse_xml_bytes(exp_xml, "The experiment document", MAX_AUX_XML_BYTES)
     if root.findtext("InstrumentTypeId", "").strip().lower() != "steponeplus":
         raise ValueError(
             "Unsupported StepOne instrument: only StepOnePlus (96-well) is supported"
@@ -268,7 +275,7 @@ def _marker_labels(marker: ET.Element) -> AlleleLabels | None:
 def parse_marker_alleles(exp_xml: bytes, used: set[str]) -> dict[str, AlleleLabels]:
     """Allele names per marker in ``used`` (markers placed on the plate)."""
     seen: dict[str, AlleleLabels | None] = {}
-    for marker in ET.fromstring(exp_xml).iter("Markers"):
+    for marker in parse_xml_bytes(exp_xml, "The experiment document", MAX_AUX_XML_BYTES).iter("Markers"):
         name = marker.findtext("Name", "").strip()
         if name not in used:
             continue
@@ -318,7 +325,9 @@ def _plate_metadata(
     path = _find_file(names, "plate_setup.xml")
     if not path:
         return {}, None
-    sample_raw, groups_raw, _ = _parse_plate_metadata(zf.read(path))
+    sample_raw, groups_raw, _ = _parse_plate_metadata(
+        read_member(zf, path, "The plate setup document", MAX_AUX_XML_BYTES)
+    )
     samples = {
         well_index_to_id(i, PLATE_COLS): n
         for i, n in sample_raw.items()
@@ -351,9 +360,13 @@ def parse_stepone_eds(zf: zipfile.ZipFile, names: list[str]) -> UnifiedData:
     mc_path = _find_file(names, "multicomponent_data.txt")
     if not exp_path or not tc_path:
         raise ValueError("This StepOne .eds file is missing experiment.xml or tcprotocol.xml.")
-    exp_xml = zf.read(exp_path)
+    exp_xml = read_member(zf, exp_path, "The experiment document", MAX_AUX_XML_BYTES)
     _check_instrument(exp_xml)
-    tc_xml = zf.read(tc_path)
+    _parse_plate_dims(exp_xml)  # refuses a declared plate beyond the largest format
+    manifest = _find_file(names, "Manifest.mf")
+    if manifest:
+        check_members(zf, [manifest], MAX_AUX_XML_BYTES, "The manifest")
+    tc_xml = read_member(zf, tc_path, "The protocol document", MAX_AUX_XML_BYTES)
     plan = plan_reads(tc_xml)
 
     if mc_path:

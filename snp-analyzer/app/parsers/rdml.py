@@ -30,12 +30,12 @@ from app.parsers.generic_table import (
     _to_duplex_unified,
 )
 from app.parsers.instrument_detail import rdml_instrument_detail
+from app.parsers.safe_xml import XmlRefused, parse_xml_bytes
 from app.parsers.vendor_presets import apply_vendor_presets
 
 
 MAX_RDML_XML_BYTES = 25 * 1024 * 1024
 _WELL_RE = re.compile(r"^[A-Ha-h](?:[1-9]|1[0-2])$")
-_UNSAFE_XML_TOKENS = (b"<!doctype", b"<!entity")
 
 
 @dataclass(frozen=True)
@@ -323,6 +323,8 @@ def _read_rdml_bytes(file_path: Path) -> tuple[bytes, str | None]:
                         message="RDML archive does not contain an XML/RDML entry.",
                     )
                 entry = sorted(candidates, key=lambda item: item.filename)[0]
+                if entry.file_size > MAX_RDML_XML_BYTES:
+                    raise_import_error(ImportErrorCode.FILE_LIMIT_EXCEEDED)
                 data = zf.read(entry)
                 return _limit_xml_bytes(data), entry.filename
         except ValueError as exc:
@@ -337,16 +339,17 @@ def _limit_xml_bytes(data: bytes) -> bytes:
 
 
 def _safe_parse_xml(data: bytes) -> ET.Element:
-    lowered = data.lower()
-    if any(token in lowered for token in _UNSAFE_XML_TOKENS):
-        raise_import_error(
-            ImportErrorCode.UNSUPPORTED_CONTENT,
-            message="RDML XML with DTD or entity declarations is not accepted.",
-        )
     try:
-        return ET.fromstring(data)
-    except ET.ParseError as exc:
-        raise_import_error(ImportErrorCode.UNSUPPORTED_CONTENT, message=f"Malformed RDML XML: {exc}")
+        return parse_xml_bytes(data, "RDML XML", MAX_RDML_XML_BYTES)
+    except XmlRefused as exc:
+        if exc.kind == "dtd":
+            raise_import_error(
+                ImportErrorCode.UNSUPPORTED_CONTENT,
+                message="RDML XML with DTD or entity declarations is not accepted.",
+            )
+        if exc.kind == "size":
+            raise_import_error(ImportErrorCode.FILE_LIMIT_EXCEEDED)
+        raise_import_error(ImportErrorCode.UNSUPPORTED_CONTENT, message="Malformed RDML XML.")
 
 
 def _target_defs(root: ET.Element) -> dict[str, _TargetDef]:

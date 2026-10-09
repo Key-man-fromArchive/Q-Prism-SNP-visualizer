@@ -10,10 +10,17 @@ import string
 import xml.etree.ElementTree as ET
 
 from app.models import ProtocolStep
+from app.parsers.safe_xml import (
+    MAX_AUX_XML_BYTES,
+    check_plate_dims,
+    parse_xml_bytes,
+)
 
 WELL_ROWS = "ABCDEFGH"
 # Row labels for well IDs: A..Z, enough for 96 (8 rows) and 384 (16 rows) plates.
 ROW_LABELS = string.ascii_uppercase
+
+_XML_WHAT = "A plate or protocol document"
 
 # Stage flag labels from tcprotocol.xml
 STAGE_LABELS = {
@@ -41,14 +48,21 @@ def _parse_plate_dims(xml_data: bytes) -> tuple[int, int] | None:
     Returns None if no recognizable plate type is present, so the caller can
     fall back to inferring geometry from the observed well indices.
     """
-    m = re.search(rb"TYPE_(\d+)X(\d+)", xml_data)
+    m = re.search(rb"TYPE_(\d{1,6})X(\d{1,6})", xml_data)
     if m:
-        return (int(m.group(1)), int(m.group(2)))
+        rows, cols = int(m.group(1)), int(m.group(2))
+        check_plate_dims(rows, cols, "The experiment")
+        return (rows, cols)
     return None
 
 
-def _parse_bracket_array(text: str) -> list[float]:
-    """Parse '[1.0, 2.0, 3.0]' into list of floats."""
+def _parse_bracket_array(text: str, max_items: int | None = None) -> list[float]:
+    """Parse '[1.0, 2.0, 3.0]' into list of floats.
+
+    ``max_items`` refuses a longer array before any value is converted.
+    """
+    if max_items is not None and text.count(",") >= max_items:
+        raise ValueError(f"A data array holds more than {max_items} values")
     text = text.strip()
     if text.startswith("["):
         text = text[1:]
@@ -99,7 +113,7 @@ def _parse_plate_metadata(
     xml_data: bytes,
 ) -> tuple[dict[int, str], dict[str, list[int]] | None, dict[int, str]]:
     """Parse explicit sample, assay, and task metadata from plate_setup.xml."""
-    root = ET.fromstring(xml_data)
+    root = parse_xml_bytes(xml_data, _XML_WHAT, MAX_AUX_XML_BYTES)
     sample_names: dict[int, str] = {}
     marker_groups: dict[str, list[int]] = {}
     well_types: dict[int, str] = {}
@@ -176,7 +190,7 @@ def _parse_protocol(xml_data: bytes) -> list[ProtocolStep]:
     Assigns phase labels for visual grouping:
     Pre-read / Initial Denaturation / Amplification 1,2,3 / Post-read.
     """
-    root = ET.fromstring(xml_data)
+    root = parse_xml_bytes(xml_data, _XML_WHAT, MAX_AUX_XML_BYTES)
     steps: list[ProtocolStep] = []
     step_num = 0
 
@@ -281,7 +295,7 @@ def _parse_stage_type_map(xml_data: bytes) -> dict[int, str]:
     This maps each stage index to its type (PRE_READ, CYCLING, POST_READ, etc).
     Only CYCLING stages with data collection are relevant for amplification.
     """
-    root = ET.fromstring(xml_data)
+    root = parse_xml_bytes(xml_data, _XML_WHAT, MAX_AUX_XML_BYTES)
     stage_map: dict[int, str] = {}
 
     for i, stage in enumerate(root.findall("TCStage"), 1):

@@ -15,11 +15,20 @@ Data hierarchy in .eds:
 """
 
 import zipfile
-import xml.etree.ElementTree as ET
 
 from app.models import UnifiedData, WellCycleData, DataWindow
 from app.parsers.errors import EdsNoMeasurementData
 from app.parsers.instrument_detail import read_eds_instrument_detail
+from app.parsers.safe_xml import (
+    MAX_AUX_XML_BYTES,
+    MAX_PLATE_READS,
+    MAX_PLATE_WELLS,
+    check_declarations,
+    check_members,
+    check_zip_directory,
+    parse_xml_bytes,
+    read_member,
+)
 from app.parsers.stepone_images import has_scan_images
 from app.parsers.eds_common import (
     ROW_LABELS,
@@ -76,6 +85,7 @@ def _is_stepone_experiment(zf: zipfile.ZipFile, names: list[str]) -> bool:
 
 def parse_eds(file_path: str) -> UnifiedData:
     """Parse a QuantStudio .eds raw instrument file."""
+    check_zip_directory(file_path)
     with zipfile.ZipFile(file_path, "r") as zf:
         names = zf.namelist()
 
@@ -103,15 +113,21 @@ def parse_eds(file_path: str) -> UnifiedData:
                 "It may be corrupted or from an unsupported instrument."
             )
 
-        mc_xml = zf.read(mc_path)
+        mc_xml = read_member(zf, mc_path, "The multicomponent data")
         dye_map, signal_map, stage_flags = _parse_multicomponent(mc_xml)
 
         # Find experiment.xml (optional, for plate geometry: 96-well vs 384-well)
         plate_dims: tuple[int, int] | None = None
         exp_path = _find_file(names, "experiment.xml")
         if exp_path:
-            plate_dims = _parse_plate_dims(zf.read(exp_path))
+            exp_xml = read_member(zf, exp_path, "The experiment document", MAX_AUX_XML_BYTES)
+            check_declarations(exp_xml, "The experiment document")
+            plate_dims = _parse_plate_dims(exp_xml)
 
+        # Bound the manifest the instrument-detail reader loads whole.
+        manifest_path = _find_file(names, "Manifest.mf")
+        if manifest_path:
+            check_members(zf, [manifest_path], MAX_AUX_XML_BYTES, "The manifest")
         instrument_detail = read_eds_instrument_detail(zf, names)
 
         # Find plate_setup.xml (optional, for sample names and marker groups)
@@ -120,7 +136,7 @@ def parse_eds(file_path: str) -> UnifiedData:
         imported_types_raw: dict[int, str] = {}
         ps_path = _find_file(names, "plate_setup.xml")
         if ps_path:
-            ps_xml = zf.read(ps_path)
+            ps_xml = read_member(zf, ps_path, "The plate setup document", MAX_AUX_XML_BYTES)
             sample_names, marker_groups_raw, imported_types_raw = _parse_plate_metadata(ps_xml)
 
         # Find tcprotocol.xml (optional, for protocol steps)
@@ -128,7 +144,7 @@ def parse_eds(file_path: str) -> UnifiedData:
         stage_type_map: dict[int, str] = {}  # stage_index (1-based) -> stage_type
         tc_path = _find_file(names, "tcprotocol.xml")
         if tc_path:
-            tc_xml = zf.read(tc_path)
+            tc_xml = read_member(zf, tc_path, "The protocol document", MAX_AUX_XML_BYTES)
             protocol_steps = _parse_protocol(tc_xml)
             stage_type_map = _parse_stage_type_map(tc_xml)
 
@@ -305,22 +321,37 @@ def parse_eds(file_path: str) -> UnifiedData:
         instrument_detail=instrument_detail,
     )
 
+def _checked_well_index(element) -> int:
+    """WellIndex of a DyeData/SignalData element, within the largest plate format."""
+    well_idx = int(element.get("WellIndex", "-1"))
+    if not 0 <= well_idx < MAX_PLATE_WELLS:
+        raise ValueError(
+            f"The multicomponent data refers to well index {well_idx}; "
+            f"plates of up to {MAX_PLATE_WELLS} wells are supported"
+        )
+    return well_idx
+
+
 def _parse_multicomponent(xml_data: bytes) -> tuple[
     dict[int, list[str]],      # well_idx -> dye list
     dict[int, list[list[float]]],  # well_idx -> [array per dye]
     list[int],                 # stage flags
 ]:
     """Parse multicomponentdata.xml."""
-    root = ET.fromstring(xml_data)
+    root = parse_xml_bytes(xml_data, "The multicomponent data")
 
     # Parse TCStageFlags: "[1, 5, 5, ..., 5, 6]"
     stage_flags_text = root.findtext("TCStageFlags", "")
-    stage_flags = [int(v) for v in _parse_bracket_array(stage_flags_text)] if stage_flags_text else []
+    stage_flags = (
+        [int(v) for v in _parse_bracket_array(stage_flags_text, MAX_PLATE_READS)]
+        if stage_flags_text
+        else []
+    )
 
     # Parse DyeData: well_index -> dye list
     dye_map: dict[int, list[str]] = {}
     for dd in root.findall(".//DyeData"):
-        well_idx = int(dd.get("WellIndex", "-1"))
+        well_idx = _checked_well_index(dd)
         dye_list_text = dd.findtext("DyeList", "[]")
         dyes = _parse_dye_list(dye_list_text)
         dye_map[well_idx] = dyes
@@ -328,11 +359,11 @@ def _parse_multicomponent(xml_data: bytes) -> tuple[
     # Parse SignalData: well_index -> list of CycleData arrays
     signal_map: dict[int, list[list[float]]] = {}
     for sd in root.findall(".//SignalData"):
-        well_idx = int(sd.get("WellIndex", "-1"))
+        well_idx = _checked_well_index(sd)
         cycle_data_elems = sd.findall("CycleData")
         if not cycle_data_elems:
             continue
-        arrays = [_parse_bracket_array(cd.text or "") for cd in cycle_data_elems]
+        arrays = [_parse_bracket_array(cd.text or "", MAX_PLATE_READS) for cd in cycle_data_elems]
         signal_map[well_idx] = arrays
 
     return dye_map, signal_map, stage_flags
