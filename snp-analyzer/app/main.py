@@ -118,6 +118,18 @@ async def lifespan(app: FastAPI):
     yield
 
 
+# The interactive API documentation routes stay registered (the mode is read
+# per request, like the other asg_launch switches) and are answered with 404
+# by _early_refusal while asg_launch mode is active.
+_DOCS_PATHS = frozenset({"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"})
+_STATE_CHANGING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+_CSP_REPORT_ONLY = (
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; "
+    "worker-src 'self' blob:; object-src 'none'; base-uri 'self'; "
+    "frame-ancestors 'none'; form-action 'self'"
+)
+
 app = FastAPI(
     title="Q-Prism® Cluster Caller",
     lifespan=lifespan,
@@ -138,14 +150,32 @@ async def _background_mode_error(request, exc: BackgroundModeError):
     return JSONResponse({"detail": str(exc)}, status_code=400)
 
 
+def _early_refusal(request):
+    """Return a JSON refusal for requests that must not reach a handler."""
+    from fastapi.responses import JSONResponse
+
+    path = request.url.path
+    if is_asg_launch_mode():
+        if _is_disabled_local_auth_path(path):
+            return JSONResponse({"detail": "Local auth endpoint disabled"}, status_code=404)
+        if path in _DOCS_PATHS:
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+    if (
+        request.method in _STATE_CHANGING_METHODS
+        and path.startswith("/api/")
+        and request.headers.get("sec-fetch-site", "").strip().lower() in {"cross-site", "same-site"}
+    ):
+        return JSONResponse({"detail": "Cross-site request refused"}, status_code=403)
+    return None
+
+
 @app.middleware("http")
 async def add_security_headers(request, call_next):
-    if is_asg_launch_mode() and _is_disabled_local_auth_path(request.url.path):
-        from fastapi.responses import JSONResponse
-
-        return JSONResponse({"detail": "Local auth endpoint disabled"}, status_code=404)
-
-    response = await call_next(request)
+    response = _early_refusal(request)
+    if response is None:
+        response = await call_next(request)
+    response.headers.setdefault("Content-Security-Policy-Report-Only", _CSP_REPORT_ONLY)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "same-origin")

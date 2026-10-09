@@ -43,7 +43,7 @@ class ASGLaunchAuthTest(unittest.TestCase):
         self.env.stop()
         self.tmp.cleanup()
 
-    def test_asg_launch_upserts_shadow_user_and_sets_cookie(self):
+    def test_asg_launch_cookie_upserts_shadow_user_and_sets_cookie(self):
         from fastapi.testclient import TestClient
 
         from app.asg_client import ASGLaunchContext, ASGLaunchUser, ASGLaunchValidation
@@ -62,7 +62,8 @@ class ASGLaunchAuthTest(unittest.TestCase):
 
         with patch("app.routers.auth_router.validate_launch_token", return_value=validation):
             with TestClient(app) as client:
-                response = client.post("/api/auth/asg-launch", json={"token": "raw-token"})
+                client.cookies.set("snp_launch_token", "raw-token")
+                response = client.post("/api/auth/asg-launch-cookie")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("snp_auth=", response.headers.get("set-cookie", ""))
@@ -103,6 +104,80 @@ class ASGLaunchAuthTest(unittest.TestCase):
         self.assertIn("snp_launch_token=", set_cookie)
         self.assertIn("Max-Age=0", set_cookie)
         self.assertEqual(response.json()["linked_context"]["target_type"], "ad_hoc")
+
+    def test_json_body_launch_route_no_longer_exists(self):
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        with TestClient(app) as client:
+            response = client.post("/api/auth/asg-launch", json={"token": "raw-token"})
+
+        self.assertIn(response.status_code, {404, 405})
+
+    def test_launch_cookie_with_unexpected_shape_is_refused_before_asg_call(self):
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        bad_values = ["x" * 513, "has space", "quote\"mark", "slash/value", "plus+sign"]
+        with patch("app.routers.auth_router.validate_launch_token") as validate:
+            with TestClient(app) as client:
+                for value in bad_values:
+                    client.cookies.clear()
+                    client.cookies.set("snp_launch_token", value)
+                    response = client.post("/api/auth/asg-launch-cookie")
+                    self.assertEqual(response.status_code, 401, value)
+
+        validate.assert_not_called()
+
+    def test_launch_cookie_accepts_url_safe_token_of_maximum_length(self):
+        from fastapi.testclient import TestClient
+
+        from app.asg_client import ASGLaunchContext, ASGLaunchUser, ASGLaunchValidation
+        from app.main import app
+
+        token = "aB3_-.~" * 73 + "a"  # 512 characters
+        self.assertEqual(len(token), 512)
+        validation = ASGLaunchValidation(
+            user=ASGLaunchUser(id="79", email="long@example.com"),
+            target=ASGLaunchContext(target_type="ad_hoc", target_id="79", context={}),
+            scope=["snp:read"],
+        )
+        with patch("app.routers.auth_router.validate_launch_token", return_value=validation) as validate:
+            with TestClient(app) as client:
+                client.cookies.set("snp_launch_token", token)
+                response = client.post("/api/auth/asg-launch-cookie")
+
+        self.assertEqual(response.status_code, 200)
+        validate.assert_called_once_with(token)
+
+    def test_launch_failure_response_carries_only_the_fixed_message(self):
+        from fastapi.testclient import TestClient
+        from urllib.error import URLError
+
+        from app import asg_client
+        from app.main import app
+
+        with patch.object(asg_client.config, "ASG_SNP_SERVICE_SECRET", "secret"), patch.object(
+            asg_client, "urlopen", side_effect=URLError("connect to 10.0.0.9:8000 refused")
+        ):
+            with TestClient(app) as client:
+                client.cookies.set("snp_launch_token", "cookie-token")
+                response = client.post("/api/auth/asg-launch-cookie")
+
+        self.assertEqual(response.status_code, 504)
+        self.assertEqual(response.json()["detail"], "ASG launch validation timed out")
+        self.assertNotIn("10.0.0.9", response.text)
+
+    def test_api_docs_are_not_served_in_asg_launch_mode(self):
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        with TestClient(app) as client:
+            for path in ("/docs", "/redoc", "/openapi.json"):
+                self.assertEqual(client.get(path).status_code, 404, path)
 
     def test_asg_launch_is_idempotent_and_forces_user_role(self):
         from app.asg_client import ASGLaunchUser

@@ -112,7 +112,8 @@ class ASGResultSaveTest(unittest.TestCase):
 
         with patch("app.routers.auth_router.validate_launch_token", return_value=validation):
             with TestClient(app) as client:
-                response = client.post("/api/auth/asg-launch", json={"token": "raw-token"})
+                client.cookies.set("snp_launch_token", "raw-token")
+                response = client.post("/api/auth/asg-launch-cookie")
 
         self.assertEqual(response.status_code, 200)
         body = response.json()

@@ -1,6 +1,9 @@
 """Authentication endpoints: login, logout, me, change-password."""
 from __future__ import annotations
 
+import logging
+import re
+
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
@@ -28,7 +31,13 @@ from app.auth_security import (
 from app.config import ASG_HOME_URL, ASG_LAUNCH_COOKIE_NAME, ASG_LAUNCH_COOKIE_PATH, get_auth_mode, is_asg_launch_mode
 from app.db import get_db
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+# A launch cookie value is a short URL-safe token; anything longer or using
+# other characters is refused before the ASG service is contacted.
+_LAUNCH_TOKEN_RE = re.compile(r"[A-Za-z0-9_\-.~]{1,512}")
 
 
 class LoginRequest(BaseModel):
@@ -39,10 +48,6 @@ class LoginRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
-
-
-class ASGLaunchRequest(BaseModel):
-    token: str
 
 
 @router.get("/config")
@@ -72,7 +77,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
 
     record_login_success(user.username, client_ip)
     token = create_access_token(user.id, user.username, user.role)
-    set_auth_cookie(response, token)
+    set_auth_cookie(response, token, request)
 
     return {
         "user": {
@@ -144,13 +149,10 @@ async def change_password(body: ChangePasswordRequest, current_user: CurrentUser
     return {"status": "ok"}
 
 
-@router.post("/asg-launch")
-async def asg_launch(body: ASGLaunchRequest, response: Response):
-    return _complete_asg_launch(body.token, response)
-
-
 @router.post("/asg-launch-cookie")
-async def asg_launch_cookie(request: Request, response: Response):
+def asg_launch_cookie(request: Request, response: Response):
+    # Plain ``def`` on purpose: the token exchange makes a blocking network
+    # call, so FastAPI runs this handler in its threadpool.
     # P18-AUTH-401: check the mode before the cookie. This route doesn't
     # exist outside asg_launch mode -- every other asg_launch-only surface
     # (login, change-password, _complete_asg_launch itself) reports that as
@@ -164,18 +166,29 @@ async def asg_launch_cookie(request: Request, response: Response):
     if not raw_token:
         raise HTTPException(status_code=401, detail="ASG launch cookie is missing")
 
-    payload = _complete_asg_launch(raw_token, response)
+    if not _LAUNCH_TOKEN_RE.fullmatch(raw_token):
+        raise HTTPException(status_code=401, detail="Invalid ASG launch token")
+
+    payload = _complete_asg_launch(raw_token, response, request)
     response.delete_cookie(key=ASG_LAUNCH_COOKIE_NAME, path=ASG_LAUNCH_COOKIE_PATH)
     return payload
 
 
-def _complete_asg_launch(raw_token: str, response: Response):
+def _complete_asg_launch(raw_token: str, response: Response, request: Request | None = None):
     if not is_asg_launch_mode():
         raise HTTPException(status_code=404, detail="ASG launch is disabled")
 
     try:
         validation = validate_launch_token(raw_token)
     except ASGLaunchValidationError as exc:
+        # The client only ever sees the fixed message; the chained cause
+        # (network or HTTP detail) is logged server-side.
+        logger.warning(
+            "ASG launch validation failed: code=%s status=%s cause=%r",
+            exc.code,
+            exc.status_code,
+            exc.__cause__,
+        )
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
     try:
@@ -183,7 +196,7 @@ def _complete_asg_launch(raw_token: str, response: Response):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     token = create_access_token(user.id, user.username, user.role)
-    set_auth_cookie(response, token)
+    set_auth_cookie(response, token, request)
     remember_asg_launch(
         user.id,
         validation.target,

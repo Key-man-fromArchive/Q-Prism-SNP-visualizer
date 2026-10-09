@@ -125,15 +125,34 @@ def decode_token(token: str) -> TokenData | None:
 # Cookie helpers
 # ---------------------------------------------------------------------------
 
-def set_auth_cookie(response: Response, token: str):
-    secure_cookie = os.environ.get("AUTH_COOKIE_SECURE", "").lower() in {"1", "true", "yes"}
+def _cookie_should_be_secure(request: Request | None) -> bool:
+    """Decide the Secure attribute for the session cookie.
+
+    AUTH_COOKIE_SECURE (1/true/yes or 0/false/no) wins when set. Otherwise
+    the cookie is Secure when the request arrived over https, either directly
+    or as reported by a proxy through X-Forwarded-Proto.
+    """
+    configured = os.environ.get("AUTH_COOKIE_SECURE", "").strip().lower()
+    if configured in {"1", "true", "yes"}:
+        return True
+    if configured in {"0", "false", "no"}:
+        return False
+    if request is None:
+        return False
+    if request.url.scheme == "https":
+        return True
+    forwarded = request.headers.get("x-forwarded-proto", "")
+    return forwarded.split(",")[0].strip().lower() == "https"
+
+
+def set_auth_cookie(response: Response, token: str, request: Request | None = None):
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
         max_age=get_jwt_expire_minutes() * 60,
         httponly=True,
         samesite="lax",
-        secure=secure_cookie,
+        secure=_cookie_should_be_secure(request),
         path=SNP_COOKIE_PATH,
     )
 

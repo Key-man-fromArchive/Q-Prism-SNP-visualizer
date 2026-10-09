@@ -267,9 +267,18 @@ def delete_raw_files_for_sessions(session_ids: list[str]) -> None:
     ``sessions``; this only needs to clean up the filesystem. Best-effort,
     like the rest of this module -- a stray leftover directory is a disk
     hygiene issue, not a reason to fail session deletion."""
+    root = _raw_file_dir().resolve()
     for session_id in session_ids:
         session_dir = _raw_file_dir() / session_id
         try:
+            resolved = session_dir.resolve()
+            # Only directories strictly inside the storage root are removed.
+            if resolved == root or root not in resolved.parents:
+                logger.warning(
+                    "Raw file retention: skipping storage path outside the storage root for session %r",
+                    session_id,
+                )
+                continue
             if session_dir.exists():
                 shutil.rmtree(session_dir)
         except OSError:

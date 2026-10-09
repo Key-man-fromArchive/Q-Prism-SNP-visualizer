@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -135,6 +137,10 @@ async def list_sessions(current_user: CurrentUser):
     ]
 
 
+# Session ids are generated as uuid4().hex[:12].
+_SESSION_ID_RE = re.compile(r"[0-9a-f]{12}")
+
+
 class BulkDeleteRequest(BaseModel):
     session_ids: list[str]
 
@@ -177,7 +183,9 @@ async def bulk_delete_sessions(body: BulkDeleteRequest, current_user: CurrentUse
 
     # Filter to only sessions the user owns (admin can delete all)
     if current_user.role == "admin" and not is_asg_launch_mode():
-        sids_to_delete = body.session_ids
+        # Only ids in the app's own session id format are acted on; anything
+        # else cannot name a stored session and is skipped.
+        sids_to_delete = [sid for sid in body.session_ids if _SESSION_ID_RE.fullmatch(sid)]
     else:
         sids_to_delete = []
         for sid in body.session_ids:
