@@ -17,7 +17,9 @@ import pytest
 from app.parsers.detector import detect_and_parse
 from app.parsers.eds_raw import parse_eds
 from app.parsers.stepone_eds import INSTRUMENT_ANALYSED, INSTRUMENT_FROM_IMAGES
-from app.parsers.stepone_images import FILTERS, ROI_OFFSET, ROI_PIXELS, _decode_tiff
+import time
+
+from app.parsers.stepone_images import FILTERS, ROI_OFFSET, ROI_PIXELS, _decode_tiff, _filter_grids
 from tests.stepone_fixtures import build_stepone_eds
 
 ROWS, COLS, HEIGHT = 8, 12, 598
@@ -234,6 +236,28 @@ def test_tiff_decoder_checks_the_header_against_the_file(override, message):
     pixels = np.arange(24, dtype=np.uint16).reshape(2, 12)
     with pytest.raises(ValueError, match=message):
         _decode_tiff(_tiff(pixels, **override))
+
+
+def test_tiff_decoder_rejects_a_repeated_tag():
+    pixels = np.arange(24, dtype=np.uint16).reshape(2, 12)
+    data = bytearray(_tiff(pixels))
+    ifd = struct.unpack_from("<I", data, 4)[0]
+    # Turn the photometric tag (262) into a second strip-offsets tag (273).
+    for i in range(struct.unpack_from("<H", data, ifd)[0]):
+        at = ifd + 2 + 12 * i
+        if struct.unpack_from("<H", data, at)[0] == 262:
+            struct.pack_into("<HHII", data, at, 273, 4, 1, 8)
+    with pytest.raises(ValueError, match="repeats a tag"):
+        _decode_tiff(bytes(data))
+
+
+def test_calibration_without_block_ends_is_refused_promptly():
+    body = "BLUE=<<eof\n1,2,3\n" * 20_000
+    text = f"[peaks]\n{body}"
+    started = time.perf_counter()
+    with pytest.raises(ValueError, match="BLUE"):
+        _filter_grids(text, "peaks", "peaks.ini", (8, 12))
+    assert time.perf_counter() - started < 0.5
 
 
 def test_tiff_decoder_rejects_an_oversized_tag_table():

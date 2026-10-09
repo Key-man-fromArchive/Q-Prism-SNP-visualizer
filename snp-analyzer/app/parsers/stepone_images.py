@@ -62,21 +62,30 @@ def _read_ini(zf: zipfile.ZipFile, names: list[str], filename: str) -> str:
     return zf.read(path).decode("utf-8", "replace").replace("\r", "")
 
 
-def _section(text: str, name: str, filename: str) -> str:
-    match = re.search(rf"^\[{re.escape(name)}\]\n(.*?)(?=^\[|\Z)", text, re.M | re.S)
-    if not match:
-        raise ValueError(f"{filename} has no [{name}] section")
-    return match.group(1)
-
-
-def _grid(section: str, key: str, shape: tuple[int, int], where: str) -> np.ndarray:
-    match = re.search(rf"^{re.escape(key)}=<<eof\n(.*?)\neof", section, re.M | re.S)
-    if not match:
-        raise ValueError(f"{where} has no {key} values")
+def _section(text: str, name: str, filename: str) -> list[str]:
+    """Lines of the first ``[name]`` section, up to the next section header."""
+    lines = text.split("\n")
+    header = f"[{name}]"
     try:
-        grid = np.array(
-            [[float(v) for v in line.split(",")] for line in match.group(1).strip().split("\n")]
-        )
+        start = lines.index(header) + 1
+    except ValueError:
+        raise ValueError(f"{filename} has no [{name}] section") from None
+    end = next((i for i in range(start, len(lines)) if lines[i].startswith("[")), len(lines))
+    return lines[start:end]
+
+
+def _grid(section: list[str], key: str, shape: tuple[int, int], where: str) -> np.ndarray:
+    """The ``key=<<eof`` ... ``eof`` block of a section as a ``shape`` array."""
+    try:
+        start = section.index(f"{key}=<<eof") + 1
+        end = section.index("eof", start)
+    except ValueError:
+        raise ValueError(f"{where} has no {key} values") from None
+    rows = [line for line in section[start:end] if line.strip()]
+    if len(rows) != shape[0]:
+        raise ValueError(f"{where} {key} does not cover the {shape[0]}x{shape[1]} plate")
+    try:
+        grid = np.array([[float(v) for v in line.split(",")] for line in rows])
     except ValueError:
         raise ValueError(f"{where} {key} values are not numeric") from None
     if grid.shape != shape or not np.all(np.isfinite(grid)):
@@ -116,6 +125,8 @@ def _decode_tiff(data: bytes) -> np.ndarray:
             tag, typ, n, value_at = struct.unpack_from(order + "HHI4s", data, ifd + 2 + 12 * i)
             if tag not in _USED_TAGS or typ not in _TYPE_SIZES or n == 0:
                 continue
+            if tag in tags:
+                raise ValueError("scan image TIFF header repeats a tag")
             code, size = _TYPE_SIZES[typ]
             if n * size <= 4:
                 source, start = value_at, 0
