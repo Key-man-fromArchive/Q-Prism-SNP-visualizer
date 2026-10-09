@@ -32,11 +32,13 @@ import xml.etree.ElementTree as ET
 from app.models import UnifiedData, WellCycleData, ProtocolStep, DataWindow
 from app.parsers.instrument_detail import cfx_instrument_label, pcrd_instrument_detail
 from app.parsers.safe_xml import (
+    KEEP,
+    LEAF,
+    PrunedStream,
     check_plate_dims,
     check_read_count,
     check_zip_directory,
-    parse_xml_bytes,
-    read_member,
+    iterparse_member,
 )
 
 WELL_ROWS = "ABCDEFGH"
@@ -179,8 +181,77 @@ def parse_pcrd(file_path: str) -> UnifiedData:
     )
 
 
+_PCRD_DATA = "The .pcrd data"
+# Sections the parser reads; each is taken from its first occurrence. The last
+# two are read for their attributes only.
+_SECTIONS = {
+    "plateSetup2": KEEP,
+    "protocol2BaseList": KEEP,
+    "machineProperties": LEAF,
+    "header": LEAF,
+}
+
+
+class _PcrdClassifier:
+    """Decides which elements of the document stay in the tree while it is read.
+
+    Kept: the plate setup, the protocol, the two attribute-only elements the
+    instrument detail reads, and the ``plateRead`` elements (reduced to what
+    ``_parse_plate_reads`` uses as each one ends). Everything else is released
+    as soon as it ends.
+    """
+
+    def __init__(self):
+        self._seen: set[str] = set()
+        self.read_vector: ET.Element | None = None
+        self.current_read: ET.Element | None = None
+
+    def __call__(self, elem, ancestors):
+        tag, depth = elem.tag, len(ancestors)
+        if tag == "plateRead":
+            if depth == 3 and ancestors[2] is self.read_vector:
+                self.current_read = elem
+                return KEEP
+            return None
+        if tag == "plateReadDataVector":
+            if depth == 2 and ancestors[1].tag == "runData" and self.read_vector is None:
+                self.read_vector = elem
+            return None
+        mode = _SECTIONS.get(tag)
+        if mode is None or tag in self._seen or (tag == "plateSetup2" and depth != 1):
+            return None
+        self._seen.add(tag)
+        return mode
+
+
+def _reduce_plate_read(plate_read: ET.Element) -> None:
+    """Keep of a ``plateRead`` only the header fields and data text the parser uses."""
+    inner = plate_read.find("PlateRead")
+    kept: ET.Element | None = None
+    if inner is not None:
+        kept = ET.Element("PlateRead")
+        header = inner.find("Hdr/PlateReadDataHeader")
+        if header is not None:
+            target = ET.SubElement(ET.SubElement(kept, "Hdr"), "PlateReadDataHeader")
+            for field in ("Step", "Cycle", "ChCount", "NumCols"):
+                text = header.findtext(field)
+                if text is not None:
+                    ET.SubElement(target, field).text = text
+        data = inner.find("Data/PAr")
+        if data is not None:
+            ET.SubElement(ET.SubElement(kept, "Data"), "PAr").text = data.text
+    plate_read.clear()
+    if kept is not None:
+        plate_read.append(kept)
+
+
 def _extract_xml(file_path: str) -> ET.Element:
-    """Open encrypted ZIP, extract single XML entry, parse to Element."""
+    """Open encrypted ZIP and read its single XML entry into an Element.
+
+    The document is read element by element: only the sections the parser uses
+    stay in the returned tree, and each plate read is reduced to its header
+    fields and data text.
+    """
     if not _PCRD_PASSWORD:
         raise ValueError(
             "PCRD_PASSWORD environment variable is not set.\n"
@@ -192,11 +263,21 @@ def _extract_xml(file_path: str) -> ET.Element:
         names = zf.namelist()
         if not names:
             raise ValueError("Empty .pcrd archive — no files inside.")
-        xml_bytes = read_member(zf, names[0], "The .pcrd data", pwd=_PCRD_PASSWORD)
-    # Strip BOM if present
-    if xml_bytes[:3] == b"\xef\xbb\xbf":
-        xml_bytes = xml_bytes[3:]
-    return parse_xml_bytes(xml_bytes, "The .pcrd data")
+        classifier = _PcrdClassifier()
+        stream = PrunedStream(
+            iterparse_member(zf, names[0], _PCRD_DATA, pwd=_PCRD_PASSWORD), classifier
+        )
+        reads = 0
+        for elem in stream:
+            if elem is classifier.current_read:
+                classifier.current_read = None
+                reads += 1
+                check_read_count(reads, "This .pcrd file")
+                _reduce_plate_read(elem)
+        root = stream.root
+    if root is None:
+        raise ValueError("The .pcrd data is not well-formed XML")
+    return root
 
 
 def _parse_dye_layers(plate_setup: ET.Element) -> tuple[

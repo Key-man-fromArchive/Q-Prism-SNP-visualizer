@@ -14,7 +14,9 @@ Data hierarchy in .eds:
   TCStageFlags: [1, 5, 5, ..., 5, 6]  where 1=PRE_READ, 5=CYCLING, 6=POST_READ
 """
 
+import io
 import zipfile
+from typing import BinaryIO
 
 from app.models import UnifiedData, WellCycleData, DataWindow
 from app.parsers.errors import EdsNoMeasurementData
@@ -25,8 +27,12 @@ from app.parsers.safe_xml import (
     MAX_PLATE_WELLS,
     check_declarations,
     check_members,
+    KEEP,
+    PASS,
+    PrunedStream,
     check_zip_directory,
-    parse_xml_bytes,
+    iterparse_member,
+    iterparse_stream,
     read_member,
 )
 from app.parsers.stepone_images import has_scan_images
@@ -113,8 +119,10 @@ def parse_eds(file_path: str) -> UnifiedData:
                 "It may be corrupted or from an unsupported instrument."
             )
 
-        mc_xml = read_member(zf, mc_path, "The multicomponent data")
-        dye_map, signal_map, stage_flags = _parse_multicomponent(mc_xml)
+        # Read element by element: the document holds every well's reads.
+        dye_map, signal_map, stage_flags = _parse_multicomponent(
+            iterparse_member(zf, mc_path, _MULTICOMPONENT)
+        )
 
         # Find experiment.xml (optional, for plate geometry: 96-well vs 384-well)
         plate_dims: tuple[int, int] | None = None
@@ -332,38 +340,59 @@ def _checked_well_index(element) -> int:
     return well_idx
 
 
-def _parse_multicomponent(xml_data: bytes) -> tuple[
+_MULTICOMPONENT = "The multicomponent data"
+
+
+def _classify_multicomponent(elem, ancestors):
+    """Wells are handled when they end; only the stage flags stay in the tree."""
+    if elem.tag in ("DyeData", "SignalData"):
+        return PASS
+    if len(ancestors) == 1 and elem.tag == "TCStageFlags":
+        return KEEP
+    return None
+
+
+def _parse_multicomponent(source) -> tuple[
     dict[int, list[str]],      # well_idx -> dye list
     dict[int, list[list[float]]],  # well_idx -> [array per dye]
     list[int],                 # stage flags
 ]:
-    """Parse multicomponentdata.xml."""
-    root = parse_xml_bytes(xml_data, "The multicomponent data")
+    """Parse multicomponentdata.xml from its bytes, a binary stream or parse events.
 
-    # Parse TCStageFlags: "[1, 5, 5, ..., 5, 6]"
-    stage_flags_text = root.findtext("TCStageFlags", "")
-    stage_flags = (
-        [int(v) for v in _parse_bracket_array(stage_flags_text, MAX_PLATE_READS)]
-        if stage_flags_text
-        else []
-    )
+    Each ``DyeData`` / ``SignalData`` element is converted when it ends and then
+    released, so memory follows the arrays returned rather than the document.
+    """
+    if isinstance(source, (bytes, bytearray)):
+        source = io.BytesIO(source)
+    if hasattr(source, "read"):
+        source = iterparse_stream(source, _MULTICOMPONENT)
+    stream = PrunedStream(source, _classify_multicomponent)
 
     # Parse DyeData: well_index -> dye list
     dye_map: dict[int, list[str]] = {}
-    for dd in root.findall(".//DyeData"):
-        well_idx = _checked_well_index(dd)
-        dye_list_text = dd.findtext("DyeList", "[]")
-        dyes = _parse_dye_list(dye_list_text)
-        dye_map[well_idx] = dyes
-
     # Parse SignalData: well_index -> list of CycleData arrays
     signal_map: dict[int, list[list[float]]] = {}
-    for sd in root.findall(".//SignalData"):
-        well_idx = _checked_well_index(sd)
-        cycle_data_elems = sd.findall("CycleData")
-        if not cycle_data_elems:
-            continue
-        arrays = [_parse_bracket_array(cd.text or "", MAX_PLATE_READS) for cd in cycle_data_elems]
-        signal_map[well_idx] = arrays
+    stage_flags: list[int] | None = None
 
-    return dye_map, signal_map, stage_flags
+    for elem in stream:
+        if elem.tag == "DyeData":
+            well_idx = _checked_well_index(elem)
+            dye_list_text = elem.findtext("DyeList", "[]")
+            dye_map[well_idx] = _parse_dye_list(dye_list_text)
+        elif elem.tag == "SignalData":
+            well_idx = _checked_well_index(elem)
+            cycle_data_elems = elem.findall("CycleData")
+            if not cycle_data_elems:
+                continue
+            signal_map[well_idx] = [
+                _parse_bracket_array(cd.text or "", MAX_PLATE_READS)
+                for cd in cycle_data_elems
+            ]
+        elif stream.depth == 1 and elem.tag == "TCStageFlags" and stage_flags is None:
+            # "[1, 5, 5, ..., 5, 6]"
+            text = elem.text or ""
+            stage_flags = (
+                [int(v) for v in _parse_bracket_array(text, MAX_PLATE_READS)] if text else []
+            )
+
+    return dye_map, signal_map, stage_flags or []

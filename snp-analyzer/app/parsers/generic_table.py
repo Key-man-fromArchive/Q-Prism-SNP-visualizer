@@ -26,6 +26,7 @@ from app.import_models import (
 )
 from app.models import InstrumentDetail, UnifiedData, WellCycleData
 from app.parsers.detector import _validate_zip_archive
+from app.parsers.safe_xml import check_zip_directory
 from app.parsers.vendor_presets import apply_vendor_presets
 
 
@@ -488,6 +489,7 @@ def _load_xlsx_matrix(file_path: Path, row_limit: int) -> tuple[list[list[str]],
     if not zipfile.is_zipfile(file_path):
         raise_import_error(ImportErrorCode.UNSUPPORTED_CONTENT, message="XLSX file is not a valid ZIP archive.")
     try:
+        check_zip_directory(str(file_path))
         with zipfile.ZipFile(file_path, "r") as zf:
             _validate_zip_archive(zf)
     except ValueError as exc:

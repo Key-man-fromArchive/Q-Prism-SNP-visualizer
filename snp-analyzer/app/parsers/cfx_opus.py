@@ -12,12 +12,46 @@ File structure (after fixing broken packaging):
 """
 
 import os
+from collections.abc import Iterator
 
 import openpyxl
 
 from app.models import UnifiedData, WellCycleData, DataWindow
+from app.parsers.detector import MAX_XLSX_SHEET_COLS, MAX_XLSX_SHEET_ROWS, _WorkbookTooLarge
 from app.parsers.instrument_detail import cfx_export_detail, cfx_instrument_label
+from app.parsers.safe_xml import check_zip_directory
 from app.parsers.xlsx_fixer import fix_cfx_xlsx, needs_fixing
+
+
+def _sheet_rows(ws) -> Iterator[tuple]:
+    """Values of a sheet row by row, counting the rows and columns actually read.
+
+    The dimension a sheet declares is not relied on: reading stops with an
+    error as soon as the rows or the used columns exceed what an instrument
+    export holds.
+    """
+    if hasattr(ws, "reset_dimensions"):
+        ws.reset_dimensions()
+    count = 0
+    for row in ws.iter_rows(values_only=True):
+        count += 1
+        if count > MAX_XLSX_SHEET_ROWS:
+            raise _too_large(ws, f"more than {MAX_XLSX_SHEET_ROWS} rows")
+        if len(row) > MAX_XLSX_SHEET_COLS:
+            used = next((i for i in range(len(row), 0, -1) if row[i - 1] is not None), 0)
+            if used > MAX_XLSX_SHEET_COLS:
+                raise _too_large(ws, f"more than {MAX_XLSX_SHEET_COLS} columns")
+        yield row
+
+
+def _too_large(ws, detail: str) -> _WorkbookTooLarge:
+    return _WorkbookTooLarge(
+        f"Sheet '{ws.title}' is larger than an instrument export can be ({detail})"
+    )
+
+
+def _cell(row: tuple, index: int):
+    return row[index] if index < len(row) else None
 
 
 def _identity(wb: openpyxl.Workbook) -> dict:
@@ -25,27 +59,17 @@ def _identity(wb: openpyxl.Workbook) -> dict:
     sheet = next(
         (wb[name] for name in wb.sheetnames if name.strip().lower() == "run information"), None
     )
-    rows = sheet.iter_rows(values_only=True) if sheet is not None else []
+    rows = _sheet_rows(sheet) if sheet is not None else []
     detail = cfx_export_detail(rows)
     return {"instrument": cfx_instrument_label(detail), "instrument_detail": detail}
 
 
 def parse_cfx_opus(file_path: str) -> UnifiedData:
-    # Fix broken xlsx if needed
-    fixed_path = None
-    if needs_fixing(file_path):
-        fixed_path = fix_cfx_xlsx(file_path)
-        work_path = fixed_path
-    else:
-        work_path = file_path
-
+    wb, fixed_path = _open_cfx(file_path)
     try:
-        wb = openpyxl.load_workbook(work_path, data_only=True)
         return _parse_workbook(wb)
     finally:
-        wb.close()
-        if fixed_path and os.path.exists(fixed_path):
-            os.remove(fixed_path)
+        _close_cfx(wb, fixed_path)
 
 
 def _parse_workbook(wb: openpyxl.Workbook) -> UnifiedData:
@@ -100,9 +124,10 @@ def _parse_workbook(wb: openpyxl.Workbook) -> UnifiedData:
 def _parse_dye_sheet(ws) -> dict[tuple[str, int], float]:
     """Parse a wide-format dye sheet into {(well_id, cycle): rfu_value}."""
     result = {}
+    rows = _sheet_rows(ws)
 
     # Row 1 is header: [None, 'Cycle', 'A1', 'A2', ..., 'H12']
-    headers = [cell.value for cell in ws[1]]
+    headers = next(rows, ())
 
     # Well IDs start at column index 2 (column C)
     well_ids = []
@@ -112,14 +137,14 @@ def _parse_dye_sheet(ws) -> dict[tuple[str, int], float]:
             well_ids.append((i, str(h)))
 
     # Data rows start at row 2
-    for row_idx in range(2, ws.max_row + 1):
-        cycle_val = ws.cell(row=row_idx, column=2).value
+    for row in rows:
+        cycle_val = _cell(row, 1)
         if cycle_val is None:
             continue
         cycle = int(cycle_val)
 
         for col_idx, well_id in well_ids:
-            val = ws.cell(row=row_idx, column=col_idx + 1).value
+            val = _cell(row, col_idx)
             if val is not None and isinstance(val, (int, float)):
                 result[(well_id, cycle)] = float(val)
 
@@ -127,15 +152,30 @@ def _parse_dye_sheet(ws) -> dict[tuple[str, int], float]:
 
 
 def _open_cfx(file_path: str):
-    """Open a CFX Opus file, fixing packaging if needed. Returns (wb, fixed_path)."""
+    """Open a CFX Opus file once, read-only, fixing packaging if needed.
+
+    Returns (wb, fixed_path); release both with ``_close_cfx``.
+    """
+    check_zip_directory(file_path)
     fixed_path = None
     if needs_fixing(file_path):
         fixed_path = fix_cfx_xlsx(file_path)
         work_path = fixed_path
     else:
         work_path = file_path
-    wb = openpyxl.load_workbook(work_path, data_only=True)
+    try:
+        wb = openpyxl.load_workbook(work_path, read_only=True, data_only=True)
+    except BaseException:
+        _close_cfx(None, fixed_path)
+        raise
     return wb, fixed_path
+
+
+def _close_cfx(wb, fixed_path: str | None) -> None:
+    if wb is not None:
+        wb.close()
+    if fixed_path and os.path.exists(fixed_path):
+        os.remove(fixed_path)
 
 
 def parse_cfx_endpoint(file_path: str) -> UnifiedData:
@@ -180,15 +220,14 @@ def parse_cfx_endpoint(file_path: str) -> UnifiedData:
             data_windows=[DataWindow(name="End Point", start_cycle=1, end_cycle=1)],
         )
     finally:
-        wb.close()
-        if fixed_path and os.path.exists(fixed_path):
-            os.remove(fixed_path)
+        _close_cfx(wb, fixed_path)
 
 
 def _parse_endpoint_sheet(ws) -> dict[str, float]:
     """Parse End Point Results sheet: {well_id: end_rfu}."""
     result = {}
-    headers = [cell.value for cell in ws[1]]
+    rows = _sheet_rows(ws)
+    headers = next(rows, ())
     headers_str = [str(h).upper() if h else "" for h in headers]
 
     well_col = None
@@ -202,9 +241,9 @@ def _parse_endpoint_sheet(ws) -> dict[str, float]:
     if well_col is None or rfu_col is None:
         return result
 
-    for row_idx in range(2, ws.max_row + 1):
-        well = ws.cell(row=row_idx, column=well_col + 1).value
-        rfu = ws.cell(row=row_idx, column=rfu_col + 1).value
+    for row in rows:
+        well = _cell(row, well_col)
+        rfu = _cell(row, rfu_col)
 
         if well and rfu is not None and isinstance(rfu, (int, float)):
             # Normalize well format: A01 -> A1
@@ -226,7 +265,8 @@ def parse_cfx_allelic(file_path: str) -> UnifiedData:
     wb, fixed_path = _open_cfx(file_path)
     try:
         ws = wb["ADSheet"]
-        headers = [cell.value for cell in ws[1]]
+        rows = _sheet_rows(ws)
+        headers = next(rows, ())
         headers_str = [str(h).upper() if h else "" for h in headers]
 
         well_col = None
@@ -254,10 +294,10 @@ def parse_cfx_allelic(file_path: str) -> UnifiedData:
         wells_set: set[str] = set()
         sample_names: dict[str, str] = {}
 
-        for row_idx in range(2, ws.max_row + 1):
-            well = ws.cell(row=row_idx, column=well_col + 1).value
-            rfu1 = ws.cell(row=row_idx, column=rfu1_col + 1).value
-            rfu2 = ws.cell(row=row_idx, column=rfu2_col + 1).value
+        for row in rows:
+            well = _cell(row, well_col)
+            rfu1 = _cell(row, rfu1_col)
+            rfu2 = _cell(row, rfu2_col)
 
             if not well or not isinstance(rfu1, (int, float)) or not isinstance(rfu2, (int, float)):
                 continue
@@ -273,7 +313,7 @@ def parse_cfx_allelic(file_path: str) -> UnifiedData:
             wells_set.add(well_str)
 
             if sample_col is not None:
-                sample = ws.cell(row=row_idx, column=sample_col + 1).value
+                sample = _cell(row, sample_col)
                 if sample:
                     sample_names[well_str] = str(sample)
 
@@ -288,9 +328,7 @@ def parse_cfx_allelic(file_path: str) -> UnifiedData:
             data_windows=[DataWindow(name="End Point", start_cycle=1, end_cycle=1)],
         )
     finally:
-        wb.close()
-        if fixed_path and os.path.exists(fixed_path):
-            os.remove(fixed_path)
+        _close_cfx(wb, fixed_path)
 
 
 def _well_sort_key(well: str) -> tuple[int, int]:

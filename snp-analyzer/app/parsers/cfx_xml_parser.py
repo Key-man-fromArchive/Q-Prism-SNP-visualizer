@@ -24,10 +24,13 @@ from app.models import UnifiedData, WellCycleData, DataWindow
 from app.parsers.instrument_detail import cfx_instrument_label, cfx_xml_export_detail
 from app.parsers.safe_xml import (
     MAX_PLATE_WELLS,
+    PASS,
+    PrunedStream,
     XmlRefused,
     check_read_count,
     check_size,
     check_zip_directory,
+    iterparse_file,
     parse_xml_file,
 )
 
@@ -128,26 +131,36 @@ def _find_xml_files(extract_dir: str) -> dict[str, str]:
 
 # --- Individual XML parsers ---
 
+def _classify_amplification(elem, ancestors):
+    """Each ``Row`` is handled when it ends; nothing else is kept."""
+    return PASS if len(ancestors) == 1 and elem.tag == "Row" else None
+
+
 def _parse_amplification_xml(filepath: str) -> tuple[str, list[int], dict[str, list[float]]]:
     """Parse one amplification XML.
 
     Returns (dye_name, sorted_cycles, {well: [rfu_per_cycle]}).
     Wells in amp XML use A1 format (no zero-padding).
+
+    The file is read row by row, so memory follows the values returned.
     """
-    root = parse_xml_file(filepath, "The amplification export")
-    dye = root.tag  # "FAM", "HEX", "VIC", or "ROX"
+    stream = PrunedStream(
+        iterparse_file(filepath, "The amplification export"), _classify_amplification
+    )
 
     wells: list[str] = []
     cycles: list[int] = []
     data: dict[str, list[float]] = {}
 
-    rows = root.findall("Row")
-    check_read_count(len(rows), "The amplification export")
-    for i, row in enumerate(rows):
+    for row in stream:
+        if stream.depth != 1 or row.tag != "Row":
+            continue
+        check_read_count(len(cycles) + 1, "The amplification export")
         cycle = int(row.find("Cycle").text)
+        is_first = not cycles
         cycles.append(cycle)
 
-        if i == 0:
+        if is_first:
             # First row: discover well tags (everything except Cycle)
             wells = [child.tag for child in row if child.tag != "Cycle"]
             if len(wells) > MAX_PLATE_WELLS:
@@ -161,6 +174,7 @@ def _parse_amplification_xml(filepath: str) -> tuple[str, list[int], dict[str, l
             elem = row.find(well)
             data[well].append(float(elem.text))
 
+    dye = stream.root.tag  # "FAM", "HEX", "VIC", or "ROX"
     return dye, sorted(cycles), data
 
 

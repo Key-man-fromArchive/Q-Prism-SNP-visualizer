@@ -8,6 +8,10 @@ through this module so that the same limits apply everywhere:
   write them), whatever the text encoding of the document;
 * the archive directory is inspected before the archive is opened, so an
   archive with an unreasonable number of entries is refused up front.
+
+Documents that hold per-well, per-cycle data are read element by element
+(``iterparse_member`` / ``iterparse_file`` with ``PrunedStream``), so the memory
+needed follows the values kept, not the size of the document.
 """
 
 from __future__ import annotations
@@ -15,6 +19,8 @@ from __future__ import annotations
 import os
 import struct
 import zipfile
+from collections.abc import Callable, Iterator, Sequence
+from typing import BinaryIO
 from xml.etree import ElementTree as _ET
 
 from defusedxml import ElementTree as _safe_et
@@ -95,6 +101,145 @@ def parse_member(
 ) -> _ET.Element:
     label = what or name
     return parse_xml_bytes(read_member(zf, name, label, max_bytes), label, max_bytes)
+
+
+def iterparse_stream(
+    stream: BinaryIO, what: str, events: Sequence[str] = ("start", "end")
+) -> Iterator[tuple[str, _ET.Element]]:
+    """Read one XML document incrementally with the options ``parse_xml_bytes`` uses.
+
+    Raises the same ``XmlRefused`` errors (``dtd`` / ``malformed``). A leading
+    UTF-8 byte-order mark is skipped.
+    """
+    try:
+        head = stream.read(3)
+        if head != b"\xef\xbb\xbf":
+            stream = _Prefixed(head, stream)
+        yield from _safe_et.iterparse(
+            stream,
+            events=tuple(events),
+            forbid_dtd=True,
+            forbid_entities=True,
+            forbid_external=True,
+        )
+    except DefusedXmlException:
+        raise XmlRefused(
+            f"{what} has a document type declaration, which is not accepted", "dtd"
+        ) from None
+    except (_ET.ParseError, UnicodeError, ValueError, RecursionError):
+        raise XmlRefused(f"{what} is not well-formed XML", "malformed") from None
+
+
+class _Prefixed:
+    """A readable stream that first returns bytes already taken from ``rest``."""
+
+    def __init__(self, head: bytes, rest: BinaryIO):
+        self._head = head
+        self._rest = rest
+
+    def read(self, size: int = -1) -> bytes:
+        if self._head:
+            if size is None or size < 0:
+                data, self._head = self._head + self._rest.read(), b""
+                return data
+            data, self._head = self._head[:size], self._head[size:]
+            if len(data) < size:
+                data += self._rest.read(size - len(data))
+            return data
+        return self._rest.read(size)
+
+
+def iterparse_member(
+    zf: zipfile.ZipFile,
+    name: str,
+    what: str | None = None,
+    max_bytes: int | None = None,
+    pwd: bytes | None = None,
+    events: Sequence[str] = ("start", "end"),
+) -> Iterator[tuple[str, _ET.Element]]:
+    """Events of an archive member whose declared size is within ``max_bytes``."""
+    label = what or name
+    check_size(zf.getinfo(name).file_size, label, max_bytes)
+    with zf.open(name, pwd=pwd) as stream:
+        yield from iterparse_stream(stream, label, events)
+
+
+def iterparse_file(
+    path: str,
+    what: str,
+    max_bytes: int | None = None,
+    events: Sequence[str] = ("start", "end"),
+) -> Iterator[tuple[str, _ET.Element]]:
+    """Events of an XML file on disk with the same limits as a member."""
+    check_size(os.path.getsize(path), what, max_bytes)
+    with open(path, "rb") as handle:
+        yield from iterparse_stream(handle, what, events)
+
+
+# What a ``PrunedStream`` classifier returns for an element at its start event.
+KEEP = "keep"  # stays in the tree, with its subtree
+LEAF = "leaf"  # stays in the tree; its children and text are dropped once it ends
+PASS = "pass"  # whole subtree is available at its end event, then it is dropped
+
+
+class PrunedStream:
+    """End events of a document, with processed elements released as reading goes on.
+
+    ``classify(element, ancestors)`` is called for every element when it starts
+    and returns ``KEEP``, ``LEAF``, ``PASS`` or ``None``. Elements that are
+    ``None`` (and are not wrappers of kept elements) are removed from their
+    parent as soon as they end. A ``PASS`` element is handed to the caller at
+    its end event with all of its children and is removed afterwards. Iterating
+    yields each element at its end event; ``depth`` is then the element's depth
+    (the document element is 0) and ``root`` is the document element.
+    """
+
+    def __init__(
+        self,
+        events: Iterator[tuple[str, _ET.Element]],
+        classify: Callable[[_ET.Element, Sequence[_ET.Element]], str | None],
+    ):
+        self._events = events
+        self._classify = classify
+        self.root: _ET.Element | None = None
+        self.depth = 0
+
+    def __iter__(self) -> Iterator[_ET.Element]:
+        classify = self._classify
+        path: list[_ET.Element] = []
+        modes: list[str | None] = []
+        wrappers: list[bool] = []  # holds a kept element
+        protected = 0  # open elements that are kept or handed to the caller
+        for event, elem in self._events:
+            if event == "start":
+                if not path and self.root is None:
+                    self.root = elem
+                mode = classify(elem, path)
+                if protected:
+                    mode = mode and PASS  # nested: kept only while the parent is
+                elif mode in (KEEP, LEAF):
+                    wrappers[:] = [True] * len(wrappers)
+                if mode:
+                    protected += 1
+                path.append(elem)
+                modes.append(mode)
+                wrappers.append(False)
+                continue
+            path.pop()
+            mode = modes.pop()
+            wrapper = wrappers.pop()
+            self.depth = len(path)
+            yield elem
+            if mode:
+                protected -= 1
+            if protected or not path:
+                continue
+            if mode == LEAF:
+                del elem[:]
+                elem.text = elem.tail = None
+            elif mode != KEEP and not wrapper:
+                path[-1].remove(elem)
+                elem.clear()
 
 
 def parse_xml_file(path: str, what: str, max_bytes: int | None = None) -> _ET.Element:

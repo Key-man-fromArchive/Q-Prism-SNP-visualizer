@@ -17,7 +17,7 @@ import openpyxl
 import pytest
 
 from app.import_errors import ImportValidationError
-from app.parsers import cfx_opus, cfx_xml_parser, detector, pcrd_raw, safe_xml
+from app.parsers import cfx_opus, cfx_xml_parser, detector, generic_table, pcrd_raw, safe_xml
 from app.parsers.detector import detect_and_parse
 from app.parsers.eds_common import _parse_plate_dims
 from app.parsers.eds_raw import _parse_multicomponent, parse_eds
@@ -406,3 +406,158 @@ def test_unreadable_workbook_keeps_its_message(tmp_path):
         zf.writestr("hello.txt", "x")
     with pytest.raises(ValueError, match="Could not read this .xlsx file"):
         detect_and_parse(str(path), "broken.xlsx")
+
+
+# --- archives opened by the RDML and generic table readers ---------------
+
+
+def _refuse_zipfile(monkeypatch):
+    def refuse(*_a, **_k):
+        raise AssertionError("the archive directory was parsed")
+
+    monkeypatch.setattr(zipfile, "ZipFile", refuse)
+
+
+def test_rdml_archive_with_too_many_entries_is_refused_before_it_is_opened(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "many.rdml"
+    path.write_bytes(_zip_bytes(600))
+    _refuse_zipfile(monkeypatch)
+    with pytest.raises(ImportValidationError) as exc_info:
+        RDMLParser().preview(path, path.name)
+    issue = exc_info.value.issues[0]
+    assert issue.code == "file_limit_exceeded"
+    assert "too many entries (600 > 500)" in issue.message
+
+
+def test_generic_xlsx_with_too_many_entries_is_refused_before_it_is_opened(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "many.xlsx"
+    path.write_bytes(_zip_bytes(600))
+    _refuse_zipfile(monkeypatch)
+    with pytest.raises(ImportValidationError) as exc_info:
+        generic_table._load_xlsx_matrix(path, 100)
+    issue = exc_info.value.issues[0]
+    assert issue.code == "file_limit_exceeded"
+    assert "too many entries (600 > 500)" in issue.message
+
+
+# --- CFX workbook reading in cfx_opus ------------------------------------
+
+
+def _endpoint_workbook(path: str) -> str:
+    wb = openpyxl.Workbook()
+    fam = wb.active
+    fam.title = "FAM"
+    hex_ = wb.create_sheet("HEX")
+    for ws, base in ((fam, 1000.0), (hex_, 2000.0)):
+        ws.append([None, "Well", "Fluor", "Target", "Content", "Sample", "End RFU"])
+        for i, well in enumerate(("A01", "A02", "B01")):
+            ws.append([None, well, ws.title, "T", "Unkn", f"S{i}", base + i])
+    wb.save(path)
+    return path
+
+
+def _allelic_workbook(path: str) -> str:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "ADSheet"
+    ws.append([None, "Well", "Sample", "Call", "Type", "RFU1", "RFU2"])
+    ws.append([None, "A01", "S1", "Allele 1", "Unknown", 10.0, 2.0])
+    ws.append([None, "A02", "", "Allele 2", "Unknown", 3.0, 9.0])
+    ws.append([None, "A03", "S3", "", "Unknown", None, 9.0])
+    wb.save(path)
+    return path
+
+
+def test_cfx_opus_parsers_read_each_workbook_once_and_read_only(tmp_path, monkeypatch):
+    calls: list[dict] = []
+    real = openpyxl.load_workbook
+
+    def counting(*args, **kwargs):
+        calls.append(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(openpyxl, "load_workbook", counting)
+    amplification = _cfx_workbook(str(tmp_path / "amp.xlsx"), rows=4)
+    endpoint = _endpoint_workbook(str(tmp_path / "ep.xlsx"))
+    allelic = _allelic_workbook(str(tmp_path / "ad.xlsx"))
+
+    parsed = [
+        cfx_opus.parse_cfx_opus(amplification),
+        cfx_opus.parse_cfx_endpoint(endpoint),
+        cfx_opus.parse_cfx_allelic(allelic),
+    ]
+
+    assert len(calls) == 3
+    assert all(c.get("read_only") is True and c.get("data_only") is True for c in calls)
+    assert [(d.wells, d.cycles) for d in parsed] == [
+        (["A1"], [1, 2, 3]),
+        (["A1", "A2", "B1"], [1]),
+        (["A1", "A2"], [1]),
+    ]
+    amp, endpoint_data, allelic_data = parsed
+    assert [(p.cycle, p.fam, p.allele2) for p in amp.data] == [
+        (1, 1001.0, 1001.0),
+        (2, 1002.0, 1002.0),
+        (3, 1003.0, 1003.0),
+    ]
+    assert [(p.well, p.fam, p.allele2) for p in endpoint_data.data] == [
+        ("A1", 1000.0, 2000.0),
+        ("A2", 1001.0, 2001.0),
+        ("B1", 1002.0, 2002.0),
+    ]
+    assert [(p.well, p.fam, p.allele2) for p in allelic_data.data] == [
+        ("A1", 10.0, 2.0),
+        ("A2", 3.0, 9.0),
+    ]
+    assert allelic_data.sample_names == {"A1": "S1"}
+    assert endpoint_data.instrument == "Bio-Rad CFX"
+
+
+def test_cfx_opus_refuses_a_sheet_with_too_many_rows_as_it_is_read(tmp_path, monkeypatch):
+    path = _cfx_workbook(str(tmp_path / "cfx.xlsx"), rows=20)
+    monkeypatch.setattr(cfx_opus, "MAX_XLSX_SHEET_ROWS", 10)
+    with pytest.raises(ValueError, match="larger than an instrument export can be"):
+        cfx_opus.parse_cfx_opus(path)
+
+
+def test_cfx_opus_refuses_a_sheet_with_too_many_columns_as_it_is_read(tmp_path, monkeypatch):
+    path = _cfx_workbook(str(tmp_path / "cfx.xlsx"), rows=3)
+    wb = openpyxl.load_workbook(path)
+    wb["FAM"].cell(row=2, column=30, value=1.0)
+    wb.save(path)
+    monkeypatch.setattr(cfx_opus, "MAX_XLSX_SHEET_COLS", 20)
+    with pytest.raises(ValueError, match="larger than an instrument export can be"):
+        cfx_opus.parse_cfx_opus(path)
+
+
+def test_cfx_opus_does_not_trust_the_declared_sheet_dimension(tmp_path):
+    path = _cfx_workbook(str(tmp_path / "cfx.xlsx"), rows=4)
+    declared = str(tmp_path / "declared.xlsx")
+    with zipfile.ZipFile(path) as src, zipfile.ZipFile(declared, "w") as dst:
+        for info in src.infolist():
+            data = src.read(info)
+            if info.filename.startswith("xl/worksheets/sheet"):
+                text = data.decode("utf-8")
+                start = text.index("<dimension")
+                end = text.index("/>", start) + 2
+                text = text[:start] + '<dimension ref="A1:XFD1048576"/>' + text[end:]
+                data = text.encode("utf-8")
+            dst.writestr(info, data)
+
+    started = time.perf_counter()
+    unified = cfx_opus.parse_cfx_opus(declared)
+
+    assert time.perf_counter() - started < 10
+    assert (unified.wells, unified.cycles) == (["A1"], [1, 2, 3])
+
+
+def test_cfx_opus_checks_the_archive_directory_before_opening_it(tmp_path, monkeypatch):
+    path = tmp_path / "many.xlsx"
+    path.write_bytes(_zip_bytes(600))
+    _refuse_zipfile(monkeypatch)
+    with pytest.raises(ValueError, match=r"too many entries \(600 > 500\)"):
+        cfx_opus.parse_cfx_opus(str(path))

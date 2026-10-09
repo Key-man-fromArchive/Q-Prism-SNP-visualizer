@@ -30,7 +30,7 @@ from app.parsers.generic_table import (
     _to_duplex_unified,
 )
 from app.parsers.instrument_detail import rdml_instrument_detail
-from app.parsers.safe_xml import XmlRefused, parse_xml_bytes
+from app.parsers.safe_xml import XmlRefused, check_zip_directory, parse_xml_bytes
 from app.parsers.vendor_presets import apply_vendor_presets
 
 
@@ -309,6 +309,7 @@ def _read_rdml(file_path: Path) -> _RdmlDocument:
 def _read_rdml_bytes(file_path: Path) -> tuple[bytes, str | None]:
     if zipfile.is_zipfile(file_path):
         try:
+            check_zip_directory(str(file_path))
             with zipfile.ZipFile(file_path, "r") as zf:
                 _validate_zip_archive(zf)
                 candidates = [
