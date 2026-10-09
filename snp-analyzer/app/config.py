@@ -29,6 +29,12 @@ RAW_FILE_RETENTION_DAYS = _int_env("RAW_FILE_RETENTION_DAYS", 90)
 # at the time this cap was introduced (P28); raise via env var if the
 # workspace grows well past that before a smarter policy is needed.
 SESSION_CACHE_MAX_ENTRIES = _int_env("SESSION_CACHE_MAX_ENTRIES", 200)
+# The warm cache is also bounded by the total number of stored readings
+# (wells x cycles x channels, i.e. len(unified.data)) so a few very large
+# plates cannot fill memory while the entry count is still low. The least
+# recently used sessions are dropped from memory (never from the database)
+# until the total is under this budget.
+SESSION_CACHE_MAX_POINTS = _int_env("SNP_SESSION_CACHE_MAX_POINTS", 20_000_000)
 MAX_UPLOAD_SIZE_MB = _int_env("MAX_UPLOAD_SIZE_MB", 50)
 MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 UPLOAD_CHUNK_SIZE = _int_env("UPLOAD_CHUNK_SIZE", 1024 * 1024)
@@ -78,3 +84,24 @@ def get_auth_mode() -> str:
 
 def is_asg_launch_mode() -> bool:
     return get_auth_mode() == AUTH_MODE_ASG_LAUNCH
+
+
+DEFAULT_MAX_SESSIONS_PER_USER = 1000
+DEFAULT_MAINTENANCE_INTERVAL_SECONDS = 3600
+
+
+def max_sessions_per_user() -> int:
+    """How many saved analyses each user keeps (env SNP_MAX_SESSIONS_PER_USER).
+
+    Read on every call so a deployment can change it without code changes.
+    """
+    value = _int_env("SNP_MAX_SESSIONS_PER_USER", DEFAULT_MAX_SESSIONS_PER_USER)
+    return value if value > 0 else DEFAULT_MAX_SESSIONS_PER_USER
+
+
+def maintenance_interval_seconds() -> int:
+    """Seconds between housekeeping runs (env SNP_MAINTENANCE_INTERVAL_SECONDS).
+
+    0 (or a negative value) turns the periodic run off.
+    """
+    return max(0, _int_env("SNP_MAINTENANCE_INTERVAL_SECONDS", DEFAULT_MAINTENANCE_INTERVAL_SECONDS))

@@ -25,13 +25,13 @@ P32-RAW-FILE.md for the full rationale):
   recomputed from ``stored_at`` + the current ``RAW_FILE_RETENTION_DAYS`` on
   every read. Changing the env var must not retroactively move the expiry
   of files already stored under the old window.
-* Deletion is REQUEST-DRIVEN, not a background scheduler: this app has none
-  (``app.db.cleanup_sessions_older_than`` is itself only ever invoked
-  manually), and introducing one was explicitly out of scope for this
-  change. ``sweep_expired_raw_files`` is instead called from the read paths
-  that already enumerate sessions (GET /api/sessions, GET
-  /api/sessions/{sid}, and this module's own status/download entry points),
-  so an expired file is removed the next time anyone looks at it.
+* Deletion happens in two places: ``sweep_expired_raw_files`` is called
+  from the read paths that already enumerate sessions (GET /api/sessions,
+  GET /api/sessions/{sid}, and this module's own status/download entry
+  points), and the hourly housekeeping run (app.services.maintenance) calls
+  it too, so an expired copy is removed even when nobody looks at it. Only
+  the stored copy is removed; the session and its readings are never
+  touched.
 * Storage failure NEVER raises out of ``store_raw_file``: raw file retention
   rides along with an upload/import that has already fully persisted the
   parsed session (readings + calls) by the time this runs. A full disk or a

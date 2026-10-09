@@ -6,9 +6,9 @@ Phase P0 adds synthetic, committed import fixtures for generic long, generic wid
 
 | Template | Static path | Structure | Notes |
 | --- | --- | --- | --- |
-| Q-Prism RDES amplification TSV | `snp-analyzer/app/static/templates/qprism-rdes-amplification-template.tsv` | `Well`, sample metadata, `Dye`, `Role`, `Cq`, cycle columns | Q-Prism RDES extension, not strict RDES. |
-| Generic long CSV | `snp-analyzer/app/static/templates/qprism-generic-long-template.csv` | `well,cycle,dye,role,rfu,sample,target,sample_type` | Explicit role per fluorescence row. |
-| Generic wide CSV | `snp-analyzer/app/static/templates/qprism-generic-wide-template.csv` | `well,cycle,ch1_rfu,ch2_rfu,ch3_rfu,ch4_rfu,sample,target` | Requires channel-to-role mapping before import. |
+| Q-Prism RDES amplification TSV | `snp-analyzer/frontend/public/templates/qprism-rdes-amplification-template.tsv` | `Well`, sample metadata, `Dye`, `Role`, `Cq`, cycle columns | Q-Prism RDES extension, not strict RDES. |
+| Generic long CSV | `snp-analyzer/frontend/public/templates/qprism-generic-long-template.csv` | `well,cycle,dye,role,rfu,sample,target,sample_type` | Explicit role per fluorescence row. |
+| Generic wide CSV | `snp-analyzer/frontend/public/templates/qprism-generic-wide-template.csv` | `well,cycle,ch1_rfu,ch2_rfu,ch3_rfu,ch4_rfu,sample,target` | Requires channel-to-role mapping before import. |
 
 Template files are machine-readable and contain no comment rows.
 

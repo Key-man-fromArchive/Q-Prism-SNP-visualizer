@@ -16,12 +16,16 @@ from app.models import UploadPreviewRequiredResponse, UploadResponse
 from app.parsers.detector import detect_and_parse
 from app.parsers.errors import UploadParseError
 from app.parsers.registry import PREVIEW_REQUIRED_EXTENSIONS, requires_preview_for_extension
-from app.services.import_session import create_session_from_import
+from app.services.import_session import create_session_from_import, ensure_session_capacity
 from app.upload_limits import UNREADABLE_FILE_DETAIL, run_parse_limited
 
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+# Prefix of the spooled upload files in the system temp dir; the periodic
+# cleanup (app.services.maintenance) removes leftovers that carry it.
+UPLOAD_TEMP_PREFIX = "qprism_upload_"
 
 # In-memory session store: session_id -> UnifiedData
 sessions: dict = {}
@@ -45,7 +49,7 @@ def _validate_upload_metadata(file: UploadFile) -> str:
 
 
 async def _write_upload_to_temp(file: UploadFile, ext: str) -> str:
-    fd, tmp_path = tempfile.mkstemp(suffix=ext)
+    fd, tmp_path = tempfile.mkstemp(suffix=ext, prefix=UPLOAD_TEMP_PREFIX)
     total_bytes = 0
 
     try:
@@ -122,6 +126,8 @@ async def upload_file(current_user: CurrentUser, file: UploadFile = File(...)):
             ),
             supported_extensions=sorted(PREVIEW_REQUIRED_EXTENSIONS),
         )
+
+    ensure_session_capacity(current_user.user_id)
 
     try:
         tmp_path = await _write_upload_to_temp(file, ext)

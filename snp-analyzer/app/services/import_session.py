@@ -5,10 +5,27 @@ from pathlib import Path
 import unicodedata
 import uuid
 
+from fastapi import HTTPException
+
 from app import asg_session, db
+from app.config import max_sessions_per_user
 from app.models import DataWindow, UnifiedData, UploadResponse
 from app.processing.background import available_background_modes
 from app.processing import ntc_detection
+
+
+def ensure_session_capacity(user_id: str) -> None:
+    """Refuse (409) when ``user_id`` already keeps the maximum number of analyses.
+
+    A cheap COUNT, meant to run before any file is parsed so no work is wasted.
+    """
+    limit = max_sessions_per_user()
+    if db.count_user_sessions(user_id) >= limit:
+        raise HTTPException(
+            409,
+            f"You have reached the limit of {limit} saved analyses. "
+            "Delete older analyses to upload more.",
+        )
 
 
 def create_session_from_import(

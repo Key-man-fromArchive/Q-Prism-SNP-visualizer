@@ -10,7 +10,7 @@ from app.examples import build_example, list_examples
 from app.models import UploadResponse
 from app.processing.genotype_vocab import validate_ploidy
 from app.routers.upload import sessions
-from app.services.import_session import create_session_from_import
+from app.services.import_session import create_session_from_import, ensure_session_capacity
 
 router = APIRouter()
 
@@ -30,6 +30,7 @@ async def load_example(body: ExampleRequest, current_user: CurrentUser):
         validate_ploidy(body.ploidy)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+    ensure_session_capacity(current_user.user_id)
     unified = build_example(body.ploidy)
     return create_session_from_import(
         unified=unified,

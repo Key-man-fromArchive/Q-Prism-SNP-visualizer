@@ -839,6 +839,12 @@ def list_expired_raw_files(now_iso: str) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+def count_user_sessions(user_id: str) -> int:
+    """Number of saved analyses owned by ``user_id`` (a COUNT over the session rows only)."""
+    conn = get_db()
+    return conn.execute("SELECT COUNT(*) FROM sessions WHERE user_id = ?", (user_id,)).fetchone()[0]
+
+
 def cleanup_sessions_older_than(days: int = SESSION_RETENTION_DAYS) -> int:
     """Delete persisted sessions older than the configured retention window.
 

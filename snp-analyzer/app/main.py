@@ -118,7 +118,13 @@ async def lifespan(app: FastAPI):
         _ensure_admin()
     _migrate_projects_json()
 
-    yield
+    from app.services.maintenance import start_maintenance_task, stop_maintenance_task
+
+    maintenance_task = start_maintenance_task()
+    try:
+        yield
+    finally:
+        await stop_maintenance_task(maintenance_task)
 
 
 # The interactive API documentation routes stay registered (the mode is read
@@ -126,12 +132,13 @@ async def lifespan(app: FastAPI):
 # by _early_refusal while asg_launch mode is active.
 _DOCS_PATHS = frozenset({"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"})
 _STATE_CHANGING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
-# The page loads only its own bundle; Plotly needs inline styles and data/blob
-# images. Browsers send what the policy stops to CSP_REPORT_PATH, which logs it.
+# The page loads only its own bundle. Plotly needs inline styles, data/blob
+# images and 'unsafe-eval' (its WebGL scatter compiles functions at run time).
+# Browsers send what the policy stops to CSP_REPORT_PATH, which logs it.
 # SNP_CSP_MODE=report-only sends the same policy without enforcing it.
 CSP_REPORT_PATH = "/api/csp-report"
 _CSP = (
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; "
     "worker-src 'self' blob:; object-src 'none'; base-uri 'self'; "
     "frame-ancestors 'none'; form-action 'self'; "
@@ -267,17 +274,7 @@ async def csp_report(request: Request) -> Response:
     )
     return Response(status_code=204)
 
-# Serve React build (default) or legacy static (USE_LEGACY=1)
-use_legacy = os.environ.get("USE_LEGACY", "").strip().lower() in ("1", "true", "yes")
-
-if use_legacy:
-    static_dir = Path(__file__).parent / "static"
-    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
-else:
-    static_react_dir = Path(__file__).parent / "static-react"
-    if static_react_dir.exists():
-        app.mount("/", StaticFiles(directory=str(static_react_dir), html=True), name="static")
-    else:
-        # Fallback to legacy if React build not found
-        static_dir = Path(__file__).parent / "static"
-        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+# Serve the React build.
+static_react_dir = Path(__file__).parent / "static-react"
+if static_react_dir.exists():
+    app.mount("/", StaticFiles(directory=str(static_react_dir), html=True), name="static")

@@ -481,8 +481,9 @@ async def test_upload_rejection_leaves_no_database_session_job_or_tempfile(
 
     exact_temp_path = tmp_path / "upload-under-test.xls"
 
-    def fake_mkstemp(*, suffix: str = "") -> tuple[int, str]:
+    def fake_mkstemp(*, suffix: str = "", prefix: str = "tmp") -> tuple[int, str]:
         assert suffix == ".xls"
+        assert prefix == upload.UPLOAD_TEMP_PREFIX
         fd = os.open(exact_temp_path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
         return fd, str(exact_temp_path)
 

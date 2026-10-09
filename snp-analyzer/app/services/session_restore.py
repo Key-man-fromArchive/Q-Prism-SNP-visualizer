@@ -44,7 +44,7 @@ from threading import RLock
 
 from fastapi import HTTPException
 
-from app.config import SESSION_CACHE_MAX_ENTRIES
+from app.config import SESSION_CACHE_MAX_ENTRIES, SESSION_CACHE_MAX_POINTS
 from app.models import UnifiedData
 
 # Recency order for the bounded in-memory cache: least-recently-used first.
@@ -89,12 +89,25 @@ def _evict_if_over_capacity() -> None:
     from app.routers.data import protocol_store
 
     with _lock:
-        overflow = len(_access_order) - SESSION_CACHE_MAX_ENTRIES
-        if overflow <= 0:
+        sizes = {
+            sid: _session_points(session_store.get(sid)) for sid in _access_order
+        }
+        total_points = sum(sizes.values())
+        if (
+            len(_access_order) <= SESSION_CACHE_MAX_ENTRIES
+            and total_points <= SESSION_CACHE_MAX_POINTS
+        ):
             return
         protected = _in_flight_sids()
-        evictable = [sid for sid in _access_order if sid not in protected]
-        for sid in evictable[:overflow]:
+        newest = next(reversed(_access_order))
+        # Least-recently-used first. The count cap may drop any unprotected
+        # entry; the size budget never drops the entry that was just used.
+        for sid in [s for s in _access_order if s not in protected]:
+            over_count = len(_access_order) > SESSION_CACHE_MAX_ENTRIES
+            over_points = total_points > SESSION_CACHE_MAX_POINTS and sid != newest
+            if not (over_count or over_points):
+                break
+            total_points -= sizes[sid]
             _access_order.pop(sid, None)
             session_store.pop(sid, None)
             cluster_store.pop(sid, None)
@@ -103,6 +116,12 @@ def _evict_if_over_capacity() -> None:
             marker_store.pop(sid, None)
             sample_name_store.pop(sid, None)
             protocol_store.pop(sid, None)
+
+
+def _session_points(unified: UnifiedData | None) -> int:
+    """Approximate memory weight of a session: its stored readings
+    (wells x cycles x channels, one entry per well and cycle)."""
+    return len(getattr(unified, "data", None) or ())
 
 
 def restore_session(sid: str) -> UnifiedData | None:

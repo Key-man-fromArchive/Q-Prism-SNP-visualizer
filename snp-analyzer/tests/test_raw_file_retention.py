@@ -18,10 +18,8 @@ file" answer (see ``app.services.raw_file_storage.RawFileStatus``):
                   session already produced are untouched.
 3. ``missing`` -- an anomaly: the DB says it should be there and it isn't.
 
-There is no background scheduler in this app (``cleanup_sessions_older_than``
-is itself dead code, never invoked automatically) and none is introduced
-here either -- expiry is swept opportunistically from the read paths that
-already enumerate sessions.
+Expiry is swept from the read paths that already enumerate sessions and by
+the hourly housekeeping run (see tests/test_maintenance.py).
 """
 
 from __future__ import annotations

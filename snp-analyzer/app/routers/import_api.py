@@ -18,7 +18,7 @@ from app.models import UploadResponse
 from app.parsers.generic_table import table_read_scope
 from app.parsers.registry import ParserContract, build_default_parser_registry
 from app.routers import upload
-from app.services.import_session import create_session_from_import
+from app.services.import_session import create_session_from_import, ensure_session_capacity
 from app.upload_limits import UNREADABLE_FILE_DETAIL, run_parse_limited
 
 
@@ -93,6 +93,7 @@ async def import_preview(current_user: CurrentUser, file: UploadFile = File(...)
     _cleanup_expired_previews()
     filename = file.filename or ""
     ext = upload._validate_upload_metadata(file)
+    ensure_session_capacity(current_user.user_id)
     try:
         tmp_path = await upload._write_upload_to_temp(file, ext)
     except HTTPException:
@@ -159,6 +160,7 @@ def _parse_blocking(record: PreviewRecord, request: ImportParseRequest):
 
 @router.post("/api/import/parse", response_model=UploadResponse)
 async def import_parse(current_user: CurrentUser, request: ImportParseRequest) -> UploadResponse | JSONResponse:
+    ensure_session_capacity(current_user.user_id)
     record = _get_preview_for_parse(request.preview_id, current_user.user_id)
     unified = await run_parse_limited(_parse_blocking, record, request)
     if isinstance(unified, JSONResponse):
@@ -221,11 +223,15 @@ def _store_preview(record: PreviewRecord) -> None:
             _delete_preview(stale.preview_id)
 
 
-def _cleanup_expired_previews() -> None:
+def _cleanup_expired_previews() -> int:
+    """Drop previews past their expiry (and their files); returns how many."""
     now = time.time()
+    removed = 0
     for preview_id, record in list(preview_store.items()):
         if record.expires_at <= now:
             _delete_preview(preview_id)
+            removed += 1
+    return removed
 
 
 def _delete_preview(preview_id: str) -> None:
